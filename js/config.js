@@ -210,6 +210,42 @@ Weaponize your buzzwords, circle back, and disrupt MegaCorp into bankruptcy. The
     goldNodes:[ {x:4,y:4,amt:3200},{x:11,y:3,amt:3000},{x:3,y:12,amt:3000},{x:13,y:11,amt:2600},{x:6,y:14,amt:2400},
                 {x:81,y:64,amt:1800},{x:75,y:65,amt:1800},{x:83,y:14,amt:1800},{x:77,y:11,amt:1800},{x:39,y:68,amt:1800},{x:45,y:69,amt:1800},
                 {x:44,y:38,amt:4000},{x:30,y:30,amt:2600},{x:58,y:42,amt:2600},{x:50,y:24,amt:2400} ],
+  },
+  {
+    name:'VII — The Dunes and the Drifts',
+    enemyName:'THE CONGLOMERATE',
+    aggression:1.7,
+    startGold:1600, startWorkers:8, startSoldiers:6, startBarracks:true,
+    graceTime:125, waveTimer:125,
+    crawl:{ episode:'EPISODE VII', title:'THE DUNES AND THE DRIFTS',
+      text:'You crushed the board. You ARE the market. So the survivors did the only thing left — they merged into one.\n\nTHE CONGLOMERATE spans a frozen-and-scorched wasteland: EIGHT subsidiary campuses ringing a dead sea, defended by every lawyer money can rent.\n\nBut two of your own outposts were abandoned out on the dunes and the drifts — reach them and they\'re yours again. Mine the wastes, reclaim what\'s lost, and liquidate all eight. This is the last quarter. Make it count.' },
+    // Double the area of the previous biggest map (88×72 = 6,336 tiles → 124×102 ≈ 12,648).
+    w:124, h:102,
+    seed:7,
+    player:{ x:8, y:94 },
+    // ---- no grass: huge SAND blocks (top-left + bottom-right) and huge SNOW blocks
+    //      (top-right + bottom-left), with one big WATER pond drowning the centre. ----
+    baseBiome:B_DESERT,
+    biomeAt(x,y,W,H,v){
+      const cx=W*0.5, cy=H*0.5;
+      const pondR=Math.min(W,H)*0.18;                 // big central sea
+      if(Math.hypot(x-cx,y-cy)+(v-0.5)*6 < pondR) return B_WATER;
+      const bx=x+(v-0.5)*7, by=y+(v-0.5)*7;           // jittered block edges (ragged, not ruler-straight)
+      return ((bx<cx)===(by<cy)) ? B_DESERT : B_ICE;  // TL/BR = sand, TR/BL = snow
+    },
+    enemies:[ {x:12,y:10, extraBarracks:true, defenders:3}, {x:42,y:8, defenders:3}, {x:80,y:8, defenders:3},
+              {x:110,y:12, extraBarracks:true, defenders:3}, {x:112,y:50, defenders:3}, {x:110,y:90, extraBarracks:true, defenders:3},
+              {x:74,y:94, defenders:3}, {x:10,y:50, defenders:3} ],
+    // two abandoned player outposts flanking the central sea — walk a unit up to reclaim them
+    lostBases:[ {x:36,y:50}, {x:84,y:50} ],
+    objective:'THE CONGLOMERATE holds EIGHT campuses around a dead sea — liquidate all eight. TWO abandoned outposts sit in the middle: reach them with a unit to reclaim them and fight from the front.',
+    lakes:[ {x:28,y:24,r:3},{x:96,y:78,r:3},{x:24,y:74,r:3},{x:98,y:26,r:3} ],
+    rockClusters:[ {x:50,y:24,n:16},{x:74,y:78,n:16},{x:30,y:64,n:14},{x:92,y:38,n:14},{x:20,y:30,n:12},{x:104,y:66,n:12} ],
+    forests:[ {x:18,y:18,n:24},{x:100,y:84,n:24},{x:96,y:20,n:22},{x:22,y:84,n:22},{x:40,y:40,n:16},{x:84,y:62,n:16} ],
+    goldNodes:[ {x:6,y:90,amt:3000},{x:12,y:96,amt:3000},{x:4,y:84,amt:2600},
+                {x:8,y:6,amt:1800},{x:46,y:5,amt:1800},{x:84,y:5,amt:1800},{x:116,y:8,amt:1800},
+                {x:118,y:54,amt:1800},{x:116,y:94,amt:1800},{x:78,y:98,amt:1800},{x:5,y:46,amt:1800},
+                {x:32,y:54,amt:2800},{x:88,y:54,amt:2800},{x:62,y:26,amt:3500},{x:62,y:76,amt:3500} ],
   }
 ];
 

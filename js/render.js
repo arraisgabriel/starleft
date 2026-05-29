@@ -338,6 +338,7 @@ function drawBuilding(state,e,ox,oy,dim){
 
   ctx.save();
   if(dim) ctx.globalAlpha=0.55;
+  if(e.abandoned) ctx.globalAlpha*=0.7;   // derelict: faded
   // selection ring (footprint)
   if(e.selected){ ctx.strokeStyle='#8effb0'; ctx.lineWidth=2; ctx.strokeRect(px-3,py-3,w+6,h+6); }
   // ground contact shadow
@@ -363,6 +364,16 @@ function drawBuilding(state,e,ox,oy,dim){
     ctx.fillStyle='rgba(255,255,255,.85)'; ctx.textAlign='center'; ctx.textBaseline='middle';
     ctx.font=(w*0.42|0)+'px sans-serif'; ctx.fillText(d.icon||'🏢', px+w/2, py+h/2+1);
     ctx.fillStyle = isRedSide(e.owner)?'#ff8a8a':'#7fd6ff'; ctx.fillRect(px+w/2-3, py+2, 6, 9);
+  }
+  // derelict: desaturating grey wash + a pulsing reclaim beacon over the roof
+  if(e.abandoned){
+    ctx.fillStyle='rgba(70,80,92,.42)'; roundRect(px+3,py+3,w-6,h-6,6); ctx.fill();
+    const pulse=0.55+0.45*Math.abs(Math.sin(state.time*2.2));
+    ctx.globalAlpha=pulse;
+    ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.font='bold 12px sans-serif';
+    ctx.fillStyle='#0a0a0a'; ctx.fillText('⚑ RECLAIM', px+w/2+1, topY-12+1);
+    ctx.fillStyle='#8effb0'; ctx.fillText('⚑ RECLAIM', px+w/2, topY-12);
   }
   ctx.restore();
 
@@ -510,8 +521,8 @@ function renderMinimap(state){
     if(e.dead) continue;
     if(e.type==='goldmine'){ if(state.explored[((e.y/TILE)|0)*state.W+((e.x/TILE)|0)]){ mmx.fillStyle='#c89bff'; mmx.fillRect(e.x/TILE*sx-1,e.y/TILE*sy-1,3,3);} continue; }
     if(e.owner==='enemy' && !isVisiblePix(state,e.x,e.y) && !(e.kind==='building'&&e._everSeen)) continue;
-    mmx.fillStyle = isRedSide(e.owner)?'#ff6b6b':'#7fd6ff';
-    const s = e.kind==='building'?3:2;
+    mmx.fillStyle = e.abandoned ? '#8effb0' : isRedSide(e.owner)?'#ff6b6b':'#7fd6ff';
+    const s = e.kind==='building'? (e.abandoned?4:3) :2;
     mmx.fillRect(e.x/TILE*sx - s/2, e.y/TILE*sy - s/2, s, s);
   }
   // viewport rect — world units visible (dpr + zoom corrected)

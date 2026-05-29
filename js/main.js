@@ -108,7 +108,11 @@ cv.addEventListener('wheel', e=>{
 
 addEventListener('keydown', e=>{
   keys[e.key.toLowerCase()]=true;
-  if(e.key==='Escape'){ if(G&&G.placing){ G.placing=null; refreshUI(); } return; }
+  if(e.key==='Escape'){
+    if(G&&G.placing){ G.placing=null; refreshUI(); }     // first: cancel building placement
+    else if(G&&G.selection.length){ clearSelection(); refreshUI(); }  // then: deselect so you can pick others
+    return;
+  }
   // control groups — digit keys 0..9 (also works from the numpad)
   if(G && !G.over && e.key.length===1 && e.key>='0' && e.key<='9'){
     if(e.ctrlKey || e.metaKey){ assignGroup(e.key); e.preventDefault(); }

@@ -27,8 +27,18 @@ function newMap(idx){
   // base, one or two seas, one or two mountain ranges, and at most ONE ground
   // accent (tech, desert, OR snow — never mixed together, and never volcanic).
   // Snow only forms large fields over the grass/water landscape.
-  const biome = new Array(W*H).fill(B_GRASS);
-  {
+  // A map may override all of this: `baseBiome` sets the default floor (e.g. sand
+  // for a no-grass map) and `biomeAt(x,y,W,H,variant)` paints an explicit layout.
+  const baseBiome = (cfg.baseBiome!=null) ? cfg.baseBiome : B_GRASS;
+  const biome = new Array(W*H).fill(baseBiome);
+  if(typeof cfg.biomeAt === 'function'){
+    for(let y=0;y<H;y++)for(let x=0;x<W;x++){ const i=y*W+x; biome[i]=cfg.biomeAt(x,y,W,H,variant[i]); }
+    // biome-driven terrain so regions become real obstacles, not just paint
+    for(let i=0;i<W*H;i++){
+      if(biome[i]===B_WATER) tiles[i]=T_WATER;
+      else if(biome[i]===B_MOUNTAIN && variant[i]>0.34) tiles[i]=T_ROCK;
+    }
+  } else {
     const patches = [];
     const nWater = 1 + ((rng()*2)|0);                       // 1-2 seas
     for(let i=0;i<nWater;i++) patches.push({ x:3+((rng()*(W-6))|0), y:3+((rng()*(H-6))|0), r:4+rng()*4.5, kind:B_WATER });
@@ -85,14 +95,17 @@ function newMap(idx){
       cx+=((rng()*3)|0)-1; cy+=((rng()*3)|0)-1; if(!inB(cx,cy)){cx=f.x;cy=f.y;} }
   });
 
-  // Make sure player & enemy start areas are clear grassland (terrain + biome)
+  // Make sure player & enemy start areas are clear, buildable floor (terrain +
+  // biome). Clear to the map's BASE biome — on a no-grass map (baseBiome=sand)
+  // that keeps the theme intact instead of stamping grass patches everywhere.
   const clearArea=(px,py,rad)=>{ for(let y=-rad;y<=rad;y++)for(let x=-rad;x<=rad;x++){
-    if(inB(px+x,py+y)){ const j=(py+y)*W+(px+x); tiles[j]=T_GRASS; biome[j]=B_GRASS; } } };
+    if(inB(px+x,py+y)){ const j=(py+y)*W+(px+x); tiles[j]=T_GRASS; biome[j]=baseBiome; } } };
   clearArea(cfg.player.x,cfg.player.y,4);
   bases.forEach(b=> clearArea(b.x,b.y,4));
+  (cfg.lostBases||[]).forEach(b=> clearArea(b.x,b.y,3));   // abandoned outposts sit on clear ground too
   // keep gold nodes reachable: clear the footprint to passable floor (biome theme kept)
   cfg.goldNodes.forEach(g=>{ for(let y=-2;y<=2;y++)for(let x=-2;x<=2;x++){
-    if(inB(g.x+x,g.y+y)){ const j=(g.y+y)*W+(g.x+x); tiles[j]=T_GRASS; biome[j]=B_GRASS; } } });
+    if(inB(g.x+x,g.y+y)){ const j=(g.y+y)*W+(g.x+x); tiles[j]=T_GRASS; biome[j]=baseBiome; } } });
 
   const zoom0 = initialZoom(W,H);
   const state = {
@@ -156,6 +169,18 @@ function newMap(idx){
 
   // ---- enemy bases (one or more) ----
   bases.forEach(b=> buildEnemyBase(state, b, idx));
+
+  // ---- abandoned player outposts: walk a unit up to one to reclaim it ----
+  // Neutral-owned so they're ignored by combat/targeting and don't count toward
+  // win/lose until reclaimed; reclaimOutposts() (core.js) flips them to player.
+  (cfg.lostBases||[]).forEach(b=>{
+    const e = mkBuilding(state,'hq','neutral', b.x, b.y, true);
+    e.abandoned = true;
+    // reveal the surrounding terrain so the outpost reads as a findable beacon
+    for(let y=-4;y<=4;y++)for(let x=-4;x<=4;x++){
+      if(inB(b.x+x,b.y+y)) state.explored[(b.y+y)*W+(b.x+x)]=1;
+    }
+  });
 
   recomputeSupply(state);
   return state;

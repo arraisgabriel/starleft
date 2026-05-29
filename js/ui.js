@@ -136,9 +136,13 @@ function toast(msg){
 /* =====================================================================
    GAME FLOW
    ===================================================================== */
+// Show / hide a menu sub-screen (map selection, documentation)
+function showSub(id){ const el=document.getElementById(id); if(el) el.style.display='flex'; }
+function hideSub(id){ const el=document.getElementById(id); if(el) el.style.display='none'; }
+
 function startGame(idx){
   idx = idx|0;
-  document.getElementById('startScreen').style.display='none';
+  ['startScreen','mapScreen','docScreen'].forEach(id=>{ const el=document.getElementById(id); if(el) el.style.display='none'; });
   mapIndex=idx; showCrawl(idx, ()=>{ loadMap(idx); });
 }
 // Build a "jump to any Quarter" row on the title screen from the MAPS list.

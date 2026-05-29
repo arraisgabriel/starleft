@@ -51,14 +51,20 @@
     width:330px; padding:10px; border-left:1px solid #462430;
     display:flex; flex-wrap:wrap; align-content:flex-start; gap:8px;
   }
+  /* in-game command buttons — same angular red-accent look as the menu .sc-btn */
   .cmd-btn {
-    width:88px; height:58px; border-radius:7px; cursor:pointer;
-    background:linear-gradient(180deg,#4a2632,#3a181f); border:1px solid #6f3644;
-    color:#f6dbe0; font-size:11px; font-weight:600; line-height:1.25;
+    width:88px; height:58px; border-radius:3px; cursor:pointer;
+    background:linear-gradient(135deg, rgba(70,18,24,.92), rgba(28,10,14,.82));
+    border:1px solid #6f2630; border-left:3px solid #ff5a5a;
+    clip-path:polygon(0 0,100% 0,95% 100%,0 100%);
+    color:#ffd9dd; font-size:11px; font-weight:600; line-height:1.2;
     display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px;
     transition:.1s; text-align:center; padding:3px;
+    box-shadow:0 2px 8px rgba(0,0,0,.5), inset 0 0 16px rgba(255,60,60,.05);
   }
-  .cmd-btn:hover { background:linear-gradient(180deg,#683040,#491d28); border-color:#b55b6b; transform:translateY(-1px);}
+  .cmd-btn:hover { color:#fff; border-left-color:#ff9a9a;
+    background:linear-gradient(135deg, rgba(128,28,38,.96), rgba(54,16,22,.9));
+    box-shadow:0 3px 14px rgba(255,46,46,.35), inset 0 0 20px rgba(255,90,90,.12); transform:translateY(-1px);}
   .cmd-btn:active { transform:translateY(0); }
   .cmd-btn.disabled { opacity:.4; cursor:not-allowed; }
   .cmd-btn .cost { font-size:10px; color:#ffd86b; }
@@ -76,18 +82,25 @@
   .overlay p  { max-width:560px; font-size:15px; color:#d6b0b6; line-height:1.7; }
   .overlay .big { font-size:46px; }
   .btn {
-    margin-top:6px; padding:13px 34px; font-size:17px; font-weight:700; letter-spacing:1px;
-    background:linear-gradient(180deg,#d64141,#a82f2f); border:none; border-radius:8px;
-    color:#fff; cursor:pointer; box-shadow:0 4px 16px #d6414150; transition:.12s;
+    margin-top:6px; padding:13px 32px; font-size:16px; font-weight:700; letter-spacing:1.4px; text-transform:uppercase;
+    background:linear-gradient(100deg, rgba(128,28,38,.95), rgba(58,16,22,.9));
+    border:1px solid #6f2630; border-left:3px solid #ff5a5a; border-radius:3px;
+    clip-path:polygon(0 0,100% 0,98% 100%,0 100%);
+    color:#ffd9dd; cursor:pointer; transition:.12s;
+    box-shadow:0 3px 14px rgba(255,46,46,.3), inset 0 0 20px rgba(255,80,80,.08);
   }
-  .btn:hover { transform:translateY(-2px); box-shadow:0 7px 22px #d6414180; }
+  .btn:hover { color:#fff; border-left-color:#ff9a9a; transform:translateY(-2px);
+    box-shadow:0 6px 20px rgba(255,46,46,.45), inset 0 0 24px rgba(255,90,90,.14); }
   .hint { font-size:12px; color:#9c6f78; }
   .map-select { display:flex; flex-direction:column; align-items:center; gap:10px; margin-top:2px; }
   #mapButtons { display:flex; gap:14px; flex-wrap:wrap; justify-content:center; max-width:640px; }
-  .map-btn { background:linear-gradient(180deg,#4e2230,#3a1620); border:1px solid #6f3644; color:#f6dbe0;
-    border-radius:10px; padding:12px 18px; min-width:150px; cursor:pointer; transition:.12s; text-align:center;
-    font-family:inherit; }
-  .map-btn:hover { border-color:#b55b6b; transform:translateY(-2px); box-shadow:0 6px 18px rgba(0,0,0,.45); }
+  .map-btn { background:linear-gradient(135deg, rgba(70,18,24,.92), rgba(28,10,14,.82)); color:#f6dbe0;
+    border:1px solid #6f2630; border-left:3px solid #ff5a5a; border-radius:3px;
+    clip-path:polygon(0 0,100% 0,97% 100%,0 100%);
+    padding:12px 18px; min-width:150px; cursor:pointer; transition:.12s; text-align:center; font-family:inherit;
+    box-shadow:0 2px 10px rgba(0,0,0,.5), inset 0 0 16px rgba(255,60,60,.05); }
+  .map-btn:hover { border-left-color:#ff9a9a; transform:translateY(-2px);
+    box-shadow:0 5px 18px rgba(255,46,46,.35), inset 0 0 20px rgba(255,90,90,.12); }
   .map-btn b { color:#ff7676; font-size:15px; letter-spacing:1px; }
   .map-btn .mn { display:block; font-size:13px; margin-top:3px; color:#f8d0d6; }
   .map-btn small { color:#ffb45a; font-size:11px; }
@@ -152,18 +165,22 @@
   /* press feedback for touch (hover does nothing on a touch screen) */
   .cmd-btn:active, .btn:active, .map-btn:active, .tc-btn:active{ transform:translateY(0); filter:brightness(1.15); }
   @media (hover:none){
-    .cmd-btn:hover, .btn:hover, .map-btn:hover{ transform:none; box-shadow:none;
-      background:linear-gradient(180deg,#4a2632,#3a181f); border-color:#6f3644; }
+    .cmd-btn:hover, .btn:hover, .map-btn:hover{ transform:none;
+      background:linear-gradient(135deg, rgba(70,18,24,.92), rgba(28,10,14,.82));
+      border-color:#6f2630; border-left-color:#ff5a5a; color:#ffd9dd;
+      box-shadow:0 2px 8px rgba(0,0,0,.5), inset 0 0 16px rgba(255,60,60,.05); }
   }
 
   /* on-screen control cluster — hidden on desktop, shown on touch / narrow */
   #touch-controls{ display:none; gap:6px; align-items:center; flex-wrap:wrap;
     padding:5px 8px; border-top:1px solid #462430; }
-  .tc-btn{ min-width:44px; min-height:44px; padding:0 8px; border-radius:8px; cursor:pointer;
-    background:linear-gradient(180deg,#4a2632,#3a181f); border:1px solid #6f3644;
-    color:#f6dbe0; font-size:18px; font-family:inherit; line-height:1;
-    display:inline-flex; align-items:center; justify-content:center; touch-action:manipulation; }
-  .tc-btn.armed{ border-color:#8effb0; box-shadow:0 0 8px #8effb080; color:#bfffd2; }
+  .tc-btn{ min-width:44px; min-height:44px; padding:0 8px; border-radius:3px; cursor:pointer;
+    background:linear-gradient(135deg, rgba(70,18,24,.92), rgba(28,10,14,.82));
+    border:1px solid #6f2630; border-left:3px solid #ff5a5a;
+    color:#ffd9dd; font-size:18px; font-family:inherit; line-height:1;
+    display:inline-flex; align-items:center; justify-content:center; touch-action:manipulation;
+    box-shadow:0 2px 8px rgba(0,0,0,.5), inset 0 0 14px rgba(255,60,60,.05); }
+  .tc-btn.armed{ border-color:#ff9a9a; border-left-color:#ff9a9a; box-shadow:0 0 12px rgba(255,80,80,.6); color:#fff; }
   .grp-chips{ display:inline-flex; gap:4px; }
   .grp-chip{ min-width:38px; font-weight:700; font-size:15px; }
 
@@ -226,6 +243,73 @@
     .cmd-btn{ height:44px; min-height:44px; }
     #touch-controls{ padding:3px 6px; }
   }
+
+  /* ================= Revamped main menu (StarCraft-II layout, red accent) ================= */
+  .overlay.menu{ display:block; padding:0; background:#07050a; }
+  .menu-bg{ position:absolute; inset:0; z-index:0; background-repeat:no-repeat; background-position:center;
+    background-size:cover, cover, cover;
+    background-image:
+      url('assets/menu/background.png'),
+      radial-gradient(ellipse at 64% 44%, rgba(150,24,36,.28), transparent 58%),
+      radial-gradient(ellipse at center, #1c0d11 0%, #07050a 100%); }
+  .menu-bg::after{ content:''; position:absolute; inset:0;
+    background:linear-gradient(90deg, rgba(6,4,8,.94) 0%, rgba(6,4,8,.55) 32%, rgba(6,4,8,.12) 58%, rgba(6,4,8,.5) 100%),
+               linear-gradient(180deg, rgba(6,4,8,.55) 0%, transparent 20%, transparent 66%, rgba(6,4,8,.88) 100%); }
+  .menu-logo{ position:absolute; z-index:2; top:clamp(10px,3.5vh,34px); left:clamp(14px,3.5vw,48px);
+    display:flex; align-items:center; gap:clamp(8px,1.4vw,16px); }
+  .menu-logo .emblem{ height:clamp(62px,15vh,128px); width:auto; filter:drop-shadow(0 3px 12px rgba(255,40,40,.45)); }
+  .menu-logo .logo-star{ display:none; color:#ff3b3b; line-height:1; font-size:clamp(52px,12vh,104px);
+    text-shadow:0 0 16px #ff3b3b, 0 0 36px #ff000080; }
+  .logo-text{ font-weight:800; letter-spacing:clamp(1px,.5vw,4px); line-height:.9; font-size:clamp(30px,6.5vw,58px);
+    color:#f2dde0; text-shadow:0 2px 10px #000, 0 0 24px rgba(255,40,40,.28); }
+  .logo-text small{ display:block; font-size:clamp(9px,2vw,13px); letter-spacing:clamp(2px,1.2vw,7px);
+    color:#c98a90; font-weight:600; margin-top:5px; }
+  .menu-nav{ position:absolute; z-index:2; left:clamp(14px,3.5vw,52px); top:50%; transform:translateY(-26%);
+    display:flex; flex-direction:column; gap:clamp(9px,1.5vh,15px); }
+  .sc-btn{ display:flex; align-items:center; gap:11px; width:clamp(230px,30vw,340px); max-width:84vw;
+    min-height:50px; text-align:left; padding:14px 24px; font:700 clamp(13px,1.5vw,17px)/1 inherit;
+    letter-spacing:1.6px; text-transform:uppercase; color:#ffd9dd; cursor:pointer;
+    background:linear-gradient(100deg, rgba(66,16,22,.92), rgba(30,10,14,.78));
+    border:1px solid #6f2630; border-left:3px solid #ff5a5a; border-radius:3px;
+    box-shadow:0 2px 12px rgba(0,0,0,.55), inset 0 0 20px rgba(255,60,60,.05);
+    clip-path:polygon(0 0,100% 0,97% 100%,0 100%); transition:.12s; touch-action:manipulation; }
+  .sc-btn:hover{ color:#fff; border-left-color:#ff9a9a;
+    background:linear-gradient(100deg, rgba(128,28,38,.96), rgba(58,16,22,.9));
+    box-shadow:0 4px 18px rgba(255,46,46,.4), inset 0 0 26px rgba(255,90,90,.14); transform:translateX(4px); }
+  .sc-btn:active{ transform:translateX(1px); }
+  .sc-btn .ic{ font-size:1.25em; filter:drop-shadow(0 0 6px rgba(255,70,70,.55)); }
+  .menu-news{ position:absolute; z-index:2; top:clamp(14px,5vh,46px); right:clamp(14px,3.5vw,52px);
+    width:clamp(210px,24vw,300px); max-width:44vw; padding:14px 16px; border-radius:6px;
+    background:linear-gradient(180deg, rgba(42,14,18,.9), rgba(18,8,11,.86)); border:1px solid #5a2730;
+    box-shadow:0 6px 22px rgba(0,0,0,.5); }
+  .menu-news h4{ font-size:12px; letter-spacing:2px; color:#ff7676; text-transform:uppercase;
+    margin-bottom:8px; border-bottom:1px solid #5a2730; padding-bottom:6px; }
+  .menu-news p{ font-size:12.5px; color:#d8b3b9; line-height:1.5; }
+  .menu-news .stat-line{ margin-top:8px; font-size:11px; color:#9e7780; font-style:italic; }
+  .menu-hint{ position:absolute; z-index:2; left:0; right:0; bottom:clamp(8px,2.5vh,20px); text-align:center;
+    font-size:clamp(10px,2.4vw,12px); color:#9e7780; padding:0 14px; }
+
+  /* submenu screens (map select / documentation) */
+  .overlay.submenu{ background:radial-gradient(ellipse at center, rgba(20,8,11,.93), rgba(4,3,6,.97)); }
+  .submenu-panel{ width:min(720px,92vw); max-height:86vh; overflow:auto; padding:clamp(18px,3vw,30px);
+    background:linear-gradient(180deg, rgba(38,14,18,.97), rgba(18,8,11,.97)); border:1px solid #6f3644;
+    border-radius:10px; box-shadow:0 12px 44px rgba(0,0,0,.62);
+    display:flex; flex-direction:column; gap:16px; align-items:center; }
+  .submenu-panel h2{ color:#ff7676; letter-spacing:2px; text-transform:uppercase; font-size:clamp(18px,4vw,26px);
+    text-shadow:0 0 18px rgba(255,40,40,.3); }
+  .sc-btn.back{ width:auto; min-width:150px; justify-content:center; text-align:center; clip-path:none; }
+
+  /* mobile / narrow: stack the menu centered */
+  @media (hover:none), (max-width:760px){
+    .overlay.menu{ display:flex; flex-direction:column; align-items:center; justify-content:flex-start;
+      gap:14px; overflow-y:auto; padding:0 0 16px; }
+    .menu-bg::after{ background:linear-gradient(180deg, rgba(6,4,8,.62) 0%, rgba(6,4,8,.34) 30%, rgba(6,4,8,.82) 100%); }
+    .menu-logo{ position:static; justify-content:center; padding:clamp(20px,6vh,40px) 0 4px; }
+    .menu-nav{ position:static; transform:none; align-items:center; width:100%; }
+    .sc-btn{ width:min(360px,86vw); justify-content:center; text-align:center; clip-path:none; padding-left:18px; }
+    .menu-news{ position:static; width:min(360px,86vw); max-width:86vw; margin:4px 0; }
+    .menu-hint{ position:static; margin-top:6px; }
+  }
 </style>
 </head>
 <body>
@@ -268,24 +352,52 @@
 
   <div id="toast"></div>
 
-  <!-- Start screen -->
-  <div class="overlay" id="startScreen">
-    <h1>STARLEFT</h1>
-    <h2>Disrupt. Scale. Conquer. — A Mini RTS</h2>
-    <div class="controls-box">
-      <b>The hustle:</b> Mine <b>Funding</b> 💰, hire an army of Interns &amp; Growth Hackers, and disrupt two rival empires into bankruptcy.<br>
-      <b>Tap / click</b> — select your unit, or command it: tap an enemy to attack, a gold mine to mine, ground to move, an unfinished building to send an Intern<br>
-      <b>Drag</b> — pan the map &nbsp;•&nbsp; <b>Pinch</b> (or mouse <span class="key">wheel</span> / on-screen <span class="key">＋－</span>) — zoom &nbsp;•&nbsp; <b>Minimap</b> — tap to jump<br>
-      <b>Box-select</b> — <span class="key">Shift</span>+drag, or tap the <span class="key">▭</span> button then drag &nbsp;•&nbsp; desktop also: <span class="key">WASD</span>/<span class="key">arrows</span> &amp; screen-edge scroll, right-click to command<br>
-      <b>Build</b> — select an <b>Intern</b>, tap a build button, then tap a spot &nbsp;•&nbsp; <span class="key">Esc</span> or the <span class="key">✕</span> button cancels placement<br>
-      <b>Control groups</b> — <span class="key">Ctrl</span>/<span class="key">⌘</span>+<span class="key">1-9</span> (or hold a <span class="key">1-4</span> chip) to set; tap <span class="key">1-9</span> / a chip to reselect (double-tap to jump there)
+  <!-- Main menu -->
+  <div class="overlay menu" id="startScreen">
+    <div class="menu-bg"></div>
+    <div class="menu-logo">
+      <img class="emblem" src="assets/menu/logo.png" alt="STARLEFT"
+           onerror="this.style.display='none';this.nextElementSibling.style.display='inline-block';">
+      <span class="logo-star">★</span>
+      <div class="logo-text">STARLEFT<small>DISRUPT · SCALE · CONQUER</small></div>
     </div>
-    <button class="btn" onclick="startGame(0)">▶ Raise Seed Round (Start Campaign)</button>
-    <div class="map-select">
-      <div class="panel-label">— or jump straight to a Quarter —</div>
+    <nav class="menu-nav">
+      <button class="sc-btn" onclick="startGame(0)"><span class="ic">▶</span> New Campaign</button>
+      <button class="sc-btn" onclick="showSub('mapScreen')"><span class="ic">🗺</span> Map Selection</button>
+      <button class="sc-btn" onclick="showSub('docScreen')"><span class="ic">📖</span> Documentation</button>
+    </nav>
+    <aside class="menu-news">
+      <h4>Quarterly Briefing</h4>
+      <p>Two rival empires are burning runway to corner the market. Mine <b style="color:#ffd9dd">Funding</b> 💰, scale your team, and disrupt them into bankruptcy.</p>
+      <div class="stat-line">Series ∞ secured · equity not guaranteed</div>
+    </aside>
+    <div class="menu-hint">No sound · best played fullscreen · a mini-RTS</div>
+  </div>
+
+  <!-- Map selection sub-screen -->
+  <div class="overlay submenu" id="mapScreen" style="display:none;">
+    <div class="submenu-panel">
+      <h2>Select a Quarter</h2>
+      <div class="panel-label">Jump straight into any mission</div>
       <div id="mapButtons"></div>
+      <button class="sc-btn back" onclick="hideSub('mapScreen')">◀ Back</button>
     </div>
-    <div class="hint">No sound. Best played fullscreen. Equity not guaranteed.</div>
+  </div>
+
+  <!-- Documentation sub-screen -->
+  <div class="overlay submenu" id="docScreen" style="display:none;">
+    <div class="submenu-panel">
+      <h2>Field Manual</h2>
+      <div class="controls-box">
+        <b>The hustle:</b> Mine <b>Funding</b> 💰, hire an army of Interns &amp; Growth Hackers, and disrupt two rival empires into bankruptcy.<br>
+        <b>Tap / click</b> — select your unit, or command it: tap an enemy to attack, a gold mine to mine, ground to move, an unfinished building to send an Intern<br>
+        <b>Drag</b> — pan the map &nbsp;•&nbsp; <b>Pinch</b> (or mouse <span class="key">wheel</span> / on-screen <span class="key">＋－</span>) — zoom &nbsp;•&nbsp; <b>Minimap</b> — tap to jump<br>
+        <b>Box-select</b> — <span class="key">Shift</span>+drag, or tap the <span class="key">▭</span> button then drag &nbsp;•&nbsp; desktop also: <span class="key">WASD</span>/<span class="key">arrows</span> &amp; screen-edge scroll, right-click to command<br>
+        <b>Build</b> — select an <b>Intern</b>, tap a build button, then tap a spot &nbsp;•&nbsp; <span class="key">Esc</span> or the <span class="key">✕</span> button cancels placement<br>
+        <b>Control groups</b> — <span class="key">Ctrl</span>/<span class="key">⌘</span>+<span class="key">1-9</span> (or hold a <span class="key">1-4</span> chip) to set; tap <span class="key">1-9</span> / a chip to reselect (double-tap to jump there)
+      </div>
+      <button class="sc-btn back" onclick="hideSub('docScreen')">◀ Back</button>
+    </div>
   </div>
 
   <!-- Star-Wars-style intro crawl between maps -->

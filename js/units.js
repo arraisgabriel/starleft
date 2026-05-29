@@ -86,6 +86,13 @@ function commandUnits(state, wx, wy, target){
     return;
   }
 
+  // abandoned outpost → walk the squad onto it to reclaim (don't attack it)
+  if(target && target.abandoned){
+    units.forEach((u,i)=>{ resetMotion(u); issueMove(state,u, target.x+((i%3)-1)*24, target.y+24); });
+    spawnRing(target.x,target.y,'#8effb0');
+    toast('Move a unit onto the outpost to reclaim it');
+    return;
+  }
   if(target && target.owner && target.owner!=='player'){
     // attack
     units.forEach(u=> attackTarget(state,u,target));

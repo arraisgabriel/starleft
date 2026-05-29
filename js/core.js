@@ -48,6 +48,9 @@ function update(state, dt){
   // ---- enemy AI ----
   enemyAI(state,dt);
 
+  // ---- reclaim abandoned outposts (a player unit walking up flips them) ----
+  reclaimOutposts(state);
+
   // ---- fog of war ----
   computeFog(state);
 
@@ -62,6 +65,27 @@ function update(state, dt){
 
   checkWinLose(state);
 }
+/* =====================================================================
+   ABANDONED OUTPOSTS
+   ===================================================================== */
+// A neutral `abandoned` outpost becomes the player's the moment one of their
+// units reaches it — a forward HQ (deposit + supply + build point) on the front.
+function reclaimOutposts(state){
+  let any=false;
+  for(const b of state.entities){
+    if(b.dead || !b.abandoned) continue;
+    const reach = Math.max(b.w,b.h)*TILE*0.5 + TILE*1.6;   // building radius + ~1.5 tiles
+    const taken = state.entities.some(u=> !u.dead && u.kind==='unit' && u.owner==='player' && dist(u,b) < reach);
+    if(taken){
+      b.owner='player'; b.abandoned=false; b.constructing=false; b.hp=b.maxHp;
+      any=true;
+      spawnRing(b.x,b.y,'#8effb0');
+      toast('🚩 Outpost reclaimed — fight from the front!');
+    }
+  }
+  if(any){ recomputeSupply(state); computeFog(state); refreshUI(); }
+}
+
 /* =====================================================================
    WIN / LOSE
    ===================================================================== */
