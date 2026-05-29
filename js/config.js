@@ -43,11 +43,35 @@ const BIOME_PAL = {
 // flat colors for the minimap floor, indexed by biome
 const BIOME_MINI = ['#34522f','#574f47','#234e6e','#2c3744','#bd9c5e','#bcd2dd','#2b2320'];
 
+/* ---- Procedural terrain parameters (Whittaker-style: elevation + climate) ----
+   newMap() builds three coherent noise fields — ELEVATION (land/sea/mountain),
+   TEMPERATURE (a latitude-style gradient + noise), MOISTURE — and classifies
+   each tile from them, so geography comes out realistic and contiguous.
+   A map may override any of these via its `terrain:{}` block; omitted fields
+   fall back to TEMPERATE GRASSLAND below. `biomes` is the allowed land palette
+   ('grass','desert','ice','tech','volcanic'); climates outside it are remapped. */
+const CLIMATE = { grass:B_GRASS, desert:B_DESERT, ice:B_ICE, tech:B_TECH, volcanic:B_VOLCANIC };
+const TERRAIN_DEFAULTS = {
+  // Coverage is set by QUANTILE (target fraction of the map), not an absolute
+  // elevation cutoff, so water/mountain amounts stay consistent across seeds.
+  seaFrac: 0.12,         // fraction of the map that is water (lowest elevations)
+  mtnFrac: 0.10,         // fraction that is mountain (highest elevations)
+  centralSea: 0,         // >0: force a sea of this radius (fraction of min(W,H)) at map centre
+  temp:  { axis:'none', gradient:0.0, base:0.55, noise:0.16 }, // axis: 'y'|'x'|'diag'|'none'
+  moist: { base:0.5, noise:0.5 },
+  freeze: 0.30,          // temp below this (where ice allowed) → snow
+  hot:    0.70,          // temp above this + dry (where desert allowed) → sand
+  dry:    0.42,          // moisture below this counts as arid
+  biomes: ['grass'],     // allowed land climates; others are remapped to the nearest allowed
+  forest: 0.05,          // forest density on moist grass (0..~0.15)
+  beach:  true,          // sandy/dirt shore band where land meets sea
+};
+
 
 /* ---- Unit / building definitions (startup-vs-monopoly satire) ---- */
 const DEF = {
-  hq:       { name:'Open-Plan HQ', icon:'🏢', kind:'building', w:2,h:2, hp:1500, cost:0,   build:35,  sight:7, supply:24, color:'#3b7fd0',
-              flavor:'Stores Funding and onboards unpaid Interns. Has a ping-pong table nobody uses.' },
+  hq:       { name:'Open-Plan HQ', icon:'🏢', kind:'building', w:2,h:2, hp:3000, cost:0,   build:35,  sight:7, supply:24, color:'#3b7fd0',
+              dmg:8, range:7.5, cd:1.6, flavor:'Stores Funding and onboards unpaid Interns. Fires the occasional warning shot from the rooftop.' },
   barracks: { name:'People Ops',   icon:'🎯', kind:'building', w:2,h:2, hp:900,  cost:150, build:20,  sight:5, supply:0,  color:'#5a6b8a',
               flavor:'"Recruiting" department. Turns Funding into Growth Hackers and Consultants.' },
   turret:   { name:'Legal Team',   icon:'⚖️', kind:'building', w:1,h:1, hp:550,  cost:100, build:14,  sight:7, supply:0,  color:'#7a8aa8',
@@ -223,15 +247,16 @@ Weaponize your buzzwords, circle back, and disrupt MegaCorp into bankruptcy. The
     w:124, h:102,
     seed:7,
     player:{ x:8, y:94 },
-    // ---- no grass: huge SAND blocks (top-left + bottom-right) and huge SNOW blocks
-    //      (top-right + bottom-left), with one big WATER pond drowning the centre. ----
-    baseBiome:B_DESERT,
-    biomeAt(x,y,W,H,v){
-      const cx=W*0.5, cy=H*0.5;
-      const pondR=Math.min(W,H)*0.18;                 // big central sea
-      if(Math.hypot(x-cx,y-cy)+(v-0.5)*6 < pondR) return B_WATER;
-      const bx=x+(v-0.5)*7, by=y+(v-0.5)*7;           // jittered block edges (ragged, not ruler-straight)
-      return ((bx<cx)===(by<cy)) ? B_DESERT : B_ICE;  // TL/BR = sand, TR/BL = snow
+    // ---- A frozen-and-scorched wasteland: cold SNOW north, hot DESERT south
+    //      (a real latitude gradient), with a big dead SEA drowning the centre.
+    //      No grassland anywhere. Geography is coherent (no per-tile jitter). ----
+    terrain:{
+      biomes:['desert','ice'],
+      centralSea:0.18,                                       // the dead sea
+      seaFrac:0.15, mtnFrac:0.03,                            // sea + few ponds; few ridges (rocks are hand-placed)
+      temp:{ axis:'y', base:0.5, gradient:0.72, noise:0.12 },// north cold → south hot
+      freeze:0.36, hot:0.6, dry:1.0,                         // dry:1 → desert is temp-driven, not moisture-gated
+      forest:0.03, beach:true,
     },
     enemies:[ {x:12,y:10, extraBarracks:true, defenders:3}, {x:42,y:8, defenders:3}, {x:80,y:8, defenders:3},
               {x:110,y:12, extraBarracks:true, defenders:3}, {x:112,y:50, defenders:3}, {x:110,y:90, extraBarracks:true, defenders:3},

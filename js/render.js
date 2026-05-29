@@ -148,16 +148,19 @@ function drawTile(state,tx,ty,px,py){
   const i=ty*state.W+tx;
   const t=state.tiles[i], b=state.biome[i], v=state.variant[i];
 
+  // Water always uses the neighbour-aware renderer (never a single atlas/oasis
+  // blit), so lakes show open water inside and a real shoreline at the edge.
+  if(t===T_WATER){ drawWaterTile(state,tx,ty,b,v,px,py); return; }
+
   // ---- atlas path: each terrain maps to one cell that includes its own
   //      ground, so the whole 32px tile is a single blit (1px overscan to
   //      hide seams). Any undefined slot falls through to procedural below. ----
-  const slot = t===T_WATER?'water' : t===T_ROCK?'rock' : t===T_TREE?'tree' : 'floor';
+  const slot = t===T_ROCK?'rock' : t===T_TREE?'tree' : 'floor';
   if(b===B_DESERT){ const im=desertTile(slot); if(im){ ctx.drawImage(im,0,0,im.naturalWidth,im.naturalHeight, px,py, TILE+1, TILE+1); return; } }
   const r = spriteFor(b, slot);
   if(r){ ctx.drawImage(ATLAS_IMG, r[0],r[1],r[2],r[3], px,py, TILE+1, TILE+1); return; }
 
   // ---- procedural fallback ----
-  if(t===T_WATER){ drawWaterTile(state,b,v,px,py); return; }
   const P = BIOME_PAL[b] || BIOME_PAL[B_GRASS];
   ctx.fillStyle = (t===T_DIRT) ? P.dirt : (v>0.5 ? P.b : P.a);
   ctx.fillRect(px,py,TILE+1,TILE+1);   // drawn 1px larger so neighbours overlap
@@ -209,24 +212,87 @@ function drawFloorDeco(state,b,v,px,py){
   }
 }
 
-function drawWaterTile(state,b,v,px,py){
-  if(b===B_VOLCANIC){                               // lava lake
-    ctx.fillStyle='#5a1606'; ctx.fillRect(px,py,TILE+1,TILE+1);
+/* ---- Water: neighbour-aware so a lake reads as open water in the interior with
+   a real shoreline only where it meets land — no more shore tile blitted across
+   the middle of the lake. Works for every water biome; the shore rim colour is
+   taken from the adjacent LAND biome (sandy by desert, snowy by ice, …). ---- */
+const EDGE_N=1, EDGE_E=2, EDGE_S=4, EDGE_W=8, EDGE_NE=16, EDGE_SE=32, EDGE_SW=64, EDGE_NW=128;
+function waterEdges(state,tx,ty){
+  const W=state.W,H=state.H,T=state.tiles;
+  const wet=(x,y)=> x>=0&&y>=0&&x<W&&y<H && T[y*W+x]===T_WATER;   // off-map = land → border seas get a shore
+  let mask=0, land=-1;
+  if(!wet(tx,ty-1)){ mask|=EDGE_N; if(ty>0)   land=state.biome[(ty-1)*W+tx]; }
+  if(!wet(tx+1,ty)){ mask|=EDGE_E; if(tx<W-1) land=state.biome[ty*W+tx+1]; }
+  if(!wet(tx,ty+1)){ mask|=EDGE_S; if(ty<H-1) land=state.biome[(ty+1)*W+tx]; }
+  if(!wet(tx-1,ty)){ mask|=EDGE_W; if(tx>0)   land=state.biome[ty*W+tx-1]; }
+  if(mask){                                                       // corners only matter on an edge tile
+    if(!wet(tx+1,ty-1)) mask|=EDGE_NE;
+    if(!wet(tx+1,ty+1)) mask|=EDGE_SE;
+    if(!wet(tx-1,ty+1)) mask|=EDGE_SW;
+    if(!wet(tx-1,ty-1)) mask|=EDGE_NW;
+  }
+  return { mask, land };
+}
+// base water-body colour by the tile's OWN biome; `shore` lightens it near land (depth gradient)
+function waterBody(b,v,shore){
+  if(b===B_VOLCANIC) return shore?'#6a1e08':'#4a1204';
+  if(b===B_ICE)      return v>0.5 ? (shore?'#aed0e0':'#9fc4d8') : (shore?'#b8d8e6':'#aacfe0');
+  return shore ? (v>0.5?'#1d4f73':'#1a466a') : (v>0.5?'#163f5e':'#123a57');
+}
+// rim colour from the adjacent LAND biome
+function shoreColor(b){
+  switch(b){
+    case B_DESERT:   return '#d8c188';   // sand
+    case B_ICE:      return '#e8f2f7';   // snow
+    case B_MOUNTAIN: return '#6f6357';   // rock
+    case B_VOLCANIC: return '#3a2a22';   // scorched
+    case B_TECH:     return '#3a4754';   // panel edge
+    case B_GRASS:    return '#5a7a3e';   // grassy bank
+    default:         return '#cdbf9a';   // neutral foam/sand
+  }
+}
+const SHORE_RIM=4;
+function drawShoreline(b,mask,land,px,py){
+  const dark = b===B_VOLCANIC, R=SHORE_RIM, T=TILE;
+  ctx.fillStyle = dark ? '#1c0f08' : shoreColor(land);
+  if(mask&EDGE_N) ctx.fillRect(px,     py,     T, R);
+  if(mask&EDGE_S) ctx.fillRect(px,     py+T-R, T, R);
+  if(mask&EDGE_W) ctx.fillRect(px,     py,     R, T);
+  if(mask&EDGE_E) ctx.fillRect(px+T-R, py,     R, T);
+  // inner corners (two adjacent orthogonal sides are land) — square off the bend
+  if((mask&EDGE_N)&&(mask&EDGE_W)) ctx.fillRect(px,     py,     R,R);
+  if((mask&EDGE_N)&&(mask&EDGE_E)) ctx.fillRect(px+T-R, py,     R,R);
+  if((mask&EDGE_S)&&(mask&EDGE_W)) ctx.fillRect(px,     py+T-R, R,R);
+  if((mask&EDGE_S)&&(mask&EDGE_E)) ctx.fillRect(px+T-R, py+T-R, R,R);
+  // diagonal-only foam fleck (land touches just at a corner)
+  if((mask&EDGE_NW)&&!(mask&(EDGE_N|EDGE_W))) ctx.fillRect(px,     py,     2,2);
+  if((mask&EDGE_NE)&&!(mask&(EDGE_N|EDGE_E))) ctx.fillRect(px+T-2, py,     2,2);
+  if((mask&EDGE_SW)&&!(mask&(EDGE_S|EDGE_W))) ctx.fillRect(px,     py+T-2, 2,2);
+  if((mask&EDGE_SE)&&!(mask&(EDGE_S|EDGE_E))) ctx.fillRect(px+T-2, py+T-2, 2,2);
+  if(dark) return;
+  ctx.fillStyle='rgba(255,255,255,.28)';   // faint foam highlight just inside the rim
+  if(mask&EDGE_N) ctx.fillRect(px,       py+R,     T,1);
+  if(mask&EDGE_S) ctx.fillRect(px,       py+T-R-1, T,1);
+  if(mask&EDGE_W) ctx.fillRect(px+R,     py,       1,T);
+  if(mask&EDGE_E) ctx.fillRect(px+T-R-1, py,       1,T);
+}
+function drawWaterTile(state,tx,ty,b,v,px,py){
+  const {mask,land}=waterEdges(state,tx,ty);
+  const shore = mask!==0;
+  ctx.fillStyle=waterBody(b,v,shore); ctx.fillRect(px,py,TILE+1,TILE+1);
+  if(b===B_VOLCANIC){                               // lava glow
     const g=0.5+0.5*Math.sin(state.time*1.8+v*10+px*0.05);
     ctx.fillStyle='rgba(255,'+((80+120*g)|0)+',20,.9)'; ctx.fillRect(px+2,py+2,TILE-3,TILE-3);
     ctx.fillStyle='rgba(255,225,120,'+(0.3+0.5*g).toFixed(2)+')'; ctx.fillRect(px+((v*16)|0),py+8,8,3);
-    return;
-  }
-  if(b===B_ICE){                                    // frozen-over water
-    ctx.fillStyle= v>0.5?'#9fc4d8':'#aacfe0'; ctx.fillRect(px,py,TILE+1,TILE+1);
+  } else if(b===B_ICE){                             // frozen crack
     ctx.strokeStyle='rgba(255,255,255,.4)'; ctx.lineWidth=1;
     ctx.beginPath(); ctx.moveTo(px+v*TILE,py); ctx.lineTo(px+TILE*0.5,py+TILE); ctx.stroke();
-    return;
+  } else {                                          // gentle shimmer
+    const sh=0.5+0.5*Math.sin(state.time*1.4 + v*8 + py*0.04);
+    ctx.fillStyle='rgba(255,255,255,'+(0.03+0.05*sh).toFixed(3)+')';
+    ctx.fillRect(px+((v*20)|0), py+8, 10, 2);
   }
-  ctx.fillStyle= v>0.5? '#1d4f73':'#1a466a'; ctx.fillRect(px,py,TILE+1,TILE+1);
-  const sh=0.5+0.5*Math.sin(state.time*1.4 + v*8 + py*0.04);   // gentle shimmer
-  ctx.fillStyle='rgba(255,255,255,'+(0.03+0.05*sh).toFixed(3)+')';
-  ctx.fillRect(px+((v*20)|0), py+8, 10, 2);
+  if(shore) drawShoreline(b,mask,land,px,py);
 }
 
 function drawRockTile(b,v,px,py){

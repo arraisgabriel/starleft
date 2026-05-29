@@ -22,52 +22,68 @@ function newMap(idx){
   const inB=(x,y)=> x>=0&&y>=0&&x<W&&y<H;
   const set=(x,y,t)=>{ if(inB(x,y)) tiles[y*W+x]=t; };
 
-  // ---- biome regions ----
-  // Every map gets a COHERENT palette so it reads like a real place: a grassland
-  // base, one or two seas, one or two mountain ranges, and at most ONE ground
-  // accent (tech, desert, OR snow — never mixed together, and never volcanic).
-  // Snow only forms large fields over the grass/water landscape.
-  // A map may override all of this: `baseBiome` sets the default floor (e.g. sand
-  // for a no-grass map) and `biomeAt(x,y,W,H,variant)` paints an explicit layout.
-  const baseBiome = (cfg.baseBiome!=null) ? cfg.baseBiome : B_GRASS;
-  const biome = new Array(W*H).fill(baseBiome);
-  if(typeof cfg.biomeAt === 'function'){
-    for(let y=0;y<H;y++)for(let x=0;x<W;x++){ const i=y*W+x; biome[i]=cfg.biomeAt(x,y,W,H,variant[i]); }
-    // biome-driven terrain so regions become real obstacles, not just paint
-    for(let i=0;i<W*H;i++){
-      if(biome[i]===B_WATER) tiles[i]=T_WATER;
-      else if(biome[i]===B_MOUNTAIN && variant[i]>0.34) tiles[i]=T_ROCK;
-    }
-  } else {
-    const patches = [];
-    const nWater = 1 + ((rng()*2)|0);                       // 1-2 seas
-    for(let i=0;i<nWater;i++) patches.push({ x:3+((rng()*(W-6))|0), y:3+((rng()*(H-6))|0), r:4+rng()*4.5, kind:B_WATER });
-    const nMtn = 1 + ((rng()*2)|0);                         // 1-2 mountain ranges
-    for(let i=0;i<nMtn;i++) patches.push({ x:3+((rng()*(W-6))|0), y:3+((rng()*(H-6))|0), r:4+rng()*4, kind:B_MOUNTAIN });
-    // one ground accent for the whole map (~40% none) — tech, desert, or snow
-    const accent = [B_GRASS,B_GRASS,B_TECH,B_DESERT,B_ICE][(rng()*5)|0];
-    if(accent===B_ICE){
-      const n = 1 + ((rng()*2)|0);                          // a couple of LARGE snowfields
-      for(let i=0;i<n;i++) patches.push({ x:5+((rng()*(W-10))|0), y:5+((rng()*(H-10))|0), r:7+rng()*5, kind:B_ICE });
-    } else if(accent!==B_GRASS){
-      const n = 1 + ((rng()*2)|0);                          // a tech zone / desert region
-      for(let i=0;i<n;i++) patches.push({ x:4+((rng()*(W-8))|0), y:4+((rng()*(H-8))|0), r:5+rng()*4, kind:accent });
-    }
-    for(let y=0;y<H;y++)for(let x=0;x<W;x++){
-      let bestD=1e9, best=B_GRASS;
-      for(const p of patches){
-        const wob=(variant[y*W+x]-0.5)*p.r*0.85;       // per-tile noise → ragged edges
-        const d=Math.hypot(x-p.x,y-p.y)+wob;
-        if(d<p.r && d<bestD){ bestD=d; best=p.kind; }
-      }
-      biome[y*W+x]=best;
-    }
-    // biome-driven terrain so regions become real obstacles, not just paint
-    for(let i=0;i<W*H;i++){
-      if(biome[i]===B_WATER) tiles[i]=T_WATER;                       // seas
-      else if(biome[i]===B_MOUNTAIN && variant[i]>0.34) tiles[i]=T_ROCK; // ranges w/ passable gaps
+  // ---- procedural geography (coherent elevation + climate) ----
+  // Three seeded noise fields — ELEVATION (sea / land / mountain), TEMPERATURE
+  // (a latitude-style gradient + noise) and MOISTURE — are sampled per tile and
+  // classified Whittaker-style, so regions and coastlines come out smooth and
+  // contiguous instead of the old per-tile-random speckle. Tunable per map via
+  // cfg.terrain (see TERRAIN_DEFAULTS); maps without it get temperate grassland.
+  const P = Object.assign({}, TERRAIN_DEFAULTS, cfg.terrain||{});
+  P.temp  = Object.assign({}, TERRAIN_DEFAULTS.temp,  (cfg.terrain&&cfg.terrain.temp) ||{});
+  P.moist = Object.assign({}, TERRAIN_DEFAULTS.moist, (cfg.terrain&&cfg.terrain.moist)||{});
+  const allow = new Set((P.biomes||['grass']).map(n=>CLIMATE[n]).filter(v=>v!=null));
+  const landBiome = (P.biomes && CLIMATE[P.biomes[0]]!=null) ? CLIMATE[P.biomes[0]] : B_GRASS;
+
+  const nzE=makeNoise2D(cfg.seed*131+17),  nzT=makeNoise2D(cfg.seed*131+53),
+        nzM=makeNoise2D(cfg.seed*131+97),  nzW=makeNoise2D(cfg.seed*131+211);
+  const cxF=W*0.5, cyF=H*0.5, minWH=Math.min(W,H);
+  const FE=0.06, FT=0.05, FM=0.06, FW=0.09;             // feature frequencies
+  const tempAt=(x,y)=>{ const T=P.temp; let g=0;
+    if(T.axis==='y') g=((y/H)-0.5)*T.gradient;          // south (bottom) hotter
+    else if(T.axis==='x') g=((x/W)-0.5)*T.gradient;
+    else if(T.axis==='diag') g=(((x/W+y/H)*0.5)-0.5)*T.gradient;
+    return T.base+g+(nzT.fbm(x*FT,y*FT,3)-0.5)*2*T.noise;
+  };
+  const moistAt=(x,y)=> P.moist.base+(nzM.fbm(x*FM,y*FM,4)-0.5)*2*P.moist.noise;
+
+  // ELEVATION field (domain-warped fBm + optional forced central sea), cached once
+  const elev=new Float32Array(W*H);
+  for(let y=0;y<H;y++)for(let x=0;x<W;x++){
+    const wx=x+(nzW.fbm(x*FW,y*FW,1)-0.5)*9, wy=y+(nzW.fbm(x*FW+50,y*FW+50,1)-0.5)*9;
+    let e=nzE.fbm(wx*FE,wy*FE,4);
+    if(P.centralSea>0){ const r=Math.hypot(x-cxF,y-cyF)/(minWH*P.centralSea); e-=Math.max(0,1-r)*0.5; }
+    elev[y*W+x]=e;
+  }
+  // sea / mountain cutoffs picked by QUANTILE → consistent coverage across seeds
+  const sortedE=Float32Array.from(elev).sort();
+  const seaCut=sortedE[Math.min(W*H-1, Math.floor(P.seaFrac*W*H))];
+  const mtnCut=sortedE[Math.min(W*H-1, Math.floor((1-P.mtnFrac)*W*H))];
+
+  const biome = new Array(W*H);
+  // 1) classify each tile into a structural KIND: water, mountain, or a land climate
+  const K_WATER=100, K_MTN=101;
+  const kind=new Array(W*H);
+  for(let y=0;y<H;y++)for(let x=0;x<W;x++){
+    const i=y*W+x, e=elev[i];
+    if(e<seaCut) kind[i]=K_WATER;
+    else if(e>mtnCut) kind[i]=K_MTN;
+    else kind[i]=climateBiome(tempAt(x,y), moistAt(x,y), P, allow); // temp/moist sampled on land only
+  }
+  // 2) majority-vote smoothing → contiguous regions, no orphan single-tile specks
+  smoothKind(kind, W, H, 2);
+  // 3) derive biome[] + terrain tiles[] from the smoothed kinds
+  for(let y=0;y<H;y++)for(let x=0;x<W;x++){
+    const i=y*W+x, k=kind[i];
+    if(k===K_WATER){ tiles[i]=T_WATER;                  // frozen if cold, lava on volcanic maps, else open blue
+      biome[i]= allow.has(B_VOLCANIC)?B_VOLCANIC : (tempAt(x,y)<P.freeze?B_ICE:B_WATER); }
+    else if(k===K_MTN){ biome[i]=B_MOUNTAIN; tiles[i]= variant[i]>0.34?T_ROCK:T_GRASS; } // ranges w/ passable gaps
+    else { biome[i]=k; tiles[i]=T_GRASS;
+      // clustered groves on moist grassland (noise-gated so they form copses, not static)
+      if(k===B_GRASS && P.forest>0 && nzM.fbm(x*0.25+7,y*0.25+7,2) > 1-P.forest*3 && variant[i]>0.3) tiles[i]=T_TREE;
     }
   }
+  // 4) sandy/dirt shore band where land meets sea (Whittaker realism; stays passable)
+  if(P.beach) addBeach(tiles, W, H);
 
   // occasional dirt — kept sparse and clustered so the floor still reads as one surface
   for(let k=0;k<W*H*0.012;k++){
@@ -94,18 +110,24 @@ function newMap(idx){
     for(let i=0;i<f.n;i++){ if(passableTerrain(tiles[cy*W+cx]||0)) set(cx,cy,T_TREE);
       cx+=((rng()*3)|0)-1; cy+=((rng()*3)|0)-1; if(!inB(cx,cy)){cx=f.x;cy=f.y;} }
   });
-
-  // Make sure player & enemy start areas are clear, buildable floor (terrain +
-  // biome). Clear to the map's BASE biome — on a no-grass map (baseBiome=sand)
-  // that keeps the theme intact instead of stamping grass patches everywhere.
+  // Make sure player & enemy start areas are clear, buildable floor. Keep the
+  // local climate (desert/snow/grass) so the theme reads naturally — only flip
+  // sea/mountain under a cleared spot to the map's dominant land biome.
   const clearArea=(px,py,rad)=>{ for(let y=-rad;y<=rad;y++)for(let x=-rad;x<=rad;x++){
-    if(inB(px+x,py+y)){ const j=(py+y)*W+(px+x); tiles[j]=T_GRASS; biome[j]=baseBiome; } } };
+    if(inB(px+x,py+y)){ const j=(py+y)*W+(px+x); tiles[j]=T_GRASS;
+      if(biome[j]===B_WATER||biome[j]===B_MOUNTAIN) biome[j]=landBiome; } } };
   clearArea(cfg.player.x,cfg.player.y,4);
   bases.forEach(b=> clearArea(b.x,b.y,4));
   (cfg.lostBases||[]).forEach(b=> clearArea(b.x,b.y,3));   // abandoned outposts sit on clear ground too
-  // keep gold nodes reachable: clear the footprint to passable floor (biome theme kept)
+  // keep gold nodes reachable: clear the footprint to passable floor (climate theme kept)
   cfg.goldNodes.forEach(g=>{ for(let y=-2;y<=2;y++)for(let x=-2;x<=2;x++){
-    if(inB(g.x+x,g.y+y)){ const j=(g.y+y)*W+(g.x+x); tiles[j]=T_GRASS; biome[j]=baseBiome; } } });
+    if(inB(g.x+x,g.y+y)){ const j=(g.y+y)*W+(g.x+x); tiles[j]=T_GRASS;
+      if(biome[j]===B_WATER||biome[j]===B_MOUNTAIN) biome[j]=landBiome; } } });
+
+  // Erode lone/thin water (jittered lakes + clearings can orphan single tiles).
+  // Runs AFTER clearing but BEFORE the blocked grid is built; erode-only, so it
+  // can never re-block the land bridges carved below.
+  despeckleWater(tiles, biome, W, H, landBiome, 3);
 
   const zoom0 = initialZoom(W,H);
   const state = {
@@ -149,11 +171,15 @@ function newMap(idx){
       if(seen[g.y*W+g.x]) continue;
       let x=g.x,y=g.y,guard=0;
       while(!seen[y*W+x] && guard++<W+H){
-        const k=y*W+x; if(B[k]){ B[k]=0; tiles[k]=T_DIRT; }
+        const k=y*W+x; if(B[k]){ B[k]=0; tiles[k]=T_DIRT; if(biome[k]===B_WATER||biome[k]===B_MOUNTAIN) biome[k]=landBiome; }
         if(Math.abs(sx-x)>=Math.abs(sy-y)) x+=Math.sign(sx-x); else y+=Math.sign(sy-y);
       }
     }
   }
+
+  // final visual tidy: remove any strict single-tile biome orphans left by the
+  // climate seams, cleared areas, or carved bridges (biome-only; passability set)
+  despeckleBiome(biome, W, H);
 
   // gold nodes
   cfg.goldNodes.forEach(g=>{
@@ -184,6 +210,99 @@ function newMap(idx){
 
   recomputeSupply(state);
   return state;
+}
+
+/* ---------- procedural-terrain helpers ---------- */
+// Pick a LAND climate biome from (temperature, moisture), restricted to the
+// map's allowed set. Cold → snow, hot+arid → sand, else grass; on a no-grass
+// map the leftover temperate band is split desert/ice by the temp midpoint.
+function climateBiome(t, m, P, allow){
+  if(allow.has(B_ICE)    && t < P.freeze)              return B_ICE;
+  if(allow.has(B_DESERT) && t > P.hot && m < P.dry)    return B_DESERT;
+  if(allow.has(B_GRASS))                               return B_GRASS;
+  if(allow.has(B_TECH))                                return B_TECH;
+  if(allow.has(B_DESERT) && allow.has(B_ICE))          return t < (P.freeze+P.hot)/2 ? B_ICE : B_DESERT;
+  if(allow.has(B_DESERT))                              return B_DESERT;
+  if(allow.has(B_ICE))                                 return B_ICE;
+  return B_GRASS;
+}
+
+// 8-neighbour majority vote over an integer KIND grid, `iters` passes. Off-map
+// counts as the cell's own value (edge-stable). Keeps the current value on a tie,
+// so it dissolves orphan specks without eroding genuine regions. Allocation-light
+// (a fixed 9-slot scratch, no per-tile Map) so it's cheap on the largest maps.
+function smoothKind(kind, W, H, iters){
+  const out = kind.slice(), buf = new Int32Array(9);
+  for(let it=0; it<iters; it++){
+    for(let y=0;y<H;y++)for(let x=0;x<W;x++){
+      const i=y*W+x, self=kind[i]; let n=0;
+      for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++){
+        const nx=x+dx, ny=y+dy;
+        buf[n++] = (nx<0||ny<0||nx>=W||ny>=H) ? self : kind[ny*W+nx];
+      }
+      let bestK=self, bestC=0, selfC=0;
+      for(let a=0;a<9;a++){ let c=0; const va=buf[a];
+        for(let b2=0;b2<9;b2++) if(buf[b2]===va) c++;
+        if(va===self) selfC=c;
+        if(c>bestC){ bestC=c; bestK=va; }
+      }
+      out[i] = (selfC>=bestC) ? self : bestK;   // keep self unless something is strictly more common
+    }
+    for(let i=0;i<W*H;i++) kind[i]=out[i];
+  }
+}
+
+// Erode lone/thin water: any water tile with <2 orthogonal water neighbours
+// reverts to land, taking a neighbouring land biome (so it doesn't render as a
+// stray water-floor tile). Iterated, because eroding a thin strip's ends can
+// briefly orphan its middle — a couple of passes leaves only solid seas.
+function despeckleWater(tiles, biome, W, H, landBiome, iters){
+  for(let it=0; it<(iters||1); it++){
+    const out = tiles.slice(); let changed=false;
+    for(let y=0;y<H;y++)for(let x=0;x<W;x++){
+      const i=y*W+x; if(tiles[i]!==T_WATER) continue;
+      let n=0, lb=-1;
+      if(x<W-1){ if(tiles[i+1]===T_WATER) n++; else lb=biome[i+1]; }
+      if(x>0)  { if(tiles[i-1]===T_WATER) n++; else if(lb<0) lb=biome[i-1]; }
+      if(y<H-1){ if(tiles[i+W]===T_WATER) n++; else if(lb<0) lb=biome[i+W]; }
+      if(y>0)  { if(tiles[i-W]===T_WATER) n++; else if(lb<0) lb=biome[i-W]; }
+      if(n<2){ out[i]=T_GRASS; biome[i] = (lb>=0 && lb!==B_WATER) ? lb : landBiome; changed=true; }
+    }
+    for(let i=0;i<W*H;i++) tiles[i]=out[i];
+    if(!changed) break;
+  }
+}
+
+// Final tidy: any tile whose biome differs from ALL 8 neighbours (a strict orphan
+// — e.g. a lone snow tile ringed by sand) is repainted to its neighbours' mode.
+// Biome-only (never touches terrain/passability), so it's safe to run last.
+function despeckleBiome(biome, W, H){
+  const out = biome.slice(), buf = new Int32Array(8);
+  for(let y=0;y<H;y++)for(let x=0;x<W;x++){
+    const i=y*W+x, self=biome[i]; let same=0, n=0;
+    for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++){ if(!dx&&!dy) continue;
+      const nx=x+dx, ny=y+dy;
+      const b = (nx<0||ny<0||nx>=W||ny>=H) ? self : biome[ny*W+nx];
+      buf[n++]=b; if(b===self) same++;
+    }
+    if(same>0) continue;                              // not an orphan
+    let bestB=buf[0], bestC=0;
+    for(let a=0;a<8;a++){ let c=0, va=buf[a]; for(let b2=0;b2<8;b2++) if(buf[b2]===va) c++; if(c>bestC){ bestC=c; bestB=va; } }
+    out[i]=bestB;
+  }
+  for(let i=0;i<W*H;i++) biome[i]=out[i];
+}
+
+// Sandy/dirt shore: any grass tile orthogonally touching water becomes T_DIRT
+// (a wet bank). Grass→dirt is passable→passable, so it never walls anything off.
+function addBeach(tiles, W, H){
+  const out = tiles.slice();
+  for(let y=0;y<H;y++)for(let x=0;x<W;x++){
+    const i=y*W+x; if(tiles[i]!==T_GRASS) continue;
+    if((x<W-1&&tiles[i+1]===T_WATER) || (x>0&&tiles[i-1]===T_WATER) ||
+       (y<H-1&&tiles[i+W]===T_WATER) || (y>0&&tiles[i-W]===T_WATER)) out[i]=T_DIRT;
+  }
+  for(let i=0;i<W*H;i++) tiles[i]=out[i];
 }
 
 /* ---------- entity factories ---------- */
