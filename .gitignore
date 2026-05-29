@@ -1,3 +1,6 @@
+# Local dev tooling & source art — kept out of the deployed GitHub Pages site
+_dev/
+
 # Secrets / env
 .env
 .env.*
