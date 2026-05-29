@@ -1,0 +1,1058 @@
+{
+  "recruiter_walk": {
+    "ok": true,
+    "tries": 1,
+    "atlas": "unit_recruiter_walk.png",
+    "fw": 524,
+    "fh": 523,
+    "rects": [
+      [
+        0,
+        0,
+        524,
+        523
+      ],
+      [
+        524,
+        0,
+        524,
+        523
+      ],
+      [
+        1048,
+        0,
+        524,
+        523
+      ],
+      [
+        1572,
+        0,
+        524,
+        523
+      ]
+    ]
+  },
+  "recruiter_heal": {
+    "ok": true,
+    "tries": 1,
+    "atlas": "unit_recruiter_heal.png",
+    "fw": 524,
+    "fh": 523,
+    "rects": [
+      [
+        0,
+        0,
+        524,
+        523
+      ],
+      [
+        524,
+        0,
+        524,
+        523
+      ],
+      [
+        1048,
+        0,
+        524,
+        523
+      ],
+      [
+        1572,
+        0,
+        524,
+        523
+      ]
+    ]
+  },
+  "recruiter_walk_enemy": {
+    "ok": true,
+    "tries": 1,
+    "atlas": "unit_recruiter_walk_enemy.png",
+    "fw": 524,
+    "fh": 523,
+    "rects": [
+      [
+        0,
+        0,
+        524,
+        523
+      ],
+      [
+        524,
+        0,
+        524,
+        523
+      ],
+      [
+        1048,
+        0,
+        524,
+        523
+      ],
+      [
+        1572,
+        0,
+        524,
+        523
+      ]
+    ]
+  },
+  "recruiter_heal_enemy": {
+    "ok": true,
+    "tries": 1,
+    "atlas": "unit_recruiter_heal_enemy.png",
+    "fw": 524,
+    "fh": 523,
+    "rects": [
+      [
+        0,
+        0,
+        524,
+        523
+      ],
+      [
+        524,
+        0,
+        524,
+        523
+      ],
+      [
+        1048,
+        0,
+        524,
+        523
+      ],
+      [
+        1572,
+        0,
+        524,
+        523
+      ]
+    ]
+  },
+  "hustler_walk": {
+    "ok": true,
+    "tries": 1,
+    "atlas": "unit_hustler_walk.png",
+    "fw": 524,
+    "fh": 523,
+    "rects": [
+      [
+        0,
+        0,
+        524,
+        523
+      ],
+      [
+        524,
+        0,
+        524,
+        523
+      ],
+      [
+        1048,
+        0,
+        524,
+        523
+      ],
+      [
+        1572,
+        0,
+        524,
+        523
+      ]
+    ]
+  },
+  "hustler_attack": {
+    "ok": true,
+    "tries": 1,
+    "atlas": "unit_hustler_attack.png",
+    "fw": 524,
+    "fh": 523,
+    "rects": [
+      [
+        0,
+        0,
+        524,
+        523
+      ],
+      [
+        524,
+        0,
+        524,
+        523
+      ],
+      [
+        1048,
+        0,
+        524,
+        523
+      ],
+      [
+        1572,
+        0,
+        524,
+        523
+      ]
+    ]
+  },
+  "hustler_walk_enemy": {
+    "ok": true,
+    "tries": 1,
+    "atlas": "unit_hustler_walk_enemy.png",
+    "fw": 524,
+    "fh": 523,
+    "rects": [
+      [
+        0,
+        0,
+        524,
+        523
+      ],
+      [
+        524,
+        0,
+        524,
+        523
+      ],
+      [
+        1048,
+        0,
+        524,
+        523
+      ],
+      [
+        1572,
+        0,
+        524,
+        523
+      ]
+    ]
+  },
+  "hustler_attack_enemy": {
+    "ok": true,
+    "tries": 1,
+    "atlas": "unit_hustler_attack_enemy.png",
+    "fw": 524,
+    "fh": 523,
+    "rects": [
+      [
+        0,
+        0,
+        524,
+        523
+      ],
+      [
+        524,
+        0,
+        524,
+        523
+      ],
+      [
+        1048,
+        0,
+        524,
+        523
+      ],
+      [
+        1572,
+        0,
+        524,
+        523
+      ]
+    ]
+  },
+  "lobbyist_walk": {
+    "ok": true,
+    "tries": 1,
+    "atlas": "unit_lobbyist_walk.png",
+    "fw": 524,
+    "fh": 523,
+    "rects": [
+      [
+        0,
+        0,
+        524,
+        523
+      ],
+      [
+        524,
+        0,
+        524,
+        523
+      ],
+      [
+        1048,
+        0,
+        524,
+        523
+      ],
+      [
+        1572,
+        0,
+        524,
+        523
+      ]
+    ]
+  },
+  "lobbyist_attack": {
+    "ok": true,
+    "tries": 1,
+    "atlas": "unit_lobbyist_attack.png",
+    "fw": 524,
+    "fh": 523,
+    "rects": [
+      [
+        0,
+        0,
+        524,
+        523
+      ],
+      [
+        524,
+        0,
+        524,
+        523
+      ],
+      [
+        1048,
+        0,
+        524,
+        523
+      ],
+      [
+        1572,
+        0,
+        524,
+        523
+      ]
+    ]
+  },
+  "lobbyist_walk_enemy": {
+    "ok": true,
+    "tries": 1,
+    "atlas": "unit_lobbyist_walk_enemy.png",
+    "fw": 524,
+    "fh": 523,
+    "rects": [
+      [
+        0,
+        0,
+        524,
+        523
+      ],
+      [
+        524,
+        0,
+        524,
+        523
+      ],
+      [
+        1048,
+        0,
+        524,
+        523
+      ],
+      [
+        1572,
+        0,
+        524,
+        523
+      ]
+    ]
+  },
+  "lobbyist_attack_enemy": {
+    "ok": true,
+    "tries": 1,
+    "atlas": "unit_lobbyist_attack_enemy.png",
+    "fw": 524,
+    "fh": 523,
+    "rects": [
+      [
+        0,
+        0,
+        524,
+        523
+      ],
+      [
+        524,
+        0,
+        524,
+        523
+      ],
+      [
+        1048,
+        0,
+        524,
+        523
+      ],
+      [
+        1572,
+        0,
+        524,
+        523
+      ]
+    ]
+  },
+  "foodtruck_walk": {
+    "ok": true,
+    "tries": 1,
+    "atlas": "unit_foodtruck_walk.png",
+    "fw": 504,
+    "fh": 534,
+    "rects": [
+      [
+        0,
+        0,
+        504,
+        534
+      ],
+      [
+        504,
+        0,
+        504,
+        534
+      ],
+      [
+        1008,
+        0,
+        504,
+        534
+      ],
+      [
+        1512,
+        0,
+        504,
+        534
+      ]
+    ]
+  },
+  "foodtruck_attack": {
+    "ok": true,
+    "tries": 1,
+    "atlas": "unit_foodtruck_attack.png",
+    "fw": 503,
+    "fh": 539,
+    "rects": [
+      [
+        0,
+        0,
+        503,
+        539
+      ],
+      [
+        503,
+        0,
+        503,
+        539
+      ],
+      [
+        1006,
+        0,
+        503,
+        539
+      ],
+      [
+        1509,
+        0,
+        503,
+        539
+      ]
+    ]
+  },
+  "foodtruck_walk_enemy": {
+    "ok": true,
+    "tries": 1,
+    "atlas": "unit_foodtruck_walk_enemy.png",
+    "fw": 504,
+    "fh": 534,
+    "rects": [
+      [
+        0,
+        0,
+        504,
+        534
+      ],
+      [
+        504,
+        0,
+        504,
+        534
+      ],
+      [
+        1008,
+        0,
+        504,
+        534
+      ],
+      [
+        1512,
+        0,
+        504,
+        534
+      ]
+    ]
+  },
+  "foodtruck_attack_enemy": {
+    "ok": true,
+    "tries": 1,
+    "atlas": "unit_foodtruck_attack_enemy.png",
+    "fw": 504,
+    "fh": 539,
+    "rects": [
+      [
+        0,
+        0,
+        504,
+        539
+      ],
+      [
+        504,
+        0,
+        504,
+        539
+      ],
+      [
+        1008,
+        0,
+        504,
+        539
+      ],
+      [
+        1512,
+        0,
+        504,
+        539
+      ]
+    ]
+  },
+  "auditor_walk": {
+    "ok": true,
+    "tries": 1,
+    "atlas": "unit_auditor_walk.png",
+    "fw": 472,
+    "fh": 519,
+    "rects": [
+      [
+        0,
+        0,
+        472,
+        519
+      ],
+      [
+        472,
+        0,
+        472,
+        519
+      ],
+      [
+        944,
+        0,
+        472,
+        519
+      ],
+      [
+        1416,
+        0,
+        472,
+        519
+      ]
+    ]
+  },
+  "auditor_attack": {
+    "ok": true,
+    "tries": 1,
+    "atlas": "unit_auditor_attack.png",
+    "fw": 508,
+    "fh": 539,
+    "rects": [
+      [
+        0,
+        0,
+        508,
+        539
+      ],
+      [
+        508,
+        0,
+        508,
+        539
+      ],
+      [
+        1016,
+        0,
+        508,
+        539
+      ],
+      [
+        1524,
+        0,
+        508,
+        539
+      ]
+    ]
+  },
+  "auditor_walk_enemy": {
+    "ok": true,
+    "tries": 1,
+    "atlas": "unit_auditor_walk_enemy.png",
+    "fw": 499,
+    "fh": 524,
+    "rects": [
+      [
+        0,
+        0,
+        499,
+        524
+      ],
+      [
+        499,
+        0,
+        499,
+        524
+      ],
+      [
+        998,
+        0,
+        499,
+        524
+      ],
+      [
+        1497,
+        0,
+        499,
+        524
+      ]
+    ]
+  },
+  "auditor_attack_enemy": {
+    "ok": true,
+    "tries": 1,
+    "atlas": "unit_auditor_attack_enemy.png",
+    "fw": 508,
+    "fh": 539,
+    "rects": [
+      [
+        0,
+        0,
+        508,
+        539
+      ],
+      [
+        508,
+        0,
+        508,
+        539
+      ],
+      [
+        1016,
+        0,
+        508,
+        539
+      ],
+      [
+        1524,
+        0,
+        508,
+        539
+      ]
+    ]
+  },
+  "founder_walk": {
+    "ok": true,
+    "tries": 1,
+    "atlas": "unit_founder_walk.png",
+    "fw": 508,
+    "fh": 539,
+    "rects": [
+      [
+        0,
+        0,
+        508,
+        539
+      ],
+      [
+        508,
+        0,
+        508,
+        539
+      ],
+      [
+        1016,
+        0,
+        508,
+        539
+      ],
+      [
+        1524,
+        0,
+        508,
+        539
+      ]
+    ]
+  },
+  "founder_attack": {
+    "ok": true,
+    "tries": 1,
+    "atlas": "unit_founder_attack.png",
+    "fw": 508,
+    "fh": 539,
+    "rects": [
+      [
+        0,
+        0,
+        508,
+        539
+      ],
+      [
+        508,
+        0,
+        508,
+        539
+      ],
+      [
+        1016,
+        0,
+        508,
+        539
+      ],
+      [
+        1524,
+        0,
+        508,
+        539
+      ]
+    ]
+  },
+  "founder_walk_enemy": {
+    "ok": true,
+    "tries": 1,
+    "atlas": "unit_founder_walk_enemy.png",
+    "fw": 508,
+    "fh": 539,
+    "rects": [
+      [
+        0,
+        0,
+        508,
+        539
+      ],
+      [
+        508,
+        0,
+        508,
+        539
+      ],
+      [
+        1016,
+        0,
+        508,
+        539
+      ],
+      [
+        1524,
+        0,
+        508,
+        539
+      ]
+    ]
+  },
+  "founder_attack_enemy": {
+    "ok": true,
+    "tries": 1,
+    "atlas": "unit_founder_attack_enemy.png",
+    "fw": 508,
+    "fh": 539,
+    "rects": [
+      [
+        0,
+        0,
+        508,
+        539
+      ],
+      [
+        508,
+        0,
+        508,
+        539
+      ],
+      [
+        1016,
+        0,
+        508,
+        539
+      ],
+      [
+        1524,
+        0,
+        508,
+        539
+      ]
+    ]
+  },
+  "courier_walk": {
+    "ok": true,
+    "tries": 1,
+    "atlas": "unit_courier_walk.png",
+    "fw": 508,
+    "fh": 539,
+    "rects": [
+      [
+        0,
+        0,
+        508,
+        539
+      ],
+      [
+        508,
+        0,
+        508,
+        539
+      ],
+      [
+        1016,
+        0,
+        508,
+        539
+      ],
+      [
+        1524,
+        0,
+        508,
+        539
+      ]
+    ]
+  },
+  "courier_heal": {
+    "ok": true,
+    "tries": 1,
+    "atlas": "unit_courier_heal.png",
+    "fw": 508,
+    "fh": 539,
+    "rects": [
+      [
+        0,
+        0,
+        508,
+        539
+      ],
+      [
+        508,
+        0,
+        508,
+        539
+      ],
+      [
+        1016,
+        0,
+        508,
+        539
+      ],
+      [
+        1524,
+        0,
+        508,
+        539
+      ]
+    ]
+  },
+  "courier_walk_enemy": {
+    "ok": true,
+    "tries": 1,
+    "atlas": "unit_courier_walk_enemy.png",
+    "fw": 508,
+    "fh": 539,
+    "rects": [
+      [
+        0,
+        0,
+        508,
+        539
+      ],
+      [
+        508,
+        0,
+        508,
+        539
+      ],
+      [
+        1016,
+        0,
+        508,
+        539
+      ],
+      [
+        1524,
+        0,
+        508,
+        539
+      ]
+    ]
+  },
+  "courier_heal_enemy": {
+    "ok": true,
+    "tries": 1,
+    "atlas": "unit_courier_heal_enemy.png",
+    "fw": 508,
+    "fh": 539,
+    "rects": [
+      [
+        0,
+        0,
+        508,
+        539
+      ],
+      [
+        508,
+        0,
+        508,
+        539
+      ],
+      [
+        1016,
+        0,
+        508,
+        539
+      ],
+      [
+        1524,
+        0,
+        508,
+        539
+      ]
+    ]
+  },
+  "bomber_walk": {
+    "ok": true,
+    "tries": 1,
+    "atlas": "unit_bomber_walk.png",
+    "fw": 508,
+    "fh": 539,
+    "rects": [
+      [
+        0,
+        0,
+        508,
+        539
+      ],
+      [
+        508,
+        0,
+        508,
+        539
+      ],
+      [
+        1016,
+        0,
+        508,
+        539
+      ],
+      [
+        1524,
+        0,
+        508,
+        539
+      ]
+    ]
+  },
+  "bomber_attack": {
+    "ok": true,
+    "tries": 1,
+    "atlas": "unit_bomber_attack.png",
+    "fw": 508,
+    "fh": 539,
+    "rects": [
+      [
+        0,
+        0,
+        508,
+        539
+      ],
+      [
+        508,
+        0,
+        508,
+        539
+      ],
+      [
+        1016,
+        0,
+        508,
+        539
+      ],
+      [
+        1524,
+        0,
+        508,
+        539
+      ]
+    ]
+  },
+  "bomber_walk_enemy": {
+    "ok": true,
+    "tries": 1,
+    "atlas": "unit_bomber_walk_enemy.png",
+    "fw": 508,
+    "fh": 539,
+    "rects": [
+      [
+        0,
+        0,
+        508,
+        539
+      ],
+      [
+        508,
+        0,
+        508,
+        539
+      ],
+      [
+        1016,
+        0,
+        508,
+        539
+      ],
+      [
+        1524,
+        0,
+        508,
+        539
+      ]
+    ]
+  },
+  "bomber_attack_enemy": {
+    "ok": true,
+    "tries": 1,
+    "atlas": "unit_bomber_attack_enemy.png",
+    "fw": 508,
+    "fh": 539,
+    "rects": [
+      [
+        0,
+        0,
+        508,
+        539
+      ],
+      [
+        508,
+        0,
+        508,
+        539
+      ],
+      [
+        1016,
+        0,
+        508,
+        539
+      ],
+      [
+        1524,
+        0,
+        508,
+        539
+      ]
+    ]
+  }
+}
