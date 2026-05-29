@@ -18,7 +18,7 @@ function refreshUI(){
   // ---- info text (cheap text updates — safe to refresh every call) ----
   if(!sel.length){
     elTitle.textContent='Nothing selected';
-    elDesc.innerHTML='Left-drag to select your units. <b>⌘/Shift+click</b> adds a unit to the selection. Right-click to move, gather or attack.<br>Select a <b>Worker</b> then a build button to construct — or right-click an <b>unfinished building</b> to send an Intern to finish it. &nbsp;<b>Ctrl/⌘+1-9</b> control group.';
+    elDesc.innerHTML='<b>Tap</b> a unit to select; tap an enemy/mine/ground to attack, gather or move. <b>Drag</b> to pan, <b>pinch</b> (or wheel / +−) to zoom.<br><b>Box-select:</b> Shift+drag or the <b>Select box</b> button. Select a <b>Worker</b> then a build button, then tap a spot. <b>Ctrl/⌘+1-9</b> control group.';
   } else if(sel.length>1){
     const counts={}; sel.forEach(s=>counts[s.type]=(counts[s.type]||0)+1);
     elTitle.textContent= sel.length+' units selected';
@@ -45,6 +45,10 @@ function refreshUI(){
   const sig = cmdSig(sel);
   if(sig !== G._cmdSig){ G._cmdSig = sig; buildCommands(sel); }
   updateAffordability();
+
+  // show the Cancel button only while placing a building (touch replacement for Esc)
+  const cb=document.getElementById('btn-cancel');
+  if(cb) cb.style.display = G.placing ? '' : 'none';
 }
 
 // Signature of which command buttons should be shown for the current selection.
@@ -109,7 +113,7 @@ function tryPlaceFixed(type){
     const sel=G.selection.find(e=>e.kind==='unit'&&e.type==='worker'&&!e.dead);
     if(!sel){ toast('Select a Worker first'); return; }
     G.placing={type:'hq', def:Object.assign({},DEF.hq,{cost:350}), builder:sel};
-    toast('Click a spot for the Command Center (Esc cancels)');
+    toast('Tap a spot for the Command Center (Cancel / Esc to abort)');
   }
 }
 
@@ -150,7 +154,7 @@ function buildMapSelect(){
   });
 }
 function loadMap(idx){
-  G=newMap(idx); clampCam(G); refreshUI(); running=true;
+  G=newMap(idx); syncHud(); clampCam(G); refreshUI(); running=true;
   toast('Quarter '+(idx+1)+': '+G.cfg.name);
 }
 
@@ -172,8 +176,8 @@ function showCrawl(idx, done){
   const finish=()=>{ if(finished) return; finished=true; clearTimeout(timer);
     scr.style.display='none'; done&&done(); };
   document.getElementById('crawl-skip').onclick=finish;
-  // auto-advance when the crawl scrolls off (anim ~46s + delay) — but keep it skippable
-  const timer=setTimeout(finish, idx===0? 55000 : 50000);
+  // auto-advance when the crawl scrolls off (anim 55s + 0.2s delay) — but keep it skippable
+  const timer=setTimeout(finish, idx===0? 57000 : 56000);
 }
 
 function onVictory(){

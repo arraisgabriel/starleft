@@ -1,41 +1,110 @@
 /* main.js — bootstrap, loaded LAST. The ONLY file with top-level executing code: canvas sizing, event-listener registration, buildMapSelect(), and the requestAnimationFrame loop. */
 addEventListener('resize',resize); resize();
-cv.addEventListener('mousemove', e=>{
-  mouse.sx=e.clientX; mouse.sy=e.clientY;
-  if(!G) return;
-  const w=screenToWorld(G,e.clientX,e.clientY); mouse.wx=w.x; mouse.wy=w.y;
-  if(drag.active){ drag.cx=e.clientX; drag.cy=e.clientY; if(Math.hypot(drag.cx-drag.sx,drag.cy-drag.sy)>5) drag.moved=true; }
-});
+addEventListener('orientationchange', ()=>resize());
 
-cv.addEventListener('mousedown', e=>{
+/* ---------------------------------------------------------------------
+   UNIFIED POINTER INPUT (mouse + touch). One gesture machine:
+     tap   → dispatchTap (select / move / attack / gather / build / place)
+     drag  → pan the map (one finger / left-drag)
+     shift+drag or armed "Select box" → box-select
+     2 fingers → pinch-zoom
+   Desktop right-click is kept as a bonus command alias.
+   --------------------------------------------------------------------- */
+function gestureBegin(e){
   if(!G||G.over) return;
-  if(e.clientY<VIEW_TOP||e.clientY>cv.height-VIEW_BOT) return;
-  if(e.button===0){
-    if(G.placing){
-      const pc=G.placeCandidate;
-      if(pc&&pc.ok){ placeBuilding(G,G.placing.type,pc.tx,pc.ty,G.placing.builder); }
-      else toast('Cannot build there');
-      G.placing=null; refreshUI();
-      return;
-    }
-    drag.active=true; drag.sx=e.clientX; drag.sy=e.clientY; drag.cx=e.clientX; drag.cy=e.clientY; drag.moved=false;
-  } else if(e.button===2){
+  if(e.pointerType==='mouse') lastPointerWasMouse=true; else lastPointerWasMouse=false;
+  // ignore presses on the HUD bands (CSS px)
+  if(e.clientY<VIEW_TOP || e.clientY>cssH-VIEW_BOT) return;
+
+  pointers.set(e.pointerId, {sx:e.clientX, sy:e.clientY});
+
+  // second finger → pinch; cancel any in-progress tap/pan/box (no tap fires)
+  if(pointers.size===2){
+    gesture.mode='pinch'; gesture.id=null;
+    const p=[...pointers.values()];
+    gesture.lastDist=Math.hypot(p[0].sx-p[1].sx, p[0].sy-p[1].sy)||1;
+    return;
+  }
+  if(pointers.size>2) return;
+
+  // desktop right-button → command alias (or cancel placement), no drag gesture
+  if(e.pointerType==='mouse' && e.button===2){
     e.preventDefault();
-    if(G.placing){ G.placing=null; refreshUI(); return; }
-    rightClick(e);
+    if(G.placing){ G.placing=null; refreshUI(); }
+    else dispatchTap(e,{forceCommand:true});
+    gesture.mode='none'; gesture.id=null; return;
   }
-});
 
-addEventListener('mouseup', e=>{
+  // primary press starts as a tap; promotes to pan/box on move
+  try{ cv.setPointerCapture(e.pointerId); }catch(_){}
+  gesture.mode='tap'; gesture.id=e.pointerId;
+  gesture.sx=gesture.cx=e.clientX; gesture.sy=gesture.cy=e.clientY;
+  gesture.moved=false; gesture.shift=e.shiftKey;
+  gesture.startCamX=G.camX; gesture.startCamY=G.camY;
+  // seed mouse/world position so the placement ghost lands where you pressed
+  mouse.sx=e.clientX; mouse.sy=e.clientY;
+  const w=screenToWorld(G,e.clientX,e.clientY); mouse.wx=w.x; mouse.wy=w.y;
+}
+
+function gestureMove(e){
   if(!G) return;
-  if(e.button===0 && drag.active){
-    drag.active=false;
-    if(drag.moved) boxSelect(e);
-    else clickSelect(e);
-  }
-});
+  const p=pointers.get(e.pointerId); if(p){ p.sx=e.clientX; p.sy=e.clientY; }
 
+  // keep mouse/world fresh for edge-scroll + placement ghost
+  if(e.pointerType==='mouse' || gesture.id===e.pointerId){
+    if(e.pointerType==='mouse') lastPointerWasMouse=true;
+    mouse.sx=e.clientX; mouse.sy=e.clientY;
+    const w=screenToWorld(G,e.clientX,e.clientY); mouse.wx=w.x; mouse.wy=w.y;
+  }
+
+  if(gesture.mode==='pinch'){
+    if(pointers.size>=2){
+      const a=[...pointers.values()];
+      const dist=Math.hypot(a[0].sx-a[1].sx, a[0].sy-a[1].sy)||1;
+      const midX=(a[0].sx+a[1].sx)/2, midY=(a[0].sy+a[1].sy)/2;
+      if(gesture.lastDist>0) zoomAt(G, midX, midY, dist/gesture.lastDist);
+      gesture.lastDist=dist;
+    }
+    return;
+  }
+
+  if(e.pointerId!==gesture.id) return;
+  gesture.cx=e.clientX; gesture.cy=e.clientY;
+  if(gesture.mode==='tap' && Math.hypot(gesture.cx-gesture.sx, gesture.cy-gesture.sy)>MOVE_THRESH){
+    gesture.moved=true;
+    gesture.mode=(gesture.shift || armBoxSelect) ? 'box' : 'pan';
+  }
+  if(gesture.mode==='pan') panTo(e);
+  // 'box' just records cx/cy; render draws the rectangle
+}
+
+function gestureEnd(e){
+  if(!G){ pointers.delete(e.pointerId); return; }
+  const wasPinch=gesture.mode==='pinch';
+  pointers.delete(e.pointerId);
+  if(wasPinch){ if(pointers.size<2){ gesture.mode='none'; gesture.id=null; } return; }
+  if(e.pointerId!==gesture.id) return;
+  try{ cv.releasePointerCapture(e.pointerId); }catch(_){}
+  if(gesture.mode==='tap') dispatchTap(e);
+  else if(gesture.mode==='box'){
+    boxSelectRect(gesture.sx,gesture.sy,gesture.cx,gesture.cy, gesture.shift);
+    armBoxSelect=false; updateBoxBtn();
+  }
+  gesture.mode='none'; gesture.id=null; gesture.moved=false;
+}
+
+cv.addEventListener('pointerdown', gestureBegin);
+cv.addEventListener('pointermove', gestureMove);
+addEventListener('pointerup', gestureEnd);
+addEventListener('pointercancel', gestureEnd);
 cv.addEventListener('contextmenu', e=>e.preventDefault());
+
+// wheel zoom (desktop), anchored at the cursor
+cv.addEventListener('wheel', e=>{
+  if(!G||G.over) return;
+  e.preventDefault();
+  zoomAt(G, e.clientX, e.clientY, e.deltaY<0 ? 1.1 : 1/1.1);
+}, {passive:false});
 
 addEventListener('keydown', e=>{
   keys[e.key.toLowerCase()]=true;
@@ -48,15 +117,45 @@ addEventListener('keydown', e=>{
   }
 });
 addEventListener('keyup', e=>{ keys[e.key.toLowerCase()]=false; });
-// minimap click to jump
-mm.addEventListener('mousedown', e=>{
+// minimap tap/click to jump
+mm.addEventListener('pointerdown', e=>{
   if(!G) return;
+  e.preventDefault();
   const rect=mm.getBoundingClientRect();
-  const mx=(e.clientX-rect.left)/mm.width, my=(e.clientY-rect.top)/mm.height;
-  const vw=cv.width, vh=cv.height-VIEW_TOP-VIEW_BOT;
+  const mx=(e.clientX-rect.left)/rect.width, my=(e.clientY-rect.top)/rect.height;
+  const z=G.zoom||1, vw=viewW()/z, vh=viewH()/z;
   G.camX = mx*G.W*TILE - vw/2; G.camY=my*G.H*TILE - vh/2; clampCam(G);
   e.stopPropagation();
 });
+
+/* ---------------------------------------------------------------------
+   On-screen touch controls (also usable with a mouse). All optional —
+   guarded so the game still runs if a button is absent. Desktop keeps its
+   keyboard shortcuts; these buttons mirror the touch-only affordances.
+   --------------------------------------------------------------------- */
+function updateBoxBtn(){
+  const b=document.getElementById('btn-box');
+  if(b) b.classList.toggle('armed', armBoxSelect);
+}
+function wireTouchControls(){
+  const on=(id,fn)=>{ const el=document.getElementById(id); if(el) el.addEventListener('click', fn); };
+  on('btn-box', ()=>{ armBoxSelect=!armBoxSelect; updateBoxBtn(); toast(armBoxSelect?'Box select: drag to select':'Box select off'); });
+  on('btn-army', ()=>{ selectAllArmy(); });
+  on('btn-cancel', ()=>{ if(G&&G.placing){ G.placing=null; refreshUI(); } });
+  on('btn-zoom-in', ()=>{ if(G) zoomAt(G, viewW()/2, VIEW_TOP+viewH()/2, 1.2); });
+  on('btn-zoom-out',()=>{ if(G) zoomAt(G, viewW()/2, VIEW_TOP+viewH()/2, 1/1.2); });
+  on('btn-minimap', ()=>{ const mw=document.getElementById('minimap-wrap'); if(mw) mw.classList.toggle('as-overlay'); });
+  // control-group chips: tap = recall, long-press = assign
+  document.querySelectorAll('.grp-chip').forEach(el=>{
+    const g=el.getAttribute('data-g'); let t=null, longed=false;
+    const cancel=()=>{ if(t){ clearTimeout(t); t=null; } };
+    el.addEventListener('pointerdown', ev=>{ ev.preventDefault(); longed=false; t=setTimeout(()=>{ longed=true; assignGroup(g); }, 500); });
+    el.addEventListener('pointerup',   ev=>{ ev.preventDefault(); cancel(); if(!longed) recallGroup(g); });
+    el.addEventListener('pointerleave', cancel);
+    el.addEventListener('pointercancel', cancel);
+  });
+}
+wireTouchControls();
 
 buildMapSelect();
 /* =====================================================================

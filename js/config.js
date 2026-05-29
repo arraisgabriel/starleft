@@ -8,6 +8,18 @@ const ctx = cv.getContext('2d');
 const mm = document.getElementById('minimap');
 const mmx = mm.getContext('2d');
 
+/* ---- Display scaling (high-DPI / retina) + map zoom range ----
+   dpr is refreshed by resize(); ZOOM_* bound pinch / wheel / button zoom. */
+let dpr = window.devicePixelRatio || 1;
+const ZOOM_MIN = 0.35, ZOOM_MAX = 2.0;
+// Desktop plays at 1:1; phones/tablets start zoomed out to fit more of the map.
+function initialZoom(W,H){
+  const touch = (innerWidth < 820) || ('ontouchstart' in window);
+  if(!touch) return 1.0;
+  const fit = Math.min(innerWidth/(W*TILE), (innerHeight-196)/(H*TILE));
+  return Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, fit*0.85));
+}
+
 /* ---- Terrain types (drive gameplay: passability, gathering, LOS) ---- */
 const T_GRASS=0, T_DIRT=1, T_WATER=2, T_ROCK=3, T_TREE=4;
 function passableTerrain(t){ return t===T_GRASS || t===T_DIRT; }

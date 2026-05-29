@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <title>STARLEFT — Mini RTS</title>
 <style>
   * { margin:0; padding:0; box-sizing:border-box; }
@@ -116,21 +116,116 @@
   @keyframes introFade { 0%{opacity:0;} 15%{opacity:1;} 80%{opacity:1;} 100%{opacity:0;} }
   #crawl-viewport {
     position:absolute; top:0; left:0; right:0; bottom:0;
-    perspective:340px; perspective-origin:50% 0%; overflow:hidden;
-    -webkit-mask-image:linear-gradient(180deg, transparent 0%, #000 28%, #000 60%, transparent 92%);
-            mask-image:linear-gradient(180deg, transparent 0%, #000 28%, #000 60%, transparent 92%);
+    perspective:520px; perspective-origin:50% 0%; overflow:hidden;
+    /* fade the bottom out earlier so the most-magnified (overflow-prone) rows are cut off */
+    -webkit-mask-image:linear-gradient(180deg, transparent 0%, #000 24%, #000 54%, transparent 80%);
+            mask-image:linear-gradient(180deg, transparent 0%, #000 24%, #000 54%, transparent 80%);
   }
   #crawl-content {
-    position:absolute; top:100%; left:50%; width:min(720px,86%); transform:translateX(-50%) rotateX(26deg);
+    position:absolute; top:100%; left:50%; width:min(600px,58vw); box-sizing:border-box;
+    transform:translateX(-50%) rotateX(18deg);
     transform-origin:50% 0%; color:#ffd75e; text-align:justify;
-    animation: crawlUp 46s linear forwards; animation-delay:4.5s;
+    animation: crawlUp 55s linear forwards; animation-delay:0.1s;
   }
   #crawlScreen.fast #crawl-content { animation-duration:0s; }
   .crawl-ep { text-align:center; font-size:22px; letter-spacing:6px; margin-bottom:10px; color:#ffd75e; }
   .crawl-title { text-align:center; font-size:46px; letter-spacing:3px; margin-bottom:36px; color:#ffd75e; text-shadow:0 0 14px #ffb70060; }
   .crawl-text { font-size:26px; line-height:1.7; white-space:pre-wrap; font-weight:600; }
-  @keyframes crawlUp { 0%{ top:100%; } 100%{ top:-260%; } }
+  @keyframes crawlUp { 0%{ top:83%; } 100%{ top:-260%; } }
   #crawl-skip { position:absolute; bottom:34px; right:34px; padding:9px 20px; font-size:14px; z-index:5; }
+
+  /* ===================================================================
+     RESPONSIVE / TOUCH  — desktop look is preserved at wide widths; the
+     touch/narrow block at the bottom reflows the HUD for phones & tablets.
+     =================================================================== */
+  :root{
+    --top-h:46px; --bot-h:150px;
+    --safe-b:env(safe-area-inset-bottom,0px);
+    --safe-t:env(safe-area-inset-top,0px);
+  }
+  /* the canvas owns all pan/pinch gestures — stop the browser hijacking them */
+  #cv, #minimap{ touch-action:none; }
+  html,body{ overscroll-behavior:none; -webkit-touch-callout:none; }
+  #topbar{ padding-top:var(--safe-t); }       /* 0 on desktop; clears notches on phones */
+  #bottom{ padding-bottom:var(--safe-b); }
+
+  /* press feedback for touch (hover does nothing on a touch screen) */
+  .cmd-btn:active, .btn:active, .map-btn:active, .tc-btn:active{ transform:translateY(0); filter:brightness(1.15); }
+  @media (hover:none){
+    .cmd-btn:hover, .btn:hover, .map-btn:hover{ transform:none; box-shadow:none;
+      background:linear-gradient(180deg,#4a2632,#3a181f); border-color:#6f3644; }
+  }
+
+  /* on-screen control cluster — hidden on desktop, shown on touch / narrow */
+  #touch-controls{ display:none; gap:6px; align-items:center; flex-wrap:wrap;
+    padding:5px 8px; border-top:1px solid #462430; }
+  .tc-btn{ min-width:44px; min-height:44px; padding:0 8px; border-radius:8px; cursor:pointer;
+    background:linear-gradient(180deg,#4a2632,#3a181f); border:1px solid #6f3644;
+    color:#f6dbe0; font-size:18px; font-family:inherit; line-height:1;
+    display:inline-flex; align-items:center; justify-content:center; touch-action:manipulation; }
+  .tc-btn.armed{ border-color:#8effb0; box-shadow:0 0 8px #8effb080; color:#bfffd2; }
+  .grp-chips{ display:inline-flex; gap:4px; }
+  .grp-chip{ min-width:38px; font-weight:700; font-size:15px; }
+
+  /* minimap as a floating corner overlay (toggled by 🗺 on phones) */
+  #minimap-wrap.as-overlay{ display:flex !important; position:fixed; z-index:26;
+    top:calc(var(--top-h) + 8px + var(--safe-t)); right:8px; width:auto; padding:5px;
+    background:rgba(20,10,12,.92); border:1px solid #522a32; border-radius:6px; }
+  #minimap-wrap.as-overlay #minimap{ width:118px; height:auto; }
+
+  /* fluid overlay/menu typography so it fits any screen */
+  .overlay h1{ font-size:clamp(30px,9vw,54px); }
+  .overlay h2{ font-size:clamp(16px,5vw,24px); }
+  .overlay p { font-size:clamp(13px,3.6vw,15px); max-width:min(560px,92vw); }
+  .overlay .big{ font-size:clamp(34px,11vw,46px); }
+  .btn{ min-height:44px; }
+  .map-btn{ min-height:44px; min-width:clamp(120px,40vw,150px); }
+  #mapButtons{ max-width:min(640px,94vw); }
+  .controls-box{ font-size:clamp(11px,3vw,13px); max-width:94vw; overflow:auto; }
+  .crawl-title{ font-size:clamp(18px,5vw,40px); letter-spacing:clamp(1px,0.6vw,3px); margin-bottom:clamp(16px,4vw,36px); }
+  .crawl-text { font-size:clamp(12px,3.2vw,22px); line-height:1.55; }
+  .crawl-ep   { font-size:clamp(12px,3.6vw,20px); letter-spacing:clamp(2px,1.2vw,6px); }
+  /* larger perspective value = flatter projection = less edge-overflow; scales with width */
+  #crawl-viewport{ perspective:clamp(460px,90vw,680px); }
+  #crawl-content { width:min(600px,58vw); }
+  #crawl-skip{ min-height:44px; padding:10px 18px; bottom:calc(20px + var(--safe-b));
+    right:clamp(12px,4vw,34px); touch-action:manipulation; }
+
+  /* ---- Mouse tablets / small landscape (no pointer change) ---- */
+  @media (max-width:900px){
+    #topbar{ gap:14px; font-size:13px; }
+    #minimap-wrap{ width:140px; }
+    #commands{ width:280px; }
+    .cmd-btn{ width:80px; height:54px; }
+  }
+
+  /* ---- Touch devices OR narrow windows: reflow to a stacked HUD ----
+     (placed last so it overrides the desktop/tablet rules above) ---- */
+  @media (hover:none), (max-width:640px){
+    #topbar{ height:auto; min-height:var(--top-h); gap:10px; padding:4px 10px;
+      font-size:12px; flex-wrap:wrap; }
+    #topbar .lbl{ display:none; }
+    #objective{ font-size:11px; max-width:100%; flex-basis:100%; margin-left:0; }
+
+    #bottom{ height:auto; flex-direction:column; align-items:stretch; }
+    #minimap-wrap{ display:none; }            /* reachable via the 🗺 overlay toggle */
+    #selinfo{ flex:0 0 auto; padding:4px 10px; }
+    #selinfo h3{ font-size:13px; margin-bottom:0; }
+    #selinfo .desc{ display:none; }
+    #commands{ width:auto; border-left:none; padding:6px;
+      flex-wrap:nowrap; overflow-x:auto; -webkit-overflow-scrolling:touch; align-content:center; }
+    .cmd-btn{ flex:0 0 auto; width:auto; min-width:62px; height:48px; min-height:48px;
+      font-size:11px; padding:4px 8px; }
+    .cmd-btn .emoji{ font-size:18px; }
+    #touch-controls{ display:flex; overflow-x:auto; }
+  }
+
+  /* ---- Phones in landscape: claw back vertical space ---- */
+  @media (orientation:landscape) and (max-height:480px){
+    #selinfo{ display:none; }
+    .cmd-btn{ height:44px; min-height:44px; }
+    #touch-controls{ padding:3px 6px; }
+  }
 </style>
 </head>
 <body>
@@ -151,9 +246,24 @@
     </div>
     <div id="selinfo">
       <h3 id="sel-title">Nothing selected</h3>
-      <div class="desc" id="sel-desc">Left-drag to select your units. Right-click to move, gather or attack.</div>
+      <div class="desc" id="sel-desc">Tap to select or command. Drag to pan, pinch to zoom.</div>
     </div>
     <div id="commands"></div>
+    <!-- On-screen controls (touch / narrow screens; hidden on desktop) -->
+    <div id="touch-controls">
+      <button class="tc-btn" id="btn-box" title="Box select">▭</button>
+      <button class="tc-btn" id="btn-army" title="Select all units">⛶</button>
+      <button class="tc-btn" id="btn-minimap" title="Toggle minimap">🗺</button>
+      <button class="tc-btn" id="btn-zoom-out" title="Zoom out">－</button>
+      <button class="tc-btn" id="btn-zoom-in" title="Zoom in">＋</button>
+      <button class="tc-btn" id="btn-cancel" title="Cancel placement" style="display:none;">✕</button>
+      <span class="grp-chips">
+        <button class="tc-btn grp-chip" data-g="1" title="Group 1 (tap recall, hold set)">1</button>
+        <button class="tc-btn grp-chip" data-g="2" title="Group 2 (tap recall, hold set)">2</button>
+        <button class="tc-btn grp-chip" data-g="3" title="Group 3 (tap recall, hold set)">3</button>
+        <button class="tc-btn grp-chip" data-g="4" title="Group 4 (tap recall, hold set)">4</button>
+      </span>
+    </div>
   </div>
 
   <div id="toast"></div>
@@ -164,10 +274,11 @@
     <h2>Disrupt. Scale. Conquer. — A Mini RTS</h2>
     <div class="controls-box">
       <b>The hustle:</b> Mine <b>Funding</b> 💰, hire an army of Interns &amp; Growth Hackers, and disrupt two rival empires into bankruptcy.<br>
-      <b>Select</b> — left-click or left-drag a box &nbsp;•&nbsp; <b>Add to selection</b> — <span class="key">⌘</span>/<span class="key">Shift</span>+click another unit &nbsp;•&nbsp; <b>Command</b> — right-click (move / mine / attack)<br>
-      <b>Scroll</b> — <span class="key">WASD</span>/<span class="key">arrows</span> or move mouse to screen edge &nbsp;•&nbsp; <b>Minimap</b> — click to jump<br>
-      <b>Build</b> — select an <b>Intern</b>, click a build button, then click a spot &nbsp;•&nbsp; <span class="key">Esc</span> cancels placement<br>
-      <b>Control groups</b> — <span class="key">Ctrl</span>/<span class="key">⌘</span>+<span class="key">1-9</span> assigns the selection; press <span class="key">1-9</span> to reselect it (double-tap to jump there)
+      <b>Tap / click</b> — select your unit, or command it: tap an enemy to attack, a gold mine to mine, ground to move, an unfinished building to send an Intern<br>
+      <b>Drag</b> — pan the map &nbsp;•&nbsp; <b>Pinch</b> (or mouse <span class="key">wheel</span> / on-screen <span class="key">＋－</span>) — zoom &nbsp;•&nbsp; <b>Minimap</b> — tap to jump<br>
+      <b>Box-select</b> — <span class="key">Shift</span>+drag, or tap the <span class="key">▭</span> button then drag &nbsp;•&nbsp; desktop also: <span class="key">WASD</span>/<span class="key">arrows</span> &amp; screen-edge scroll, right-click to command<br>
+      <b>Build</b> — select an <b>Intern</b>, tap a build button, then tap a spot &nbsp;•&nbsp; <span class="key">Esc</span> or the <span class="key">✕</span> button cancels placement<br>
+      <b>Control groups</b> — <span class="key">Ctrl</span>/<span class="key">⌘</span>+<span class="key">1-9</span> (or hold a <span class="key">1-4</span> chip) to set; tap <span class="key">1-9</span> / a chip to reselect (double-tap to jump there)
     </div>
     <button class="btn" onclick="startGame(0)">▶ Raise Seed Round (Start Campaign)</button>
     <div class="map-select">

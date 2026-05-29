@@ -7,6 +7,7 @@
 const ASSET_BASE      = 'assets/';
 const ATLAS_TILESET   = ASSET_BASE + 'atlas/tileset.png';
 const ATLAS_BUILDINGS = ASSET_BASE + 'atlas/buildings.png';
+const RESOURCE_CRYSTAL = ASSET_BASE + 'resource/crystal.png'; // Funding crystal node (optional; procedural fallback if absent)
 // terrain slot: ground | rock | cactus | oasis  (desert biome opaque tiles)
 function terrainTile(slot){ return ASSET_BASE + 'terrain/desert_' + slot + '.png'; }
 // standalone building sheet: name garage|launchpad , faction player|enemy
@@ -89,6 +90,10 @@ function buildingSprite(type,owner){
   const nb=NEW_BUILDINGS[type]; if(nb){ const im=nb[fk]; return (im&&im.complete&&im.naturalWidth)?{img:im, rect:[0,0,im.naturalWidth,im.naturalHeight]}:null; }
   return null;
 }
+
+// Funding resource crystal — optional generated sprite; null until present (then drawGoldmine blits it under the animated glow/shine).
+const CRYSTAL_IMG = loadImg(RESOURCE_CRYSTAL);
+function crystalSprite(){ return (CRYSTAL_IMG.complete && CRYSTAL_IMG.naturalWidth) ? CRYSTAL_IMG : null; }
 
 /* ---- Unit animations (sliced from green-screen sprite strips) ----
    4-frame walk cycle, uniform 267×267 frames, shared baseline so it doesn't

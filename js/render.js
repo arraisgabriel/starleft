@@ -27,26 +27,59 @@ function isVisiblePix(state,x,y){
 /* =====================================================================
    RENDERING
    ===================================================================== */
-function resize(){ cv.width=innerWidth; cv.height=innerHeight; }
+// HUD bands reserved at top/bottom. `let` (not const) because the responsive CSS
+// resizes the bars per breakpoint and syncHud() copies the real heights back here.
+let VIEW_TOP=46, VIEW_BOT=150;
+let cssH=innerHeight;   // canvas CSS-pixel height (cv.height is device px once DPR-scaled)
 
-const VIEW_TOP=46, VIEW_BOT=150;
+function resize(){
+  dpr = window.devicePixelRatio || 1;
+  cv.width  = Math.round(innerWidth*dpr);  cv.height = Math.round(innerHeight*dpr);
+  cv.style.width = innerWidth+'px';         cv.style.height = innerHeight+'px';
+  syncHud();
+  if(G) clampCam(G);
+}
+// Mirror the on-screen HUD bar heights into VIEW_TOP/VIEW_BOT so the playable
+// viewport always matches the (responsive) DOM.
+function syncHud(){
+  const tb=document.getElementById('topbar'), bp=document.getElementById('bottom');
+  if(tb) VIEW_TOP = tb.offsetHeight;
+  if(bp) VIEW_BOT = bp.offsetHeight;
+  cssH = cv.getBoundingClientRect().height || innerHeight;
+}
+// CSS-pixel viewport size (independent of devicePixelRatio).
+function viewW(){ return cv.width/dpr; }
+function viewH(){ return cv.height/dpr - VIEW_TOP - VIEW_BOT; }
 
 function clampCam(state){
-  const vw=cv.width, vh=cv.height-VIEW_TOP-VIEW_BOT;
-  state.camX=Math.max(-40,Math.min(state.W*TILE - vw +40, state.camX));
-  state.camY=Math.max(-40,Math.min(state.H*TILE - vh +40, state.camY));
+  const z=state.zoom||1, wW=state.W*TILE, wH=state.H*TILE;
+  const vw=viewW()/z, vh=viewH()/z;   // world units currently visible
+  // when zoomed out past the map the clamp interval inverts — center instead
+  state.camX = (vw>=wW) ? (wW-vw)/2 : Math.max(-40, Math.min(wW-vw+40, state.camX));
+  state.camY = (vh>=wH) ? (wH-vh)/2 : Math.max(-40, Math.min(wH-vh+40, state.camY));
 }
 
 function render(state){
-  ctx.fillStyle='#05080d'; ctx.fillRect(0,0,cv.width,cv.height);
-  const vx=state.camX, vy=state.camY;
-  // snap the world offset to whole pixels so tiles land on exact pixel
-  // boundaries — fractional offsets anti-alias tile edges and leave a seam grid
-  const ox=Math.round(-vx), oy=Math.round(-vy)+VIEW_TOP;
+  const z=state.zoom||1, vx=state.camX, vy=state.camY;
 
+  // ---- phase 1: clear whole backing store in identity/device space ----
+  ctx.setTransform(1,0,0,1,0,0);
+  ctx.fillStyle='#05080d'; ctx.fillRect(0,0,cv.width,cv.height);
+
+  // ---- phase 2: world space. dpr maps CSS->device px; VIEW_TOP is a fixed
+  //      CSS band (applied before scale); zoom + camera translate the world.
+  //      Everything below draws in raw world coords, so offsets are zero. ----
+  ctx.save();
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+  ctx.translate(0,VIEW_TOP);
+  ctx.scale(z,z);
+  ctx.translate(-vx,-vy);
+  const ox=0, oy=0;   // world coords draw directly; transform does the rest
+
+  // cull to the world span actually visible (accounts for zoom)
   const x0=Math.max(0,(vx/TILE)|0), y0=Math.max(0,(vy/TILE)|0);
-  const x1=Math.min(state.W, ((vx+cv.width)/TILE|0)+1);
-  const y1=Math.min(state.H, ((vy+cv.height)/TILE|0)+1);
+  const x1=Math.min(state.W, ((vx+viewW()/z)/TILE|0)+1);
+  const y1=Math.min(state.H, ((vy+viewH()/z)/TILE|0)+1);
 
   // ---- terrain ----
   for(let ty=y0;ty<y1;ty++)for(let tx=x0;tx<x1;tx++){
@@ -58,7 +91,7 @@ function render(state){
   for(const e of state.entities){
     if(e.dead||e.type!=='goldmine') continue;
     if(!state.explored[((e.y/TILE)|0)*state.W+((e.x/TILE)|0)]) continue;
-    drawGoldmine(e, e.x+ox, e.y+oy);
+    drawGoldmine(state, e, e.x+ox, e.y+oy);
   }
 
   // ---- buildings ----
@@ -95,15 +128,20 @@ function render(state){
   // ---- selection ring effects ----
   drawRings(ox,oy);
 
-  // ---- drag selection box ----
-  if(drag.active){
+  ctx.restore();   // leave world space
+
+  // ---- phase 3: screen-space overlays (CSS px, dpr-scaled, NOT world) ----
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+  // box-select rectangle — drawn only while a box gesture is active
+  if(typeof gesture!=='undefined' && gesture.mode==='box'){
     ctx.strokeStyle='rgba(120,220,160,.9)'; ctx.fillStyle='rgba(120,220,160,.12)';
-    const x=Math.min(drag.sx,drag.cx), y=Math.min(drag.sy,drag.cy);
-    const w=Math.abs(drag.cx-drag.sx), h=Math.abs(drag.cy-drag.sy);
+    const x=Math.min(gesture.sx,gesture.cx), y=Math.min(gesture.sy,gesture.cy);
+    const w=Math.abs(gesture.cx-gesture.sx), h=Math.abs(gesture.cy-gesture.sy);
     ctx.fillRect(x,y,w,h); ctx.lineWidth=1.5; ctx.strokeRect(x,y,w,h);
   }
+  ctx.setTransform(1,0,0,1,0,0);
 
-  renderMinimap(state);
+  renderMinimap(state);   // separate canvas — unaffected by the #cv transform
 }
 
 function drawTile(state,tx,ty,px,py){
@@ -226,21 +264,70 @@ function drawTreeTile(b,v,px,py){
   else { ctx.fillStyle='rgba(255,255,255,.07)'; ctx.beginPath(); ctx.arc(px+13,py+11,3,0,6.28); ctx.fill(); }
 }
 
-function drawGoldmine(e,px,py){
+// Funding node: a brilliant, enigmatic PURPLE crystal cluster with a live
+// shiny animation — pulsing aura, a specular gleam that sweeps the facets, and
+// floating sparkles. Uses the generated sprite if present, else draws the
+// faceted cluster procedurally. Per-node phase (e.id) so they don't pulse in sync.
+function drawGoldmine(state,e,px,py){
+  const t=state.time||0, ph=((e.id||0)*1.7)%6.283;
+  const pulse=0.5+0.5*Math.sin(t*2.0+ph);
   ctx.save(); ctx.translate(px,py);
-  // glow
-  ctx.fillStyle='rgba(240,180,30,.12)'; ctx.beginPath(); ctx.arc(0,0,22,0,6.28); ctx.fill();
-  for(let i=0;i<3;i++){
-    const a=i*2.094, dx=Math.cos(a)*7, dy=Math.sin(a)*4;
-    ctx.fillStyle = i===0?'#ffe27a':'#f0a500';
-    ctx.beginPath();
-    ctx.moveTo(dx,dy-11); ctx.lineTo(dx+7,dy); ctx.lineTo(dx,dy+11); ctx.lineTo(dx-7,dy); ctx.closePath();
-    ctx.fill(); ctx.strokeStyle='#a06a00'; ctx.lineWidth=1; ctx.stroke();
+
+  // ground contact shadow
+  ctx.fillStyle='rgba(0,0,0,.28)'; ctx.beginPath(); ctx.ellipse(0,16,15,5,0,0,6.28); ctx.fill();
+
+  // pulsing purple aura
+  const gr=ctx.createRadialGradient(0,2,2, 0,2, 24+pulse*7);
+  gr.addColorStop(0,`rgba(196,128,255,${(0.32+0.20*pulse).toFixed(3)})`);
+  gr.addColorStop(0.55,`rgba(140,60,240,${(0.12+0.08*pulse).toFixed(3)})`);
+  gr.addColorStop(1,'rgba(120,40,220,0)');
+  ctx.fillStyle=gr; ctx.beginPath(); ctx.arc(0,2,24+pulse*7,0,6.28); ctx.fill();
+
+  // crystal body — generated sprite if available, else procedural cluster
+  const cim=crystalSprite();
+  if(cim){
+    const h=30, w=h*(cim.naturalWidth/cim.naturalHeight);
+    ctx.drawImage(cim, -w/2, -h*0.66, w, h);
+  } else {
+    drawCrystalCluster();
   }
-  // amount label
-  ctx.fillStyle='#ffe9a8'; ctx.font='10px sans-serif'; ctx.textAlign='center';
-  ctx.fillText(e.amount|0, 0, 26);
+
+  // specular gleam sweeping up across the crystal (additive)
+  const sweep=((t*0.45+ph*0.16)%1);
+  ctx.save(); ctx.globalCompositeOperation='lighter';
+  ctx.fillStyle=`rgba(210,160,255,${(0.55*Math.sin(sweep*Math.PI)).toFixed(3)})`;
+  ctx.beginPath(); ctx.ellipse(0, 14-sweep*30, 9, 2.4, 0,0,6.28); ctx.fill();
   ctx.restore();
+
+  // floating sparkles drifting upward
+  for(let i=0;i<3;i++){
+    const sp=((t*0.5)+i*0.34+ph*0.1)%1;
+    const a=Math.sin(sp*Math.PI);
+    if(a>0.02){ ctx.fillStyle=`rgba(232,205,255,${(a*0.9).toFixed(3)})`;
+      drawSparkle(Math.sin(i*2.1+t*1.2)*9, 8-sp*24, 1.6+a*1.8); }
+  }
+
+  // amount label
+  ctx.fillStyle='#e9d2ff'; ctx.font='10px sans-serif'; ctx.textAlign='center';
+  ctx.fillText(e.amount|0, 0, 30);
+  ctx.restore();
+}
+// faceted purple crystal cluster (a tall central shard flanked by two smaller)
+function drawCrystalCluster(){
+  const shards=[ {x:-7,top:-9,base:13,w:4.0,lean:-0.10}, {x:7,top:-5,base:13,w:3.6,lean:0.12}, {x:0,top:-19,base:14,w:5.5,lean:0} ];
+  for(const s of shards){
+    const tx=s.x+(s.base-s.top)*s.lean, ty=s.top, by=s.base, lx=s.x-s.w, rx=s.x+s.w, mid=(ty+by)/2-2;
+    ctx.beginPath(); ctx.moveTo(tx,ty); ctx.lineTo(lx,mid); ctx.lineTo(s.x,by); ctx.closePath(); ctx.fillStyle='#46167f'; ctx.fill(); // dark facet
+    ctx.beginPath(); ctx.moveTo(tx,ty); ctx.lineTo(rx,mid); ctx.lineTo(s.x,by); ctx.closePath(); ctx.fillStyle='#8a3ff0'; ctx.fill(); // lit facet
+    ctx.strokeStyle='rgba(224,184,255,.85)'; ctx.lineWidth=1; ctx.beginPath(); ctx.moveTo(tx,ty); ctx.lineTo(s.x,by); ctx.stroke(); // central edge
+    ctx.fillStyle='rgba(255,244,255,.95)'; ctx.beginPath(); ctx.arc(tx,ty+1,1.5,0,6.28); ctx.fill(); // tip glint
+  }
+}
+function drawSparkle(x,y,r){
+  ctx.beginPath();
+  ctx.moveTo(x,y-r); ctx.lineTo(x+r*0.28,y-r*0.28); ctx.lineTo(x+r,y); ctx.lineTo(x+r*0.28,y+r*0.28);
+  ctx.lineTo(x,y+r); ctx.lineTo(x-r*0.28,y+r*0.28); ctx.lineTo(x-r,y); ctx.lineTo(x-r*0.28,y-r*0.28);
+  ctx.closePath(); ctx.fill();
 }
 
 function drawBuilding(state,e,ox,oy,dim){
@@ -421,14 +508,14 @@ function renderMinimap(state){
   }
   for(const e of state.entities){
     if(e.dead) continue;
-    if(e.type==='goldmine'){ if(state.explored[((e.y/TILE)|0)*state.W+((e.x/TILE)|0)]){ mmx.fillStyle='#ffd86b'; mmx.fillRect(e.x/TILE*sx-1,e.y/TILE*sy-1,3,3);} continue; }
+    if(e.type==='goldmine'){ if(state.explored[((e.y/TILE)|0)*state.W+((e.x/TILE)|0)]){ mmx.fillStyle='#c89bff'; mmx.fillRect(e.x/TILE*sx-1,e.y/TILE*sy-1,3,3);} continue; }
     if(e.owner==='enemy' && !isVisiblePix(state,e.x,e.y) && !(e.kind==='building'&&e._everSeen)) continue;
     mmx.fillStyle = isRedSide(e.owner)?'#ff6b6b':'#7fd6ff';
     const s = e.kind==='building'?3:2;
     mmx.fillRect(e.x/TILE*sx - s/2, e.y/TILE*sy - s/2, s, s);
   }
-  // viewport rect
-  const vw=cv.width, vh=cv.height-VIEW_TOP-VIEW_BOT;
+  // viewport rect — world units visible (dpr + zoom corrected)
+  const z=state.zoom||1, vw=viewW()/z, vh=viewH()/z;
   mmx.strokeStyle='rgba(255,255,255,.7)'; mmx.lineWidth=1;
   mmx.strokeRect(state.camX/TILE*sx, state.camY/TILE*sy, vw/TILE*sx, vh/TILE*sy);
 }

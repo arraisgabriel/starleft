@@ -156,7 +156,7 @@ function tryPlace(state, type){
   const d=DEF[type];
   if(state.gold < d.cost){ toast('Not enough gold'); return; }
   state.placing = { type, def:d, builder:sel };
-  toast('Click a location to build the '+d.name+' (Esc to cancel)');
+  toast('Tap a spot to build the '+d.name+' (Cancel / Esc to abort)');
 }
 
 function canPlaceAt(state, type, tx, ty){

@@ -94,6 +94,7 @@ function newMap(idx){
   cfg.goldNodes.forEach(g=>{ for(let y=-2;y<=2;y++)for(let x=-2;x<=2;x++){
     if(inB(g.x+x,g.y+y)){ const j=(g.y+y)*W+(g.x+x); tiles[j]=T_GRASS; biome[j]=B_GRASS; } } });
 
+  const zoom0 = initialZoom(W,H);
   const state = {
     cfg, W, H, tiles, variant, biome,
     blocked: new Uint8Array(W*H),       // impassable (terrain or building)
@@ -103,8 +104,9 @@ function newMap(idx){
     gold: cfg.startGold || 300,
     supply: 0, supplyCap: 0,
     nextId: 1,
-    camX: cfg.player.x*TILE - innerWidth/2 + 100,
-    camY: cfg.player.y*TILE - innerHeight/2 + 100,
+    zoom: zoom0,
+    camX: cfg.player.x*TILE - (innerWidth/zoom0)/2 + 100,
+    camY: cfg.player.y*TILE - (innerHeight/zoom0)/2 + 100,
     selection: [],
     groups: {},           // control groups: "1".."0" -> array of entity refs
     placing: null,        // {def, type} when placing a building
