@@ -290,9 +290,13 @@ function spawnTrained(state,b,type){
 }
 
 function updateUnit(state,u,dt){
-  const cmd=u.cmd;
+  let cmd=u.cmd;
   const def=DEF[u.type];
   u._actState=null;   // set to 'attack' / 'mine' / 'heal' below (drives action sprites)
+  // clear stale targeting: a finished fight (dead target) must not leave a lingering
+  // attack-cmd, or the unit sits idle and never re-acquires or retaliates.
+  if(u.autoTarget && u.autoTarget.dead) u.autoTarget=null;
+  if(cmd && cmd.type==='attack' && (!cmd.target || cmd.target.dead)){ cmd=u.cmd=null; u.state='idle'; }
 
   // ---- siege auto-deploy (Auditor): set up when enemies near & not moving ----
   if(def.siege){
@@ -339,6 +343,8 @@ function updateUnit(state,u,dt){
   if(atk && atk.air && !canHitAir(u)){ atk=null; u.autoTarget=null; if(cmd&&cmd.type==='attack')u.cmd=null; }  // can't reach flyers
 
   if(atk){
+    // a unit beginning a NEW engagement rallies nearby idle allies to join the fight
+    if(u._engagedId!==atk.id){ u._engagedId=atk.id; callToArms(state, atk, u.owner, u); }
     // effective stats (Auditor gains range/dmg/splash while sieged)
     let aRange=u.range, aDmg=u.dmg, aSplash=def.splash||0, aSplashR=def.splashR||1.3;
     if(def.siege && u.sieged){ const sg=def.siege; aRange=sg.range; aDmg=sg.dmg; aSplash=Math.round(sg.dmg*0.6); aSplashR=sg.splashR; }
@@ -365,7 +371,7 @@ function updateUnit(state,u,dt){
       followPath(state,u,dt);
     }
     return;
-  } else { u._reTarget=null; }
+  } else { u._reTarget=null; u._engagedId=null; }
 
   // ---- gather ----
   if(cmd&&cmd.type==='gather'){
@@ -597,12 +603,36 @@ function resolveStuck(state, dt){
   }
 }
 
+// Pull nearby idle, combat-capable allies of `side` onto `foe` (assist / focus-fire).
+// Skips units on an explicit player order (move/gather/build) or already fighting.
+function callToArms(state, foe, side, from){
+  if(!foe||foe.dead) return;
+  const R=7*TILE, r2=R*R, cx=from.x, cy=from.y;
+  for(const o of state.entities){
+    if(o.dead||o.kind!=='unit'||o.owner!==side||o===from) continue;
+    if(o.type==='worker' || !(DEF[o.type].dmg>0)) continue;                 // combat units only
+    if(o.cmd && (o.cmd.type==='move'||o.cmd.type==='gather'||o.cmd.type==='build')) continue; // respect explicit orders
+    if((o.cmd&&o.cmd.type==='attack'&&o.cmd.target&&!o.cmd.target.dead) || (o.autoTarget&&!o.autoTarget.dead)) continue; // busy fighting
+    if(foe.air && !canHitAir(o)) continue;
+    const dx=o.x-cx, dy=o.y-cy; if(dx*dx+dy*dy>r2) continue;
+    o.autoTarget=foe;
+  }
+}
+
 function damage(state, t, amt, src){
   if(t.dead) return;
   t.hp-=amt;
   t.hitFx=0.12;
-  // retaliate: if target is idle unit, fight back
-  if(t.kind==='unit'&&!t.cmd&&!t.autoTarget && src){ t.autoTarget=src; }
+  // RETALIATE: any unit attacked by an enemy fights back, unless it's already
+  // engaging a live target or busy on an explicit gather/build order.
+  if(t.kind==='unit' && src && !src.dead && t.owner!==src.owner){
+    const engaged=(t.cmd&&t.cmd.type==='attack'&&t.cmd.target&&!t.cmd.target.dead) || (t.autoTarget&&!t.autoTarget.dead);
+    const onTask = t.cmd && (t.cmd.type==='gather'||t.cmd.type==='build');
+    if(!engaged && !onTask && !(src.air && !canHitAir(t))){
+      t.autoTarget=src;
+      callToArms(state, src, t.owner, t);   // neighbours rush to defend
+    }
+  }
 }
 
 function killEntity(state,e){
