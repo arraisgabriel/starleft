@@ -95,16 +95,16 @@ const DEF = {
   lobbyist: { name:'Lobbyist', icon:'🎩', kind:'unit', hp:70, cost:140, build:20, sight:9, supply:2, speed:2.2, dmg:36, range:7.5, cd:2.3, r:9,
               flavor:'Buys senators wholesale. One devastating long-range shot, then a long reload.' },
   /* ---- The Garage (Factory) tier ---- */
-  foodtruck:{ name:'Food Truck', icon:'🚚', kind:'unit', hp:110, cost:90, build:15, sight:6, supply:2, speed:3.6, dmg:11, range:3.0, cd:1.0, r:11, vehicle:true, facesLeft:true,
+  foodtruck:{ name:'Food Truck', icon:'🚚', kind:'unit', hp:110, cost:90, build:15, sight:6, supply:2, speed:3.6, dmg:11, range:3.0, cd:1.0, r:11, vehicle:true,
               splash:9, splashR:1.4, flavor:'Free cold brew & napalm. A flame cone shreds clustered enemies.' },
-  auditor:  { name:'Auditor', icon:'📊', kind:'unit', hp:200, cost:175, build:28, sight:8, supply:3, speed:1.8, dmg:18, range:5.0, cd:1.4, r:12, vehicle:true, facesLeft:true,
+  auditor:  { name:'Auditor', icon:'📊', kind:'unit', hp:200, cost:175, build:28, sight:8, supply:3, speed:1.8, dmg:18, range:5.0, cd:1.4, r:12, vehicle:true,
               siege:{dmg:42,range:9,splashR:1.6,setup:1.2}, flavor:'Deploys spreadsheets into a long-range due-diligence cannon. Sieges when enemies are near.' },
   /* ---- Launch Pad (Starport) tier ---- */
   founder:  { name:'Founder Mech', icon:'🦄', kind:'unit', hp:600, cost:400, build:45, sight:8, supply:6, speed:1.6, dmg:45, range:3.5, cd:1.5, r:16, vehicle:true,
               splash:20, splashR:1.3, antiAir:true, flavor:'A visionary in a 12-ft exosuit. Hits anything, ground or air.' },
   courier:  { name:'Courier Drone', icon:'🛸', kind:'unit', hp:120, cost:90, build:16, sight:7, supply:2, speed:3.0, dmg:0, range:4.0, cd:1.0, r:10, air:true, action:'heal',
               heal:7, flavor:'Same-day delivery of medkits and morale. Flies over everything.' },
-  bomber:   { name:'Buzzword Bomber', icon:'🛩️', kind:'unit', hp:480, cost:450, build:50, sight:9, supply:6, speed:1.7, dmg:26, range:6.0, cd:0.9, r:16, air:true, facesLeft:true,
+  bomber:   { name:'Buzzword Bomber', icon:'🛩️', kind:'unit', hp:480, cost:450, build:50, sight:9, supply:6, speed:1.7, dmg:26, range:6.0, cd:0.9, r:16, air:true,
               flavor:'Capital airship. Rains cyan ordnance on the campus below.' },
 
   /* ---- production buildings ---- */
