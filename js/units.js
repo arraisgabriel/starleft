@@ -634,6 +634,7 @@ function damage(state, t, amt, src){
   if(t.dead) return;
   t.hp-=amt;
   t.hitFx=0.12;
+  t._lastHit=state.time;   // pauses veteran self-heal (vetRegen) while in/near combat
   // RETALIATE: any unit attacked by an enemy fights back, unless it's already
   // engaging a live target or busy on an explicit gather/build order.
   if(t.kind==='unit' && src && !src.dead && t.owner!==src.owner){

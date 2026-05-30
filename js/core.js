@@ -42,6 +42,7 @@ function update(state, dt){
     if(u.dead||u.kind!=='unit') continue;
     u.cd-=dt;
     updateUnit(state,u,dt);
+    vetRegen(u,state,dt);   // out-of-combat self-heal for high-level veterans
   }
   // separation (avoid overlap)
   separation(state,dt);

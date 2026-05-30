@@ -46,6 +46,8 @@
 
   #selinfo { flex:1; padding:10px 14px; overflow:hidden; }
   #selinfo h3 { font-size:15px; color:#ffd0d2; margin-bottom:4px; }
+  #selinfo .stats { display:flex; gap:10px; flex-wrap:wrap; font-size:12px; color:#e7c8a0; margin:2px 0 4px; }
+  #selinfo .stats .st { white-space:nowrap; }
   #selinfo .desc { font-size:12px; color:#b89aa0; line-height:1.5; }
   .hpbar { height:7px; width:160px; background:#3e2228; border-radius:4px; margin-top:6px; overflow:hidden;}
   .hpbar > i { display:block; height:100%; background:linear-gradient(90deg,#3ad15a,#7af07a); }
@@ -253,6 +255,7 @@
     #minimap-wrap{ display:none; }            /* reachable via the 🗺 overlay toggle */
     #selinfo{ flex:0 0 auto; padding:4px 10px; }
     #selinfo h3{ font-size:13px; margin-bottom:0; }
+    #selinfo .stats{ gap:8px; font-size:11px; margin:1px 0 2px; }   /* stays visible on mobile */
     #selinfo .desc{ display:none; }
     #commands{ width:auto; border-left:none; padding:6px;
       flex-wrap:nowrap; overflow-x:auto; -webkit-overflow-scrolling:touch; align-content:center; }
@@ -356,6 +359,7 @@
     </div>
     <div id="selinfo">
       <h3 id="sel-title">Nothing selected</h3>
+      <div class="stats" id="sel-stats"></div>
       <div class="desc" id="sel-desc">Tap to select or command. Drag to pan, pinch to zoom.</div>
       <div id="prod-queue"></div>
     </div>

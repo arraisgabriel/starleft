@@ -5,6 +5,7 @@
 const elCmd=document.getElementById('commands');
 const elTitle=document.getElementById('sel-title');
 const elDesc=document.getElementById('sel-desc');
+const elStats=document.getElementById('sel-stats');
 
 function refreshUI(){
   if(!G) return;
@@ -18,25 +19,34 @@ function refreshUI(){
   // ---- info text (cheap text updates — safe to refresh every call) ----
   if(!sel.length){
     elTitle.textContent='Nothing selected';
+    elStats.textContent='';
     elDesc.innerHTML='<b>Tap</b> a unit to select; tap an enemy/mine/ground to attack, gather or move. <b>Drag</b> to pan, <b>pinch</b> (or wheel / +−) to zoom.<br><b>Units box-select:</b> Shift+drag or the <b>Select box</b> button. Select a <b>Worker</b> then a build button, then tap a spot. <b>Ctrl/⌘+1-9</b> control group.';
   } else if(sel.length>1){
     const counts={}; sel.forEach(s=>counts[s.type]=(counts[s.type]||0)+1);
     elTitle.textContent= sel.length+' units selected';
+    elStats.textContent='';
     elDesc.innerHTML = Object.entries(counts).map(([k,v])=>v+'× '+DEF[k].name).join(', ');
   } else {
-    const e=sel[0]; const d=DEF[e.type];
-    elTitle.textContent=(d.icon?d.icon+' ':'')+d.name + (e.owner==='enemy'?' (rival)':'');
+    const e=sel[0]; const d=DEF[e.type]; const lvl=e.stars||0;
+    // career title prefixes the name for leveled player units (e.g. "Senior Lobbyist")
+    const titlePrefix=(e.owner==='player'&&lvl>0)? careerTitle(lvl)+' ' : '';
+    elTitle.textContent=(d.icon?d.icon+' ':'')+titlePrefix+d.name + (e.owner==='enemy'?' (rival)':'');
+    // always-visible 3-stat line (level / HP / damage) — shown on desktop AND mobile
+    if(e.kind==='unit'){
+      const dmg=Math.round((e.dmg||0)*vetDmgMul(e));   // reflect the career damage bonus
+      elStats.innerHTML=`<span class="st">★ Lv ${lvl}</span><span class="st">❤ ${e.hp|0}/${e.maxHp}</span><span class="st">⚔ ${dmg}</span>`;
+    } else {
+      const s=e.constructing? `🏗 ${(e.buildProg/e.buildTime*100)|0}%` : `❤ ${e.hp|0}/${e.maxHp}`;
+      elStats.innerHTML=`<span class="st">${s}</span>`;
+    }
+    // secondary detail (context + flavor) — lives in .desc, which is desktop-only on mobile
     let extra='';
     if(e.kind==='unit'){
-      extra = `HP ${e.hp|0}/${e.maxHp}`;
-      if(e.type==='worker') extra+=` • carrying ${e.carrying} 💰`;
-      if(e.dmg) extra+=` • dmg ${e.dmg}`;
-      if(e.stars) extra+=` • ${'★'.repeat(e.stars)} (+${e.stars*15}% dmg, +${e.stars*33}% hp)`;
-    } else {
-      extra = e.constructing? `Building… ${(e.buildProg/e.buildTime*100)|0}%` : `HP ${e.hp|0}/${e.maxHp}`;
-      if(e.prodQueue&&e.prodQueue.length) extra+=` • hiring ${DEF[e.prodQueue[0]].name} (${e.prodQueue.length} queued)`;
+      if(e.type==='worker' && e.carrying>0) extra=`carrying ${e.carrying} 💰`;
+    } else if(e.prodQueue&&e.prodQueue.length){
+      extra=`hiring ${DEF[e.prodQueue[0]].name} (${e.prodQueue.length} queued)`;
     }
-    if(d.flavor) extra+=`<br><span style="color:#9e7780;font-style:italic;">${d.flavor}</span>`;
+    if(d.flavor) extra+=(extra?'<br>':'')+`<span style="color:#9e7780;font-style:italic;">${d.flavor}</span>`;
     elDesc.innerHTML=extra;
   }
 
