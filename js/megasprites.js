@@ -13,7 +13,7 @@
 const MEGA_BASE = ASSET_BASE + 'mega/';                 // ASSET_BASE from assets.js
 const MEGA_MANIFEST = { megabuilding:3, mountain:3, volcano:3, ruin:3 }; // variants per category
 const MEGA_FRAMES = 9;                                  // frames per strip (3×3 grid → 9)
-const MEGA_FPS = { megabuilding:3.5, mountain:1.2, volcano:2.5, ruin:1.8 }; // ambient loop speed (slow)
+const MEGA_FPS = { megabuilding:1.4, mountain:0.6, volcano:1.2, ruin:0.9 }; // ambient loop speed (slow)
 function megaPath(cat,n){ return MEGA_BASE + cat + '_' + n + '.png'; }
 
 // Tint a whole 4-frame strip to a biome wash WITHOUT bleeding onto terrain: draw
@@ -60,7 +60,17 @@ const CATSPEC = {
   volcano:      { w:6, h:6, overhang:1.32, needPassable:false },
   ruin:         { w:6, h:5, overhang:1.30, needPassable:true  },
 };
-const MEGA_EDGE=2, MEGA_KEEPOUT=5, MEGA_GAP=2;   // margins (tiles)
+const MEGA_EDGE=2, MEGA_KEEPOUT=4, MEGA_GAP=1;   // margins (tiles)
+
+// The art is drawn wider than the core footprint (overhang, centred), so the art's
+// ground BASE flares past the core. Block the tiles the base actually covers — its
+// full drawn width × the footprint height — so units can't stand in the side margin
+// and appear to walk under the building base. (The taller body above stays passable
+// so units can pass BEHIND it; the depth sort occludes them there.)
+function megaBlockRect(tx,ty,w,h,overhang){
+  const bw = Math.max(w, Math.round(w*(overhang||1)));
+  return { x: tx-((bw-w)>>1), y: ty, w: bw, h: h };
+}
 
 // 4 small maps → 12 biggest, area-interpolated across [1920, 12648].
 function megaCount(W,H){ const t=(W*H-1920)/(12648-1920); return Math.max(4, Math.min(12, Math.round(4 + 8*t))); }
@@ -84,39 +94,43 @@ function megaVariantCycler(cat, rng){
   let idx=0; return ()=>order[(idx++)%n];
 }
 
-// Chebyshev distance from a point to the footprint rect; < keep ⇒ too close.
-function megaNearPoi(tx,ty,fw,fh,pois,keep){
+// Chebyshev distance from a point to a rect; < keep ⇒ too close.
+function megaNearPoi(r,pois,keep){
   for(const p of pois){
-    const dx = (p.x<tx)?tx-p.x : (p.x>=tx+fw)?p.x-(tx+fw-1):0;
-    const dy = (p.y<ty)?ty-p.y : (p.y>=ty+fh)?p.y-(ty+fh-1):0;
+    const dx = (p.x<r.x)?r.x-p.x : (p.x>=r.x+r.w)?p.x-(r.x+r.w-1):0;
+    const dy = (p.y<r.y)?r.y-p.y : (p.y>=r.y+r.h)?p.y-(r.y+r.h-1):0;
     if(Math.max(dx,dy) < keep) return true;
   }
   return false;
 }
-function megaOverlaps(tx,ty,fw,fh,placed,gap){
+function megaOverlaps(r,placed,gap){
   for(const m of placed){
-    if(tx < m.tx+m.w+gap && tx+fw+gap > m.tx && ty < m.ty+m.h+gap && ty+fh+gap > m.ty) return true;
+    const o=megaBlockRect(m.tx,m.ty,m.w,m.h,m.overhang);
+    if(r.x < o.x+o.w+gap && r.x+r.w+gap > o.x && r.y < o.y+o.h+gap && r.y+r.h+gap > o.y) return true;
   }
   return false;
 }
-// Find a candidate footprint: entirely on the target biome, off water, passable if
-// required, clear of POIs and other landmarks. Returns {tx,ty,w,h} or null.
+// Find a candidate footprint whose BLOCK rect (the wider art base) is entirely on
+// the target biome, off water, passable if required, in bounds, and clear of POIs
+// and other landmarks. Returns the render footprint {tx,ty,w,h} or null.
 function megaFindSpot(state, rng, cat){
   const {W,H,biome,tiles} = state, spec=CATSPEC[cat], fw=spec.w, fh=spec.h;
   const spanX=W-fw-2*MEGA_EDGE, spanY=H-fh-2*MEGA_EDGE;
   if(spanX<=0 || spanY<=0) return null;
-  for(let attempt=0; attempt<120; attempt++){
+  for(let attempt=0; attempt<300; attempt++){
     const tx=MEGA_EDGE+((rng()*spanX)|0), ty=MEGA_EDGE+((rng()*spanY)|0);
+    const r=megaBlockRect(tx,ty,fw,fh,spec.overhang);
+    if(r.x<MEGA_EDGE || r.x+r.w>W-MEGA_EDGE) continue;        // wider base rect must fit
     let ok=true;
-    for(let y=ty; y<ty+fh && ok; y++) for(let x=tx; x<tx+fw && ok; x++){
+    for(let y=r.y; y<r.y+r.h && ok; y++) for(let x=r.x; x<r.x+r.w && ok; x++){
       const i=y*W+x;
       if(megaCategory(biome[i])!==cat) ok=false;
       else if(tiles[i]===T_WATER) ok=false;
       else if(spec.needPassable && !passableTerrain(tiles[i])) ok=false;
     }
     if(!ok) continue;
-    if(megaNearPoi(tx,ty,fw,fh,state._megaPois,MEGA_KEEPOUT)) continue;
-    if(megaOverlaps(tx,ty,fw,fh,state.megaSprites,MEGA_GAP)) continue;
+    if(megaNearPoi(r,state._megaPois,MEGA_KEEPOUT)) continue;
+    if(megaOverlaps(r,state.megaSprites,MEGA_GAP)) continue;
     return {tx,ty,w:fw,h:fh};
   }
   return null;
@@ -143,15 +157,16 @@ function megaConnOK(state, anchor, mustReach){
 // Try to place ONE landmark of a category: find a spot, tentatively block it, keep
 // it only if the map stays connected; else undo and retry. Returns true on commit.
 function megaTryPlace(state, rng, cat, cyc, anchor, mustReach){
-  const {W,blocked}=state;
-  for(let retry=0; retry<40; retry++){
+  const {W,H,blocked}=state, spec=CATSPEC[cat];
+  for(let retry=0; retry<80; retry++){
     const spot=megaFindSpot(state, rng, cat);
     if(!spot) return false;                          // no geometric room left
+    const r=megaBlockRect(spot.tx,spot.ty,spot.w,spot.h,spec.overhang);   // block the art base width
     const touched=[];
-    for(let y=spot.ty; y<spot.ty+spot.h; y++) for(let x=spot.tx; x<spot.tx+spot.w; x++){
+    for(let y=r.y; y<r.y+r.h; y++) for(let x=r.x; x<r.x+r.w; x++){
+      if(x<0||y<0||x>=W||y>=H) continue;
       const k=y*W+x; if(blocked[k]===0){ blocked[k]=1; touched.push(k); } }
     if(megaConnOK(state, anchor, mustReach)){
-      const spec=CATSPEC[cat];
       state.megaSprites.push({ cat, variant:cyc(), tx:spot.tx, ty:spot.ty, w:spot.w, h:spot.h,
         overhang:spec.overhang, biome:state.biome[spot.ty*W+spot.tx], seed:rng() });
       return true;
@@ -223,8 +238,6 @@ function drawOneMega(state, m, ox, oy, x0, y0, x1, y1){
   const px=m.tx*TILE+ox, py=m.ty*TILE+oy, w=m.w*TILE, h=m.h*TILE;
   ctx.save();
   if(!lit) ctx.globalAlpha=0.5;                                          // explored-not-visible dim
-  ctx.fillStyle='rgba(0,0,0,.34)';                                       // ground contact shadow
-  ctx.beginPath(); ctx.ellipse(px+w/2, py+h-3, w*0.46, 8, 0, 0, 6.28); ctx.fill();
   if(spr){
     const fps=MEGA_FPS[m.cat]||2.5;
     const fi=((((t*fps + m.seed*MEGA_FRAMES)|0)%MEGA_FRAMES)+MEGA_FRAMES)%MEGA_FRAMES;
