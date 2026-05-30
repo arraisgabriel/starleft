@@ -130,6 +130,8 @@ The board is watching. Synergy awaits....` },
     w:48, h:40,
     seed:1,
     player:{ x:5, y:33 },
+    // a green starting valley — lush temperate grassland, gentle water & low hills
+    terrain:{ biomes:['grass'], seaFrac:0.08, mtnFrac:0.07, moist:{base:0.62,noise:0.45}, forest:0.10 },
     aggression:1.0,
     enemies:[ {x:40,y:6, defenders:2}, {x:30,y:24, defenders:2} ],
     objective:'DISRUPTR INC. now holds TWO outposts. Mine Funding, scale your team, and raze both.',
@@ -150,6 +152,8 @@ Weaponize your buzzwords, circle back, and disrupt MegaCorp into bankruptcy. The
     w:54, h:46,
     seed:2,
     player:{ x:6, y:6 },
+    // the Silicon WASTES — hot arid desert with dry-grass pockets, rocky, little water
+    terrain:{ biomes:['desert','grass'], temp:{base:0.74,noise:0.18}, hot:0.6, dry:0.65, moist:{base:0.42,noise:0.5}, seaFrac:0.05, mtnFrac:0.12, forest:0.02 },
     aggression:1.5,
     enemies:[ {x:44,y:38, extraBarracks:true, defenders:4}, {x:46,y:12, defenders:3} ],
     objective:'MEGACORP now holds TWO campuses (SE and E). Raze both and acquire their assets by force.',
@@ -170,6 +174,8 @@ Weaponize your buzzwords, circle back, and disrupt MegaCorp into bankruptcy. The
     w:64, h:54,
     seed:3,
     player:{ x:6, y:46 },
+    // flooded merger ground — a lake-laced temperate grassland, few hills
+    terrain:{ biomes:['grass'], seaFrac:0.20, mtnFrac:0.06, moist:{base:0.60,noise:0.5}, forest:0.08 },
     enemies:[ {x:54,y:8, extraBarracks:true, defenders:3}, {x:50,y:46, defenders:3}, {x:40,y:24, extraBarracks:true, defenders:3} ],
     objective:'SYNERGY CORP has THREE campuses — liquidate all three. You start with extra Funding and a People Ops to fund the takeover.',
     lakes:[ {x:30,y:26,r:5},{x:18,y:14,r:3},{x:44,y:34,r:4} ],
@@ -190,6 +196,8 @@ Weaponize your buzzwords, circle back, and disrupt MegaCorp into bankruptcy. The
     w:72, h:60,
     seed:4,
     player:{ x:7, y:7 },
+    // OMNICORP owns the cloud — a vast dark server-farm foundation with coolant pools
+    terrain:{ biomes:['tech'], seaFrac:0.13, mtnFrac:0.08, forest:0 },
     enemies:[ {x:62,y:50, extraBarracks:true, defenders:4}, {x:60,y:12, extraBarracks:true, defenders:4}, {x:36,y:48, extraBarracks:true, defenders:4} ],
     objective:'OMNICORP has THREE HQs — raze all three. You are very well-funded; overwhelm them.',
     lakes:[ {x:34,y:30,r:6},{x:50,y:18,r:4},{x:22,y:44,r:4},{x:58,y:40,r:3} ],
@@ -210,6 +218,8 @@ Weaponize your buzzwords, circle back, and disrupt MegaCorp into bankruptcy. The
     w:80, h:66,
     seed:5,
     player:{ x:6, y:58 },
+    // lawless scorched badlands — volcanic basalt with molten lava seas
+    terrain:{ biomes:['volcanic'], seaFrac:0.10, mtnFrac:0.10, forest:0 },
     enemies:[ {x:68,y:10, extraBarracks:true, defenders:3}, {x:72,y:54, extraBarracks:true, defenders:3}, {x:34,y:8, defenders:3}, {x:46,y:36, extraBarracks:true, defenders:3} ],
     objective:'THE CARTEL holds FOUR campuses. Liquidate all four — clear them one at a time. You start very well-funded.',
     lakes:[ {x:40,y:32,r:6},{x:24,y:18,r:4},{x:56,y:44,r:4},{x:30,y:50,r:3} ],
@@ -230,6 +240,8 @@ Weaponize your buzzwords, circle back, and disrupt MegaCorp into bankruptcy. The
     w:88, h:72,
     seed:6,
     player:{ x:7, y:7 },
+    // corporate winter — a frozen wasteland of snow and ice, seas frozen over
+    terrain:{ biomes:['ice'], temp:{base:0.20,noise:0.15}, freeze:0.50, seaFrac:0.12, mtnFrac:0.10 },
     enemies:[ {x:78,y:62, extraBarracks:true, defenders:4}, {x:80,y:16, extraBarracks:true, defenders:4}, {x:42,y:66, extraBarracks:true, defenders:4}, {x:48,y:36, extraBarracks:true, defenders:4} ],
     objective:'THE BOARD seized FOUR strongholds to oust you. Raze all four for the ultimate exit. You have maximum Funding — make it count.',
     lakes:[ {x:44,y:36,r:7},{x:28,y:20,r:4},{x:60,y:24,r:4},{x:34,y:54,r:4},{x:66,y:48,r:3} ],

@@ -221,6 +221,7 @@ function climateBiome(t, m, P, allow){
   if(allow.has(B_DESERT) && t > P.hot && m < P.dry)    return B_DESERT;
   if(allow.has(B_GRASS))                               return B_GRASS;
   if(allow.has(B_TECH))                                return B_TECH;
+  if(allow.has(B_VOLCANIC))                            return B_VOLCANIC;   // scorched-land maps
   if(allow.has(B_DESERT) && allow.has(B_ICE))          return t < (P.freeze+P.hot)/2 ? B_ICE : B_DESERT;
   if(allow.has(B_DESERT))                              return B_DESERT;
   if(allow.has(B_ICE))                                 return B_ICE;

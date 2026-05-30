@@ -8,40 +8,35 @@ const ASSET_BASE      = 'assets/';
 const ATLAS_TILESET   = ASSET_BASE + 'atlas/tileset.png';
 const ATLAS_BUILDINGS = ASSET_BASE + 'atlas/buildings.png';
 const RESOURCE_CRYSTAL = ASSET_BASE + 'resource/crystal.png'; // Funding crystal node (optional; procedural fallback if absent)
-// terrain slot: ground | rock | cactus | oasis  (desert biome opaque tiles)
-function terrainTile(slot){ return ASSET_BASE + 'terrain/desert_' + slot + '.png'; }
 // standalone building sheet: name garage|launchpad , faction player|enemy
 function buildingSheet(name, faction){ return ASSET_BASE + 'buildings/' + name + '_' + faction + '.png'; }
 // unit sheet: type worker|soldier|... , action walk|mine|attack|heal , enemy bool
 function unitSheet(type, action, enemy){ return ASSET_BASE + 'units/' + type + '/' + action + (enemy ? '_enemy' : '') + '.png'; }
 
 /* ---- Dark / devastated cyberpunk tile atlas (tileset.png) ----
-   A clean, gutterless 4×7 grid composed from per-biome Gemini generations
+   A clean, gutterless 3×7 grid composed from per-biome Gemini generations
    (Hades-inspired dark palette; see _dev/gen/ + _dev/prompts/terrain-dark.md).
-   Columns are slots floor/rock/tree/water; rows are biomes in biome-constant
-   order (grass=0 … volcanic=6), so the atlas row IS the biome id. Each cell
-   already includes its own ground, so a feature tile (rock/tree) is the whole
-   32px blit. Falls back to the procedural renderer if the image is missing.
-   (Water tiles render via the neighbour-aware procedural path in render.js, so
-   the water column is generated for completeness but unused in practice.) */
+   Columns are the only slots blitted in-game — floor / rock / tree; rows are
+   biomes in biome-constant order (grass=0 … volcanic=6), so the atlas row IS
+   the biome id. Each cell already includes its own ground, so a feature tile
+   (rock/tree) is the whole 32px blit. Falls back to the procedural renderer if
+   the image is missing. (Water has NO column — water tiles are drawn by the
+   neighbour-aware procedural shoreline path in render.js, never from the atlas.) */
 const ATLAS_IMG = new Image();
 let ATLAS_READY = false;
 ATLAS_IMG.onload = ()=>{ ATLAS_READY = true; };
 ATLAS_IMG.onerror = ()=>{ ATLAS_READY = false; };
 ATLAS_IMG.src = ATLAS_TILESET;
-const ATLAS_CELL = 128;                                  // px per cell (4 cols × 7 rows, no gutter)
-const SLOT_COL = { floor:0, rock:1, tree:2, water:3 };
+const ATLAS_CELL = 128;                                  // px per cell (3 cols × 7 rows, no gutter)
+const SLOT_COL = { floor:0, rock:1, tree:2 };
 function atlasRect(biome, slot){ const c=SLOT_COL[slot]||0; return [c*ATLAS_CELL, biome*ATLAS_CELL, ATLAS_CELL, ATLAS_CELL]; }
 const ATLAS_BIOMES = [B_GRASS,B_MOUNTAIN,B_WATER,B_TECH,B_DESERT,B_ICE,B_VOLCANIC];
 const SPRITES = {};
-for(const b of ATLAS_BIOMES) SPRITES[b] = { floor:atlasRect(b,'floor'), rock:atlasRect(b,'rock'), tree:atlasRect(b,'tree'), water:atlasRect(b,'water') };
+for(const b of ATLAS_BIOMES) SPRITES[b] = { floor:atlasRect(b,'floor'), rock:atlasRect(b,'rock'), tree:atlasRect(b,'tree') };
 function spriteFor(biome, slot){
   if(!ATLAS_READY) return null;
   const s = SPRITES[biome]; return s ? (s[slot]||null) : null;
 }
-// Desert now has a proper dark sand row in the atlas, so the old standalone
-// desert PNGs are no longer used; keep a no-op stub so any stale call is safe.
-function desertTile(slot){ return null; }
 
 /* ---- Building sprite atlas (buildings.png) ----
    3×2 grid: columns HQ / Barracks / Turret, rows player (cyan) / enemy (red).
