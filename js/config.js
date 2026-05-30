@@ -72,13 +72,13 @@ const TERRAIN_DEFAULTS = {
 
 /* ---- Unit / building definitions (startup-vs-monopoly satire) ---- */
 const DEF = {
-  hq:       { name:'Open-Plan HQ', icon:'🏢', kind:'building', w:2,h:2, hp:3000, cost:0,   build:35,  sight:7, supply:24, color:'#3b7fd0',
+  hq:       { name:'Open-Plan HQ', icon:'🏢', kind:'building', w:4,h:3, hp:3000, cost:0,   build:35,  sight:7, supply:24, color:'#3b7fd0',
               dmg:8, range:7.5, cd:1.6, flavor:'Stores Funding and onboards unpaid Interns. Fires the occasional warning shot from the rooftop.' },
-  barracks: { name:'People Ops',   icon:'🎯', kind:'building', w:2,h:2, hp:900,  cost:150, build:20,  sight:5, supply:0,  color:'#5a6b8a',
+  barracks: { name:'People Ops',   icon:'🎯', kind:'building', w:3,h:3, hp:900,  cost:150, build:20,  sight:5, supply:0,  color:'#5a6b8a',
               flavor:'"Recruiting" department. Turns Funding into Growth Hackers and Consultants.' },
-  turret:   { name:'Legal Team',   icon:'⚖️', kind:'building', w:1,h:1, hp:550,  cost:100, build:14,  sight:7, supply:0,  color:'#7a8aa8',
+  turret:   { name:'Legal Team',   icon:'⚖️', kind:'building', w:2,h:2, hp:550,  cost:100, build:14,  sight:7, supply:0,  color:'#7a8aa8',
               dmg:14, range:6.0, cd:0.7, flavor:'Fires cease-and-desist letters at anything that trespasses on your IP.' },
-  outpost:  { name:'Satellite Office', icon:'📡', kind:'building', w:2,h:2, hp:650, cost:175, build:16, sight:5, supply:0, color:'#5a6b8a',
+  outpost:  { name:'Satellite Office', icon:'📡', kind:'building', w:3,h:3, hp:650, cost:175, build:16, sight:5, supply:0, color:'#5a6b8a',
               deposit:true, trickle:2, flavor:'A scrappy forward branch — Interns drop Funding here instead of trekking back to HQ, and its rig slowly auto-extracts a little on its own. Cheaper and flimsier than a second HQ.' },
   worker:   { name:'Intern',         icon:'🧑‍💻', kind:'unit', hp:60,  cost:50,  build:10, sight:5, supply:1, speed:2.6, dmg:4,  range:1.0, cd:1.0, r:9,
               flavor:'Mines Funding "for the exposure." Builds things. Equity will never vest.' },
@@ -108,9 +108,9 @@ const DEF = {
               flavor:'Capital airship. Rains cyan ordnance on the campus below.' },
 
   /* ---- production buildings ---- */
-  garage:   { name:'The Garage', icon:'🔧', kind:'building', w:2,h:2, hp:1000, cost:200, build:24, sight:4, supply:0, color:'#4a6b5a',
+  garage:   { name:'The Garage', icon:'🔧', kind:'building', w:3,h:3, hp:1000, cost:200, build:24, sight:4, supply:0, color:'#4a6b5a',
               flavor:'Vehicle bay. Turns Funding into Food Trucks, Auditors and Founder Mechs.' },
-  launchpad:{ name:'Launch Pad', icon:'🚀', kind:'building', w:2,h:2, hp:850,  cost:250, build:28, sight:5, supply:0, color:'#5a6b8a',
+  launchpad:{ name:'Launch Pad', icon:'🚀', kind:'building', w:3,h:3, hp:850,  cost:250, build:28, sight:5, supply:0, color:'#5a6b8a',
               flavor:'Starport. Assembles Courier Drones and Buzzword Bombers. Requires a Garage.' },
 };
 

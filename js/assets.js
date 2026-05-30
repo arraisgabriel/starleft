@@ -38,22 +38,23 @@ function spriteFor(biome, slot){
   const s = SPRITES[biome]; return s ? (s[slot]||null) : null;
 }
 
-/* ---- Building sprite atlas (buildings.png) ----
-   3×2 grid: columns HQ / Barracks / Turret, rows player (cyan) / enemy (red).
-   The generated atlas baked its transparency as a grey checkerboard, so it was
-   alpha-keyed at slice time; these rects are the tight bounding boxes of each
-   building inside the keyed atlas. Blitted aspect-preserved + bottom-anchored
-   so buildings "stand" on their footprint and overhang upward. */
-const BLD_IMG = new Image();
-let BLD_READY = false;
-BLD_IMG.onload = ()=>{ BLD_READY = true; };
-BLD_IMG.onerror = ()=>{ BLD_READY = false; };
-BLD_IMG.src = ATLAS_BUILDINGS;
-const BUILDING_SPRITES = {
-  hq:       { player:[44,25,253,284],  enemy:[42,369,255,276] },
-  barracks: { player:[380,40,287,269], enemy:[380,379,287,273] },
-  turret:   { player:[801,80,192,175], enemy:[799,433,195,224] },
-};
+/* ---- Building sprites (dark cyberpunk-Hades, animated like the mega-sprites) ----
+   Every building is a 9-frame strip (player cyan / enemy red), bottom-anchored and
+   blitted aspect-preserved so it "stands" on its footprint and overhangs upward;
+   only the neon flickers (the structure is frozen). One transparent PNG per faction:
+   assets/buildings/<type>_<player|enemy>.png. (Mirrors loadWalk / loadMega.) */
+const BUILDING_FRAMES = 9;
+const BUILDING_FPS = 0.9;               // slow ambient neon-flicker playback
+const BUILDING_TYPES = ['hq','barracks','turret','garage','launchpad','outpost'];
+function loadBuildingStrip(type, faction){
+  const a = { img:new Image(), ready:false, fw:0, fh:0 };
+  a.img.onload  = ()=>{ a.fw = a.img.naturalWidth/BUILDING_FRAMES; a.fh = a.img.naturalHeight; a.ready = true; };
+  a.img.onerror = ()=>{ a.ready=false; };
+  a.img.src = buildingSheet(type, faction);
+  return a;
+}
+const BUILDING_ANIM = {};
+for(const t of BUILDING_TYPES) BUILDING_ANIM[t] = { player:loadBuildingStrip(t,'player'), enemy:loadBuildingStrip(t,'enemy') };
 /* ---- Visual faction ----
    Gameplay still treats owner==='player' as the human side everywhere; this
    only flips APPEARANCE. With PLAYER_IS_RED the human renders in red art/colors
@@ -63,19 +64,11 @@ const PLAYER_IS_RED = true;
 function isRedSide(owner){ const human=owner==='player'; return PLAYER_IS_RED ? human : !human; }
 function factionKey(owner){ return isRedSide(owner) ? 'enemy' : 'player'; }
 
-// New production buildings live as their own transparent PNGs (one per faction)
 function loadImg(src){ const i=new Image(); i.src=src; return i; }
-const NEW_BUILDINGS = {
-  garage:    { player:loadImg(buildingSheet('garage','player')),    enemy:loadImg(buildingSheet('garage','enemy')) },
-  launchpad: { player:loadImg(buildingSheet('launchpad','player')), enemy:loadImg(buildingSheet('launchpad','enemy')) },
-  outpost:   { player:loadImg(buildingSheet('outpost','player')),   enemy:loadImg(buildingSheet('outpost','enemy')) },
-};
-// returns {img, rect:[sx,sy,sw,sh]} for an entity's building sprite, or null
+// returns {img, fw, fh, frames} for an entity's building strip (faction-keyed), or null
 function buildingSprite(type,owner){
-  const fk=factionKey(owner);
-  if(BUILDING_SPRITES[type]){ if(!BLD_READY) return null; const r=BUILDING_SPRITES[type][fk]; return r?{img:BLD_IMG, rect:r}:null; }
-  const nb=NEW_BUILDINGS[type]; if(nb){ const im=nb[fk]; return (im&&im.complete&&im.naturalWidth)?{img:im, rect:[0,0,im.naturalWidth,im.naturalHeight]}:null; }
-  return null;
+  const e=BUILDING_ANIM[type]; const a=e&&e[factionKey(owner)];
+  return (a&&a.ready) ? { img:a.img, fw:a.fw, fh:a.fh, frames:BUILDING_FRAMES } : null;
 }
 
 // Funding resource crystal — optional generated sprite; null until present (then drawGoldmine blits it under the animated glow/shine).

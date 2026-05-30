@@ -1,13 +1,16 @@
 /* map.js — map generation & entity factories: buildEnemyBase, newMap, mkEntity/mkBuilding/mkUnit, markBuilding, recomputeSupply. */
 function buildEnemyBase(state, base, idx){
+  // origin (ax,ay) = HQ top-left. Buildings are big now (HQ 4×3, barracks/garage
+  // 3×3, turret 2×2), so they're laid out side-by-side without overlap; the base
+  // spans roughly ax-2..ax+7 × ay..ay+6 (clearArea below clears radius 7 around it).
   const ax=base.x, ay=base.y;
-  mkBuilding(state,'hq','enemy', ax, ay, true);
-  mkBuilding(state,'barracks','enemy', ax+3, ay, true);
-  if(base.extraBarracks) mkBuilding(state,'barracks','enemy', ax, ay+3, true);
-  mkBuilding(state,'turret','enemy', ax-1, ay+2, true);
-  if(idx>=1 && ax+4<state.W && ay+4<state.H) mkBuilding(state,'garage','enemy', ax+3, ay+3, true); // vehicles on later Quarters
+  mkBuilding(state,'hq','enemy', ax, ay, true);                 // 4×3
+  mkBuilding(state,'barracks','enemy', ax+4, ay, true);         // 3×3, right of HQ
+  if(base.extraBarracks) mkBuilding(state,'barracks','enemy', ax+4, ay+3, true); // below the barracks
+  mkBuilding(state,'turret','enemy', ax-2, ay, true);           // 2×2, left of HQ
+  if(idx>=1 && ax+3<=state.W && ay+6<=state.H) mkBuilding(state,'garage','enemy', ax, ay+3, true); // 3×3, below HQ
   const ndef = base.defenders!=null ? base.defenders : (idx===0?2:4);
-  for(let i=0;i<ndef;i++) mkUnit(state,'soldier','enemy', ax-1+i, ay+3);
+  for(let i=0;i<ndef;i++) mkUnit(state,'soldier','enemy', ax+1+i, ay+6);   // muster below the base (clear ground)
 }
 
 function newMap(idx){
@@ -116,9 +119,9 @@ function newMap(idx){
   const clearArea=(px,py,rad)=>{ for(let y=-rad;y<=rad;y++)for(let x=-rad;x<=rad;x++){
     if(inB(px+x,py+y)){ const j=(py+y)*W+(px+x); tiles[j]=T_GRASS;
       if(biome[j]===B_WATER||biome[j]===B_MOUNTAIN) biome[j]=landBiome; } } };
-  clearArea(cfg.player.x,cfg.player.y,4);
-  bases.forEach(b=> clearArea(b.x,b.y,4));
-  (cfg.lostBases||[]).forEach(b=> clearArea(b.x,b.y,3));   // abandoned outposts sit on clear ground too
+  clearArea(cfg.player.x,cfg.player.y,6);                  // bigger buildings need a bigger clear pad
+  bases.forEach(b=> clearArea(b.x,b.y,7));                 // enemy base spans ~ax-2..ax+7 × ay..ay+6
+  (cfg.lostBases||[]).forEach(b=> clearArea(b.x,b.y,4));   // abandoned outposts sit on clear ground too
   // keep gold nodes reachable: clear the footprint to passable floor (climate theme kept)
   cfg.goldNodes.forEach(g=>{ for(let y=-2;y<=2;y++)for(let x=-2;x<=2;x++){
     if(inB(g.x+x,g.y+y)){ const j=(g.y+y)*W+(g.x+x); tiles[j]=T_GRASS;
@@ -196,8 +199,8 @@ function newMap(idx){
   // ---- player start: HQ + Interns + Growth Hackers (+ optional People Ops) ----
   const phq = mkBuilding(state,'hq','player', cfg.player.x, cfg.player.y, true);
   const nW = cfg.startWorkers || 4, nS = cfg.startSoldiers || 2;
-  for(let i=0;i<nW;i++) mkUnit(state,'worker','player', cfg.player.x+ (i%3), cfg.player.y+2 + ((i/3)|0));
-  for(let i=0;i<nS;i++) mkUnit(state,'soldier','player', cfg.player.x-1+(i%5), cfg.player.y-2 - ((i/5)|0));
+  for(let i=0;i<nW;i++) mkUnit(state,'worker','player', cfg.player.x+ (i%3), cfg.player.y+4 + ((i/3)|0));  // below the 4×3 HQ
+  for(let i=0;i<nS;i++) mkUnit(state,'soldier','player', cfg.player.x-1+(i%5), cfg.player.y-2 - ((i/5)|0)); // above the HQ
   if(cfg.startBarracks) mkBuilding(state,'barracks','player', cfg.player.x-3, cfg.player.y, true);
 
   // ---- enemy bases (one or more) ----
@@ -209,11 +212,37 @@ function newMap(idx){
   (cfg.lostBases||[]).forEach(b=>{
     const e = mkBuilding(state,'hq','neutral', b.x, b.y, true);
     e.abandoned = true;
-    // reveal the surrounding terrain so the outpost reads as a findable beacon
-    for(let y=-4;y<=4;y++)for(let x=-4;x<=4;x++){
+    // reveal the surrounding terrain so the (now 4×3) outpost reads as a findable beacon
+    for(let y=-5;y<=6;y++)for(let x=-5;x<=6;x++){
       if(inB(b.x+x,b.y+y)) state.explored[(b.y+y)*W+(b.x+x)]=1;
     }
   });
+
+  // Buildings are bigger now, so a base/start can land on a gold node that config
+  // tucked snugly against it (covered nodes are unminable + unreachable). Nudge any
+  // covered/unreachable node out to the nearest PLAYER-REACHABLE open tile.
+  {
+    const B=state.blocked, reach=new Uint8Array(W*H);    // tiles reachable from the player's muster
+    let sx=cfg.player.x, sy=cfg.player.y+4;
+    if(B[sy*W+sx]){ for(let r=1;r<10;r++){ let done=false;
+      for(let dy=-r;dy<=r&&!done;dy++)for(let dx=-r;dx<=r&&!done;dx++){ const nx=cfg.player.x+dx,ny=cfg.player.y+dy;
+        if(nx>=0&&ny>=0&&nx<W&&ny<H&&!B[ny*W+nx]){ sx=nx; sy=ny; done=true; } } if(done) break; } }
+    const fq=[sy*W+sx]; reach[sy*W+sx]=1;
+    for(let h=0;h<fq.length;h++){ const k=fq[h], x=k%W, y=(k/W)|0;
+      for(const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1]]){ const nx=x+dx,ny=y+dy;
+        if(nx<0||ny<0||nx>=W||ny>=H) continue; const j=ny*W+nx; if(!reach[j]&&!B[j]){ reach[j]=1; fq.push(j); } } }
+    for(const e of state.entities){
+      if(e.type!=='goldmine') continue;
+      const gx=(e.x/TILE)|0, gy=(e.y/TILE)|0;
+      if(reach[gy*W+gx]) continue;                        // already reachable & open
+      const seen=new Uint8Array(W*H), q=[gy*W+gx]; seen[gy*W+gx]=1; let found=-1;
+      for(let h=0; h<q.length && found<0; h++){ const k=q[h], x=k%W, y=(k/W)|0;
+        for(const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1]]){ const nx=x+dx,ny=y+dy;
+          if(nx<0||ny<0||nx>=W||ny>=H) continue; const j=ny*W+nx; if(seen[j]) continue; seen[j]=1;
+          if(reach[j]){ found=j; break; } q.push(j); } }   // expand across walls to the nearest reachable tile
+      if(found>=0){ e.x=((found%W)+0.5)*TILE; e.y=(((found/W)|0)+0.5)*TILE; }
+    }
+  }
 
   recomputeSupply(state);
   return state;

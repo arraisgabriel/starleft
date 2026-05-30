@@ -433,19 +433,19 @@ function drawBuilding(state,e,ox,oy,dim){
   if(e.abandoned) ctx.globalAlpha*=0.7;   // derelict: faded
   // selection ring (footprint)
   if(e.selected){ ctx.strokeStyle='#8effb0'; ctx.lineWidth=2; ctx.strokeRect(px-3,py-3,w+6,h+6); }
-  // ground contact shadow
-  ctx.fillStyle='rgba(0,0,0,.32)'; ctx.beginPath(); ctx.ellipse(px+w/2,py+h-3,w*0.46,6,0,0,6.28); ctx.fill();
 
   let topY=py;   // visual top of the structure (for the HP bar)
   if(spr){
-    // aspect-preserved, bottom-anchored with a little overhang
-    const sx=spr.rect[0], sy=spr.rect[1], sw=spr.rect[2], sh=spr.rect[3];
-    const overhang = e.type==='turret'?1.28:1.12;
-    const dw=w*overhang, dh=dw*(sh/sw);
+    // animated 9-frame strip (neon flicker), aspect-preserved, bottom-anchored with a
+    // little upward overhang for height. Per-building phase from e.id so identical
+    // buildings don't flicker in lockstep. No ground shadow (intentionally dropped).
+    const n=spr.frames, fi=((((state.time*BUILDING_FPS + e.id*0.13)|0)%n)+n)%n;
+    const overhang = e.type==='turret'?1.18:1.08;
+    const dw=w*overhang, dh=dw*(spr.fh/spr.fw);
     const dx=px+(w-dw)/2, dy=py+h-dh+2;
     topY=dy;
     if(e.constructing) ctx.globalAlpha*=0.5;   // rises faintly while building
-    ctx.drawImage(spr.img, sx,sy,sw,sh, dx,dy,dw,dh);
+    ctx.drawImage(spr.img, fi*spr.fw,0,spr.fw,spr.fh, dx,dy,dw,dh);
   } else {
     // ---- procedural fallback ----
     const col = isRedSide(e.owner)? '#9a3b3b' : d.color;
