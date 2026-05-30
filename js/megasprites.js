@@ -11,7 +11,7 @@
 
 /* ===================== assets ===================== */
 const MEGA_BASE = ASSET_BASE + 'mega/';                 // ASSET_BASE from assets.js
-const MEGA_MANIFEST = { megabuilding:3, mountain:3, volcano:3, ruin:3 }; // variants per category
+const MEGA_MANIFEST = { megabuilding:6, mountain:6, volcano:6, ruin:6 }; // variants per category
 const MEGA_FRAMES = 9;                                  // frames per strip (3×3 grid → 9)
 const MEGA_FPS = { megabuilding:1.4, mountain:0.6, volcano:1.2, ruin:0.9 }; // ambient loop speed (slow)
 function megaPath(cat,n){ return MEGA_BASE + cat + '_' + n + '.png'; }
