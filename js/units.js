@@ -256,7 +256,7 @@ function nearestDeposit(state, e){
   for(const o of state.entities){
     if(o.dead||o.owner!==e.owner) continue;
     if(o.kind!=='building'||o.constructing) continue;
-    if(!(o.type==='hq')) continue;
+    if(o.type!=='hq' && !DEF[o.type].deposit) continue;   // HQ or any drop-off building (Satellite Office)
     const dx=o.x-e.x,dy=o.y-e.y,d=dx*dx+dy*dy; if(d<bd){bd=d;best=o;}
   }
   return best;

@@ -144,6 +144,22 @@ function render(state){
   renderMinimap(state);   // separate canvas — unaffected by the #cv transform
 }
 
+// Blit an atlas cell with a per-tile orientation derived from `variant`, to break
+// the visible repetition of a single tile across a field. `full` (floor) uses all
+// 8 symmetries (4 rotations × mirror — valid since floors are seamless+flat); a
+// feature (rock/tree) only mirrors horizontally so it keeps its "up".
+function blitTileOriented(r, px, py, v, full){
+  const S = TILE+1;
+  if(!full){                                  // feature: optional horizontal mirror only
+    if(v<0.5){ ctx.drawImage(ATLAS_IMG, r[0],r[1],r[2],r[3], px,py, S,S); return; }
+    ctx.save(); ctx.translate(px+S/2, py+S/2); ctx.scale(-1,1);
+    ctx.drawImage(ATLAS_IMG, r[0],r[1],r[2],r[3], -S/2,-S/2, S,S); ctx.restore(); return;
+  }
+  const o=(v*4)|0;                            // 0..3 quarter-turns
+  ctx.save(); ctx.translate(px+TILE/2, py+TILE/2); ctx.rotate(o*1.5708);
+  if(((v*8)|0)&1) ctx.scale(-1,1);            // half also mirror → 8 orientations
+  ctx.drawImage(ATLAS_IMG, r[0],r[1],r[2],r[3], -S/2,-S/2, S,S); ctx.restore();
+}
 function drawTile(state,tx,ty,px,py){
   const i=ty*state.W+tx;
   const t=state.tiles[i], b=state.biome[i], v=state.variant[i];
@@ -152,13 +168,13 @@ function drawTile(state,tx,ty,px,py){
   // blit), so lakes show open water inside and a real shoreline at the edge.
   if(t===T_WATER){ drawWaterTile(state,tx,ty,b,v,px,py); return; }
 
-  // ---- atlas path: each terrain maps to one cell that includes its own
-  //      ground, so the whole 32px tile is a single blit (1px overscan to
-  //      hide seams). Any undefined slot falls through to procedural below. ----
+  // ---- atlas path: each terrain maps to one cell that includes its own ground,
+  //      blitted as the whole 32px tile (1px overscan to hide seams). The single
+  //      floor tile per biome is rotated/flipped per-tile (by `variant`) so a
+  //      large field doesn't read as a repeated stamp; rock/tree just mirror. ----
   const slot = t===T_ROCK?'rock' : t===T_TREE?'tree' : 'floor';
-  if(b===B_DESERT){ const im=desertTile(slot); if(im){ ctx.drawImage(im,0,0,im.naturalWidth,im.naturalHeight, px,py, TILE+1, TILE+1); return; } }
   const r = spriteFor(b, slot);
-  if(r){ ctx.drawImage(ATLAS_IMG, r[0],r[1],r[2],r[3], px,py, TILE+1, TILE+1); return; }
+  if(r){ blitTileOriented(r, px, py, v, slot==='floor'); return; }
 
   // ---- procedural fallback ----
   const P = BIOME_PAL[b] || BIOME_PAL[B_GRASS];
@@ -233,22 +249,23 @@ function waterEdges(state,tx,ty){
   }
   return { mask, land };
 }
-// base water-body colour by the tile's OWN biome; `shore` lightens it near land (depth gradient)
+// base water-body colour by the tile's OWN biome; `shore` lightens it near land
+// (depth gradient). DARK / devastated palette — toxic near-black teal, not bright.
 function waterBody(b,v,shore){
-  if(b===B_VOLCANIC) return shore?'#6a1e08':'#4a1204';
-  if(b===B_ICE)      return v>0.5 ? (shore?'#aed0e0':'#9fc4d8') : (shore?'#b8d8e6':'#aacfe0');
-  return shore ? (v>0.5?'#1d4f73':'#1a466a') : (v>0.5?'#163f5e':'#123a57');
+  if(b===B_VOLCANIC) return shore?'#5a1606':'#360e04';
+  if(b===B_ICE)      return v>0.5 ? (shore?'#2c4d5c':'#21404e') : (shore?'#335462':'#284857');
+  return shore ? (v>0.5?'#123a48':'#0e2f3c') : (v>0.5?'#0c2230':'#091a25');  // dark toxic teal
 }
-// rim colour from the adjacent LAND biome
+// rim colour from the adjacent LAND biome — grimy/dark wet shore, not bright
 function shoreColor(b){
   switch(b){
-    case B_DESERT:   return '#d8c188';   // sand
-    case B_ICE:      return '#e8f2f7';   // snow
-    case B_MOUNTAIN: return '#6f6357';   // rock
-    case B_VOLCANIC: return '#3a2a22';   // scorched
-    case B_TECH:     return '#3a4754';   // panel edge
-    case B_GRASS:    return '#5a7a3e';   // grassy bank
-    default:         return '#cdbf9a';   // neutral foam/sand
+    case B_DESERT:   return '#5a4a30';   // dark wet sand
+    case B_ICE:      return '#516472';   // dirty slush
+    case B_MOUNTAIN: return '#3a3d44';   // wet rock
+    case B_VOLCANIC: return '#2a1c16';   // scorched
+    case B_TECH:     return '#1b2129';   // panel edge
+    case B_GRASS:    return '#2b3a26';   // dark grassy bank
+    default:         return '#473b2a';   // neutral grimy silt
   }
 }
 const SHORE_RIM=4;
@@ -270,7 +287,7 @@ function drawShoreline(b,mask,land,px,py){
   if((mask&EDGE_SW)&&!(mask&(EDGE_S|EDGE_W))) ctx.fillRect(px,     py+T-2, 2,2);
   if((mask&EDGE_SE)&&!(mask&(EDGE_S|EDGE_E))) ctx.fillRect(px+T-2, py+T-2, 2,2);
   if(dark) return;
-  ctx.fillStyle='rgba(255,255,255,.28)';   // faint foam highlight just inside the rim
+  ctx.fillStyle='rgba(150,225,230,.18)';   // faint toxic-cyan foam highlight just inside the rim
   if(mask&EDGE_N) ctx.fillRect(px,       py+R,     T,1);
   if(mask&EDGE_S) ctx.fillRect(px,       py+T-R-1, T,1);
   if(mask&EDGE_W) ctx.fillRect(px+R,     py,       1,T);
@@ -287,9 +304,9 @@ function drawWaterTile(state,tx,ty,b,v,px,py){
   } else if(b===B_ICE){                             // frozen crack
     ctx.strokeStyle='rgba(255,255,255,.4)'; ctx.lineWidth=1;
     ctx.beginPath(); ctx.moveTo(px+v*TILE,py); ctx.lineTo(px+TILE*0.5,py+TILE); ctx.stroke();
-  } else {                                          // gentle shimmer
+  } else {                                          // gentle toxic-cyan shimmer
     const sh=0.5+0.5*Math.sin(state.time*1.4 + v*8 + py*0.04);
-    ctx.fillStyle='rgba(255,255,255,'+(0.03+0.05*sh).toFixed(3)+')';
+    ctx.fillStyle='rgba(120,225,225,'+(0.03+0.05*sh).toFixed(3)+')';
     ctx.fillRect(px+((v*20)|0), py+8, 10, 2);
   }
   if(shore) drawShoreline(b,mask,land,px,py);
@@ -576,10 +593,10 @@ function renderMinimap(state){
     if(!state.explored[i]) continue;
     const t=state.tiles[i], b=state.biome[i];
     let c;
-    if(t===T_WATER)      c = b===B_VOLCANIC?'#7a2408': b===B_ICE?'#9ec4d6':'#1a466a';
-    else if(t===T_ROCK)  c = b===B_VOLCANIC?'#4a2c22': b===B_ICE?'#9fb6c2':'#5a544d';
-    else if(t===T_TREE)  c = b===B_DESERT?'#5a7a3e': b===B_VOLCANIC?'#2a201a':'#27401f';
-    else                 c = BIOME_MINI[b] || '#34522f';
+    if(t===T_WATER)      c = b===B_VOLCANIC?'#4a1606': b===B_ICE?'#284857':'#0c2230';
+    else if(t===T_ROCK)  c = b===B_VOLCANIC?'#3a241c': b===B_ICE?'#3a4854':'#3a3d44';
+    else if(t===T_TREE)  c = b===B_DESERT?'#2e4a2a': b===B_VOLCANIC?'#1c1411':'#16241a';
+    else                 c = BIOME_MINI[b] || '#1c2a1e';
     if(!state.visible[i]) c=shade(c,-30);
     mmx.fillStyle=c; mmx.fillRect(tx*sx,ty*sy,Math.ceil(sx),Math.ceil(sy));
   }

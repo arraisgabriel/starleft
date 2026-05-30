@@ -30,18 +30,20 @@ function passableTerrain(t){ return t===T_GRASS || t===T_DIRT; }
    they read as real seas / impassable ranges. */
 const B_GRASS=0, B_MOUNTAIN=1, B_WATER=2, B_TECH=3, B_DESERT=4, B_ICE=5, B_VOLCANIC=6;
 const BIOME_KINDS = [B_MOUNTAIN,B_WATER,B_TECH,B_DESERT,B_ICE,B_VOLCANIC];
-// floor palette: a/b = two shades alternated by per-tile variant; dirt = worn-patch tint
+// floor palette: a/b = two shades alternated by per-tile variant; dirt = worn-patch tint.
+// DARK / devastated cyberpunk tones — matches the generated atlas; used as the
+// procedural fallback if the atlas image is missing, and for the minimap.
 const BIOME_PAL = {
-  [B_GRASS]:    { a:'#33502e', b:'#3a5a34', dirt:'#414b2e' },
-  [B_MOUNTAIN]: { a:'#574f47', b:'#615850', dirt:'#494139' },
-  [B_WATER]:    { a:'#1a466a', b:'#1d4f73', dirt:'#1a466a' },
-  [B_TECH]:     { a:'#27313d', b:'#2c3744', dirt:'#222b35' },
-  [B_DESERT]:   { a:'#bd9c5e', b:'#c8a869', dirt:'#a8884a' },
-  [B_ICE]:      { a:'#bcd2dd', b:'#cde0ea', dirt:'#a8bdc8' },
-  [B_VOLCANIC]: { a:'#2b2320', b:'#332a25', dirt:'#211a17' },
+  [B_GRASS]:    { a:'#1c2a1e', b:'#243524', dirt:'#232a1d' },
+  [B_MOUNTAIN]: { a:'#24262b', b:'#2d2f35', dirt:'#20242a' },
+  [B_WATER]:    { a:'#0c2230', b:'#103040', dirt:'#0c2230' },
+  [B_TECH]:     { a:'#14181f', b:'#1b2129', dirt:'#12161c' },
+  [B_DESERT]:   { a:'#3f3526', b:'#4a4030', dirt:'#342c20' },
+  [B_ICE]:      { a:'#2c3742', b:'#37454f', dirt:'#283440' },
+  [B_VOLCANIC]: { a:'#16110e', b:'#201913', dirt:'#14100d' },
 };
-// flat colors for the minimap floor, indexed by biome
-const BIOME_MINI = ['#34522f','#574f47','#234e6e','#2c3744','#bd9c5e','#bcd2dd','#2b2320'];
+// flat colors for the minimap floor, indexed by biome (dark, matches the atlas)
+const BIOME_MINI = ['#1c2a1e','#24262b','#0c2230','#14181f','#3f3526','#2c3742','#16110e'];
 
 /* ---- Procedural terrain parameters (Whittaker-style: elevation + climate) ----
    newMap() builds three coherent noise fields — ELEVATION (land/sea/mountain),
@@ -76,6 +78,8 @@ const DEF = {
               flavor:'"Recruiting" department. Turns Funding into Growth Hackers and Consultants.' },
   turret:   { name:'Legal Team',   icon:'⚖️', kind:'building', w:1,h:1, hp:550,  cost:100, build:14,  sight:7, supply:0,  color:'#7a8aa8',
               dmg:14, range:6.0, cd:0.7, flavor:'Fires cease-and-desist letters at anything that trespasses on your IP.' },
+  outpost:  { name:'Satellite Office', icon:'📡', kind:'building', w:2,h:2, hp:650, cost:175, build:16, sight:5, supply:0, color:'#5a6b8a',
+              deposit:true, trickle:2, flavor:'A scrappy forward branch — Interns drop Funding here instead of trekking back to HQ, and its rig slowly auto-extracts a little on its own. Cheaper and flimsier than a second HQ.' },
   worker:   { name:'Intern',         icon:'🧑‍💻', kind:'unit', hp:60,  cost:50,  build:10, sight:5, supply:1, speed:2.6, dmg:4,  range:1.0, cd:1.0, r:9,
               flavor:'Mines Funding "for the exposure." Builds things. Equity will never vest.' },
   soldier:  { name:'Growth Hacker',  icon:'🚀', kind:'unit', hp:140, cost:80,  build:13, sight:6, supply:1, speed:2.4, dmg:17, range:1.3, cd:0.9, r:10,

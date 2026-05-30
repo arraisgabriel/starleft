@@ -15,42 +15,33 @@ function buildingSheet(name, faction){ return ASSET_BASE + 'buildings/' + name +
 // unit sheet: type worker|soldier|... , action walk|mine|attack|heal , enemy bool
 function unitSheet(type, action, enemy){ return ASSET_BASE + 'units/' + type + '/' + action + (enemy ? '_enemy' : '') + '.png'; }
 
-/* ---- Hand-drawn tile atlas (tileset.png) ----
-   A 6×6 grid sliced from the generated atlas; magenta gutters detected at
-   load-time gave these exact interior cell spans. Each (biome, slot) maps to
-   one cell that already includes its own ground, so a feature tile (rock /
-   tree / water) is blitted as the whole 32px tile — no separate floor pass.
-   Falls back to the procedural renderer if the image is missing or a slot is
-   undefined (e.g. Desert, which the atlas has no clean sand floor for). */
+/* ---- Dark / devastated cyberpunk tile atlas (tileset.png) ----
+   A clean, gutterless 4×7 grid composed from per-biome Gemini generations
+   (Hades-inspired dark palette; see _dev/gen/ + _dev/prompts/terrain-dark.md).
+   Columns are slots floor/rock/tree/water; rows are biomes in biome-constant
+   order (grass=0 … volcanic=6), so the atlas row IS the biome id. Each cell
+   already includes its own ground, so a feature tile (rock/tree) is the whole
+   32px blit. Falls back to the procedural renderer if the image is missing.
+   (Water tiles render via the neighbour-aware procedural path in render.js, so
+   the water column is generated for completeness but unused in practice.) */
 const ATLAS_IMG = new Image();
 let ATLAS_READY = false;
 ATLAS_IMG.onload = ()=>{ ATLAS_READY = true; };
 ATLAS_IMG.onerror = ()=>{ ATLAS_READY = false; };
 ATLAS_IMG.src = ATLAS_TILESET;
-const ATLAS_COLS=[[1,169],[172,168],[343,168],[513,168],[683,170],[854,169]]; // [x, width]
-const ATLAS_ROWS=[[1,169],[172,168],[343,168],[514,168],[684,168],[855,168]]; // [y, height]
-function atlasRect(r,c){ const ins=4; const [x,w]=ATLAS_COLS[c], [y,h]=ATLAS_ROWS[r]; return [x+ins,y+ins,w-2*ins,h-2*ins]; }
-const SPRITES = {
-  [B_GRASS]:    { floor:atlasRect(0,0), rock:atlasRect(0,1), tree:atlasRect(0,2), water:atlasRect(0,4) },
-  [B_MOUNTAIN]: { floor:atlasRect(1,0), rock:atlasRect(1,1), tree:atlasRect(1,2), water:atlasRect(1,3) },
-  [B_WATER]:    { floor:atlasRect(2,0), rock:atlasRect(2,1), tree:atlasRect(2,2), water:atlasRect(2,3) },
-  [B_TECH]:     { floor:atlasRect(3,0), rock:atlasRect(3,1), tree:atlasRect(3,2), water:atlasRect(3,3) },
-  // Desert intentionally omitted → procedural sand (atlas lacks a clean sand floor)
-  [B_ICE]:      { floor:atlasRect(4,0), rock:atlasRect(4,2), tree:atlasRect(4,3), water:atlasRect(4,4) },
-  [B_VOLCANIC]: { floor:atlasRect(5,0), rock:atlasRect(5,2), tree:atlasRect(5,3), water:atlasRect(5,4) },
-};
+const ATLAS_CELL = 128;                                  // px per cell (4 cols × 7 rows, no gutter)
+const SLOT_COL = { floor:0, rock:1, tree:2, water:3 };
+function atlasRect(biome, slot){ const c=SLOT_COL[slot]||0; return [c*ATLAS_CELL, biome*ATLAS_CELL, ATLAS_CELL, ATLAS_CELL]; }
+const ATLAS_BIOMES = [B_GRASS,B_MOUNTAIN,B_WATER,B_TECH,B_DESERT,B_ICE,B_VOLCANIC];
+const SPRITES = {};
+for(const b of ATLAS_BIOMES) SPRITES[b] = { floor:atlasRect(b,'floor'), rock:atlasRect(b,'rock'), tree:atlasRect(b,'tree'), water:atlasRect(b,'water') };
 function spriteFor(biome, slot){
   if(!ATLAS_READY) return null;
   const s = SPRITES[biome]; return s ? (s[slot]||null) : null;
 }
-// Desert renders from its own opaque tiles (sand floor / boulder / cactus / oasis)
-const DESERT_TILES = { floor:terrainTile('ground'), rock:terrainTile('rock'), tree:terrainTile('cactus'), water:terrainTile('oasis') };
-const DESERT_IMG = {};
-function desertTile(slot){
-  const src=DESERT_TILES[slot]||DESERT_TILES.floor;
-  let im=DESERT_IMG[src]; if(!im){ im=new Image(); im.src=src; DESERT_IMG[src]=im; }
-  return (im.complete&&im.naturalWidth)?im:null;
-}
+// Desert now has a proper dark sand row in the atlas, so the old standalone
+// desert PNGs are no longer used; keep a no-op stub so any stale call is safe.
+function desertTile(slot){ return null; }
 
 /* ---- Building sprite atlas (buildings.png) ----
    3×2 grid: columns HQ / Barracks / Turret, rows player (cyan) / enemy (red).
@@ -82,6 +73,7 @@ function loadImg(src){ const i=new Image(); i.src=src; return i; }
 const NEW_BUILDINGS = {
   garage:    { player:loadImg(buildingSheet('garage','player')),    enemy:loadImg(buildingSheet('garage','enemy')) },
   launchpad: { player:loadImg(buildingSheet('launchpad','player')), enemy:loadImg(buildingSheet('launchpad','enemy')) },
+  outpost:   { player:loadImg(buildingSheet('outpost','player')),   enemy:loadImg(buildingSheet('outpost','enemy')) },
 };
 // returns {img, rect:[sx,sy,sw,sh]} for an entity's building sprite, or null
 function buildingSprite(type,owner){

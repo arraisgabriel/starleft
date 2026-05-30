@@ -16,12 +16,15 @@ function update(state, dt){
       }
       continue;
     }
-    // turret attacks
-    if(b.type==='turret'){
+    // any building with a dmg stat returns fire (turret, and the HQ's weak rooftop shot)
+    const bd=DEF[b.type];
+    if(bd.dmg){
       b.cd-=dt;
-      const tgt=nearestEnemy(state,b, DEF.turret.range*TILE);
-      if(tgt && b.cd<=0){ damage(state,tgt,DEF.turret.dmg, b); b.cd=DEF.turret.cd; b.shootFx={x:tgt.x,y:tgt.y,t:0.12}; }
+      const tgt=nearestEnemy(state,b, bd.range*TILE);
+      if(tgt && b.cd<=0){ damage(state,tgt,bd.dmg, b); b.cd=bd.cd; b.shootFx={x:tgt.x,y:tgt.y,t:0.12}; }
     }
+    // passive auto-extraction (Satellite Office trickles Funding for the player)
+    if(bd.trickle && b.owner==='player'){ state.gold += bd.trickle*dt; state.gold_collected += bd.trickle*dt; }
     // unit production
     if(b.prodQueue.length){
       b.prodTime+=dt;
