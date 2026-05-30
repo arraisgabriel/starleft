@@ -12,7 +12,8 @@
 /* ===================== assets ===================== */
 const MEGA_BASE = ASSET_BASE + 'mega/';                 // ASSET_BASE from assets.js
 const MEGA_MANIFEST = { megabuilding:3, mountain:3, volcano:3, ruin:3 }; // variants per category
-const MEGA_FPS = { megabuilding:6, mountain:2, volcano:4, ruin:3 };       // ambient loop speed
+const MEGA_FRAMES = 9;                                  // frames per strip (3×3 grid → 9)
+const MEGA_FPS = { megabuilding:3.5, mountain:1.2, volcano:2.5, ruin:1.8 }; // ambient loop speed (slow)
 function megaPath(cat,n){ return MEGA_BASE + cat + '_' + n + '.png'; }
 
 // Tint a whole 4-frame strip to a biome wash WITHOUT bleeding onto terrain: draw
@@ -30,7 +31,7 @@ function megaTint(img, rgba){
 function loadMega(src, cat){
   const a = { img:new Image(), ready:false, fw:0, fh:0, snow:null, sand:null };
   a.img.onload = ()=>{
-    a.fw = a.img.naturalWidth/4; a.fh = a.img.naturalHeight; a.ready = true;
+    a.fw = a.img.naturalWidth/MEGA_FRAMES; a.fh = a.img.naturalHeight; a.ready = true;
     if(cat==='ruin'){ a.snow = megaTint(a.img,'rgba(150,180,205,.40)'); a.sand = megaTint(a.img,'rgba(200,165,110,.40)'); }
   };
   a.img.onerror = ()=>{ a.ready=false; };
@@ -203,37 +204,45 @@ function placeMegaSprites(state, rng){
 }
 
 /* ===================== render ===================== */
-// Drawn between terrain and entities (called from render.js). Bottom-anchored,
-// aspect-preserved, overhanging upward like buildings; fog-gated on the centre
-// tile (skip if unexplored, dim if explored-but-not-visible); animated frame pick
-// from state.time at a per-category fps, desynced by the per-instance seed.
-function drawMegaSprites(state, ox, oy, x0, y0, x1, y1){
-  const arr=state.megaSprites; if(!arr || !arr.length) return;
+// World-pixel ground line a landmark "stands on" (footprint bottom). render.js
+// depth-sorts mega sprites against units by this Y so a unit behind the tall body
+// is occluded by it and a unit in front draws over it.
+function megaSortY(m){ return (m.ty + m.h) * TILE; }
+
+// Draw ONE landmark, bottom-anchored, aspect-preserved, overhanging upward like a
+// building; fog-gated on the centre tile (skip if unexplored, dim if explored-but-
+// not-visible); animated frame pick from state.time at a per-category fps, desynced
+// by the per-instance seed. Culls to the visible tile span.
+function drawOneMega(state, m, ox, oy, x0, y0, x1, y1){
   const W=state.W, t=state.time||0;
-  for(const m of arr){
-    if(m.tx+m.w<=x0 || m.tx>=x1 || m.ty+m.h<=y0 || m.ty>=y1) continue;   // AABB cull
-    const ci=(m.ty+(m.h>>1))*W + (m.tx+(m.w>>1));
-    if(!state.explored[ci]) continue;                                    // unseen → skip
-    const lit=state.visible[ci]===1;
-    const spr=megaSprite(m.cat, m.variant);
-    const px=m.tx*TILE+ox, py=m.ty*TILE+oy, w=m.w*TILE, h=m.h*TILE;
-    ctx.save();
-    if(!lit) ctx.globalAlpha=0.5;                                        // explored-not-visible dim
-    ctx.fillStyle='rgba(0,0,0,.34)';                                     // ground contact shadow
-    ctx.beginPath(); ctx.ellipse(px+w/2, py+h-3, w*0.46, 8, 0, 0, 6.28); ctx.fill();
-    if(spr){
-      const fps=MEGA_FPS[m.cat]||4;
-      const fi=((((t*fps + m.seed*4)|0)%4)+4)%4;
-      const dw=w*(m.overhang||1.3), dh=dw*(spr.fh/spr.fw);
-      const dx=px+(w-dw)/2, dy=py+h-dh+2;
-      let img=spr.img;
-      if(m.cat==='ruin') img=(m.biome===B_ICE?spr.snow : m.biome===B_DESERT?spr.sand : null) || spr.img;
-      ctx.drawImage(img, fi*spr.fw, 0, spr.fw, spr.fh, dx, dy, dw, dh);
-    } else {
-      ctx.fillStyle='rgba(16,18,24,.92)';                                // fallback mass so the obstacle reads
-      roundRect(px+3, py+3, w-6, h-6, 7); ctx.fill();
-      ctx.strokeStyle='rgba(70,80,100,.6)'; ctx.lineWidth=2; ctx.stroke();
-    }
-    ctx.restore();
+  if(m.tx+m.w<=x0 || m.tx>=x1 || m.ty+m.h<=y0 || m.ty>=y1) return;       // AABB cull
+  const ci=(m.ty+(m.h>>1))*W + (m.tx+(m.w>>1));
+  if(!state.explored[ci]) return;                                        // unseen → skip
+  const lit=state.visible[ci]===1;
+  const spr=megaSprite(m.cat, m.variant);
+  const px=m.tx*TILE+ox, py=m.ty*TILE+oy, w=m.w*TILE, h=m.h*TILE;
+  ctx.save();
+  if(!lit) ctx.globalAlpha=0.5;                                          // explored-not-visible dim
+  ctx.fillStyle='rgba(0,0,0,.34)';                                       // ground contact shadow
+  ctx.beginPath(); ctx.ellipse(px+w/2, py+h-3, w*0.46, 8, 0, 0, 6.28); ctx.fill();
+  if(spr){
+    const fps=MEGA_FPS[m.cat]||2.5;
+    const fi=((((t*fps + m.seed*MEGA_FRAMES)|0)%MEGA_FRAMES)+MEGA_FRAMES)%MEGA_FRAMES;
+    const dw=w*(m.overhang||1.3), dh=dw*(spr.fh/spr.fw);
+    const dx=px+(w-dw)/2, dy=py+h-dh+2;
+    let img=spr.img;
+    if(m.cat==='ruin') img=(m.biome===B_ICE?spr.snow : m.biome===B_DESERT?spr.sand : null) || spr.img;
+    ctx.drawImage(img, fi*spr.fw, 0, spr.fw, spr.fh, dx, dy, dw, dh);
+  } else {
+    ctx.fillStyle='rgba(16,18,24,.92)';                                  // fallback mass so the obstacle reads
+    roundRect(px+3, py+3, w-6, h-6, 7); ctx.fill();
+    ctx.strokeStyle='rgba(70,80,100,.6)'; ctx.lineWidth=2; ctx.stroke();
   }
+  ctx.restore();
+}
+
+// Draw all landmarks (used when no depth interleave is needed).
+function drawMegaSprites(state, ox, oy, x0, y0, x1, y1){
+  const arr=state.megaSprites; if(!arr) return;
+  for(const m of arr) drawOneMega(state, m, ox, oy, x0,y0,x1,y1);
 }

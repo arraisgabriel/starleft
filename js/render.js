@@ -87,9 +87,6 @@ function render(state){
     drawTile(state,tx,ty, tx*TILE+ox, ty*TILE+oy);
   }
 
-  // ---- mega sprites (big animated landmark scenery: on the floor, under entities) ----
-  drawMegaSprites(state, ox, oy, x0,y0,x1,y1);
-
   // ---- gold mines ----
   for(const e of state.entities){
     if(e.dead||e.type!=='goldmine') continue;
@@ -105,11 +102,20 @@ function render(state){
     drawBuilding(state,e,ox,oy,false);
   }
 
-  // ---- units (only visible enemies) ----
+  // ---- mega sprites + units, depth-sorted by ground-line Y so a unit BEHIND a
+  //      tall landmark is occluded by it (drawn first) and a unit in FRONT draws
+  //      over it. Sprite transparency makes the occlusion pixel-correct. ----
+  const depth=[];
+  if(state.megaSprites) for(const m of state.megaSprites) depth.push({y:megaSortY(m), m});
   for(const e of state.entities){
     if(e.dead||e.kind!=='unit') continue;
     if(e.owner==='enemy' && !isVisiblePix(state,e.x,e.y)) continue;
-    drawUnit(state,e,ox,oy);
+    depth.push({y:e.y, u:e});
+  }
+  depth.sort((a,b)=>a.y-b.y);
+  for(const d of depth){
+    if(d.m) drawOneMega(state, d.m, ox,oy, x0,y0,x1,y1);
+    else drawUnit(state, d.u, ox,oy);
   }
 
   // ---- shoot FX ----
