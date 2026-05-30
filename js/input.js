@@ -154,7 +154,11 @@ function pickEntity(state,wx,wy){
     if(e.dead) continue;
     if(e.kind==='unit'){
       if(e.owner==='enemy' && !isVisiblePix(state,e.x,e.y)) continue;
-      const d=Math.hypot(e.x-wx,e.y-wy); if(d<e.r+4&&d<bd){bd=d;best=e;}
+      // hit-test the whole VISIBLE sprite box (head→feet), not the small collision r
+      const hb=unitHitBox(e);
+      if(wx>=hb.cx-hb.hw && wx<=hb.cx+hb.hw && wy>=hb.top && wy<=hb.bot){
+        const d=Math.hypot(e.x-wx, (hb.top+hb.bot)/2-wy); if(d<bd){ bd=d; best=e; }
+      }
     }
   }
   if(best) return best;

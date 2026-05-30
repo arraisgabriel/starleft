@@ -483,7 +483,8 @@ function drawBuilding(state,e,ox,oy,dim){
 function drawUnit(state,u,ox,oy){
   const px=u.x+ox, py=u.y+oy;
   const r=u.r;
-  const alt = u.air?16:0;   // flyers are drawn raised; their shadow stays on the ground
+  const alt = u.air?16:0;   // flyers are drawn raised
+  const vh = (UNIT_SPRITE_H[u.type]||r*2);   // drawn sprite height — HUD scales to this, not collision r
 
   // ---- movement state for sprite animation (updated each render frame) ----
   const lax = u._ax==null?u.x:u._ax, lay = u._ay==null?u.y:u._ay;
@@ -495,10 +496,8 @@ function drawUnit(state,u,ox,oy){
   const moving = (u._still||0) < 6;   // debounce so brief stalls don't flicker to idle
 
   ctx.save();
-  // selection ring
-  if(u.selected){ ctx.strokeStyle='#8effb0'; ctx.lineWidth=2; ctx.beginPath(); ctx.arc(px,py,r+4,0,6.28); ctx.stroke(); }
-  // shadow
-  ctx.fillStyle='rgba(0,0,0,.3)'; ctx.beginPath(); ctx.ellipse(px,py+r-1,r,r*0.45,0,0,6.28); ctx.fill();
+  // selection ring — a ground ellipse under the sprite's FEET, scaled to the sprite (no shadow)
+  if(u.selected){ const fy=py-alt+vh*0.3; ctx.strokeStyle='#8effb0'; ctx.lineWidth=2; ctx.beginPath(); ctx.ellipse(px,fy,vh*0.34,vh*0.14,0,0,6.28); ctx.stroke(); }
 
   const _red = isRedSide(u.owner);
   const team = _red ? '#c0392b' : '#3b7fd0';
@@ -506,17 +505,17 @@ function drawUnit(state,u,ox,oy){
 
   const anim = unitWalk(u.type, u.owner);
   if(anim){
-    const S = UNIT_SPRITE_H[u.type]||30;
+    const S = vh;
     const act = u._actState ? actionAnim(u.type, u._actState, u.owner) : null;
     let fi, useAnim;
     if(act){
-      useAnim = act;
-      if(u._actState==='attack'){ const t = state.time-(u._actStamp||0);          // strike-synced
-        fi = t<0.09?1 : t<0.19?2 : t<0.34?3 : 0; }
-      else { fi = Math.floor(state.time*7) % act.frames.length; }                  // mine / heal loop
-    } else { useAnim = anim; fi = moving ? Math.floor((u._walkDist||0)/9) % anim.frames.length : 0; }
+      useAnim = act; const n=act.frames.length;
+      if(u._actState==='attack'){ const t = state.time-(u._actStamp||0);          // swing windup→strike→recover across the strip
+        fi = t<0.42 ? Math.min(n-1, (t/0.42*n)|0) : 0; }
+      else { fi = ((state.time*7)|0) % n; }                                        // mine / heal loop
+    } else { useAnim = anim; fi = moving ? (((u._walkDist||0)/9)|0) % anim.frames.length : 0; }
     const dh = blitFrame(u,px,py-alt,useAnim,S,fi);
-    if(u.type==='worker' && u.carrying>0){ ctx.fillStyle='#ffd86b'; ctx.beginPath(); ctx.arc(px,py-dh*0.7-3,3,0,6.28); ctx.fill(); }
+    if(u.type==='worker' && u.carrying>0){ ctx.fillStyle='#ffd86b'; ctx.beginPath(); ctx.arc(px,py-alt-dh*0.7-4,3,0,6.28); ctx.fill(); }
   } else if(u.type==='worker'){
     ctx.fillStyle=team; ctx.beginPath(); ctx.arc(px,py,r,0,6.28); ctx.fill();
     ctx.fillStyle=teamL; ctx.beginPath(); ctx.arc(px,py-2,r*0.5,0,6.28); ctx.fill();
@@ -543,19 +542,19 @@ function drawUnit(state,u,ox,oy){
   }
   ctx.restore();
 
-  // hp bar
+  // hp bar — above the (bigger) sprite top
   if(u.hp<u.maxHp || u.selected){
-    barAt(px-r, py-r-7-alt, r*2, 4, u.hp/u.maxHp, hpColor(u.hp/u.maxHp));
+    barAt(px-vh*0.3, py-alt-vh*0.72-6, vh*0.6, 4, u.hp/u.maxHp, hpColor(u.hp/u.maxHp));
   }
-  // control-group badge (lowest assigned number)
+  // control-group badge (lowest assigned number) — at the sprite's lower-right
   if(u.owner==='player' && u._groups && u._groups.size){
-    const g=Math.min(...[...u._groups].map(Number));
+    const g=Math.min(...[...u._groups].map(Number)); const bx=px+vh*0.30, by=py-alt+vh*0.24;
     ctx.fillStyle='rgba(10,16,26,.85)'; ctx.strokeStyle='#7fd6ff'; ctx.lineWidth=1;
-    ctx.beginPath(); ctx.arc(px+r-1, py+r-1, 6.5, 0, 6.28); ctx.fill(); ctx.stroke();
+    ctx.beginPath(); ctx.arc(bx, by, 6.5, 0, 6.28); ctx.fill(); ctx.stroke();
     ctx.fillStyle='#cfe9ff'; ctx.font='bold 9px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
-    ctx.fillText(g, px+r-1, py+r);
+    ctx.fillText(g, bx, by+0.5);
   }
-  if(u.hitFx>0){ ctx.fillStyle='rgba(255,80,80,'+(u.hitFx*3)+')'; ctx.beginPath(); ctx.arc(px,py,r,0,6.28); ctx.fill(); u.hitFx-=1/60; }
+  if(u.hitFx>0){ ctx.fillStyle='rgba(255,80,80,'+(u.hitFx*3)+')'; ctx.beginPath(); ctx.arc(px,py-vh*0.2,vh*0.38,0,6.28); ctx.fill(); u.hitFx-=1/60; }
 }
 
 function drawFog(state,ox,oy,x0,y0,x1,y1){

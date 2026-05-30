@@ -81,63 +81,46 @@ function crystalSprite(){ return (CRYSTAL_IMG.complete && CRYSTAL_IMG.naturalWid
    and the sprite mirrors on horizontal facing. Enemy has no Interns, so the
    player blue worker covers every worker in practice; other unit types and
    any missing sheet fall back to the procedural vector drawing. */
+const UNIT_FRAMES = 10;                 // frames per walk/action strip (5×2 grid → 10)
+// Load a horizontal N-frame strip (frame i at x=i*fw). New unit art is a uniform
+// UNIT_FRAMES-wide strip, so frames are auto-derived as width/UNIT_FRAMES.
 function loadWalk(src, fw, fh, frames){
   const a = { img:new Image(), ready:false, fw:fw||0, fh:fh||0, frames:frames||null };
-  a.img.onload=()=>{ if(!a.frames){ a.fw=a.img.width/4; a.fh=a.img.height;   // auto-derive 4 side-by-side frames
-      a.frames=[[0,0,a.fw,a.fh],[a.fw,0,a.fw,a.fh],[2*a.fw,0,a.fw,a.fh],[3*a.fw,0,a.fw,a.fh]]; } a.ready=true; };
+  a.img.onload=()=>{ if(!a.frames){ const n=UNIT_FRAMES; a.fw=a.img.width/n; a.fh=a.img.height;
+      a.frames=[]; for(let i=0;i<n;i++) a.frames.push([i*a.fw,0,a.fw,a.fh]); } a.ready=true; };
   a.img.onerror=()=>{ a.ready=false; }; a.img.src=src;
   return a;
 }
-// atlases hold 4 cell-isolated frames laid side by side (frame i at x=i*fw)
-const WORKER_WALK = loadWalk(unitSheet('worker','walk',false), 257,256,
-  [[0,0,257,256],[257,0,257,256],[514,0,257,256],[771,0,257,256]]);
-const SOLDIER_WALK = loadWalk(unitSheet('soldier','walk',false), 250,263,
-  [[0,0,250,263],[250,0,250,263],[500,0,250,263],[750,0,250,263]]);
-const RANGER_WALK = loadWalk(unitSheet('ranger','walk',false), 256,259,
-  [[0,0,256,259],[256,0,256,259],[512,0,256,259],[768,0,256,259]]);
-const RANGER_WALK_ENEMY = loadWalk(unitSheet('ranger','walk',true), 258,261,
-  [[0,0,258,261],[258,0,258,261],[516,0,258,261],[774,0,258,261]]);
-const SOLDIER_WALK_ENEMY = loadWalk(unitSheet('soldier','walk',true), 260,264,
-  [[0,0,260,264],[260,0,260,264],[520,0,260,264],[780,0,260,264]]);
-const WORKER_WALK_ENEMY = loadWalk(unitSheet('worker','walk',true), 260,259,
-  [[0,0,260,259],[260,0,260,259],[520,0,260,259],[780,0,260,259]]);
-// per-type walk sets keyed by owner; sprite height per type. Missing owner →
-// null (no fallback to the other faction's color) → procedural vector drawing.
+// a faction pair of auto-derived 10-frame strips for a unit's walk/action sheet
+function walkPair(type, act){ return { player:loadWalk(unitSheet(type,act,false)), enemy:loadWalk(unitSheet(type,act,true)) }; }
+// per-type walk sets keyed by owner (player cyan / enemy red). Missing/!ready →
+// null → procedural vector fallback (shown only until the art loads).
 const UNIT_WALK = {
-  worker:  { player:WORKER_WALK, enemy:WORKER_WALK_ENEMY },
-  soldier: { player:SOLDIER_WALK, enemy:SOLDIER_WALK_ENEMY },
-  ranger:  { player:RANGER_WALK, enemy:RANGER_WALK_ENEMY },
-  recruiter:{ player:loadWalk(unitSheet('recruiter','walk',false)), enemy:loadWalk(unitSheet('recruiter','walk',true)) },
-  hustler:  { player:loadWalk(unitSheet('hustler','walk',false)),   enemy:loadWalk(unitSheet('hustler','walk',true)) },
-  lobbyist: { player:loadWalk(unitSheet('lobbyist','walk',false)),  enemy:loadWalk(unitSheet('lobbyist','walk',true)) },
-  foodtruck:{ player:loadWalk(unitSheet('foodtruck','walk',false)), enemy:loadWalk(unitSheet('foodtruck','walk',true)) },
-  auditor:  { player:loadWalk(unitSheet('auditor','walk',false)),   enemy:loadWalk(unitSheet('auditor','walk',true)) },
-  founder:  { player:loadWalk(unitSheet('founder','walk',false)),   enemy:loadWalk(unitSheet('founder','walk',true)) },
-  courier:  { player:loadWalk(unitSheet('courier','walk',false)),   enemy:loadWalk(unitSheet('courier','walk',true)) },
-  bomber:   { player:loadWalk(unitSheet('bomber','walk',false)),    enemy:loadWalk(unitSheet('bomber','walk',true)) },
+  worker:walkPair('worker','walk'),       soldier:walkPair('soldier','walk'),   ranger:walkPair('ranger','walk'),
+  recruiter:walkPair('recruiter','walk'), hustler:walkPair('hustler','walk'),   lobbyist:walkPair('lobbyist','walk'),
+  foodtruck:walkPair('foodtruck','walk'), auditor:walkPair('auditor','walk'),   founder:walkPair('founder','walk'),
+  courier:walkPair('courier','walk'),     bomber:walkPair('bomber','walk'),
 };
-const UNIT_SPRITE_H = { worker:30, soldier:34, ranger:32, recruiter:30, hustler:30, lobbyist:32, foodtruck:32, auditor:36, founder:46, courier:32, bomber:48 };
+// drawn sprite HEIGHT per type — ~2× the old values (bigger on screen). Collision
+// radius r / speed / range in DEF are UNCHANGED, so gameplay is unaffected.
+const UNIT_SPRITE_H = { worker:46, soldier:68, ranger:62, recruiter:54, hustler:56, lobbyist:64, foodtruck:64, auditor:72, founder:92, courier:60, bomber:96 };
 function unitWalk(type,owner){ const e=UNIT_WALK[type]; const a=e&&e[factionKey(owner)]; return (a&&a.ready)?a:null; }
+// Drawn-sprite world metrics — shared by the selection ring AND click hit-testing so
+// they track the (now big) VISIBLE sprite, not the small collision radius r. The sprite
+// is blitted from -0.7*h (top) to +0.3*h (feet) around the unit's (x,y) (see blitFrame),
+// raised by `alt` for flyers. footY is the on-the-ground point under the sprite.
+function unitDrawH(u){ return (UNIT_SPRITE_H[u.type] || u.r*2); }
+function unitHitBox(u){ const h=unitDrawH(u), alt=u.air?16:0, hw=h*0.34;
+  return { cx:u.x, hw, top:u.y-alt-h*0.7, bot:u.y-alt+h*0.3, footY:u.y-alt+h*0.3 }; }
 
-// action animations (mine / melee / shoot), played in place during the action
-const WORKER_MINE  = loadWalk(unitSheet('worker','mine',false),   193,242, [[0,0,193,242],[193,0,193,242],[386,0,193,242],[579,0,193,242]]);
-const SOLDIER_ATK  = loadWalk(unitSheet('soldier','attack',false),217,255, [[0,0,217,255],[217,0,217,255],[434,0,217,255],[651,0,217,255]]);
-const RANGER_ATK   = loadWalk(unitSheet('ranger','attack',false), 203,245, [[0,0,203,245],[203,0,203,245],[406,0,203,245],[609,0,203,245]]);
-const SOLDIER_ATK_ENEMY = loadWalk(unitSheet('soldier','attack',true),222,254, [[0,0,222,254],[222,0,222,254],[444,0,222,254],[666,0,222,254]]);
-const RANGER_ATK_ENEMY  = loadWalk(unitSheet('ranger','attack',true), 203,245, [[0,0,203,245],[203,0,203,245],[406,0,203,245],[609,0,203,245]]);
-const WORKER_MINE_ENEMY = loadWalk(unitSheet('worker','mine',true),   196,243, [[0,0,196,243],[196,0,196,243],[392,0,196,243],[588,0,196,243]]);
+// action animations (mine / attack / heal), played in place during the action
 const UNIT_ACTION = {
-  worker:  { mine:   { player:WORKER_MINE, enemy:WORKER_MINE_ENEMY } },
-  soldier: { attack: { player:SOLDIER_ATK, enemy:SOLDIER_ATK_ENEMY } },
-  ranger:  { attack: { player:RANGER_ATK,  enemy:RANGER_ATK_ENEMY } },
-  recruiter:{ heal:  { player:loadWalk(unitSheet('recruiter','heal',false)),   enemy:loadWalk(unitSheet('recruiter','heal',true)) } },
-  hustler:  { attack:{ player:loadWalk(unitSheet('hustler','attack',false)),   enemy:loadWalk(unitSheet('hustler','attack',true)) } },
-  lobbyist: { attack:{ player:loadWalk(unitSheet('lobbyist','attack',false)),  enemy:loadWalk(unitSheet('lobbyist','attack',true)) } },
-  foodtruck:{ attack:{ player:loadWalk(unitSheet('foodtruck','attack',false)), enemy:loadWalk(unitSheet('foodtruck','attack',true)) } },
-  auditor:  { attack:{ player:loadWalk(unitSheet('auditor','attack',false)),   enemy:loadWalk(unitSheet('auditor','attack',true)) } },
-  founder:  { attack:{ player:loadWalk(unitSheet('founder','attack',false)),   enemy:loadWalk(unitSheet('founder','attack',true)) } },
-  courier:  { heal:  { player:loadWalk(unitSheet('courier','heal',false)),     enemy:loadWalk(unitSheet('courier','heal',true)) } },
-  bomber:   { attack:{ player:loadWalk(unitSheet('bomber','attack',false)),    enemy:loadWalk(unitSheet('bomber','attack',true)) } },
+  worker:{ mine:walkPair('worker','mine') },           soldier:{ attack:walkPair('soldier','attack') },
+  ranger:{ attack:walkPair('ranger','attack') },       recruiter:{ heal:walkPair('recruiter','heal') },
+  hustler:{ attack:walkPair('hustler','attack') },     lobbyist:{ attack:walkPair('lobbyist','attack') },
+  foodtruck:{ attack:walkPair('foodtruck','attack') }, auditor:{ attack:walkPair('auditor','attack') },
+  founder:{ attack:walkPair('founder','attack') },     courier:{ heal:walkPair('courier','heal') },
+  bomber:{ attack:walkPair('bomber','attack') },
 };
 function actionAnim(type,action,owner){ const t=UNIT_ACTION[type]; const a=t&&t[action]; const x=a&&a[factionKey(owner)]; return (x&&x.ready)?x:null; }
 // blit one frame of an animation for a unit, mirrored on facing, foot-anchored.
