@@ -113,6 +113,10 @@ addEventListener('keydown', e=>{
     else if(G&&G.selection.length){ clearSelection(); refreshUI(); }  // then: deselect so you can pick others
     return;
   }
+  // save game (⌘/Ctrl+S) — block the browser's native Save dialog
+  if((e.key==='s'||e.key==='S') && (e.metaKey||e.ctrlKey)){
+    e.preventDefault(); saveGame(); return;
+  }
   // control groups — digit keys 0..9 (also works from the numpad)
   if(G && !G.over && e.key.length===1 && e.key>='0' && e.key<='9'){
     if(e.ctrlKey || e.metaKey){ assignGroup(e.key); e.preventDefault(); }
@@ -146,6 +150,7 @@ function wireTouchControls(){
   on('btn-box', ()=>{ armBoxSelect=!armBoxSelect; updateBoxBtn(); toast(armBoxSelect?'Box select: drag to select':'Box select off'); });
   on('btn-army', ()=>{ selectAllArmy(); });
   on('btn-cancel', ()=>{ if(G&&G.placing){ G.placing=null; refreshUI(); } });
+  on('btn-save', ()=>{ saveGame(); });
   on('btn-zoom-in', ()=>{ if(G) zoomAt(G, viewW()/2, VIEW_TOP+viewH()/2, 1.2); });
   on('btn-zoom-out',()=>{ if(G) zoomAt(G, viewW()/2, VIEW_TOP+viewH()/2, 1/1.2); });
   on('btn-minimap', ()=>{ const mw=document.getElementById('minimap-wrap'); if(mw) mw.classList.toggle('as-overlay'); });
@@ -167,10 +172,11 @@ buildMapSelect();
    ===================================================================== */
 let last=performance.now();
 let uiTick=0;
+let autoTick=0;
 function loop(now){
   const dt=Math.min(0.05,(now-last)/1000); last=now;
   if(G){
-    if(running && !G.over){ update(G,dt); }
+    if(running && !G.over){ update(G,dt); autoTick+=dt; if(autoTick>60){ autoTick=0; autosaveGame(); } }
     updateCamera(G,dt);
     render(G);
     uiTick+=dt; if(uiTick>0.2){ uiTick=0; if(running) refreshUI(); }

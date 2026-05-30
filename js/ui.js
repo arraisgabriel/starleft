@@ -18,7 +18,7 @@ function refreshUI(){
   // ---- info text (cheap text updates — safe to refresh every call) ----
   if(!sel.length){
     elTitle.textContent='Nothing selected';
-    elDesc.innerHTML='<b>Tap</b> a unit to select; tap an enemy/mine/ground to attack, gather or move. <b>Drag</b> to pan, <b>pinch</b> (or wheel / +−) to zoom.<br><b>Box-select:</b> Shift+drag or the <b>Select box</b> button. Select a <b>Worker</b> then a build button, then tap a spot. <b>Ctrl/⌘+1-9</b> control group.';
+    elDesc.innerHTML='<b>Tap</b> a unit to select; tap an enemy/mine/ground to attack, gather or move. <b>Drag</b> to pan, <b>pinch</b> (or wheel / +−) to zoom.<br><b>Units box-select:</b> Shift+drag or the <b>Select box</b> button. Select a <b>Worker</b> then a build button, then tap a spot. <b>Ctrl/⌘+1-9</b> control group.';
   } else if(sel.length>1){
     const counts={}; sel.forEach(s=>counts[s.type]=(counts[s.type]||0)+1);
     elTitle.textContent= sel.length+' units selected';
@@ -49,6 +49,53 @@ function refreshUI(){
   // show the Cancel button only while placing a building (touch replacement for Esc)
   const cb=document.getElementById('btn-cancel');
   if(cb) cb.style.display = G.placing ? '' : 'none';
+
+  // production-queue cards live in the selected building's info panel
+  updateProdQueue((sel.length===1 && sel[0].kind==='building' && sel[0].owner==='player') ? sel[0] : null);
+}
+
+// Build / refresh the queue cards for a selected player building (or clear them).
+// Cards (DOM) rebuild only when the queue contents change; the active card's
+// progress bar and each idle sprite refresh every call.
+function updateProdQueue(b){
+  const wrap=document.getElementById('prod-queue'); if(!wrap) return;
+  if(!b || !b.prodQueue || !b.prodQueue.length){
+    if(wrap._sig){ wrap.innerHTML=''; wrap._sig=''; }
+    return;
+  }
+  const sig=b.id+':'+b.prodQueue.join(',');
+  if(sig!==wrap._sig){ wrap._sig=sig; buildProdCards(wrap,b); }
+  const cards=wrap.children;
+  for(let i=0;i<cards.length;i++){
+    drawCardSprite(cards[i], b.prodQueue[i], b.owner);
+    const pi=cards[i].querySelector('.pq-prog>i');
+    if(pi) pi.style.width = (i===0 && b.prodTotal>0 ? Math.min(100,(b.prodTime/b.prodTotal*100))|0 : 0)+'%';
+  }
+}
+function buildProdCards(wrap,b){
+  wrap.innerHTML='';
+  b.prodQueue.forEach((type,i)=>{
+    const card=document.createElement('div'); card.className='pq-card'; card.title='Cancel '+(DEF[type].name||type);
+    const cv=document.createElement('canvas'); cv.width=40; cv.height=40; cv.className='pq-spr'; card.appendChild(cv);
+    if(i===0){ const pr=document.createElement('div'); pr.className='pq-prog'; pr.innerHTML='<i></i>'; card.appendChild(pr); }
+    const x=document.createElement('button'); x.className='pq-x'; x.textContent='✕';
+    x.onclick=(ev)=>{ ev.stopPropagation(); cancelTrain(G, b, [...wrap.children].indexOf(card)); refreshUI(); };
+    card.appendChild(x);
+    wrap.appendChild(card);
+  });
+}
+// draw a unit's idle sprite (walk frame 0) fit into the card; emoji fallback if the atlas isn't loaded
+function drawCardSprite(card,type,owner){
+  const cv=card.querySelector('.pq-spr'); if(!cv) return; const c=cv.getContext('2d');
+  c.clearRect(0,0,cv.width,cv.height);
+  const anim=unitWalk(type,owner);
+  if(anim && anim.ready && anim.frames){
+    const fr=anim.frames[0], fw=fr[2], fh=fr[3], s=Math.min(cv.width/fw, cv.height/fh)*0.96, dw=fw*s, dh=fh*s;
+    c.drawImage(anim.img, fr[0],fr[1],fw,fh, (cv.width-dw)/2, (cv.height-dh)/2, dw, dh);
+  } else {
+    c.font='22px sans-serif'; c.textAlign='center'; c.textBaseline='middle';
+    c.fillText((DEF[type]&&DEF[type].icon)||'•', cv.width/2, cv.height/2+1);
+  }
 }
 
 // Signature of which command buttons should be shown for the current selection.
@@ -140,6 +187,17 @@ function toast(msg){
 // Show / hide a menu sub-screen (map selection, documentation)
 function showSub(id){ const el=document.getElementById(id); if(el) el.style.display='flex'; }
 function hideSub(id){ const el=document.getElementById(id); if(el) el.style.display='none'; }
+
+// Field Manual: shown from "Documentation" (footer = Back) OR before "New Campaign"
+// (footer = Start Campaign, which launches the campaign).
+let _docCampaign=false;
+function showDocs(forCampaign){
+  _docCampaign=!!forCampaign;
+  const btn=document.getElementById('docFooterBtn');
+  if(btn) btn.innerHTML = forCampaign ? '<span class="ic">▶</span> Start Campaign' : '◀ Back';
+  showSub('docScreen');
+}
+function docFooter(){ if(_docCampaign) startGame(0); else hideSub('docScreen'); }
 
 function startGame(idx){
   idx = idx|0;

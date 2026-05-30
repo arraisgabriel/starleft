@@ -24,6 +24,9 @@
   .ico.gold { background:linear-gradient(135deg,#ffe27a,#f0a500); box-shadow:0 0 6px #f0a50080;}
   .ico.sup  { background:linear-gradient(135deg,#ffb0a0,#d64141); box-shadow:0 0 6px #d6414180;}
   #objective { margin-left:auto; font-size:13px; color:#ccaab0; font-weight:500; max-width:46%; }
+  /* Save lives in the top bar so it's visible on desktop too (touch-controls are hidden there) */
+  #topbar #btn-save { min-width:0; min-height:0; height:34px; padding:0 14px; margin-left:14px;
+    font-size:13px; font-weight:700; letter-spacing:.4px; gap:6px; white-space:nowrap; flex:0 0 auto; }
   #mapname { color:#ff7676; font-weight:700; letter-spacing:1px; }
   .lbl { font-size:11px; color:#9e7780; font-weight:500; letter-spacing:.5px; }
 
@@ -70,6 +73,23 @@
   .cmd-btn .cost { font-size:10px; color:#ffd86b; }
   .cmd-btn .emoji { font-size:20px; }
 
+  /* ---------- Production queue (in the selected building's info panel) ---------- */
+  #prod-queue { display:flex; flex-wrap:wrap; gap:6px; margin-top:8px; }
+  .pq-card { position:relative; width:46px; height:46px; border-radius:3px; flex:0 0 auto;
+    background:linear-gradient(135deg, rgba(70,18,24,.92), rgba(28,10,14,.82));
+    border:1px solid #6f2630; border-left:3px solid #ff5a5a;
+    clip-path:polygon(0 0,100% 0,92% 100%,0 100%);
+    box-shadow:0 2px 8px rgba(0,0,0,.5), inset 0 0 14px rgba(255,60,60,.05);
+    display:flex; align-items:center; justify-content:center; overflow:hidden; }
+  .pq-card .pq-spr { width:40px; height:40px; pointer-events:none; }
+  .pq-card .pq-x { position:absolute; top:0; right:0; width:17px; height:16px; line-height:14px;
+    font-size:11px; text-align:center; cursor:pointer; color:#ffd9dd; padding:0;
+    background:rgba(40,10,14,.92); border:1px solid #ff5a5a; border-radius:0 3px 0 6px;
+    touch-action:manipulation; }
+  .pq-card .pq-x:hover { background:#c0392b; color:#fff; }
+  .pq-card .pq-prog { position:absolute; left:0; right:0; bottom:0; height:3px; background:rgba(0,0,0,.45); }
+  .pq-card .pq-prog>i { display:block; height:100%; width:0; background:#ff7676; }
+
   /* ---------- Overlays ---------- */
   .overlay {
     position:fixed; inset:0; z-index:50; display:flex; align-items:center; justify-content:center;
@@ -104,6 +124,11 @@
   .map-btn b { color:#ff7676; font-size:15px; letter-spacing:1px; }
   .map-btn .mn { display:block; font-size:13px; margin-top:3px; color:#f8d0d6; }
   .map-btn small { color:#ffb45a; font-size:11px; }
+  #loadSlots { display:flex; flex-direction:column; gap:10px; align-items:center; width:100%; max-height:60vh; overflow:auto; }
+  .save-row { display:flex; gap:8px; align-items:stretch; width:min(560px,92vw); }
+  .save-row .save-load { flex:1; text-align:left; min-width:0; }
+  .save-row .save-load b { display:block; }
+  .save-row .save-del { align-self:center; }
   .controls-box { font-size:13px; color:#ccaab0; line-height:1.9; text-align:left;
     background:rgba(255,255,255,.04); padding:14px 22px; border-radius:8px; border:1px solid #4f2530;}
   .controls-box b { color:#f8d0d6; }
@@ -321,6 +346,7 @@
     <div class="stat" title="Headcount vs capacity — build more Open-Plan HQs to hire more"><span class="ico sup"></span>👥 <span id="supply">0/0</span> <span class="lbl">Headcount</span></div>
     <div class="lbl">Quarter <span id="mapname">—</span></div>
     <div id="objective">Disrupt the competition.</div>
+    <button class="tc-btn" id="btn-save" title="Save game (⌘/Ctrl+S)">💾 Save</button>
   </div>
 
   <div id="bottom">
@@ -331,6 +357,7 @@
     <div id="selinfo">
       <h3 id="sel-title">Nothing selected</h3>
       <div class="desc" id="sel-desc">Tap to select or command. Drag to pan, pinch to zoom.</div>
+      <div id="prod-queue"></div>
     </div>
     <div id="commands"></div>
     <!-- On-screen controls (touch / narrow screens; hidden on desktop) -->
@@ -362,9 +389,10 @@
       <div class="logo-text">STARLEFT<small>DISRUPT · SCALE · CONQUER</small></div>
     </div>
     <nav class="menu-nav">
-      <button class="sc-btn" onclick="startGame(0)"><span class="ic">▶</span> New Campaign</button>
+      <button class="sc-btn" onclick="showDocs(true)"><span class="ic">▶</span> New Campaign</button>
       <button class="sc-btn" onclick="showSub('mapScreen')"><span class="ic">🗺</span> Map Selection</button>
-      <button class="sc-btn" onclick="showSub('docScreen')"><span class="ic">📖</span> Documentation</button>
+      <button class="sc-btn" onclick="openLoadMenu()"><span class="ic">💾</span> Load Game</button>
+      <button class="sc-btn" onclick="showDocs(false)"><span class="ic">📖</span> Documentation</button>
     </nav>
     <aside class="menu-news">
       <h4>Quarterly Briefing</h4>
@@ -384,6 +412,16 @@
     </div>
   </div>
 
+  <!-- Load game sub-screen -->
+  <div class="overlay submenu" id="loadScreen" style="display:none;">
+    <div class="submenu-panel">
+      <h2>Load Game</h2>
+      <div class="panel-label">Resume a saved match</div>
+      <div id="loadSlots"></div>
+      <button class="sc-btn back" onclick="hideSub('loadScreen')">◀ Back</button>
+    </div>
+  </div>
+
   <!-- Documentation sub-screen -->
   <div class="overlay submenu" id="docScreen" style="display:none;">
     <div class="submenu-panel">
@@ -392,11 +430,11 @@
         <b>The hustle:</b> Mine <b>Funding</b> 💰, hire an army of Interns &amp; Growth Hackers, and disrupt two rival empires into bankruptcy.<br>
         <b>Tap / click</b> — select your unit, or command it: tap an enemy to attack, a gold mine to mine, ground to move, an unfinished building to send an Intern<br>
         <b>Drag</b> — pan the map &nbsp;•&nbsp; <b>Pinch</b> (or mouse <span class="key">wheel</span> / on-screen <span class="key">＋－</span>) — zoom &nbsp;•&nbsp; <b>Minimap</b> — tap to jump<br>
-        <b>Box-select</b> — <span class="key">Shift</span>+drag, or tap the <span class="key">▭</span> button then drag &nbsp;•&nbsp; desktop also: <span class="key">WASD</span>/<span class="key">arrows</span> &amp; screen-edge scroll, right-click to command<br>
+        <b>Units box-select</b> — <span class="key">Shift</span>+drag, or tap the <span class="key">▭</span> button then drag &nbsp;•&nbsp; desktop also: <span class="key">WASD</span>/<span class="key">arrows</span> &amp; screen-edge scroll, right-click to command<br>
         <b>Build</b> — select an <b>Intern</b>, tap a build button, then tap a spot &nbsp;•&nbsp; <span class="key">Esc</span> or the <span class="key">✕</span> button cancels placement<br>
         <b>Control groups</b> — <span class="key">Ctrl</span>/<span class="key">⌘</span>+<span class="key">1-9</span> (or hold a <span class="key">1-4</span> chip) to set; tap <span class="key">1-9</span> / a chip to reselect (double-tap to jump there)
       </div>
-      <button class="sc-btn back" onclick="hideSub('docScreen')">◀ Back</button>
+      <button class="sc-btn back" id="docFooterBtn" onclick="docFooter()">◀ Back</button>
     </div>
   </div>
 
@@ -432,6 +470,7 @@
 <script src="js/ui.js"></script>
 <script src="js/input.js"></script>
 <script src="js/core.js"></script>
+<script src="js/save.js"></script>
 <script src="js/main.js"></script>
 </body>
 </html>

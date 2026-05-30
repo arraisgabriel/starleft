@@ -156,6 +156,15 @@ function tryTrain(state, building, type){
   building.prodQueue.push(type);
   if(building.prodTotal===0){ building.prodTotal=d.build; building.prodTime=0; }
 }
+// Cancel a queued unit by index: refund its cost; if it was the in-progress one,
+// reset progress to the next item in line.
+function cancelTrain(state, building, index){
+  const q=building.prodQueue;
+  if(!q || index<0 || index>=q.length) return;
+  const type=q.splice(index,1)[0];
+  state.gold += (DEF[type].cost||0);
+  if(index===0){ building.prodTime=0; building.prodTotal = q.length ? DEF[q[0]].build : 0; }
+}
 
 function tryPlace(state, type){
   const sel = state.selection.find(e=>e.kind==='unit'&&e.type==='worker'&&!e.dead);
