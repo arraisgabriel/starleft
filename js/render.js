@@ -94,27 +94,30 @@ function render(state){
     drawGoldmine(state, e, e.x+ox, e.y+oy);
   }
 
-  // ---- buildings ----
-  for(const e of state.entities){
-    if(e.dead||e.kind!=='building') continue;
-    const vis = e.owner==='player' || isVisiblePix(state,e.x,e.y) || (e.owner==='enemy'&&state.explored[((e.y/TILE)|0)*state.W+((e.x/TILE)|0)] && !isVisiblePix(state,e.x,e.y) && e._everSeen);
-    if(e.owner==='enemy'){ if(isVisiblePix(state,e.x,e.y)) e._everSeen=true; if(!e._everSeen) continue; if(!isVisiblePix(state,e.x,e.y)){ drawBuilding(state,e,ox,oy,true); continue; } }
-    drawBuilding(state,e,ox,oy,false);
-  }
-
-  // ---- mega sprites + units, depth-sorted by ground-line Y so a unit BEHIND a
-  //      tall landmark is occluded by it (drawn first) and a unit in FRONT draws
-  //      over it. Sprite transparency makes the occlusion pixel-correct. ----
+  // ---- buildings + mega sprites + units: ALL depth-sorted by ground-line Y so a unit
+  //      BEHIND a tall building/landmark is occluded by it (drawn first) and a unit in
+  //      FRONT draws over it. Sprite transparency makes the occlusion pixel-correct. ----
   const depth=[];
   if(state.megaSprites) for(const m of state.megaSprites) depth.push({y:megaSortY(m), m});
   for(const e of state.entities){
-    if(e.dead||e.kind!=='unit') continue;
-    if(e.owner==='enemy' && !isVisiblePix(state,e.x,e.y)) continue;
-    depth.push({y:e.y, u:e});
+    if(e.dead) continue;
+    if(e.kind==='building'){
+      let dim=false;
+      if(e.owner==='enemy'){
+        if(isVisiblePix(state,e.x,e.y)) e._everSeen=true;
+        if(!e._everSeen) continue;                     // never seen → don't draw
+        if(!isVisiblePix(state,e.x,e.y)) dim=true;      // seen but not currently visible → dim
+      }
+      depth.push({y:(e.ty+e.h)*TILE, b:e, dim});        // ground line = footprint bottom edge
+    } else if(e.kind==='unit'){
+      if(e.owner==='enemy' && !isVisiblePix(state,e.x,e.y)) continue;
+      depth.push({y:e.y, u:e});
+    }
   }
   depth.sort((a,b)=>a.y-b.y);
   for(const d of depth){
-    if(d.m) drawOneMega(state, d.m, ox,oy, x0,y0,x1,y1);
+    if(d.b) drawBuilding(state, d.b, ox,oy, d.dim);
+    else if(d.m) drawOneMega(state, d.m, ox,oy, x0,y0,x1,y1);
     else drawUnit(state, d.u, ox,oy);
   }
 
