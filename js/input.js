@@ -185,10 +185,14 @@ function clearSelection(){ G.selection.forEach(s=>s.selected=false); G.selection
 function assignGroup(g){
   if(!G) return;
   const members = G.selection.filter(s=>!s.dead && s.owner==='player');
-  G.groups[g] = members.slice();          // replace whatever was bound to g
-  // tag entities so we can draw their group badge
+  const mset = new Set(members);
+  // a unit belongs to at most ONE group — pull these members out of every other group first,
+  // so re-assigning to a new slot moves them rather than duplicating their membership.
+  for(const k in G.groups){ if(k!==g) G.groups[k]=G.groups[k].filter(s=>!mset.has(s)); }
+  G.groups[g] = members.slice();          // bind the selection (and only it) to g
+  // retag badges: drop g from everyone, then make g each member's SOLE group
   for(const e of G.entities){ if(e._groups instanceof Set) e._groups.delete(g); }
-  members.forEach(s=>{ if(!(s._groups instanceof Set)) s._groups=new Set(); s._groups.add(g); });
+  members.forEach(s=>{ s._groups=new Set([g]); });
   toast(members.length ? ('Control group '+g+' set — '+members.length+' unit'+(members.length>1?'s':''))
                        : ('Control group '+g+' cleared'));
 }
