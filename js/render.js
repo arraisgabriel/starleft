@@ -546,6 +546,7 @@ function drawUnit(state,u,ox,oy){
   if(u.hp<u.maxHp || u.selected){
     barAt(px-vh*0.3, py-alt-vh*0.72-6, vh*0.6, 4, u.hp/u.maxHp, hpColor(u.hp/u.maxHp));
   }
+  if(u.stars) drawStars(u, px, py-alt-vh*0.72-13);   // career-rank pips above the HP bar
   // control-group badge (lowest assigned number) — at the sprite's lower-right
   if(u.owner==='player' && u._groups && u._groups.size){
     const g=Math.min(...[...u._groups].map(Number)); const bx=px+vh*0.30, by=py-alt+vh*0.24;

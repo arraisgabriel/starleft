@@ -55,7 +55,7 @@ function deserializeGame(s){
   const g={};
   const META={v:1, mapIndex:1, savedAt:1, mapName:1, gameTime:1};
   for(const k in s){ if(!SKIP[k] && !META[k]) g[k]=s[k]; }
-  g.cfg = MAPS[s.mapIndex];
+  g.cfg = scaleCfg(MAPS[s.mapIndex]);   // match the scaled cfg newMap() produces
   g.blocked  = Uint8Array.from(s.blocked);
   g.explored = Uint8Array.from(s.explored);
   g.visible  = new Uint8Array(g.W*g.H);

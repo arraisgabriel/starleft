@@ -31,6 +31,7 @@ function refreshUI(){
       extra = `HP ${e.hp|0}/${e.maxHp}`;
       if(e.type==='worker') extra+=` • carrying ${e.carrying} 💰`;
       if(e.dmg) extra+=` • dmg ${e.dmg}`;
+      if(e.stars) extra+=` • ${'★'.repeat(e.stars)} (+${e.stars*15}% dmg, +${e.stars*33}% hp)`;
     } else {
       extra = e.constructing? `Building… ${(e.buildProg/e.buildTime*100)|0}%` : `HP ${e.hp|0}/${e.maxHp}`;
       if(e.prodQueue&&e.prodQueue.length) extra+=` • hiring ${DEF[e.prodQueue[0]].name} (${e.prodQueue.length} queued)`;
@@ -254,7 +255,7 @@ function onVictory(){
       <p>Their assets are yours, their founders are "exploring new opportunities," and TechCrunch loves you.<br>
       Funding raised this quarter: <b>💰 ${G.gold_collected|0}</b></p>
       <button class="btn" id="nextBtn">▶ Next Quarter</button>`;
-    document.getElementById('nextBtn').onclick=()=>{ es.style.display='none'; mapIndex++; showCrawl(mapIndex, ()=>loadMap(mapIndex)); };
+    document.getElementById('nextBtn').onclick=()=>{ es.style.display='none'; captureVets(G); mapIndex++; showCrawl(mapIndex, ()=>loadMap(mapIndex)); };
   } else {
     es.className='overlay win'; es.style.display='flex';
     es.innerHTML=`<div class="big">🦄</div><h1>IPO!</h1>

@@ -13,8 +13,28 @@ function buildEnemyBase(state, base, idx){
   for(let i=0;i<ndef;i++) mkUnit(state,'soldier','enemy', ax+1+i, ay+6);   // muster below the base (clear ground)
 }
 
+// All maps are enlarged uniformly at load time: dimensions (w,h) and every tile
+// coordinate (starts, bases, lakes, forests, rocks, gold, lost outposts) and lake
+// radii are multiplied by MAP_SCALE so the whole layout grows proportionally —
+// 70% bigger per side (~2.9x the area) while keeping the hand-tuned spacing. Counts
+// (rock/forest `n`), gold `amt`, and gameplay tuning are left as-is. Tune here.
+const MAP_SCALE = 1.7;
+function scaleCfg(cfg){
+  const S = v => Math.round(v * MAP_SCALE);
+  const pt = p => Object.assign({}, p, { x:S(p.x), y:S(p.y) }, p.r!=null ? { r:S(p.r) } : {});
+  const c = Object.assign({}, cfg, { w:S(cfg.w), h:S(cfg.h), player:pt(cfg.player) });
+  if(cfg.enemies)      c.enemies      = cfg.enemies.map(pt);
+  if(cfg.enemy)        c.enemy        = pt(cfg.enemy);
+  if(cfg.lakes)        c.lakes        = cfg.lakes.map(pt);
+  if(cfg.rockClusters) c.rockClusters = cfg.rockClusters.map(pt);
+  if(cfg.forests)      c.forests      = cfg.forests.map(pt);
+  if(cfg.goldNodes)    c.goldNodes    = cfg.goldNodes.map(pt);
+  if(cfg.lostBases)    c.lostBases    = cfg.lostBases.map(pt);
+  return c;
+}
+
 function newMap(idx){
-  const cfg = MAPS[idx];
+  const cfg = scaleCfg(MAPS[idx]);
   const bases = cfg.enemies || [cfg.enemy];
   const rng = makeRng(cfg.seed*1000+7);
   const W=cfg.w, H=cfg.h;
@@ -201,6 +221,7 @@ function newMap(idx){
   const nW = cfg.startWorkers || 4, nS = cfg.startSoldiers || 2;
   for(let i=0;i<nW;i++) mkUnit(state,'worker','player', cfg.player.x+ (i%3), cfg.player.y+4 + ((i/3)|0));  // below the 4×3 HQ
   for(let i=0;i<nS;i++) mkUnit(state,'soldier','player', cfg.player.x-1+(i%5), cfg.player.y-2 - ((i/5)|0)); // above the HQ
+  spawnVets(state);   // carry the top-3 veterans from the previous campaign map onto this one
   if(cfg.startBarracks) mkBuilding(state,'barracks','player', cfg.player.x-3, cfg.player.y, true);
 
   // ---- enemy bases (one or more) ----
