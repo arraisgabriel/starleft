@@ -132,6 +132,7 @@ function newMap(idx){
   const zoom0 = initialZoom(W,H);
   const state = {
     cfg, W, H, tiles, variant, biome,
+    megaSprites: [],                    // big animated landmark scenery (megasprites.js)
     blocked: new Uint8Array(W*H),       // impassable (terrain or building)
     explored: new Uint8Array(W*H),
     visible:  new Uint8Array(W*H),
@@ -180,6 +181,12 @@ function newMap(idx){
   // final visual tidy: remove any strict single-tile biome orphans left by the
   // climate seams, cleared areas, or carved bridges (biome-only; passability set)
   despeckleBiome(biome, W, H);
+
+  // big animated landmarks (megabuildings / mountains / volcanoes / ruins). Placed
+  // after the connectivity bridges are carved and biome[] is final; uses a derived
+  // seed so it doesn't perturb the rng stream the rest of generation consumed, and
+  // each footprint is validated by a flood-fill so it can't wall off a node/base.
+  placeMegaSprites(state, makeRng(cfg.seed*1000+4242));
 
   // gold nodes
   cfg.goldNodes.forEach(g=>{

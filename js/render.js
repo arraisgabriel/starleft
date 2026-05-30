@@ -87,6 +87,9 @@ function render(state){
     drawTile(state,tx,ty, tx*TILE+ox, ty*TILE+oy);
   }
 
+  // ---- mega sprites (big animated landmark scenery: on the floor, under entities) ----
+  drawMegaSprites(state, ox, oy, x0,y0,x1,y1);
+
   // ---- gold mines ----
   for(const e of state.entities){
     if(e.dead||e.type!=='goldmine') continue;
