@@ -103,7 +103,7 @@ const UNIT_WALK = {
 };
 // drawn sprite HEIGHT per type — ~2× the old values (bigger on screen). Collision
 // radius r / speed / range in DEF are UNCHANGED, so gameplay is unaffected.
-const UNIT_SPRITE_H = { worker:46, soldier:68, ranger:62, recruiter:54, hustler:56, lobbyist:64, foodtruck:64, auditor:72, founder:92, courier:60, bomber:96 };
+const UNIT_SPRITE_H = { worker:46, soldier:68, ranger:62, recruiter:54, hustler:56, lobbyist:64, foodtruck:64, auditor:72, founder:92, courier:36, bomber:96 };
 function unitWalk(type,owner){ const e=UNIT_WALK[type]; const a=e&&e[factionKey(owner)]; return (a&&a.ready)?a:null; }
 // Drawn-sprite world metrics — shared by the selection ring AND click hit-testing so
 // they track the (now big) VISIBLE sprite, not the small collision radius r. The sprite

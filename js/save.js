@@ -28,7 +28,9 @@ function resolveRefs(val, byId){
   return val;
 }
 function serializeEntity(e){
-  const o={}; for(const k in e) o[k]=encodeRefs(e[k]); return o;
+  // _groups is a per-unit Set of control-group tags. Sets don't survive JSON (they become {}),
+  // and it's fully derivable from `groups`, so skip it here and rebuild it on load.
+  const o={}; for(const k in e){ if(k==='_groups') continue; o[k]=encodeRefs(e[k]); } return o;
 }
 
 /* ---------- whole-state snapshot ---------- */
@@ -65,6 +67,8 @@ function deserializeGame(s){
   g.selection = (s.selection||[]).map(id=>byId.get(id)).filter(Boolean);
   g.selection.forEach(e=>e.selected=true);
   g.groups={}; for(const k in (s.groups||{})) g.groups[k]=s.groups[k].map(id=>byId.get(id)).filter(Boolean);
+  // rebuild per-unit control-group tags (Sets don't serialize) so the on-unit badge shows after load
+  for(const k in g.groups){ for(const u of g.groups[k]){ if(!(u._groups instanceof Set)) u._groups=new Set(); u._groups.add(k); } }
   g.placing=null; g._cmdSig=null;
   return g;
 }

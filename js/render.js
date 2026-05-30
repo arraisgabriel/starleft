@@ -548,7 +548,7 @@ function drawUnit(state,u,ox,oy){
   }
   if(u.stars) drawStars(u, px, py-alt-vh*0.72-13);   // career-rank pips above the HP bar
   // control-group badge (lowest assigned number) — at the sprite's lower-right
-  if(u.owner==='player' && u._groups && u._groups.size){
+  if(u.owner==='player' && u._groups instanceof Set && u._groups.size){
     const g=Math.min(...[...u._groups].map(Number)); const bx=px+vh*0.30, by=py-alt+vh*0.24;
     ctx.fillStyle='rgba(10,16,26,.85)'; ctx.strokeStyle='#7fd6ff'; ctx.lineWidth=1;
     ctx.beginPath(); ctx.arc(bx, by, 6.5, 0, 6.28); ctx.fill(); ctx.stroke();

@@ -107,7 +107,9 @@ cv.addEventListener('wheel', e=>{
 }, {passive:false});
 
 addEventListener('keydown', e=>{
-  keys[e.key.toLowerCase()]=true;
+  // only track UNMODIFIED keys for camera panning — a modified key (e.g. ⌘/Ctrl+S) is a shortcut,
+  // and on macOS its keyup never fires while ⌘ is held, which would leave 's' stuck panning down.
+  if(!e.metaKey && !e.ctrlKey && !e.altKey) keys[e.key.toLowerCase()]=true;
   if(e.key==='Escape'){
     if(G&&G.placing){ G.placing=null; refreshUI(); }     // first: cancel building placement
     else if(G&&G.selection.length){ clearSelection(); refreshUI(); }  // then: deselect so you can pick others
@@ -117,14 +119,23 @@ addEventListener('keydown', e=>{
   if((e.key==='s'||e.key==='S') && (e.metaKey||e.ctrlKey)){
     e.preventDefault(); saveGame(); return;
   }
-  // control groups — digit keys 0..9 (also works from the numpad)
-  if(G && !G.over && e.key.length===1 && e.key>='0' && e.key<='9'){
-    if(e.ctrlKey || e.metaKey){ assignGroup(e.key); e.preventDefault(); }
-    else if(!e.altKey){ recallGroup(e.key); e.preventDefault(); }
-    return;
+  // control groups — digit keys 0..9 (top row or numpad), read via e.code so Shift's
+  // symbol remap doesn't matter. ASSIGN = Shift+digit: Chrome reserves Ctrl/⌘+1-9 for
+  // tab-switching and ignores the page's preventDefault, so those can't be used in-browser.
+  // Ctrl/⌘ kept as a best-effort for browsers that still allow it. RECALL = plain digit.
+  if(G && !G.over){
+    const m = e.code && e.code.match(/^(?:Digit|Numpad)([0-9])$/);
+    if(m){
+      const g = m[1];
+      if(e.shiftKey || e.ctrlKey || e.metaKey){ e.preventDefault(); assignGroup(g); }
+      else if(!e.altKey){ e.preventDefault(); recallGroup(g); }
+      return;
+    }
   }
 });
 addEventListener('keyup', e=>{ keys[e.key.toLowerCase()]=false; });
+// release all held keys when the window loses focus (⌘+Tab, ⌘+S dialog, etc.) so panning can't stick
+addEventListener('blur', ()=>{ for(const k in keys) keys[k]=false; });
 // minimap tap/click to jump
 mm.addEventListener('pointerdown', e=>{
   if(!G) return;
@@ -151,6 +162,7 @@ function wireTouchControls(){
   on('btn-army', ()=>{ selectAllArmy(); });
   on('btn-cancel', ()=>{ if(G&&G.placing){ G.placing=null; refreshUI(); } });
   on('btn-save', ()=>{ saveGame(); });
+  on('btn-roster', ()=>{ if(typeof showRoster==='function') showRoster(); });
   on('btn-zoom-in', ()=>{ if(G) zoomAt(G, viewW()/2, VIEW_TOP+viewH()/2, 1.2); });
   on('btn-zoom-out',()=>{ if(G) zoomAt(G, viewW()/2, VIEW_TOP+viewH()/2, 1/1.2); });
   on('btn-minimap', ()=>{ const mw=document.getElementById('minimap-wrap'); if(mw) mw.classList.toggle('as-overlay'); });

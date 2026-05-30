@@ -62,7 +62,10 @@ function update(state, dt){
   let changed=false;
   for(const e of state.entities){
     if(e.dead) continue;
-    if(e.hp<=0 && e.type!=='goldmine'){ killEntity(state,e); changed=true; }
+    if(e.hp<=0 && e.type!=='goldmine'){
+      if(e.owner==='player' && e.kind==='unit' && e.lore && typeof recordFallen==='function') recordFallen(e);  // memorial + obituary
+      killEntity(state,e); changed=true;
+    }
     if(e.type==='goldmine' && e.amount<=0){ e.dead=true; }
   }
   if(changed){ state.selection=state.selection.filter(e=>!e.dead); recomputeSupply(state); refreshUI(); }

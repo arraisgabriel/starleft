@@ -6,6 +6,7 @@ const elCmd=document.getElementById('commands');
 const elTitle=document.getElementById('sel-title');
 const elDesc=document.getElementById('sel-desc');
 const elStats=document.getElementById('sel-stats');
+const elDossierBtn=document.getElementById('sel-dossier');
 
 function refreshUI(){
   if(!G) return;
@@ -19,18 +20,21 @@ function refreshUI(){
   // ---- info text (cheap text updates — safe to refresh every call) ----
   if(!sel.length){
     elTitle.textContent='Nothing selected';
-    elStats.textContent='';
-    elDesc.innerHTML='<b>Tap</b> a unit to select; tap an enemy/mine/ground to attack, gather or move. <b>Drag</b> to pan, <b>pinch</b> (or wheel / +−) to zoom.<br><b>Units box-select:</b> Shift+drag or the <b>Select box</b> button. Select a <b>Worker</b> then a build button, then tap a spot. <b>Ctrl/⌘+1-9</b> control group.';
+    elStats.textContent=''; if(elDossierBtn) elDossierBtn.style.display='none';
+    elDesc.innerHTML='<b>Tap</b> a unit to select; tap an enemy/mine/ground to attack, gather or move. <b>Drag</b> to pan, <b>pinch</b> (or wheel / +−) to zoom.<br><b>Units box-select:</b> Shift+drag or the <b>Select box</b> button. Select a <b>Worker</b> then a build button, then tap a spot. <b>Shift+1-9</b> set / <b>1-9</b> recall control group.';
   } else if(sel.length>1){
     const counts={}; sel.forEach(s=>counts[s.type]=(counts[s.type]||0)+1);
     elTitle.textContent= sel.length+' units selected';
-    elStats.textContent='';
+    elStats.textContent=''; if(elDossierBtn) elDossierBtn.style.display='none';
     elDesc.innerHTML = Object.entries(counts).map(([k,v])=>v+'× '+DEF[k].name).join(', ');
   } else {
     const e=sel[0]; const d=DEF[e.type]; const lvl=e.stars||0;
-    // career title prefixes the name for leveled player units (e.g. "Senior Lobbyist")
+    // career title prefixes the name; once a dossier exists the person's name is appended
+    const hasDossier = e.owner==='player' && e.lore && typeof buildDossier==='function';
     const titlePrefix=(e.owner==='player'&&lvl>0)? careerTitle(lvl)+' ' : '';
-    elTitle.textContent=(d.icon?d.icon+' ':'')+titlePrefix+d.name + (e.owner==='enemy'?' (rival)':'');
+    const personName = hasDossier ? ' · '+buildDossier(e).full : '';
+    elTitle.textContent=(d.icon?d.icon+' ':'')+titlePrefix+d.name+personName + (e.owner==='enemy'?' (rival)':'');
+    if(elDossierBtn){ elDossierBtn.style.display = hasDossier ? '' : 'none'; if(hasDossier) elDossierBtn.onclick=()=>showDossier(e); }
     // always-visible 3-stat line (level / HP / damage) — shown on desktop AND mobile
     if(e.kind==='unit'){
       const dmg=Math.round((e.dmg||0)*vetDmgMul(e));   // reflect the career damage bonus
@@ -188,8 +192,13 @@ function addCmd(emoji,label,cost,fn){
 /* toast */
 let toastTimer=null;
 function toast(msg){
-  const t=document.getElementById('toast'); t.textContent=msg; t.classList.add('show');
+  const t=document.getElementById('toast'); t.textContent=msg; t.classList.remove('event'); t.classList.add('show');
   clearTimeout(toastTimer); toastTimer=setTimeout(()=>t.classList.remove('show'),1800);
+}
+// richer, longer-lived toast for life-events & obituaries (multi-line; allows HTML)
+function eventToast(html){
+  const t=document.getElementById('toast'); t.innerHTML=html; t.classList.add('show','event');
+  clearTimeout(toastTimer); toastTimer=setTimeout(()=>t.classList.remove('show'),4400);
 }
 
 /* =====================================================================
@@ -198,6 +207,21 @@ function toast(msg){
 // Show / hide a menu sub-screen (map selection, documentation)
 function showSub(id){ const el=document.getElementById(id); if(el) el.style.display='flex'; }
 function hideSub(id){ const el=document.getElementById(id); if(el) el.style.display='none'; }
+
+// career v3: per-unit dossier modal + campaign roster/memorial
+function showDossier(u){
+  if(!u || !u.lore || typeof dossierHTML!=='function') return;
+  document.getElementById('dossierBody').innerHTML = dossierHTML(u);
+  showSub('dossierScreen');
+}
+function showRoster(){
+  const b=document.getElementById('rosterBody'); if(!b || typeof rosterHTML!=='function') return;
+  b.innerHTML = rosterHTML();
+  b.querySelectorAll('.roster-row[data-uid]').forEach(el=>{
+    el.onclick=()=>{ const id=+el.dataset.uid; const u=G&&G.entities.find(e=>e.id===id&&!e.dead); if(u){ hideSub('rosterScreen'); showDossier(u); } };
+  });
+  showSub('rosterScreen');
+}
 
 // Field Manual: shown from "Documentation" (footer = Back) OR before "New Campaign"
 // (footer = Start Campaign, which launches the campaign).
@@ -259,13 +283,19 @@ function onVictory(){
   const es=document.getElementById('endScreen');
   const beaten=G.cfg.enemyName||'the competition';
   if(mapIndex < MAPS.length-1){
+    const vets = (typeof eligibleVets==='function') ? eligibleVets(G) : [];
+    const cap  = (typeof vetCarryCountFor==='function') ? vetCarryCountFor(mapIndex+1) : 0;
     es.className='overlay win'; es.style.display='flex';
     es.innerHTML=`<div class="big">📉</div><h1>ACQUIHIRED</h1>
       <h2>${beaten} has pivoted to bankruptcy</h2>
       <p>Their assets are yours, their founders are "exploring new opportunities," and TechCrunch loves you.<br>
       Funding raised this quarter: <b>💰 ${G.gold_collected|0}</b></p>
+      ${vets.length? `<div class="carry-head">Who deploys to the next quarter? <span class="carry-count" id="carry-count"></span></div>
+        <div class="carry-list" id="carry-list"></div>` : ''}
       <button class="btn" id="nextBtn">▶ Next Quarter</button>`;
-    document.getElementById('nextBtn').onclick=()=>{ es.style.display='none'; captureVets(G); mapIndex++; showCrawl(mapIndex, ()=>loadMap(mapIndex)); };
+    const proceed=(chosen)=>{ es.style.display='none'; setCarryover(chosen); mapIndex++; showCrawl(mapIndex, ()=>loadMap(mapIndex)); };
+    if(vets.length){ buildCarryChooser(document.getElementById('carry-list'), document.getElementById('carry-count'), vets, cap, document.getElementById('nextBtn'), proceed); }
+    else { document.getElementById('nextBtn').onclick=()=>proceed([]); }
   } else {
     es.className='overlay win'; es.style.display='flex';
     es.innerHTML=`<div class="big">🦄</div><h1>IPO!</h1>
@@ -275,6 +305,31 @@ function onVictory(){
       <button class="btn" onclick="location.reload()">↻ Found a New Startup</button>`;
   }
 }
+// victory-screen carryover chooser: pick up to `cap` veteran units to deploy next quarter
+function buildCarryChooser(listEl, countEl, vets, cap, nextBtn, proceed){
+  const selected = new Set(vets.slice(0, cap).map(v=>v.id));   // pre-select the strongest `cap`
+  const updateCount = ()=>{ countEl.textContent = `(${selected.size}/${cap})`; };
+  vets.forEach(v=>{
+    const d = (v.lore && typeof buildDossier==='function') ? buildDossier(v) : null;
+    const name = d ? d.full : (careerTitle(v.stars||0)+' '+DEF[v.type].name).trim();
+    const teaser = (d && (v.stars||0)>=2) ? `<span class="cc-dream">“${d.dream}”</span>` : '';
+    const card = document.createElement('button');
+    card.className = 'carry-card' + (selected.has(v.id)?' sel':'');
+    card.innerHTML = `<span class="cc-top">${DEF[v.type].icon||''} <b>${name}</b></span>
+      <span class="cc-stat">★ Lv ${v.stars||0} · ❤ ${v.hp|0}/${v.maxHp}</span>${teaser}`;
+    card.onclick = ()=>{
+      if(selected.has(v.id)) selected.delete(v.id);
+      else if(selected.size>=cap){ countEl.classList.remove('flash'); void countEl.offsetWidth; countEl.classList.add('flash'); return; }
+      else selected.add(v.id);
+      card.classList.toggle('sel', selected.has(v.id));
+      updateCount();
+    };
+    listEl.appendChild(card);
+  });
+  updateCount();
+  nextBtn.onclick = ()=> proceed(vets.filter(v=>selected.has(v.id)));
+}
+
 function onDefeat(){
   running=false;
   const es=document.getElementById('endScreen');

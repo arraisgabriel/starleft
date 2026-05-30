@@ -143,6 +143,46 @@
     box-shadow:0 4px 14px rgba(0,0,0,.5);
   }
   #toast.show { opacity:1; }
+  #toast.event { max-width:min(520px,92vw); white-space:normal; line-height:1.45; text-align:center;
+    padding:11px 22px; color:#ffe6b0; }
+  /* career v3 — dossier + roster/memorial */
+  #sel-dossier { margin-top:4px; background:#2a1620; border:1px solid #753a48; color:#ffd0d2;
+    font-size:11px; padding:3px 9px; border-radius:5px; cursor:pointer; }
+  #sel-dossier:hover { background:#3a1d2a; color:#fff; }
+  .dossier h2 { color:#ff9aa0; letter-spacing:1px; margin-bottom:2px; font-size:clamp(18px,4vw,24px); }
+  .dossier-sub { color:#e7c8a0; font-size:13px; margin-bottom:13px; }
+  .dossier-grid { display:grid; gap:9px; margin-bottom:14px; text-align:left; }
+  .dossier .dk { display:block; font-size:10px; letter-spacing:1.5px; text-transform:uppercase;
+    color:#9a6b78; margin-bottom:1px; }
+  .dossier-grid > div { color:#d8c2c6; font-size:14px; line-height:1.4; }
+  .dossier-log { text-align:left; margin:6px 0 0; padding-left:18px; color:#c8aeb4; font-size:13px; line-height:1.5; }
+  .dossier-log li { margin-bottom:5px; }
+  .dossier-log b { color:#ffd86b; }
+  .roster-cols { display:flex; gap:18px; text-align:left; flex-wrap:wrap; }
+  .roster-col { flex:1; min-width:230px; }
+  .roster-col h3 { color:#ffd86b; font-size:14px; letter-spacing:1px; margin-bottom:8px; }
+  .roster-row { display:block; width:100%; text-align:left; background:rgba(40,20,28,.6);
+    border:1px solid #5a2f3a; border-radius:6px; padding:8px 10px; margin-bottom:6px; color:#f0d6da; cursor:pointer; }
+  button.roster-row:hover { background:rgba(60,28,40,.85); color:#fff; }
+  .roster-row.fallen { opacity:.72; cursor:default; border-style:dashed; }
+  .roster-row .rr-sub { display:block; font-size:11px; color:#a88a92; margin-top:2px; }
+  .muted { color:#8c6570; font-size:13px; }
+  /* victory-screen carryover chooser */
+  .carry-head { font-size:14px; letter-spacing:1px; color:#ffd0d2; text-transform:uppercase; }
+  .carry-count { color:#ffd86b; font-weight:700; }
+  .carry-count.flash { animation:ccflash .4s ease; }
+  @keyframes ccflash { 0%,100%{ color:#ffd86b; } 35%{ color:#ff6b6b; transform:scale(1.18); } }
+  .carry-list { display:flex; flex-wrap:wrap; gap:10px; justify-content:center;
+    max-height:42vh; overflow:auto; max-width:min(720px,92vw); padding:4px; }
+  .carry-card { width:clamp(180px,30vw,230px); text-align:left; cursor:pointer;
+    background:rgba(40,20,28,.6); border:1px solid #5a2f3a; border-radius:8px; padding:9px 11px;
+    color:#f0d6da; display:flex; flex-direction:column; gap:3px; min-height:58px; transition:.12s; }
+  .carry-card:hover { background:rgba(60,28,40,.85); }
+  .carry-card.sel { border-color:#8effb0; box-shadow:0 0 0 1px #8effb0 inset, 0 0 12px rgba(142,255,176,.25); }
+  .carry-card.sel .cc-top::after { content:' ✓'; color:#8effb0; }
+  .carry-card .cc-top { font-size:14px; }
+  .carry-card .cc-stat { font-size:11px; color:#e7c8a0; }
+  .carry-card .cc-dream { font-size:11px; color:#9e8088; font-style:italic; line-height:1.3; }
   .key { display:inline-block; background:#3d1c24; border:1px solid #753a48; border-radius:4px;
     padding:1px 7px; font-size:12px; color:#f8d0d6; font-family:monospace;}
 
@@ -349,6 +389,7 @@
     <div class="stat" title="Headcount vs capacity — build more Open-Plan HQs to hire more"><span class="ico sup"></span>👥 <span id="supply">0/0</span> <span class="lbl">Headcount</span></div>
     <div class="lbl">Quarter <span id="mapname">—</span></div>
     <div id="objective">Disrupt the competition.</div>
+    <button class="tc-btn" id="btn-roster" title="Veterans &amp; Memorial">🎖 Roster</button>
     <button class="tc-btn" id="btn-save" title="Save game (⌘/Ctrl+S)">💾 Save</button>
   </div>
 
@@ -360,6 +401,7 @@
     <div id="selinfo">
       <h3 id="sel-title">Nothing selected</h3>
       <div class="stats" id="sel-stats"></div>
+      <button id="sel-dossier" style="display:none;">📖 Dossier</button>
       <div class="desc" id="sel-desc">Tap to select or command. Drag to pan, pinch to zoom.</div>
       <div id="prod-queue"></div>
     </div>
@@ -426,6 +468,24 @@
     </div>
   </div>
 
+  <!-- Dossier sub-screen (one veteran's RPG file) -->
+  <div class="overlay submenu" id="dossierScreen" style="display:none;">
+    <div class="submenu-panel">
+      <div id="dossierBody"></div>
+      <button class="sc-btn back" onclick="hideSub('dossierScreen')">◀ Back</button>
+    </div>
+  </div>
+
+  <!-- Roster & Memorial sub-screen -->
+  <div class="overlay submenu" id="rosterScreen" style="display:none;">
+    <div class="submenu-panel">
+      <h2>Veterans &amp; Memorial</h2>
+      <div class="panel-label">Those who serve, and those who fell</div>
+      <div id="rosterBody"></div>
+      <button class="sc-btn back" onclick="hideSub('rosterScreen')">◀ Back</button>
+    </div>
+  </div>
+
   <!-- Documentation sub-screen -->
   <div class="overlay submenu" id="docScreen" style="display:none;">
     <div class="submenu-panel">
@@ -470,6 +530,8 @@
 <script src="js/map.js"></script>
 <script src="js/units.js"></script>
 <script src="js/career.js"></script>
+<script src="js/lore_data.js"></script>
+<script src="js/lore.js"></script>
 <script src="js/ai.js"></script>
 <script src="js/render.js"></script>
 <script src="js/ui.js"></script>

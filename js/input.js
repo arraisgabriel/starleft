@@ -187,8 +187,8 @@ function assignGroup(g){
   const members = G.selection.filter(s=>!s.dead && s.owner==='player');
   G.groups[g] = members.slice();          // replace whatever was bound to g
   // tag entities so we can draw their group badge
-  for(const e of G.entities){ if(e._groups) e._groups.delete(g); }
-  members.forEach(s=>{ (s._groups || (s._groups=new Set())).add(g); });
+  for(const e of G.entities){ if(e._groups instanceof Set) e._groups.delete(g); }
+  members.forEach(s=>{ if(!(s._groups instanceof Set)) s._groups=new Set(); s._groups.add(g); });
   toast(members.length ? ('Control group '+g+' set — '+members.length+' unit'+(members.length>1?'s':''))
                        : ('Control group '+g+' cleared'));
 }

@@ -357,7 +357,7 @@ function updateUnit(state,u,dt){
     // effective stats (Auditor gains range/dmg/splash while sieged)
     let aRange=u.range, aDmg=u.dmg, aSplash=def.splash||0, aSplashR=def.splashR||1.3;
     if(def.siege && u.sieged){ const sg=def.siege; aRange=sg.range; aDmg=sg.dmg; aSplash=Math.round(sg.dmg*0.6); aSplashR=sg.splashR; }
-    const _m = vetDmgMul(u); aDmg = Math.round(aDmg*_m); aSplash = Math.round(aSplash*_m);  // career-rank damage bonus
+    const _m = vetDmgMul(u)*(typeof vetBuff==='function'?vetBuff(u,state).dmgMul:1); aDmg = Math.round(aDmg*_m); aSplash = Math.round(aSplash*_m);  // career-rank + life-event damage bonus
     const reach = aRange*TILE + entRadius(atk);
     const d=dist(u,atk);
     if(d<=reach){
@@ -366,7 +366,7 @@ function updateUnit(state,u,dt){
       faceTo(u,atk);
       u._actState='attack'; u._face = atk.x<u.x?-1:1;
       if(u.cd<=0){ applyHit(state,u,atk,aDmg,aSplash,aSplashR);
-        gainXp(u, atk.hp<=0);   // career points for the shot / killing blow
+        gainXp(u, atk.hp<=0, state);   // career points for the shot / killing blow
         u.cd = def.cd;
         u._actStamp = state.time;   // timestamps the strike so the swing/shot frame lands on it
         if(aRange>2) u.shootFx={x:atk.x,y:atk.y,t:0.1};

@@ -53,14 +53,23 @@ function applyVetHp(u, fullHeal){
 }
 
 // award career points to a player combat unit; promote across any thresholds crossed
-function gainXp(u, killed){
+function gainXp(u, killed, state){
   if(u.owner!=='player' || !isCombatVet(u)) return;
   u.xp = (u.xp||0) + CAREER.perShot + (killed ? CAREER.perKill : 0);
-  let s = u.stars||0;
+  const old = u.stars||0;
+  let s = old;
   while(s < CAREER.maxStars && u.xp >= CAREER.xpFor(s+1)) s++;
-  if(s !== (u.stars||0)){
-    u.stars = s; applyVetHp(u, false);
-    toast('★ Promotion! '+careerTitle(s)+' '+DEF[u.type].name);
+  if(s === old) return;
+  u.stars = s; applyVetHp(u, false);
+  toast('★ Promotion! '+careerTitle(s)+' '+DEF[u.type].name);
+  // career v3: dossier is born at level 2, then a backstory-connected life-event at each new level
+  if(typeof rollLifeEvent==='function'){
+    let last=null;
+    for(let L=Math.max(2, old+1); L<=s; L++){ ensureDossier(u); const ev=rollLifeEvent(u,L); if(ev){ applyEventFx(u,ev.fx,state); last=ev; } }
+    if(last && typeof eventToast==='function'){
+      const d=buildDossier(u);
+      eventToast(u.lore.events.length<=1 ? `📖 <b>${d.full}</b> of ${d.home}: ${last.text}` : `📖 <b>${d.first}</b>: ${last.text}`);
+    }
   }
 }
 
@@ -69,7 +78,8 @@ function vetRegen(u, state, dt){
   const lvl = u.stars||0;
   if(lvl < CAREER.healStart || u.hp<=0 || u.hp>=u.maxHp) return;
   if(state.time - (u._lastHit||-1e9) < CAREER.healCombatGap) return;   // still in/near combat
-  const rate = CAREER.healPctBase * Math.pow(2, Math.floor((lvl-CAREER.healStart)/CAREER.healDoubleEvery));
+  let rate = CAREER.healPctBase * Math.pow(2, Math.floor((lvl-CAREER.healStart)/CAREER.healDoubleEvery));
+  if(typeof vetBuff==='function') rate *= vetBuff(u,state).regenMul;   // life-event temp buff/debuff
   u.hp = Math.min(u.maxHp, u.hp + u.maxHp*rate*dt);
 }
 
@@ -95,17 +105,24 @@ function drawStars(u, px, topY){
 /* ---- veteran persistence (module global — survives the newMap() rebuild) ---- */
 let carryoverVets = [];
 
-// how many veterans carry into the map currently being entered (0-based global mapIndex):
-// 2 into map 2-3, 3 into map 4-5, 4 into map 6-7, … — grows +1 every two maps, unbounded.
-function vetCarryCount(){ return 2 + Math.floor(Math.max(0, mapIndex-1)/2); }
+// how many veterans carry into a given (0-based) map index: 2 into map 2-3, 3 into map 4-5,
+// 4 into map 6-7, … — grows +1 every two maps, unbounded.
+function vetCarryCountFor(idx){ return 2 + Math.floor(Math.max(0, idx-1)/2); }
+function vetCarryCount(){ return vetCarryCountFor(mapIndex); }   // count into the map being entered
 
-// snapshot all eligible surviving player veterans (best first) at the moment of victory
-function captureVets(state){
-  carryoverVets = state.entities
-    .filter(e=>!e.dead && e.owner==='player' && isCombatVet(e) && (e.stars||0)>0)
-    .sort((a,b)=>(b.stars-a.stars)||((b.xp||0)-(a.xp||0)))
-    .map(e=>({type:e.type, stars:e.stars, xp:e.xp}));
+// surviving player veterans (UNIT objects, best first) — the carry candidates at victory
+function eligibleVets(state){
+  return state.entities
+    .filter(e=>!e.dead && e.owner==='player' && isCombatVet(e) && (e.stars||0)>=1)
+    .sort((a,b)=>(b.stars-a.stars)||((b.xp||0)-(a.xp||0)));
 }
+// snapshot a chosen set of veteran units into the carryover (their dossier travels too)
+function setCarryover(units){
+  carryoverVets = units.map(e=>({type:e.type, stars:e.stars, xp:e.xp, lore:e.lore}));
+}
+// auto-pick fallback: carry all eligible (spawnVets slices to the count). Player choice uses the
+// victory-screen chooser (ui.js) → setCarryover() instead.
+function captureVets(state){ setCarryover(eligibleVets(state)); }
 
 // inject the carried veterans near the player HQ at full HP, on top of the normal starters
 function spawnVets(state){
@@ -113,6 +130,6 @@ function spawnVets(state){
   const c=state.cfg.player;
   carryoverVets.slice(0, vetCarryCount()).forEach((v,i)=>{
     const u=mkUnit(state, v.type, 'player', c.x-2+(i%4), c.y-3-((i/4)|0));
-    u.stars=v.stars; u.xp=v.xp; applyVetHp(u, true);
+    u.stars=v.stars; u.xp=v.xp; if(v.lore) u.lore=v.lore; applyVetHp(u, true);
   });
 }
