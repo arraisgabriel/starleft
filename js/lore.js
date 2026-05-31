@@ -25,8 +25,30 @@ function ensureDossier(u){
   if(!u.lore) u.lore = { seed: _loHash((u.id||0)+1), events: [] };
 }
 
+// HERO dossier: a hand-authored, FIXED backstory (named campaign characters like Nino) instead of
+// the seed-random one. spec fields are plain strings (already resolved); slots are still honored so
+// a hero's text can reference {me}/{home}/etc. if desired. Same shape as buildDossier's return.
+function makeHeroDossier(spec){
+  const first = spec.first || spec.name || 'Unknown';
+  const last  = spec.last || '';
+  const full  = (first + (last ? ' ' + last : '')).trim();
+  const home  = spec.home || 'parts unknown';
+  const rel   = spec.rel || '';
+  const relName = spec.relName || '';
+  const baseFill = (t)=> (t||'').replace(/\{me\}/g, first).replace(/\{full\}/g, full)
+    .replace(/\{home\}/g, home).replace(/\{rel\}/g, rel).replace(/\{relName\}/g, relName);
+  const trauma = baseFill(spec.trauma || '');
+  const dream  = baseFill(spec.dream || '');
+  const crime  = spec.crime ? baseFill(spec.crime) : null;
+  const d = { first, last, full, home, rel, relName, trauma, dream, crime, hero:true };
+  d.fill = (t)=> baseFill(t).replace(/\{dream\}/g, dream).replace(/\{trauma\}/g, trauma).replace(/\{crime\}/g, crime||'an old mistake');
+  d.familyText = baseFill(spec.family || '');
+  return d;
+}
+
 // pure + memoized by seed → {first,last,full,home,rel,relName,trauma,dream,crime|null,familyText,fill}
 function buildDossier(u){
+  if(u.lore && u.lore.fixed) return makeHeroDossier(u.lore.fixed);   // named hero — skip the RNG
   const seed = u.lore.seed;
   if(_dossierCache.has(seed)) return _dossierCache.get(seed);
   const r = makeRng(seed);

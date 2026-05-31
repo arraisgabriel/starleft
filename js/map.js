@@ -222,6 +222,7 @@ function newMap(idx){
   for(let i=0;i<nW;i++) mkUnit(state,'worker','player', cfg.player.x+ (i%3), cfg.player.y+4 + ((i/3)|0));  // below the 4×3 HQ
   for(let i=0;i<nS;i++) mkUnit(state,'soldier','player', cfg.player.x-1+(i%5), cfg.player.y-2 - ((i/5)|0)); // above the HQ
   spawnVets(state);   // carry veterans from the previous campaign map (count grows every 2 maps)
+  spawnHeroes(state); // named campaign heroes declared on the map (e.g. Nino on Episode VIII)
   if(cfg.startBarracks) mkBuilding(state,'barracks','player', cfg.player.x-3, cfg.player.y, true);
 
   // ---- enemy bases (one or more) ----

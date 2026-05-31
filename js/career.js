@@ -104,16 +104,22 @@ function drawStars(u, px, topY){
 
 /* ---- veteran persistence (module global — survives the newMap() rebuild) ---- */
 let carryoverVets = [];
+// Named heroes persist on their OWN track, separate from the chooser-driven vet carryover: once a
+// hero appears, they auto-deploy to every subsequent map until killed — never selectable, never
+// counted against the vet carry cap. (Reset alongside carryoverVets when a new campaign starts.)
+let carryoverHeroes = [];
 
 // how many veterans carry into a given (0-based) map index: 2 into map 2-3, 3 into map 4-5,
 // 4 into map 6-7, … — grows +1 every two maps, unbounded.
 function vetCarryCountFor(idx){ return 2 + Math.floor(Math.max(0, idx-1)/2); }
 function vetCarryCount(){ return vetCarryCountFor(mapIndex); }   // count into the map being entered
 
-// surviving player veterans (UNIT objects, best first) — the carry candidates at victory
+// surviving player veterans (UNIT objects, best first) — the carry candidates at victory.
+// Named campaign heroes (u.hero, e.g. Nino) are map-scoped story characters, NOT carry-over vets:
+// they're excluded here so they never appear in the chooser and never deploy to the next quarter.
 function eligibleVets(state){
   return state.entities
-    .filter(e=>!e.dead && e.owner==='player' && isCombatVet(e) && (e.stars||0)>=1)
+    .filter(e=>!e.dead && e.owner==='player' && !e.hero && isCombatVet(e) && (e.stars||0)>=1)
     .sort((a,b)=>(b.stars-a.stars)||((b.xp||0)-(a.xp||0)));
 }
 // snapshot a chosen set of veteran units into the carryover (their dossier travels too)
@@ -132,4 +138,52 @@ function spawnVets(state){
     const u=mkUnit(state, v.type, 'player', c.x-2+(i%4), c.y-3-((i/4)|0));
     u.stars=v.stars; u.xp=v.xp; if(v.lore) u.lore=v.lore; applyVetHp(u, true);
   });
+}
+
+/* ---- named campaign heroes ----
+   A map may introduce a hero via `heroes:[{name,type,level,dossier}]` (e.g. Nino on Episode VIII).
+   A hero is a normal career unit in every way — earns XP, levels, logs life-events, renders a
+   dossier — EXCEPT for persistence: instead of going through the victory chooser (where they'd be
+   selectable and consume a carry slot), heroes ride their OWN carryover track and auto-deploy to
+   every later map until they die. So they "can't get out" and "don't count to the limit", yet they
+   keep showing up like any carried veteran. Identity is keyed by a stable heroId (the name) so a
+   hero introduced once isn't re-spawned fresh when their map is revisited or after they've carried. */
+
+// snapshot the heroes ALIVE at victory so they redeploy next map; dead heroes drop out and never
+// return. Accumulated level/xp/dossier (u.lore, incl. service record) travel with them.
+function captureHeroes(state){
+  carryoverHeroes = state.entities
+    .filter(e=>!e.dead && e.owner==='player' && e.hero)
+    .map(e=>({ heroId:e.heroId, type:e.type, stars:e.stars, xp:e.xp, lore:e.lore }));
+}
+// clear the hero carryover (a brand-new campaign / map-select replay starts heroless)
+function resetHeroes(){ carryoverHeroes = []; }
+
+// place ONE hero unit beside the player HQ; `pos` is the muster-slot index (for spacing).
+function _placeHero(state, c, pos, type, heroId, stars, xp, lore, dossier){
+  if(!DEF[type]) return;                                       // unknown unit type → skip safely
+  const u=mkUnit(state, type, 'player', c.x+1+(pos%3), c.y+5+((pos/3)|0));
+  u.stars=Math.max(0, Math.min(CAREER.maxStars, stars||0));
+  u.xp=(xp!=null)?xp:CAREER.xpFor(u.stars);
+  applyVetHp(u, true);                                         // bake leveled max-HP and full-heal
+  u.hero=true; u.heroId=heroId;
+  u.lore = lore || { seed:(u.id||0)+1, events:[], fixed: dossier || { name:heroId } };
+}
+
+// deploy heroes for the map being entered: every survivor carried from prior maps, PLUS any hero
+// this map introduces for the first time (deduped by heroId so a carried hero isn't doubled).
+function spawnHeroes(state){
+  const cfg=state.cfg, c=cfg.player;
+  let pos=0; const placed=new Set();
+  for(const h of carryoverHeroes){                            // auto-carried survivors
+    _placeHero(state, c, pos++, h.type, h.heroId, h.stars, h.xp, h.lore, null);
+    placed.add(h.heroId);
+  }
+  if(cfg && cfg.heroes) for(const h of cfg.heroes){           // first appearances on this map
+    const hid = h.id || h.name;
+    if(placed.has(hid)) continue;                             // already carried in — don't duplicate
+    const lvl = Math.max(0, Math.min(CAREER.maxStars, h.level||0));
+    _placeHero(state, c, pos++, h.type, hid, lvl, CAREER.xpFor(lvl), null, h.dossier || { name:h.name });
+    placed.add(hid);
+  }
 }

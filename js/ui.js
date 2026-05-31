@@ -237,6 +237,10 @@ function docFooter(){ if(_docCampaign) startGame(0); else hideSub('docScreen'); 
 function startGame(idx){
   idx = idx|0;
   ['startScreen','mapScreen','docScreen'].forEach(id=>{ const el=document.getElementById(id); if(el) el.style.display='none'; });
+  // fresh campaign / map-select replay: clear carried units so a previous run's veterans or heroes
+  // don't bleed into this one (heroes persist WITHIN a run, not across a brand-new start).
+  if(typeof setCarryover==='function') setCarryover([]);
+  if(typeof resetHeroes==='function') resetHeroes();
   mapIndex=idx; showCrawl(idx, ()=>{ loadMap(idx); });
 }
 // Build a "jump to any Quarter" row on the title screen from the MAPS list.
@@ -274,8 +278,8 @@ function showCrawl(idx, done){
   const finish=()=>{ if(finished) return; finished=true; clearTimeout(timer);
     scr.style.display='none'; done&&done(); };
   document.getElementById('crawl-skip').onclick=finish;
-  // auto-advance when the crawl scrolls off (anim 55s + 0.2s delay) — but keep it skippable
-  const timer=setTimeout(finish, idx===0? 57000 : 56000);
+  // auto-advance when the crawl scrolls off (anim 68.75s + 0.2s delay) — but keep it skippable
+  const timer=setTimeout(finish, idx===0? 71250 : 70000);
 }
 
 function onVictory(){
@@ -293,7 +297,9 @@ function onVictory(){
       ${vets.length? `<div class="carry-head">Who deploys to the next quarter? <span class="carry-count" id="carry-count"></span></div>
         <div class="carry-list" id="carry-list"></div>` : ''}
       <button class="btn" id="nextBtn">▶ Next Quarter</button>`;
-    const proceed=(chosen)=>{ es.style.display='none'; setCarryover(chosen); mapIndex++; showCrawl(mapIndex, ()=>loadMap(mapIndex)); };
+    const proceed=(chosen)=>{ es.style.display='none'; setCarryover(chosen);
+      if(typeof captureHeroes==='function') captureHeroes(G);   // heroes auto-carry (not chooser-driven) until they die
+      mapIndex++; showCrawl(mapIndex, ()=>loadMap(mapIndex)); };
     if(vets.length){ buildCarryChooser(document.getElementById('carry-list'), document.getElementById('carry-count'), vets, cap, document.getElementById('nextBtn'), proceed); }
     else { document.getElementById('nextBtn').onclick=()=>proceed([]); }
   } else {

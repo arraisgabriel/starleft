@@ -287,6 +287,70 @@ Weaponize your buzzwords, circle back, and disrupt MegaCorp into bankruptcy. The
                 {x:8,y:6,amt:1800},{x:46,y:5,amt:1800},{x:84,y:5,amt:1800},{x:116,y:8,amt:1800},
                 {x:118,y:54,amt:1800},{x:116,y:94,amt:1800},{x:78,y:98,amt:1800},{x:5,y:46,amt:1800},
                 {x:32,y:54,amt:2800},{x:88,y:54,amt:2800},{x:62,y:26,amt:3500},{x:62,y:76,amt:3500} ],
+  },
+  {
+    name:'VIII — The Down Round',
+    enemyName:'A&O',
+    // A hard reset to scrappy: the empire is ash, so the economy starts near Episode I — you
+    // really do rebuild from nothing. A&O is entrenched (one campus has an extra People Ops) but
+    // this sits at the bottom of a NEW curve, so aggression is low and grace is generous.
+    aggression:1.2,
+    startGold:350, startWorkers:4, startSoldiers:2, startBarracks:false,
+    graceTime:105, waveTimer:112,
+    crawl:{ episode:'EPISODE VIII', title:'THE DOWN ROUND',
+      text:'The blast took everything. The campuses, the war chest, the names you carried this far — all of it gone to light and ash. The memorial is the only thing that scaled.\n\nYou come to broke in the crater of your own empire, and you are not alone in it. A&O — Alpha & Omega, the fund that buys the beginning and the end — filed the paperwork before the dust settled. They picked up your wreckage at auction and call it a portfolio.\n\nNo runway. No team — almost. NINO walked back into the crater the day he heard: the lobbyist who bought your first hundred votes, owed favors in one hand and nothing left to lose in the other. He says he can buy you a room and a reputation. After that, you are on your own.\n\nTwo A&O campuses squat on the bones of what you built. Mine the ruins, hire whoever is left, and take it back one down round at a time. Begin again, or stay buried.' },
+    w:52, h:44,
+    seed:8,
+    player:{ x:5, y:38 },
+    // the dead server-farm of the old monopoly, weeds reclaiming the wreckage — Ep IV tech gone
+    // back to Ep I grass. A graveyard you have to farm.
+    terrain:{ biomes:['tech','grass'], seaFrac:0.10, mtnFrac:0.08, moist:{base:0.50,noise:0.45}, forest:0.06 },
+    // Nino — a returning Level-10 Lobbyist who comes back to help rebuild. Spawns near the player
+    // HQ as a named career unit (fixed dossier); see spawnHeroes() in career.js.
+    heroes:[ { name:'Nino', type:'lobbyist', level:11, dossier:{
+      first:'Nino', last:'',
+      home:'the Glitch Sprawl',
+      rel:'crew', relName:'the first team',
+      family:"Nino ran the lobby in the company's first life — bought the votes, wrote the laws, and watched every name he hired end up on the memorial wall.",
+      trauma:'being three streets out when the blast turned the campus into a column of light',
+      dream:'to see one thing he helped build outlast the money that funded it',
+      crime:'authoring the legislation that made a hundred rivals simply vanish, and only now losing sleep over it',
+    } } ],
+    enemies:[ {x:44,y:7, extraBarracks:true, defenders:3}, {x:40,y:30, defenders:2} ],
+    objective:'A&O bought the ruins of your empire and holds TWO campuses — liquidate both and rebuild from the crater.',
+    lakes:[ {x:22,y:14,r:4}, {x:30,y:34,r:3} ],
+    rockClusters:[ {x:16,y:20,n:14}, {x:34,y:18,n:12}, {x:24,y:30,n:10} ],
+    forests:[ {x:12,y:24,n:24}, {x:38,y:38,n:20}, {x:28,y:8,n:18} ],
+    goldNodes:[ {x:8,y:35,amt:1500},{x:11,y:39,amt:1500},{x:4,y:33,amt:1500},
+                {x:47,y:10,amt:1500},{x:41,y:5,amt:1500},{x:43,y:33,amt:1500},
+                {x:26,y:22,amt:2000} ],
+  },
+  {
+    name:'IX — The Proof of Concept',
+    enemyName:'A&O',
+    // The company is regrowing on the back of the stolen blueprint: a step up from VIII — a real
+    // war chest again, a People Ops on day one, three A&O research campuses to crack. Still mid-
+    // curve, not finale-scale; this is the FIRST chapter of the long GRAAL arc, not its climax.
+    aggression:1.4,
+    startGold:550, startWorkers:5, startSoldiers:3, startBarracks:true,
+    graceTime:100, waveTimer:108,
+    crawl:{ episode:'EPISODE IX', title:'THE PROOF OF CONCEPT',
+      text:'You clawed the company out of the crater and put A&O\'s Research campus to the torch. In its vault, behind the NDAs and the dead-man switches, you found it: the blueprint for the GRAAL.\n\nA brain chip that lifts a mind out of a failing body and writes it into another — metal, if it has to be. The names on your memorial wall stop looking quite so final. The board calls it the cure for the only churn that ever mattered.\n\nBut a blueprint is not a product, and A&O wants its stolen IP back. Stand up the lab, ship a proof of concept, and liquidate all THREE A&O research campuses before they repossess your future. Resurrection has a roadmap now. Hit the deadline.' },
+    w:58, h:48,
+    seed:9,
+    player:{ x:6, y:42 },
+    // a cold, sterile research compound — the dead server-farm of the old monopoly refrozen into
+    // a cryo lab: tech racks under ice. Where the GRAAL gets reverse-engineered.
+    terrain:{ biomes:['tech','ice'], temp:{base:0.30,noise:0.16}, freeze:0.46, seaFrac:0.11, mtnFrac:0.08, forest:0 },
+    enemies:[ {x:48,y:8, extraBarracks:true, defenders:3}, {x:50,y:34, defenders:3}, {x:30,y:10, defenders:3} ],
+    objective:'A&O wants its GRAAL blueprint back and holds THREE research campuses — liquidate all three and keep the proof of concept.',
+    lakes:[ {x:24,y:22,r:4}, {x:40,y:30,r:3} ],
+    rockClusters:[ {x:18,y:16,n:14}, {x:38,y:18,n:12}, {x:30,y:34,n:10} ],
+    forests:[ {x:12,y:28,n:22}, {x:44,y:40,n:18}, {x:34,y:6,n:16} ],
+    goldNodes:[ {x:4,y:38,amt:1600},{x:9,y:44,amt:1600},{x:3,y:44,amt:1600},
+                {x:51,y:5,amt:1700},{x:45,y:6,amt:1700},{x:54,y:36,amt:1700},{x:52,y:30,amt:1700},
+                {x:28,y:5,amt:1700},{x:34,y:12,amt:1700},
+                {x:28,y:26,amt:2600} ],
   }
 ];
 
