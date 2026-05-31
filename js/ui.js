@@ -278,8 +278,8 @@ function showCrawl(idx, done){
   const finish=()=>{ if(finished) return; finished=true; clearTimeout(timer);
     scr.style.display='none'; done&&done(); };
   document.getElementById('crawl-skip').onclick=finish;
-  // auto-advance when the crawl scrolls off (anim 68.75s + 0.2s delay) — but keep it skippable
-  const timer=setTimeout(finish, idx===0? 71250 : 70000);
+  // auto-advance when the crawl scrolls off (anim 86.97s + 0.2s delay) — but keep it skippable
+  const timer=setTimeout(finish, idx===0? 90132 : 88550);
 }
 
 function onVictory(){
