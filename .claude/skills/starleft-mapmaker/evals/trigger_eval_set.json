@@ -1,0 +1,22 @@
+[
+  {"query": "add a new episode to the starleft campaign after the conglomerate one, something where the company has to fight its own automated AI systems", "should_trigger": true},
+  {"query": "i want to insert a mission between episode 3 and 4 and renumber the rest of the campaign so the episodes stay in order", "should_trigger": true},
+  {"query": "make a new map for starleft — a frozen siege where we take on a hostile pension fund", "should_trigger": true},
+  {"query": "design level 9 for the rts, it should be the hardest one yet, desert biome with like 6 enemy bases", "should_trigger": true},
+  {"query": "write the opening crawl and the objective for a new quarter where A&O comes back harder", "should_trigger": true},
+  {"query": "we need another mission in the campaign — a swamp map where we fight a faction of ex-employees who unionized", "should_trigger": true},
+  {"query": "create a new enemy faction and a map for it that slots in between the merger and the monopoly endgame", "should_trigger": true},
+  {"query": "extend starleft with two more episodes that continue the immortality storyline", "should_trigger": true},
+  {"query": "add a level where you can reclaim abandoned outposts like the dunes-and-drifts map but even bigger", "should_trigger": true},
+  {"query": "new battlefield for the game with a data-breach plot — pick a fitting biome and drop it into the campaign at the right spot", "should_trigger": true},
+  {"query": "the auditor unit is shooting backwards again after it turns, fix the facing bug in units.js", "should_trigger": false},
+  {"query": "generate a new sprite sheet for the founder mech using the nano-banana prompt in prompts/", "should_trigger": false},
+  {"query": "buff the growth hacker's damage and drop its cost a bit in the DEF table in config.js", "should_trigger": false},
+  {"query": "the minimap in the corner isn't redrawing the fog of war when I scroll around", "should_trigger": false},
+  {"query": "add about 40 more life-event templates to lore_data.js for the unit dossier system", "should_trigger": false},
+  {"query": "make the edge-scroll smoother when I drag the mouse to the border of the screen", "should_trigger": false},
+  {"query": "saving breaks when I have carryover veterans — debug the serialization in save.js", "should_trigger": false},
+  {"query": "build a Leaflet map widget that plots our studio's office locations on a world map for the website", "should_trigger": false},
+  {"query": "the enemy AI just turtles in its base — make it actually attack-move toward me in ai.js", "should_trigger": false},
+  {"query": "add a new building type, a 'War Room' that gives a +damage aura to nearby friendly units", "should_trigger": false}
+]
