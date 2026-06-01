@@ -33,7 +33,149 @@ function scaleCfg(cfg){
   if(cfg.forests)      c.forests      = cfg.forests.map(pt);
   if(cfg.goldNodes)    c.goldNodes    = cfg.goldNodes.map(pt);
   if(cfg.lostBases)    c.lostBases    = cfg.lostBases.map(pt);
+  if(cfg.guards)       c.guards       = cfg.guards.map(pt);   // {x,y,n,type} — n/type preserved by pt
+  if(cfg.captives)     c.captives     = cfg.captives.map(p=> Object.assign({}, p, { x:S(p.x), y:S(p.y) }, p.freeRadius!=null?{freeRadius:S(p.freeRadius)}:{}));
+  // thickets: scale only the geometry (x,y,w,h); density/mix/trail are unitless
+  if(cfg.thickets)     c.thickets     = cfg.thickets.map(t=>Object.assign({},t,{x:S(t.x),y:S(t.y),w:S(t.w),h:S(t.h)}));
   return c;
+}
+
+/* ============================================================================
+   TOPOGRAPHY FEATURES — 2x2 "walk-under" trees & rocks.
+   A feature occupies a 2x2 block anchored at its top-left (tx,ty). Its BOTTOM
+   row blocks movement (like the old single tile); its TOP row stays passable so
+   units walk UNDER the canopy (the depth-sorted draw in render.js occludes them).
+   state.features[] holds the records; state.feat[] is the per-cell mask
+   (0 none | 1 canopy/top passable | 2 base/bottom blocker) — the single source of
+   truth that keeps building (un)placement honest. See prompts/4x-walkunder-topography-plan.md.
+   ============================================================================ */
+
+// The one rule for "is cell i impassable from terrain OR a feature base?".
+// Tolerant of a missing feat[] (old saves) so it can be reused at runtime.
+function baseBlocked(state,i){ return (passableTerrain(state.tiles[i]) && (!state.feat || state.feat[i]!==2)) ? 0 : 1; }
+
+// Anchor a 2x2 feature at the even-lattice (tx,ty). TOLERANT: claims every land cell of
+// the 2x2 (floor-ifying any tree/rock), and simply SKIPS water cells (those keep blocking
+// as terrain — never paved). Fails only if the block is out of bounds, already owned by a
+// feature, or all-water. Floor-ifying makes the terrain pass draw ground so only drawFeature
+// draws the sprite. Consumes one rng() for the mirror seed.
+function addFeature(state, tx, ty, slot, rng){
+  const W=state.W,H=state.H;
+  if(tx<0||ty<0||tx+1>=W||ty+1>=H) return false;
+  let claimed=false, bsrc=-1;
+  for(let y=0;y<2;y++)for(let x=0;x<2;x++){
+    const i=(ty+y)*W+(tx+x), t=state.tiles[i];
+    if(state.feat[i]) continue;                                     // cell owned by another feature → skip (no double-claim)
+    if(t===T_WATER) continue;                                       // leave water as-is (still blocks); never pave it
+    if(t===T_TREE || t===T_ROCK) state.tiles[i]=T_GRASS;            // floor-ify → terrain pass draws ground
+    state.feat[i] = (y===1) ? 2 : 1;                                // bottom row blocks, top row passable-occupied
+    if(bsrc<0 || y===1) bsrc=i;                                     // sample biome from a bottom (base) cell
+    claimed=true;
+  }
+  if(!claimed) return false;                                        // nothing free (all-water / fully owned)
+  state.features.push({ slot, tx, ty, biome:state.biome[bsrc], v:rng() });
+  return true;
+}
+
+// Global rollout: turn EVERY tree & rock (incl. mountain-range rock) into a 2x2 walk-under
+// feature so none stay single-tile. Each tree/rock tile snaps to its even 2-tile lattice
+// anchor, so adjacent tiles merge into shared 2x2 blocks with no fragmentation or leftovers.
+// Geography-preserving — runs on a DERIVED rng so the main terrain stream is untouched.
+function buildTopoFeatures(state, rng){
+  const {W,H,tiles,feat}=state;
+  for(let ty=0;ty<H;ty++)for(let tx=0;tx<W;tx++){
+    const t=tiles[ty*W+tx];
+    if(t!==T_TREE && t!==T_ROCK) continue;          // every tree/rock — no biome exclusion
+    if(feat[ty*W+tx]) continue;                     // already absorbed into a feature
+    let ax=tx&~1, ay=ty&~1;                          // snap to the even 2-tile lattice
+    if(ax>W-2) ax=W-2; if(ay>H-2) ay=H-2;           // clamp so the 2x2 stays in-bounds
+    addFeature(state, ax, ay, (t===T_TREE)?'tree':'rock', rng);
+  }
+}
+
+// Remove the features owning any of `cells` (a Set of cell indices): clear their feat
+// mask, re-derive blocked for their footprints, and drop them from features[].
+// Deterministic (iterates features[] in order). Used by the bridge-carver + trail repair.
+function dropFeaturesAt(state, cells){
+  if(!cells || !cells.size) return;
+  const W=state.W, kill=new Set();
+  for(const f of state.features){
+    for(const k of cells){ const x=k%W, y=(k/W)|0;
+      if(x>=f.tx && x<f.tx+2 && y>=f.ty && y<f.ty+2){ kill.add(f); break; } }
+  }
+  if(!kill.size) return;
+  for(const f of kill) for(let y=0;y<2;y++)for(let x=0;x<2;x++){
+    const i=(f.ty+y)*W+(f.tx+x); state.feat[i]=0; if(state.blocked) state.blocked[i]=baseBlocked(state,i);
+  }
+  state.features = state.features.filter(f=>!kill.has(f));
+}
+
+// Cramped thickets (opt-in via cfg.thickets): pack a region wall-to-wall with 2x2
+// features on a 2-tile lattice, carve a guaranteed serpentine trail through it, and
+// validate reachability — geometric repair only (no rng) to stay deterministic.
+function placeThickets(state, rng){
+  const cfg=state.cfg; if(!cfg.thickets || !cfg.thickets.length) return;
+  const {W,H,tiles}=state;
+  const inB=(x,y)=>x>=0&&y>=0&&x<W&&y<H;
+  // POI keep-out (these GENERATE new blockers, unlike the conversion which only re-skins existing trees)
+  const protect=new Uint8Array(W*H);
+  const stamp=(px,py,rad)=>{ for(let y=-rad;y<=rad;y++)for(let x=-rad;x<=rad;x++){ if(inB(px+x,py+y)) protect[(py+y)*W+(px+x)]=1; } };
+  stamp(cfg.player.x|0, cfg.player.y|0, 8);
+  (cfg.enemies||[cfg.enemy]).forEach(b=>{ if(b) stamp(b.x|0,b.y|0,9); });
+  (cfg.lostBases||[]).forEach(b=> stamp(b.x|0,b.y|0,6));
+  (cfg.goldNodes||[]).forEach(g=> stamp(g.x|0,g.y|0,4));
+  const mustReach=(cfg.goldNodes||[]).concat(cfg.enemies||[cfg.enemy]).concat(cfg.lostBases||[]).filter(Boolean);
+
+  for(const t of cfg.thickets){
+    const rx=(t.x|0)&~1, ry=(t.y|0)&~1, rw=Math.max(2,t.w|0), rh=Math.max(2,t.h|0);   // even lattice (matches buildTopoFeatures)
+    const density=(t.density!=null?t.density:0.7), mix=(t.mix!=null?t.mix:0.5);
+    const axis=(t.trail==='h'||t.trail==='v')? t.trail : (rw>=rh?'h':'v');
+    // (1) carve a serpentine trail FIRST — monotone advance guarantees it reaches the far edge
+    const trail=new Set(), PW=2;
+    if(axis==='h'){ let cy=ry+(rh>>1);
+      for(let x=rx;x<rx+rw;x++){ for(let k=0;k<PW;k++){ const yy=Math.max(ry,Math.min(ry+rh-1, cy-(PW>>1)+k)); if(inB(x,yy)) trail.add(yy*W+x); }
+        cy=Math.max(ry+1,Math.min(ry+rh-2, cy+(((rng()*3)|0)-1))); } }
+    else { let cx=rx+(rw>>1);
+      for(let y=ry;y<ry+rh;y++){ for(let k=0;k<PW;k++){ const xx=Math.max(rx,Math.min(rx+rw-1, cx-(PW>>1)+k)); if(inB(xx,y)) trail.add(y*W+xx); }
+        cx=Math.max(rx+1,Math.min(rx+rw-2, cx+(((rng()*3)|0)-1))); } }
+    // (2) cram on the 2-tile lattice, trail-aware (roll density BEFORE legality → rng-count stable)
+    const touchesTrail=(tx,ty)=>{ for(let y=0;y<2;y++)for(let x=0;x<2;x++){ if(trail.has((ty+y)*W+(tx+x))) return true; } return false; };
+    const anyProtected=(tx,ty)=>{ for(let y=0;y<2;y++)for(let x=0;x<2;x++){ const cx=tx+x,cy=ty+y; if(inB(cx,cy)&&protect[cy*W+cx]) return true; } return false; };
+    for(let b=0;b<(rh>>1);b++)for(let a=0;a<(rw>>1);a++){
+      const tx=rx+2*a, ty=ry+2*b;
+      if(rng()>=density) continue;
+      if(anyProtected(tx,ty) || touchesTrail(tx,ty)) continue;
+      addFeature(state, tx, ty, (rng()<mix?'tree':'rock'), rng);
+    }
+    // (3) force trail tiles to passable floor (defensive; addFeature already skipped trail cells)
+    for(const k of trail) if(!passableTerrain(tiles[k])) tiles[k]=T_GRASS;
+    // (4) validate; geometric repair only — widen by dropping feature bases hugging the trail
+    if(!thicketReachOK(state, cfg.player, mustReach)){
+      const near=new Set();
+      for(const k of trail){ const x=k%W,y=(k/W)|0;
+        for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++){ const nx=x+dx,ny=y+dy; if(!inB(nx,ny))continue; const i=ny*W+nx; if(state.feat[i]===2) near.add(i); } }
+      dropFeaturesAt(state, near);   // blocked grid isn't built yet, so this just clears feat (re-derived at build)
+    }
+  }
+}
+
+// Flood from the player over a SCRATCH blocked (terrain-impassable OR feature base);
+// every mustReach POI must remain reachable. Used during thicket validation, before
+// the real blocked grid exists. Mirrors megaConnOK / the map.js carve flood.
+function thicketReachOK(state, anchor, mustReach){
+  const {W,H,tiles,feat}=state;
+  const sx=anchor.x|0, sy=anchor.y|0; if(sx<0||sy<0||sx>=W||sy>=H) return true;
+  const B=new Uint8Array(W*H);
+  for(let i=0;i<W*H;i++) B[i]=(passableTerrain(tiles[i]) && feat[i]!==2)?0:1;
+  const seen=new Uint8Array(W*H), stk=[sy*W+sx]; seen[sy*W+sx]=1;
+  while(stk.length){ const idx=stk.pop(), x=idx%W, y=(idx/W)|0;
+    if(x+1<W){const k=idx+1; if(!seen[k]&&!B[k]){seen[k]=1;stk.push(k);}}
+    if(x-1>=0){const k=idx-1; if(!seen[k]&&!B[k]){seen[k]=1;stk.push(k);}}
+    if(y+1<H){const k=idx+W; if(!seen[k]&&!B[k]){seen[k]=1;stk.push(k);}}
+    if(y-1>=0){const k=idx-W; if(!seen[k]&&!B[k]){seen[k]=1;stk.push(k);}}
+  }
+  for(const p of mustReach){ const px=p.x|0,py=p.y|0; if(px<0||py<0||px>=W||py>=H) continue; if(!seen[py*W+px]) return false; }
+  return true;
 }
 
 function newMap(idx){
@@ -119,19 +261,19 @@ function newMap(idx){
     if(rng()>0.7) set(x,y+1,T_DIRT);
   }
 
-  // lakes
-  cfg.lakes.forEach(l=>{
+  // lakes ( ||[] : a map may legitimately omit any feature list — e.g. the tech-only Episode X has no forests)
+  (cfg.lakes||[]).forEach(l=>{
     for(let y=-l.r-1;y<=l.r+1;y++) for(let x=-l.r-1;x<=l.r+1;x++){
       const d=Math.hypot(x,y); if(d< l.r + (rng()-0.5)*1.4) set(l.x+x,l.y+y,T_WATER);
     }
   });
   // rock clusters
-  cfg.rockClusters.forEach(c=>{
+  (cfg.rockClusters||[]).forEach(c=>{
     let cx=c.x,cy=c.y;
     for(let i=0;i<c.n;i++){ set(cx,cy,T_ROCK); cx+=((rng()*3)|0)-1; cy+=((rng()*3)|0)-1; }
   });
   // forests
-  cfg.forests.forEach(f=>{
+  (cfg.forests||[]).forEach(f=>{
     let cx=f.x,cy=f.y;
     for(let i=0;i<f.n;i++){ if(passableTerrain(tiles[cy*W+cx]||0)) set(cx,cy,T_TREE);
       cx+=((rng()*3)|0)-1; cy+=((rng()*3)|0)-1; if(!inB(cx,cy)){cx=f.x;cy=f.y;} }
@@ -145,6 +287,8 @@ function newMap(idx){
   clearArea(cfg.player.x,cfg.player.y,6);                  // bigger buildings need a bigger clear pad
   bases.forEach(b=> clearArea(b.x,b.y,7));                 // enemy base spans ~ax-2..ax+7 × ay..ay+6
   (cfg.lostBases||[]).forEach(b=> clearArea(b.x,b.y,4));   // abandoned outposts sit on clear ground too
+  (cfg.guards||[]).forEach(g=> clearArea(g.x,g.y,2));      // standing guard squads need clear footing
+  (cfg.captives||[]).forEach(c=> clearArea(c.x,c.y,3));    // the prison cell at the corridor's end
   // keep gold nodes reachable: clear the footprint to passable floor (climate theme kept)
   cfg.goldNodes.forEach(g=>{ for(let y=-2;y<=2;y++)for(let x=-2;x<=2;x++){
     if(inB(g.x+x,g.y+y)){ const j=(g.y+y)*W+(g.x+x); tiles[j]=T_GRASS;
@@ -159,11 +303,13 @@ function newMap(idx){
   const state = {
     cfg, W, H, tiles, variant, biome,
     megaSprites: [],                    // big animated landmark scenery (megasprites.js)
-    blocked: new Uint8Array(W*H),       // impassable (terrain or building)
+    features: [],                       // 2x2 walk-under trees/rocks: {slot,tx,ty,biome,v}
+    feat: new Uint8Array(W*H),          // per-cell feature mask: 0 none | 1 canopy(top) | 2 base(blocker)
+    blocked: new Uint8Array(W*H),       // impassable (terrain or building or feature base)
     explored: new Uint8Array(W*H),
     visible:  new Uint8Array(W*H),
     entities: [],
-    gold: cfg.startGold || 300,
+    gold: cfg.startGold!=null ? cfg.startGold : 300,   // explicit 0 must stay 0 (Ep X infiltration: no funding)
     supply: 0, supplyCap: 0,
     nextId: 1,
     zoom: zoom0,
@@ -183,13 +329,24 @@ function newMap(idx){
     over:false,
   };
 
-  // build blocked grid from terrain
-  for(let i=0;i<W*H;i++) state.blocked[i] = passableTerrain(tiles[i])?0:1;
+  // topography features (2x2 walk-under trees/rocks). A DERIVED rng keeps the main
+  // terrain stream untouched (geography unchanged); runs after the pads are cleared
+  // so it never drops a blocker on a base/gold spot. buildTopoFeatures re-skins the
+  // scattered decorative trees/rocks; placeThickets adds opt-in crammed-with-trail regions.
+  {
+    const topoRng = makeRng(cfg.seed*1000+909);
+    buildTopoFeatures(state, topoRng);
+    placeThickets(state, topoRng);
+  }
+
+  // build blocked grid from terrain + feature bases
+  for(let i=0;i<W*H;i++) state.blocked[i] = baseBlocked(state,i);
 
   // guarantee every gold node is reachable from the player's start — if a sea or
   // range happened to wall one off, carve a thin land bridge to the mainland.
   {
     const B=state.blocked, sx=cfg.player.x, sy=cfg.player.y, seen=new Uint8Array(W*H), st=[[sx,sy]];
+    const carved=new Set();             // feature-base cells a bridge tunnels through → drop those features
     seen[sy*W+sx]=1;
     while(st.length){ const [x,y]=st.pop();
       for(const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1]]){ const nx=x+dx,ny=y+dy;
@@ -198,10 +355,11 @@ function newMap(idx){
       if(seen[g.y*W+g.x]) continue;
       let x=g.x,y=g.y,guard=0;
       while(!seen[y*W+x] && guard++<W+H){
-        const k=y*W+x; if(B[k]){ B[k]=0; tiles[k]=T_DIRT; if(biome[k]===B_WATER||biome[k]===B_MOUNTAIN) biome[k]=landBiome; }
+        const k=y*W+x; if(B[k]){ if(state.feat[k]===2) carved.add(k); B[k]=0; tiles[k]=T_DIRT; if(biome[k]===B_WATER||biome[k]===B_MOUNTAIN) biome[k]=landBiome; }
         if(Math.abs(sx-x)>=Math.abs(sy-y)) x+=Math.sign(sx-x); else y+=Math.sign(sy-y);
       }
     }
+    dropFeaturesAt(state, carved);      // clear any feature the bridge cut through (rare path)
   }
 
   // final visual tidy: remove any strict single-tile biome orphans left by the
@@ -221,9 +379,16 @@ function newMap(idx){
 
   // ---- player start: HQ + Interns + Growth Hackers (+ optional People Ops) ----
   const phq = mkBuilding(state,'hq','player', cfg.player.x, cfg.player.y, true);
-  const nW = cfg.startWorkers || 4, nS = cfg.startSoldiers || 2;
+  const nW = cfg.startWorkers!=null ? cfg.startWorkers : 4;   // explicit 0 must stay 0 (Ep X starts economy-less)
+  const nS = cfg.startSoldiers!=null ? cfg.startSoldiers : 2;
   for(let i=0;i<nW;i++) mkUnit(state,'worker','player', cfg.player.x+ (i%3), cfg.player.y+4 + ((i/3)|0));  // below the 4×3 HQ
   for(let i=0;i<nS;i++) mkUnit(state,'soldier','player', cfg.player.x-1+(i%5), cfg.player.y-2 - ((i/5)|0)); // above the HQ
+  // hand-specified extra starters — Episode X sends Nino in with two Lobbyists and no economy.
+  // each {type, n, level} spawns n units of `type` above the HQ, optionally pre-leveled.
+  if(cfg.startUnits) cfg.startUnits.forEach(g=>{ const lvl=g.level||0; for(let i=0;i<(g.n||1);i++){
+    const u=mkUnit(state, g.type, 'player', cfg.player.x-2+(i%5), cfg.player.y-4-((i/5)|0));
+    if(lvl && typeof CAREER!=='undefined'){ u.stars=Math.max(0,Math.min(CAREER.maxStars,lvl)); u.xp=CAREER.xpFor(u.stars); if(typeof applyVetHp==='function') applyVetHp(u,true); }
+  }});
   spawnVets(state);   // carry veterans from the previous campaign map (count grows every 2 maps)
   spawnHeroes(state); // named campaign heroes declared on the map (e.g. Nino on Episode VIII)
   if(cfg.startBarracks) mkBuilding(state,'barracks','player', cfg.player.x-3, cfg.player.y, true);
@@ -245,6 +410,27 @@ function newMap(idx){
     for(let y=-5;y<=6;y++)for(let x=-5;x<=6;x++){
       if(inB(b.x+x,b.y+y)) state.explored[(b.y+y)*W+(b.x+x)]=1;
     }
+  });
+
+  // ---- loose guard squads (Episode X corridor + the ring around the cell) ----
+  // Enemy units with NO base, flagged `guard` so the wave/cap logic in ai.js leaves them at their
+  // post (they still auto-engage when the player closes). Killing the ones around a captive frees it.
+  (cfg.guards||[]).forEach(g=>{
+    const n=g.n||3, type=g.type||'soldier';
+    for(let i=0;i<n;i++){ const u=mkUnit(state, type, 'enemy', g.x+(i%3)-1, g.y+((i/3)|0)); u.guard=true; }
+  });
+
+  // ---- captives held in the A&O prison-office (Episode X) ----
+  // Spawned NEUTRAL so neither side targets them and they don't count toward win/lose; freeCaptives()
+  // (core.js) flips one to the player once no enemy units remain within its freeRadius. A captive
+  // flagged `hero` joins the hero carryover on release (persists like Nino).
+  (cfg.captives||[]).forEach(cap=>{
+    if(cap.hero && typeof heroIsCarried==='function' && heroIsCarried(cap.name)) return;  // already freed in a prior run → spawns at HQ instead
+    const u=mkUnit(state, cap.type, 'neutral', cap.x, cap.y);
+    u.captive=true; u.freeRadius=cap.freeRadius||7;
+    if(cap.hero){ u.captiveHero=true; u.captiveName=cap.name; u.captiveSprite=cap.sprite; u.captiveLevel=cap.level||0; u.captiveDossier=cap.dossier;
+      if(cap.sprite) u.spriteType=cap.sprite; }   // show her real sprite even while caged
+    for(let y=-5;y<=6;y++)for(let x=-5;x<=6;x++){ if(inB(cap.x+x,cap.y+y)) state.explored[(cap.y+y)*W+(cap.x+x)]=1; }
   });
 
   // Buildings are bigger now, so a base/start can land on a gold node that config
@@ -414,7 +600,7 @@ function mkUnit(state,type,owner,tx,ty){
 function markBuilding(state,e,blockedVal){
   for(let y=0;y<e.h;y++)for(let x=0;x<e.w;x++){
     const tx=e.tx+x, ty=e.ty+y;
-    if(tx>=0&&ty>=0&&tx<state.W&&ty<state.H) state.blocked[ty*state.W+tx]=blockedVal?1:passableTerrain(state.tiles[ty*state.W+tx])?0:1;
+    if(tx>=0&&ty>=0&&tx<state.W&&ty<state.H) state.blocked[ty*state.W+tx]=blockedVal?1:baseBlocked(state, ty*state.W+tx);
   }
 }
 

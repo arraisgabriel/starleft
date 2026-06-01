@@ -361,7 +361,6 @@
     background:linear-gradient(100deg, rgba(128,28,38,.96), rgba(58,16,22,.9));
     box-shadow:0 4px 18px rgba(255,46,46,.4), inset 0 0 26px rgba(255,90,90,.14); transform:translateX(4px); }
   .sc-btn:active{ transform:translateX(1px); }
-  .sc-btn .ic{ font-size:1.25em; filter:drop-shadow(0 0 6px rgba(255,70,70,.55)); }
   .menu-news{ position:absolute; z-index:2; top:clamp(14px,5vh,46px); right:clamp(14px,3.5vw,52px);
     width:clamp(210px,24vw,300px); max-width:44vw; padding:14px 16px; border-radius:6px;
     background:linear-gradient(180deg, rgba(42,14,18,.9), rgba(18,8,11,.86)); border:1px solid #5a2730;
@@ -441,6 +440,32 @@
     .cr-aura{ animation:none; opacity:.5; }
     .cr-core{ animation:none; opacity:.6; filter:brightness(1.3) saturate(1.4); }
     .cr-spark{ animation:none; opacity:.6; transform:translate(-50%,-50%) scale(.9); }
+  }
+
+  /* ---------- Logo red-star glow (mirrors the crystal breath, in red) ---------- */
+  /* wrapper shrink-wraps the emblem so the glow can be pinned to the star's core */
+  .emblem-wrap{ position:relative; display:inline-flex; }
+  /* radial red glow centred on the star core (≈49% / 43% of the emblem),
+     screened onto the emblem so it brightens the star rather than dimming it */
+  .star-glow{ position:absolute; left:49%; top:43%; width:38%; height:34%;
+    transform:translate(-50%,-50%) scale(.9); border-radius:50%;
+    background:radial-gradient(circle,
+      rgba(255,150,140,.6) 0%, rgba(255,68,58,.34) 36%, rgba(208,28,28,.12) 62%, transparent 78%);
+    mix-blend-mode:screen; pointer-events:none; filter:blur(.5px);
+    animation:starGlowPulse 5.5s ease-in-out infinite;
+    will-change:opacity, transform, filter; }
+
+  @keyframes starGlowPulse{
+    0%,100%{ opacity:.28; transform:translate(-50%,-50%) scale(.9);
+             filter:blur(.5px) brightness(1.02); }
+    50%    { opacity:.66; transform:translate(-50%,-50%) scale(1.05);
+             filter:blur(.5px) brightness(1.28)
+                     drop-shadow(0 0 8px rgba(255,40,40,.4)); }
+  }
+
+  @media (prefers-reduced-motion: reduce){
+    .star-glow{ animation:none; opacity:.4; transform:translate(-50%,-50%) scale(1);
+                filter:blur(.5px) brightness(1.12); }
   }
 
   /* submenu screens (map select / documentation) */
@@ -531,16 +556,19 @@
       <span class="cr-spark" style="left:68.5%;top:52%;  --s:4px; --dur:4.4s; --d:1.1s"></span>
     </div>
     <div class="menu-logo">
-      <img class="emblem" src="assets/menu/logo.png" alt="STARLEFT"
-           onerror="this.style.display='none';this.nextElementSibling.style.display='inline-block';">
-      <span class="logo-star">★</span>
+      <span class="emblem-wrap">
+        <img class="emblem" src="assets/menu/logo.png" alt="STARLEFT"
+             onerror="this.style.display='none';this.nextElementSibling.style.display='inline-block';this.parentElement.querySelector('.star-glow').style.display='none';">
+        <span class="logo-star">★</span>
+        <span class="star-glow" aria-hidden="true"></span>
+      </span>
       <div class="logo-text">STARLEFT<small>DISRUPT · SCALE · CONQUER</small></div>
     </div>
     <nav class="menu-nav">
-      <button class="sc-btn" onclick="showDocs(true)"><span class="ic">▶</span> New Campaign</button>
-      <button class="sc-btn" onclick="showSub('mapScreen')"><span class="ic">🗺</span> Map Selection</button>
-      <button class="sc-btn" onclick="openLoadMenu()"><span class="ic">💾</span> Load Game</button>
-      <button class="sc-btn" onclick="showDocs(false)"><span class="ic">📖</span> Documentation</button>
+      <button class="sc-btn" onclick="showDocs(true)">New Campaign</button>
+      <button class="sc-btn" onclick="showSub('mapScreen')">Map Selection</button>
+      <button class="sc-btn" onclick="openLoadMenu()">Load Game</button>
+      <button class="sc-btn" onclick="showDocs(false)">Documentation</button>
     </nav>
     <aside class="menu-news">
       <h4>Field Tip</h4>

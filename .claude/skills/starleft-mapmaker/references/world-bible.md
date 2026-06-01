@@ -58,7 +58,7 @@ backlash beginning — write to *that*.
 
 **If extending past VII:** the descent was nowhere triumphant. Every one is dead because a nuke exploded, all the career units included. The startup failed and you have to start over. At the end of episode' VII everyone dies and the player has to build another company. 
 
-After that, the story arch for the next 7 episodes, to the episode 14, revolves around the company trying to research the digital cure for imortality. A chip that will aloow conscience transfer between human and machine bodies. At the end of episode 14 the player MUST chose one of the deceased career units to live again as a Reborn Cyborg.
+After that, the story arch for the next 7 episodes, to the episode 14, revolves around the company trying to research the digital cure for imortality. A chip that will alow conscience transfer between human and machine bodies. At the end of episode 14 the player MUST chose one of the deceased career units to live again as a Reborn Cyborg.
 
 
 ---

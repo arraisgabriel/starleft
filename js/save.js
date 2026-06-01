@@ -36,7 +36,8 @@ function serializeEntity(e){
 /* ---------- whole-state snapshot ---------- */
 // Skip: cfg (re-derived from MAPS), visible (recomputed by computeFog each frame),
 // _cmdSig/placing (transient UI), and the fields handled specially below.
-const SKIP = {cfg:1, visible:1, _cmdSig:1, placing:1, entities:1, selection:1, groups:1, blocked:1, explored:1};
+// feat[] is the per-cell topography mask — rebuilt from features[] on load (keeps saves small).
+const SKIP = {cfg:1, visible:1, _cmdSig:1, placing:1, entities:1, selection:1, groups:1, blocked:1, explored:1, feat:1};
 function serializeGame(){
   const s={};
   for(const k in G){ if(!SKIP[k]) s[k]=G[k]; }       // primitives + JSON-safe arrays (tiles/biome/megaSprites)
@@ -58,9 +59,13 @@ function deserializeGame(s){
   const META={v:1, mapIndex:1, savedAt:1, mapName:1, gameTime:1};
   for(const k in s){ if(!SKIP[k] && !META[k]) g[k]=s[k]; }
   g.cfg = scaleCfg(MAPS[s.mapIndex]);   // match the scaled cfg newMap() produces
-  g.blocked  = Uint8Array.from(s.blocked);
+  g.blocked  = Uint8Array.from(s.blocked);   // already carries feature-base blockers
   g.explored = Uint8Array.from(s.explored);
   g.visible  = new Uint8Array(g.W*g.H);
+  // rebuild the topography feature mask from features[] (not serialized): bottom row blocks, top passable
+  g.feat = new Uint8Array(g.W*g.H);
+  if(g.features) for(const f of g.features){ for(let y=0;y<2;y++)for(let x=0;x<2;x++){
+    const cx=f.tx+x, cy=f.ty+y; if(cx>=0&&cy>=0&&cx<g.W&&cy<g.H) g.feat[cy*g.W+cx]=(y===1)?2:1; } }
   g.entities = s.entities.map(e=>Object.assign({}, e));
   const byId = new Map(g.entities.map(e=>[e.id, e]));
   g.entities.forEach(e=>resolveRefs(e, byId));        // re-link cross-refs in place

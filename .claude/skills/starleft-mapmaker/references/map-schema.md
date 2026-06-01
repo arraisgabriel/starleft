@@ -84,6 +84,12 @@ entities. You never write tiles by hand.
   rockClusters: [ { x:48, y:20, n:18 } ],             // n ~10–18 rocks, scatter-walked
   forests:      [ { x:18, y:54, n:28 } ],             // n ~16–34 trees
   lostBases:    [ { x:36, y:50 } ],                   // OPTIONAL: neutral HQs the player reclaims by walking a unit up (VII only so far)
+
+  // ---- cramped "thicket" regions (OPTIONAL): pack a rectangle wall-to-wall with 2x2
+  //      walk-under trees/rocks, then carve a GUARANTEED traversable trail through it ----
+  thickets:     [ { x:30, y:14, w:16, h:12, density:0.85, mix:0.5, trail:'auto' } ],
+  // x,y = top-left (pre-scale); w,h = size (pre-scale); density 0..1 (lattice fill, ~0.7);
+  // mix 0..1 = P(tree) vs rock; trail 'h'|'v'|'auto' (carve along the longer axis).
 }
 ```
 
@@ -227,7 +233,13 @@ off the static table for mid/late maps — run `--gate` and react to what carryo
   Mirror amounts roughly between the player's cluster and each enemy's so no side is starved.
 - **lakes / rockClusters / forests** are texture and chokepoints. Use them to shape lanes between
   bases; don't wall a base in completely (the generator will bridge, but it looks forced). `r` for
-  lakes ~3–7; `n` for rocks ~10–18; `n` for forests ~16–34.
+  lakes ~3–7; `n` for rocks ~10–18; `n` for forests ~16–34. Scattered trees/rocks render as **2×2
+  walk-under features**: the lower 2 tiles block, the upper 2 are passable and units walk *under*
+  the canopy (depth-sorted). Mountain-range rock stays an impassable single-tile wall.
+- **thickets** (optional): a dense maze region — packs a `w×h` rectangle with 2×2 walk-under
+  trees/rocks at `density`, then carves and *guarantees* one traversable `trail` ('h'/'v'/'auto')
+  through it. The generator keeps a keep-out around spawns/bases/gold and re-validates reachability,
+  so it can't wall off an objective. Great for ambush corridors and "fight through the forest" beats.
 - **lostBases** (optional, the reclaim mechanic): neutral HQs placed in contested no-man's-land that
   the player captures by walking a unit to them — a strong narrative device for "reclaim what was
   lost." Mention them in the objective if used.

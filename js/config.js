@@ -351,6 +351,73 @@ Weaponize your buzzwords, circle back, and disrupt MegaCorp into bankruptcy. The
                 {x:51,y:5,amt:1700},{x:45,y:6,amt:1700},{x:54,y:36,amt:1700},{x:52,y:30,amt:1700},
                 {x:28,y:5,amt:1700},{x:34,y:12,amt:1700},
                 {x:28,y:26,amt:2600} ],
+  },
+  {
+    name:'X — The Acquihire',
+    enemyName:'A&O',
+    // A rescue INFILTRATION: you bring NO economy and NO funding — only Nino and your carried career
+    // veterans (their time to shine) muster at the entrance and punch down a long walled corridor of
+    // standing guard squads (cfg.guards) to the cell at the map's heart. Free BIBA (a captive HERO,
+    // cfg.captives) and the intern caged with her, reclaim the forward outpost just past the cell
+    // (lostBases), and only THEN bootstrap an economy off the arena gold to liquidate the three A&O
+    // campuses below. Career units carry like any map; the always-on vetScaling (js/balance.js)
+    // musters proportionate extra base defenders for the power you bring, so no hand-rebalance here.
+    aggression:1.5,
+    startGold:0, startWorkers:0, startSoldiers:0, startBarracks:false,   // infiltration: no funding, no workers, no factory — just the crew
+    graceTime:130, waveTimer:120,
+    crawl:{ episode:'EPISODE X', title:'THE ACQUIHIRE',
+      text:'The proof of concept works on paper and nowhere else. A blueprint is not a mind, and no one left on your payroll can bridge the gap.\n\nNino found the one who can. Her name is BIBA — the engineer who first dreamed the GRAAL, before A&O folded her lab into a portfolio and folded her into a cell. They do not want her working. They want her retained.\n\nA&O calls the place an office. It runs for miles — open plan, no doors that open from your side, talent filed in rows. The line to the people inside went silent long ago.\n\nThis time Nino does not walk in alone — but he walks in light. No funding, no factory, no campus at your back: only the names you carried this far, the survivors of every quarter since the crater. Reach the center, get Biba and the intern out, seize the outpost beyond the cell, and liquidate the three campuses between you and the way back.\n\nThere is no exit interview. Only an exit....' },
+    w:90, h:270,
+    seed:10,
+    player:{ x:45, y:10 },
+    // the inside of A&O: an endless dark server-farm/office — pure tech, coolant pools in the margins,
+    // no growing thing. Hand-placed rock walls (rockClusters) flank a central lane to read as a
+    // prison corridor; the lower third is left open as the arena.
+    terrain:{ biomes:['tech'], seaFrac:0.10, mtnFrac:0.08, forest:0 },
+    // Nino leads the break-in. Listed here (not just carried) so he is guaranteed present even when
+    // Episode X is entered from the map-select menu; the carryover dedups by name if he also carries.
+    heroes:[ { name:'Nino', type:'lobbyist', sprite:'nino', level:11, dossier:{
+      first:'Nino', last:'',
+      home:'the Glitch Sprawl',
+      family:'the first team — every name he hired, now on the memorial wall',
+      trauma:'being three streets out when the campus became a column of light',
+      dream:'to see one thing he helped build outlast the money that funded it',
+      crime:'authoring the laws that made a hundred rivals simply vanish',
+    } } ],
+    // BIBA — caged at the map's heart with a captive intern. Freed when every enemy unit inside her
+    // cell's freeRadius is dead (freeCaptives, core.js); on release she becomes a Level-10 Recruiter
+    // HERO and joins the hero carryover, persisting like Nino. The intern rejoins your workforce.
+    captives:[
+      { x:44, y:130, type:'recruiter', hero:true, name:'Biba', sprite:'biba', level:10, freeRadius:14,
+        dossier:{ first:'Biba', home:'the flooded arcologies of Lagos-2',
+          family:'raised six younger siblings on relief credits',
+          trauma:'watched her first squad triaged out of existence by an algorithm',
+          dream:'to keep one team alive long enough to age',
+          crime:'designing the chip A&O now kills to keep' } },
+      { x:48, y:130, type:'worker', freeRadius:12 },
+    ],
+    // standing guard squads of 3–4 (cfg.guards): four down the corridor, three ringing the cell.
+    // They hold their posts (ai.js excludes `guard` units from waves) and auto-engage on approach.
+    guards:[
+      // four corridor squads, spaced ~24 tiles apart so they pull one group at a time
+      { x:45, y:36, n:3 }, { x:45, y:60, n:3 }, { x:45, y:84, n:3 }, { x:45, y:106, n:3 },
+      // the cell ring — staged north→south (y120/132/140) so the climax isn't a single 9-unit alpha-strike
+      { x:44, y:120, n:3 }, { x:40, y:132, n:3 }, { x:49, y:140, n:3 },
+    ],
+    // the abandoned A&O outpost just past the cell — reclaim it (walk a unit up) for a forward HQ to
+    // build the army that cracks the arena. Your start HQ is 120 tiles north, so this is your real base.
+    lostBases:[ { x:45, y:150 } ],
+    enemies:[ {x:20,y:225, defenders:3}, {x:45,y:255, extraBarracks:true, defenders:4}, {x:70,y:225, defenders:3} ],
+    objective:'A&O has caged the GRAAL\'s architect, BIBA, in its prison-office. Punch down the corridor, free Biba and the intern held with her, reclaim the forward outpost, then liquidate all THREE A&O campuses.',
+    // rock walls flanking the central lane (x≈38–52) → a guided corridor; left wall x34, right wall x56
+    rockClusters:[ {x:34,y:26,n:16},{x:34,y:44,n:16},{x:34,y:62,n:16},{x:34,y:80,n:16},{x:34,y:98,n:16},{x:34,y:116,n:16},
+                   {x:56,y:26,n:16},{x:56,y:44,n:16},{x:56,y:62,n:16},{x:56,y:80,n:16},{x:56,y:98,n:16},{x:56,y:116,n:16},
+                   {x:30,y:200,n:12},{x:60,y:200,n:12} ],
+    // coolant pools in the side margins (don't block the lane) + a couple in the arena
+    lakes:[ {x:18,y:55,r:6},{x:72,y:45,r:6},{x:16,y:104,r:6},{x:74,y:90,r:6} ],
+    goldNodes:[ {x:43,y:6,amt:1800},{x:48,y:7,amt:1800},
+                {x:45,y:154,amt:2600},{x:38,y:166,amt:1800},{x:52,y:166,amt:1800},
+                {x:18,y:222,amt:1800},{x:24,y:230,amt:1800},{x:45,y:250,amt:2200},{x:66,y:230,amt:1800},{x:72,y:222,amt:1800} ],
   }
 ];
 

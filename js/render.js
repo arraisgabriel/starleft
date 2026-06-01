@@ -99,6 +99,15 @@ function render(state){
   //      FRONT draws over it. Sprite transparency makes the occlusion pixel-correct. ----
   const depth=[];
   if(state.megaSprites) for(const m of state.megaSprites) depth.push({y:megaSortY(m), m});
+  // 2x2 walk-under topography features: cull to view + gate on explored BEFORE the sort
+  // (a crammed map can have hundreds). Ground line = footprint bottom edge (ty+2)*TILE, so a
+  // unit in the passable TOP row (smaller y) sorts first and is occluded → walks under the canopy.
+  if(state.features) for(const f of state.features){
+    if(f.tx+2<=x0 || f.tx>=x1 || f.ty+2<=y0 || f.ty>=y1) continue;     // AABB cull
+    const si=(f.ty+1)*state.W + (f.tx+1);                              // one sample cell (shared w/ minimap/fog)
+    if(!state.explored[si]) continue;                                 // hidden until explored
+    depth.push({y:(f.ty+2)*TILE, f, dim:state.visible[si]!==1});      // neutral scenery: dim when not visible
+  }
   for(const e of state.entities){
     if(e.dead) continue;
     if(e.kind==='building'){
@@ -118,6 +127,7 @@ function render(state){
   for(const d of depth){
     if(d.b) drawBuilding(state, d.b, ox,oy, d.dim);
     else if(d.m) drawOneMega(state, d.m, ox,oy, x0,y0,x1,y1);
+    else if(d.f) drawFeature(state, d.f, ox,oy, d.dim);
     else drawUnit(state, d.u, ox,oy);
   }
 
@@ -357,6 +367,36 @@ function drawTreeTile(b,v,px,py){
   ctx.fillStyle=canopy; ctx.beginPath(); ctx.arc(px+16,py+14,9,0,6.28); ctx.fill();
   if(b===B_ICE){ ctx.fillStyle='rgba(255,255,255,.7)'; ctx.beginPath(); ctx.arc(px+13,py+11,4,0,6.28); ctx.fill(); }
   else { ctx.fillStyle='rgba(255,255,255,.07)'; ctx.beginPath(); ctx.arc(px+13,py+11,3,0,6.28); ctx.fill(); }
+}
+
+// ---- 2x2 walk-under topography feature (tree / rock) ----
+// Drawn in the depth sort, bottom-anchored on the footprint's ground line so units in
+// the passable TOP row are occluded (walk under the canopy) and units below draw over.
+// Phase 1 reuses the existing OPAQUE atlas cell scaled 2x2 (top row reads as a mound);
+// Phase 2 swaps in a transparent feature atlas inside drawFeatureSprite — no change here.
+function drawFeature(state, f, ox, oy, dim){
+  const px=f.tx*TILE+ox, py=f.ty*TILE+oy, w=2*TILE;
+  const overhang=1.12;                                   // slight upward growth, like buildings/megas
+  const dw=w*overhang, dh=dw;                            // square atlas cells
+  const dx=px+(w-dw)/2, dy=(f.ty+2)*TILE+oy - dh + 2;    // centered, bottom-anchored on the ground line
+  ctx.save();
+  if(dim) ctx.globalAlpha*=0.5;                          // explored-but-not-visible
+  drawFeatureSprite(f, dx, dy, dw, dh);
+  ctx.restore();
+}
+
+// Blit a feature sprite into the bottom-anchored box. Mirror-only orientation from f.v
+// (never rotate — a canopy must stay upright). Fallback chain: [Phase 2 transparent atlas]
+// → the existing opaque atlas cell → procedural drawTreeTile/drawRockTile, all scaled to the box.
+function drawFeatureSprite(f, dx, dy, dw, dh){
+  ctx.save();
+  if(f.v>=0.5){ ctx.translate(dx+dw/2, dy+dh/2); ctx.scale(-1,1); ctx.translate(-(dx+dw/2), -(dy+dh/2)); }
+  // PHASE 2 (art only): if a transparent feature atlas is loaded, blit it here and return.
+  const r = (typeof spriteFor==='function') ? spriteFor(f.biome, f.slot) : null;   // existing opaque atlas cell
+  if(r){ ctx.drawImage(ATLAS_IMG, r[0],r[1],r[2],r[3], dx,dy,dw,dh); ctx.restore(); return; }
+  ctx.translate(dx,dy); ctx.scale(dw/TILE, dh/TILE);                                // procedural fallback (atlas missing)
+  if(f.slot==='rock') drawRockTile(f.biome, f.v, 0, 0); else drawTreeTile(f.biome, f.v, 0, 0);
+  ctx.restore();
 }
 
 // Funding node: a brilliant, enigmatic PURPLE crystal cluster with a live
@@ -612,6 +652,17 @@ function renderMinimap(state){
     else                 c = BIOME_MINI[b] || '#1c2a1e';
     if(!state.visible[i]) c=shade(c,-30);
     mmx.fillStyle=c; mmx.fillRect(tx*sx,ty*sy,Math.ceil(sx),Math.ceil(sy));
+  }
+  // 2x2 topography features: their footprint cells are now plain floor, so re-dot them
+  // (same colors the T_TREE/T_ROCK tiles used) over the feature's 2-tile block.
+  if(state.features) for(const f of state.features){
+    const si=(f.ty+1)*state.W + (f.tx+1);
+    if(!state.explored[si]) continue;
+    const b=state.biome[si];
+    let c = f.slot==='rock' ? (b===B_VOLCANIC?'#3a241c': b===B_ICE?'#3a4854':'#3a3d44')
+                            : (b===B_DESERT?'#2e4a2a': b===B_VOLCANIC?'#1c1411':'#16241a');
+    if(!state.visible[si]) c=shade(c,-30);
+    mmx.fillStyle=c; mmx.fillRect(f.tx*sx, f.ty*sy, Math.ceil(sx*2), Math.ceil(sy*2));
   }
   for(const e of state.entities){
     if(e.dead) continue;

@@ -333,7 +333,10 @@ function onVictory(){
   const es=document.getElementById('endScreen');
   const beaten=G.cfg.enemyName||'the competition';
   if(mapIndex < MAPS.length-1){
-    const vets = (typeof eligibleVets==='function') ? eligibleVets(G) : [];
+    // infiltration map (Ep X, cfg.noCarryVets): no vets deployed here, so don't run the chooser and
+    // don't overwrite the carryover — the roster waiting outside rejoins unchanged next quarter.
+    const keepRoster = !!(G.cfg && G.cfg.noCarryVets);
+    const vets = (!keepRoster && typeof eligibleVets==='function') ? eligibleVets(G) : [];
     const cap  = (typeof vetCarryCountFor==='function') ? vetCarryCountFor(mapIndex+1) : 0;
     es.className='overlay win'; es.style.display='flex';
     es.innerHTML=`<div class="big">📉</div><h1>ACQUIHIRED</h1>
@@ -343,8 +346,8 @@ function onVictory(){
       ${vets.length? `<div class="carry-head">Who deploys to the next quarter? <span class="carry-count" id="carry-count"></span></div>
         <div class="carry-list" id="carry-list"></div>` : ''}
       <button class="btn" id="nextBtn">▶ Next Quarter</button>`;
-    const proceed=(chosen)=>{ es.style.display='none'; setCarryover(chosen);
-      if(typeof captureHeroes==='function') captureHeroes(G);   // heroes auto-carry (not chooser-driven) until they die
+    const proceed=(chosen)=>{ es.style.display='none'; if(!keepRoster) setCarryover(chosen);
+      if(typeof captureHeroes==='function') captureHeroes(G);   // heroes auto-carry (not chooser-driven) until they die — incl. freed Biba
       mapIndex++; showCrawl(mapIndex, ()=>loadMap(mapIndex)); };
     if(vets.length){ buildCarryChooser(document.getElementById('carry-list'), document.getElementById('carry-count'), vets, cap, document.getElementById('nextBtn'), proceed); }
     else { document.getElementById('nextBtn').onclick=()=>proceed([]); }

@@ -8,7 +8,9 @@ function enemyAI(state,dt){
   if(!grace && !state._graceWarned){ state._graceWarned=true;
     toast('📣 '+(state.cfg.enemyName||'The rival')+' just closed a funding round — incoming!'); }
   // enemy barracks auto-produce soldiers (free) up to a cap that grows over time
-  const enemyUnits = state.entities.filter(e=>e.owner==='enemy'&&e.kind==='unit'&&!e.dead);
+  // `guard` units (Episode X corridor/cell squads) are excluded: they don't count toward the
+  // production cap and are never swept into a wave, so they hold their post instead of marching off.
+  const enemyUnits = state.entities.filter(e=>e.owner==='enemy'&&e.kind==='unit'&&!e.dead&&!e.guard);
   const enemyBarracks = state.entities.filter(e=>e.owner==='enemy'&&e.type==='barracks'&&!e.dead&&!e.constructing);
   // smaller standing force early, ramps up to a fixed ceiling (so a massed
   // player army can eventually overwhelm them instead of being out-scaled forever)

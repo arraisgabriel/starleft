@@ -132,6 +132,7 @@ function captureVets(state){ setCarryover(eligibleVets(state)); }
 
 // inject the carried veterans near the player HQ at full HP, on top of the normal starters
 function spawnVets(state){
+  if(state.cfg.noCarryVets) return;   // infiltration map (Ep X): the veteran roster waits outside — only Nino + cfg.startUnits go in
   if(!carryoverVets.length) return;
   const c=state.cfg.player;
   carryoverVets.slice(0, vetCarryCount()).forEach((v,i)=>{
@@ -158,6 +159,9 @@ function captureHeroes(state){
 }
 // clear the hero carryover (a brand-new campaign / map-select replay starts heroless)
 function resetHeroes(){ carryoverHeroes = []; }
+// is a named hero already on the carryover track? (Episode X: a Biba already freed in a prior run
+// rides the carryover and spawns at HQ, so map.js must NOT also spawn her as a captive again.)
+function heroIsCarried(name){ return carryoverHeroes.some(h=>h.heroId===name); }
 
 // Look up a hero's visual sprite override from the map configs (the single source of truth:
 // heroes[].sprite). Lets us derive it anywhere — for carried heroes whose map no longer lists

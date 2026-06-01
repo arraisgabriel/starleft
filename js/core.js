@@ -55,6 +55,9 @@ function update(state, dt){
   // ---- reclaim abandoned outposts (a player unit walking up flips them) ----
   reclaimOutposts(state);
 
+  // ---- free captives once their guards are dead (Episode X: Biba + the intern) ----
+  freeCaptives(state);
+
   // ---- fog of war ----
   computeFog(state);
 
@@ -88,6 +91,38 @@ function reclaimOutposts(state){
       any=true;
       spawnRing(b.x,b.y,'#8effb0');
       toast('🚩 Outpost reclaimed — fight from the front!');
+    }
+  }
+  if(any){ recomputeSupply(state); computeFog(state); refreshUI(); }
+}
+
+/* =====================================================================
+   CAPTIVES (Episode X — the A&O prison-office)
+   ===================================================================== */
+// A neutral `captive` (spawned in map.js from cfg.captives) is freed the instant no living ENEMY
+// unit remains within its freeRadius — i.e. the player has cleared the guards penning it in. A
+// `captiveHero` (Biba) is promoted to a full player hero on release: she gains her level, dossier,
+// sprite and the `hero` flag, so captureHeroes() snapshots her into the carryover and she redeploys
+// every later map like Nino. A plain captive (the intern) just rejoins the workforce.
+function freeCaptives(state){
+  let any=false;
+  for(const u of state.entities){
+    if(u.dead || !u.captive) continue;
+    const R=(u.freeRadius||7)*TILE;
+    const stillGuarded = state.entities.some(e=> !e.dead && e.owner==='enemy' && e.kind==='unit' && dist(e,u)<R);
+    if(stillGuarded) continue;
+    u.captive=false; u.owner='player'; any=true;
+    spawnRing(u.x,u.y,'#8effb0');
+    if(u.captiveHero){
+      u.hero=true; u.heroId=u.captiveName;
+      if(u.captiveSprite) u.spriteType=u.captiveSprite;
+      u.stars=Math.max(0, Math.min(CAREER.maxStars, u.captiveLevel||0));
+      u.xp=CAREER.xpFor(u.stars);
+      u.lore={ seed:(u.id||0)+1, events:[], fixed:u.captiveDossier||{ name:u.captiveName } };
+      applyVetHp(u, true);
+      toast('🦸 '+u.captiveName+' is free — the GRAAL\'s architect joins you.');
+    } else {
+      toast('🔓 Prisoner freed — they get back to work.');
     }
   }
   if(any){ recomputeSupply(state); computeFog(state); refreshUI(); }

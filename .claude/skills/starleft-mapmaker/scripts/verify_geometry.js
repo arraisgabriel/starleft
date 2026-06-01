@@ -133,10 +133,28 @@ for (const idx of indices) {
   for (const b of (cfg.enemies || [])) if (!approachable(b.x, b.y)) unreach++;
   check(unreach === 0, `unreachable gold/bases: ${unreach} (want 0)`);
 
+  // 4b) thicket trails — each declared crammed region must keep an OPEN, reachable corridor:
+  //     both ends of its trail axis must be reachable from the player (over the same flood).
+  let thBad = 0;
+  for (const t of (cfg.thickets || [])) {
+    const rx = t.x | 0, ry = t.y | 0, rw = Math.max(2, t.w | 0), rh = Math.max(2, t.h | 0);
+    const axis = (t.trail === 'h' || t.trail === 'v') ? t.trail : (rw >= rh ? 'h' : 'v');
+    let ax, ay, bx, by;
+    if (axis === 'h') { ay = by = Math.min(H - 1, ry + (rh >> 1)); ax = Math.max(0, rx); bx = Math.min(W - 1, rx + rw - 1); }
+    else { ax = bx = Math.min(W - 1, rx + (rw >> 1)); ay = Math.max(0, ry); by = Math.min(H - 1, ry + rh - 1); }
+    if (!approachable(ax, ay) || !approachable(bx, by)) thBad++;
+  }
+  if ((cfg.thickets || []).length) check(thBad === 0, `thickets with no reachable trail: ${thBad} (want 0)`);
+
   // 5) determinism
   let st2; try { st2 = newMap(idx); } catch (e) { st2 = null; }
   let diff = 0; if (st2) for (let i = 0; i < N; i++) { if (tiles[i] !== st2.tiles[i] || biome[i] !== st2.biome[i]) diff++; }
   check(st2 && diff === 0, `non-deterministic tiles: ${diff} (want 0)`);
+  // 5b) topography features must be deterministic too (element-wise tx/ty/slot)
+  const fa = st.features || [], fb = (st2 && st2.features) || [];
+  let fdiff = (fa.length !== fb.length) ? Math.abs(fa.length - fb.length) : 0;
+  for (let i = 0; i < Math.min(fa.length, fb.length); i++) if (fa[i].tx !== fb[i].tx || fa[i].ty !== fb[i].ty || fa[i].slot !== fb[i].slot) fdiff++;
+  check(st2 && fdiff === 0, `non-deterministic topography features: ${fdiff} (want 0)`);
 
   // 6) perf (maps build once, behind the intro crawl — so this is a soft heads-up, not a gate)
   warn(ms < 600, `build time ${ms.toFixed(1)}ms (slow, but builds once behind the crawl)`);

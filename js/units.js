@@ -181,6 +181,7 @@ function canPlaceAt(state, type, tx, ty){
     const cx=tx+x, cy=ty+y;
     if(cx<0||cy<0||cx>=state.W||cy>=state.H) return false;
     if(state.blocked[cy*state.W+cx]) return false;
+    if(state.feat && state.feat[cy*state.W+cx]) return false;   // no building under/over a 2x2 topography feature
     if(!state.explored[cy*state.W+cx]) return false;
   }
   // not on top of entities
@@ -299,6 +300,7 @@ function spawnTrained(state,b,type){
 }
 
 function updateUnit(state,u,dt){
+  if(u.captive){ u._actState=null; u.vx=0; u.vy=0; u.path=null; return; }   // imprisoned: stands inert until freed
   let cmd=u.cmd;
   const def=DEF[u.type];
   u._actState=null;   // set to 'attack' / 'mine' / 'heal' below (drives action sprites)
