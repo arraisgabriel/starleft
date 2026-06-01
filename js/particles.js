@@ -19,6 +19,8 @@
   const _hidpi = (window.devicePixelRatio||1) > 1.5;
   const MAX = _rm ? 0 : (_touch ? 130 : (_hidpi ? 280 : 340));
   const PER_FEATURE   = 26;    // target live particles per in-view feature (capped by MAX)
+  const DENSITY       = 1/3;   // tree/grass topography particle-COUNT scale (kept here — trees look good as-is; quantity only)
+  const OTHER_DENSITY = DENSITY*0.8; // every NON-grass biome: 20% sparser still (trees exempt — no extra cut on them)
   const SPAWN_PER_PASS= 26;    // ramp speed
   const R = Math.random;
 
@@ -122,9 +124,10 @@
       _inview.push(f); if(_inview.length>=600) break;
     }
     if(!_inview.length) return;
-    // grass/forest topography stays sparse: scale the density target toward a third where trees dominate
-    let _grass=0; for(let i=0;i<_inview.length;i++) if(_inview[i].biome===B_GRASS) _grass++;
-    const target=Math.round(Math.min(MAX, _inview.length*PER_FEATURE) * (1 - (_grass/_inview.length)*(2/3)));
+    // scale the live-particle target down (counts only — motion untouched). Trees hold at DENSITY; every
+    // other biome takes the extra 20% cut. Per-feature weight, applied after the MAX cap = a true reduction.
+    let _wsum=0; for(let i=0;i<_inview.length;i++) _wsum += (_inview[i].biome===B_GRASS ? DENSITY : OTHER_DENSITY);
+    const target=Math.round(Math.min(MAX, _inview.length*PER_FEATURE) * (_wsum/_inview.length));
     let budget=SPAWN_PER_PASS;
     while(_alive<target && budget-->0 && _free.length){
       _spawnFor(_inview[(R()*_inview.length)|0]);
