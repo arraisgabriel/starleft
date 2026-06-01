@@ -283,6 +283,10 @@
     box-shadow:0 2px 8px rgba(0,0,0,.5), inset 0 0 14px rgba(255,60,60,.05); }
   .tc-btn.armed{ border-color:#ff9a9a; border-left-color:#ff9a9a; box-shadow:0 0 12px rgba(255,80,80,.6); color:#fff; }
   .tc-btn:disabled{ opacity:.32; cursor:default; box-shadow:0 1px 4px rgba(0,0,0,.4); }   /* e.g. Stop with nothing selected */
+  /* Clear selection = the box-select glyph with a red ✕ struck over it (Esc equivalent) */
+  .tc-btn.ic-clear{ position:relative; }
+  .tc-btn.ic-clear .clr-x{ position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
+    color:#ff4d4d; font-weight:800; font-size:21px; line-height:1; text-shadow:0 1px 2px rgba(0,0,0,.85); pointer-events:none; }
   #touch-controls > .tc-btn, #touch-controls .grp-chips{ flex:0 0 auto; }   /* keep tap-size in the scrollable single row */
   .grp-chips{ display:inline-flex; gap:4px; }
   .grp-chip{ min-width:38px; font-weight:700; font-size:15px; }
@@ -671,6 +675,7 @@
       <button class="tc-btn" id="btn-army" title="Select all units">⛶</button>
       <button class="tc-btn" id="btn-minimap" title="Toggle minimap">🗺</button>
       <button class="tc-btn" id="btn-cancel" title="Cancel placement" style="display:none;">✕</button>
+      <button class="tc-btn ic-clear" id="btn-clear" title="Clear selection (Esc)">▭<span class="clr-x">✕</span></button>
       <span class="grp-chips">
         <button class="tc-btn grp-chip" data-g="1" title="Group 1 (tap recall, hold set)">1</button>
         <button class="tc-btn grp-chip" data-g="2" title="Group 2 (tap recall, hold set)">2</button>
@@ -816,9 +821,11 @@
 <script src="js/career.js"></script>
 <script src="js/balance.js"></script>
 <script src="js/lore_data.js"></script>
+<script src="js/dialog_data.js"></script>
 <script src="js/lore.js"></script>
 <script src="js/ai.js"></script>
 <script src="js/render.js"></script>
+<script src="js/dialogs.js"></script>
 <script src="js/water.js"></script>
 <script src="js/ui.js"></script>
 <script src="js/input.js"></script>

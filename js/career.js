@@ -70,6 +70,8 @@ function gainXp(u, killed, state){
       const d=buildDossier(u);
       eventToast(u.lore.events.length<=1 ? `📖 <b>${d.full}</b> of ${d.home}: ${last.text}` : `📖 <b>${d.first}</b>: ${last.text}`, 8800);
     }
+    // in-world dialog: the unit speaks its freshest life-event in a box above its head
+    if(last && last.say && typeof sayLoreEvent==='function') sayLoreEvent(u, last.say, last.tone);
   }
 }
 

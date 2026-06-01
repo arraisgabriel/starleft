@@ -172,6 +172,9 @@ function render(state){
   // ---- selection ring effects ----
   drawRings(ox,oy);
 
+  // ---- in-world unit dialog boxes — drawn last in world space, above every sprite ----
+  if(typeof drawDialogs==='function') drawDialogs(state);
+
   ctx.restore();   // leave world space
 
   // ---- phase 3: screen-space overlays (CSS px, dpr-scaled, NOT world) ----

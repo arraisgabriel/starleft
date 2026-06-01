@@ -17,6 +17,9 @@ function refreshUI(){
 
   const sel=G.selection.filter(e=>!e.dead);
 
+  // ---- in-world "unit selected" bark: fires only when the selection becomes a NEW single unit ----
+  if(typeof onSelectionRefresh==='function') onSelectionRefresh(sel);
+
   // ---- info text (cheap text updates — safe to refresh every call) ----
   if(!sel.length){
     elTitle.textContent='Nothing selected';
@@ -329,7 +332,7 @@ function startTipRotation(){
   setInterval(()=>{ const s=document.getElementById('startScreen'); if(s && s.style.display!=='none') pickTip(); }, 15000);
 }
 function loadMap(idx){
-  G=newMap(idx); syncHud(); clampCam(G); refreshUI(); running=true;
+  G=newMap(idx); if(typeof resetDialogs==='function') resetDialogs(); syncHud(); clampCam(G); refreshUI(); running=true;
   toast('Quarter '+(idx+1)+': '+G.cfg.name);
 }
 

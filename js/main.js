@@ -187,6 +187,7 @@ function wireTouchControls(){
   on('btn-stop', ()=>{ if(G){ stopSelection(); refreshUI(); } });
   on('btn-box', ()=>{ armBoxSelect=!armBoxSelect; updateBoxBtn(); toast(armBoxSelect?'Box select: drag to select':'Box select off'); });
   on('btn-army', ()=>{ selectAllArmy(); });
+  on('btn-clear', ()=>{ if(G && G.selection.length){ clearSelection(); refreshUI(); } });   // Esc equivalent: drop the current selection
   on('btn-cancel', ()=>{ if(G&&G.placing){ G.placing=null; refreshUI(); } });
   on('btn-save', ()=>{ saveGame(); });
   on('btn-roster', ()=>{ if(typeof showRoster==='function') showRoster(); });

@@ -93,7 +93,13 @@ function rollLifeEvent(u, level){
   const i = pool[(r()*pool.length)|0];
   u.lore.events.push({ lvl:level, i });
   const t = all[i];
-  return { text:_loCap(d.fill(t.text)), fx:t.fx, tone:t.tone };
+  // companion "say" for the in-world dialog box: a short first-person reaction. LORE_SAY
+  // (dialog_data.js) is index-aligned with this APPEND-ONLY events array; fall back to a
+  // tone+aspect bucket so a level-up is never mute. Filled through the same dossier slots.
+  const _sayRaw = (typeof LORE_SAY!=='undefined' && LORE_SAY[i]) ? LORE_SAY[i]
+                : (typeof loreSayFallback==='function' ? loreSayFallback(t.req, t.tone) : null);
+  const say = _sayRaw ? _loCap(d.fill(_sayRaw)) : null;
+  return { text:_loCap(d.fill(t.text)), fx:t.fx, tone:t.tone, say };
 }
 
 /* ---- light effects (only a minority of events carry fx) ---- */

@@ -67,6 +67,9 @@ function update(state, dt){
   // ---- water tide height-field + flow phase (pure visual; freezes on pause with state.time) ----
   if(typeof updateWater==='function') updateWater(state, dt);
 
+  // ---- in-world unit dialog boxes: age out ~8s speech bubbles (pure visual) ----
+  if(typeof updateDialogs==='function') updateDialogs(state, dt);
+
   // ---- cleanup dead ----
   let changed=false;
   for(const e of state.entities){

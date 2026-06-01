@@ -131,7 +131,7 @@ function loadGame(key){
   G=deserializeGame(d); mapIndex=d.mapIndex|0;
   ['startScreen','mapScreen','docScreen','crawlScreen','endScreen','loadScreen']
     .forEach(id=>{ const el=document.getElementById(id); if(el) el.style.display='none'; });
-  syncHud(); clampCam(G); computeFog(G); refreshUI(); running=true;
+  if(typeof resetDialogs==='function') resetDialogs(); syncHud(); clampCam(G); computeFog(G); refreshUI(); running=true;
   toast('Loaded: '+(d.mapName||'game'));
 }
 
