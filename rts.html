@@ -24,10 +24,25 @@
   .ico.gold { background:linear-gradient(135deg,#ffe27a,#f0a500); box-shadow:0 0 6px #f0a50080;}
   .ico.sup  { background:linear-gradient(135deg,#ffb0a0,#d64141); box-shadow:0 0 6px #d6414180;}
   #objective { margin-left:auto; font-size:13px; color:#ccaab0; font-weight:500; max-width:46%; }
-  /* Save/Events live in the top bar so they're visible on desktop too (touch-controls are hidden there) */
-  #topbar #btn-save, #topbar #btn-events, #topbar #btn-fs, #topbar #btn-news { min-width:0; min-height:0; height:34px; padding:0 14px; margin-left:14px;
-    font-size:13px; font-weight:700; letter-spacing:.4px; gap:6px; white-space:nowrap; flex:0 0 auto; }
-  #topbar #btn-events, #topbar #btn-fs, #topbar #btn-news { margin-left:0; }
+  /* Unified top-right menu — one button (same look as the in-game buttons) that
+     toggles a dropdown holding News / Roster / Events / Save / Fullscreen.
+     Lives in the top bar so it works on desktop and mobile alike. */
+  #top-menu{ position:relative; flex:0 0 auto; }
+  #topbar #btn-topmenu{ position:relative; min-width:0; min-height:0; height:34px; padding:0 16px;
+    font-size:13px; font-weight:700; letter-spacing:.6px; gap:6px; white-space:nowrap;
+    clip-path:polygon(0 0,100% 0,94% 100%,0 100%); }
+  #btn-topmenu.open{ border-color:#ff9a9a; border-left-color:#ff9a9a; color:#fff;
+    box-shadow:0 0 12px rgba(255,80,80,.55), inset 0 0 14px rgba(255,90,90,.12); }
+  #btn-topmenu .tc-badge{ position:absolute; top:-6px; right:-5px; margin-left:0; }
+  #topmenu-panel{ position:absolute; top:calc(100% + 8px); right:0; z-index:30;
+    display:flex; flex-direction:column; gap:6px; padding:8px; min-width:184px;
+    background:linear-gradient(180deg,rgba(40,21,25,.98),rgba(24,12,15,.98));
+    border:1px solid #6f2630; border-top:2px solid #ff5a5a; border-radius:4px;
+    box-shadow:0 10px 28px rgba(0,0,0,.6), inset 0 0 18px rgba(255,60,60,.05); }
+  #topmenu-panel .tc-btn{ width:100%; height:42px; min-height:42px; min-width:0;
+    justify-content:flex-start; gap:11px; padding:0 14px;
+    font-size:14px; font-weight:700; letter-spacing:.4px; white-space:nowrap;
+    clip-path:polygon(0 0,100% 0,97% 100%,0 100%); }
   .tc-badge { display:inline-flex; align-items:center; justify-content:center; min-width:16px; height:16px;
     padding:0 4px; margin-left:5px; border-radius:9px; background:#d64141; color:#fff;
     font-size:10px; font-weight:800; line-height:1; box-shadow:0 0 6px #d6414188; }
@@ -253,7 +268,8 @@
   }
 
   /* on-screen control cluster — hidden on desktop, shown on touch / narrow */
-  #touch-controls{ display:none; gap:6px; align-items:center; flex-wrap:wrap;
+  /* single horizontal row that scrolls sideways if it overflows — never wraps to a 2nd line */
+  #touch-controls{ display:none; gap:6px; align-items:center; flex-wrap:nowrap;
     padding:5px 8px; border-top:1px solid #462430; }
   .tc-btn{ min-width:44px; min-height:44px; padding:0 8px; border-radius:3px; cursor:pointer;
     background:linear-gradient(135deg, rgba(70,18,24,.92), rgba(28,10,14,.82));
@@ -262,6 +278,7 @@
     display:inline-flex; align-items:center; justify-content:center; touch-action:manipulation;
     box-shadow:0 2px 8px rgba(0,0,0,.5), inset 0 0 14px rgba(255,60,60,.05); }
   .tc-btn.armed{ border-color:#ff9a9a; border-left-color:#ff9a9a; box-shadow:0 0 12px rgba(255,80,80,.6); color:#fff; }
+  #touch-controls > .tc-btn, #touch-controls .grp-chips{ flex:0 0 auto; }   /* keep tap-size in the scrollable single row */
   .grp-chips{ display:inline-flex; gap:4px; }
   .grp-chip{ min-width:38px; font-weight:700; font-size:15px; }
 
@@ -303,7 +320,11 @@
     #topbar{ height:auto; min-height:var(--top-h); gap:10px; padding:4px 10px;
       font-size:12px; flex-wrap:wrap; }
     #topbar .lbl{ display:none; }
-    #objective{ font-size:11px; max-width:100%; flex-basis:100%; margin-left:0; }
+    /* keep the menu button on row 1 (pushed hard-right) and let the objective wrap below it
+       so the top bar stays two compact rows instead of sprawling */
+    #top-menu{ order:1; margin-left:auto; }
+    #objective{ order:2; font-size:11px; max-width:100%; flex-basis:100%; margin-left:0; }
+    #topmenu-panel{ min-width:180px; }
 
     #bottom{ height:auto; flex-direction:column; align-items:stretch; }
     #minimap-wrap{ display:none; }            /* reachable via the 🗺 overlay toggle */
@@ -566,11 +587,16 @@
     <div class="stat" title="Headcount vs capacity — build more Open-Plan HQs to hire more"><span class="ico sup"></span>👥 <span id="supply">0/0</span> <span class="lbl">Headcount</span></div>
     <div class="lbl">Quarter <span id="mapname">—</span></div>
     <div id="objective">Disrupt the competition.</div>
-    <button class="tc-btn" id="btn-news" title="Toggle live news ticker">📡 News</button>
-    <button class="tc-btn" id="btn-roster" title="Veterans &amp; Memorial">🎖 Roster</button>
-    <button class="tc-btn" id="btn-events" title="Notifications log">📜 Events<span id="events-badge" class="tc-badge" style="display:none;">0</span></button>
-    <button class="tc-btn" id="btn-save" title="Save game (⌘/Ctrl+S)">💾 Save</button>
-    <button class="tc-btn" id="btn-fs" title="Toggle fullscreen">⛶ Fullscreen</button>
+    <div id="top-menu">
+      <button class="tc-btn" id="btn-topmenu" title="Menu" aria-haspopup="true" aria-expanded="false">☰ Menu<span id="topmenu-badge" class="tc-badge" style="display:none;">0</span></button>
+      <div id="topmenu-panel" style="display:none;">
+        <button class="tc-btn" id="btn-news" title="Toggle live news ticker">📡 News</button>
+        <button class="tc-btn" id="btn-roster" title="Veterans &amp; Memorial">🎖 Roster</button>
+        <button class="tc-btn" id="btn-events" title="Notifications log">📜 Events<span id="events-badge" class="tc-badge" style="display:none;">0</span></button>
+        <button class="tc-btn" id="btn-save" title="Save game (⌘/Ctrl+S)">💾 Save</button>
+        <button class="tc-btn" id="btn-fs" title="Toggle fullscreen">⛶ Fullscreen</button>
+      </div>
+    </div>
     <!-- Live News Stream — thin ticker flush under the top bar (toggled by 📡 News) -->
     <div id="lns-ingame" style="display:none;"><div class="lns-tag">LIVE</div><div class="lns-host"></div></div>
   </div>

@@ -202,9 +202,14 @@ function logEvent(msg,isEvent){
   eventLogUnseen++; updateEventsBadge();
 }
 function updateEventsBadge(){
-  const b=document.getElementById('events-badge'); if(!b) return;
-  b.textContent = eventLogUnseen>99? '99+' : eventLogUnseen;
-  b.style.display = eventLogUnseen? '' : 'none';
+  const txt = eventLogUnseen>99? '99+' : String(eventLogUnseen);
+  const disp = eventLogUnseen? '' : 'none';
+  // the Events button now lives inside the collapsed top-menu, so mirror its
+  // unseen count onto the menu toggle too (#topmenu-badge) to stay visible
+  ['events-badge','topmenu-badge'].forEach(id=>{
+    const el=document.getElementById(id); if(!el) return;
+    el.textContent = txt; el.style.display = disp;
+  });
 }
 function toast(msg){
   const t=document.getElementById('toast'); t.textContent=msg; t.classList.remove('event'); t.classList.add('show');

@@ -185,6 +185,28 @@ function wireTouchControls(){
   on('btn-save', ()=>{ saveGame(); });
   on('btn-roster', ()=>{ if(typeof showRoster==='function') showRoster(); });
   on('btn-events', ()=>{ if(typeof showEvents==='function') showEvents(); });
+  // unified top-right menu: one button toggles a dropdown of News/Roster/Events/Save/Fullscreen
+  (function wireTopMenu(){
+    const wrap=document.getElementById('top-menu');
+    const btn=document.getElementById('btn-topmenu');
+    const panel=document.getElementById('topmenu-panel');
+    if(!wrap||!btn||!panel) return;
+    const close=()=>{ panel.style.display='none'; btn.classList.remove('open'); btn.setAttribute('aria-expanded','false'); };
+    const open =()=>{ panel.style.display='flex'; btn.classList.add('open');    btn.setAttribute('aria-expanded','true');  };
+    btn.addEventListener('click', e=>{ e.stopPropagation(); (panel.style.display==='flex')?close():open(); });
+    // picking any item runs its own action then collapses the menu
+    panel.querySelectorAll('.tc-btn').forEach(b=> b.addEventListener('click', close));
+    // tap/click anywhere outside, or Esc, closes it
+    document.addEventListener('click', e=>{ if(!wrap.contains(e.target)) close(); });
+    document.addEventListener('keydown', e=>{ if(e.key==='Escape') close(); });
+  })();
+  // flag when the cursor is over the top bar (or its open dropdown, a descendant) so the
+  // camera's edge-scroll stands down there — see updateCamera() / mouse.overHud in input.js
+  (function trackHudHover(){
+    const tb=document.getElementById('topbar'); if(!tb) return;
+    tb.addEventListener('pointerenter', ()=>{ mouse.overHud=true;  });
+    tb.addEventListener('pointerleave', ()=>{ mouse.overHud=false; });
+  })();
   on('btn-zoom-in', ()=>{ if(G) zoomAt(G, viewW()/2, VIEW_TOP+viewH()/2, 1.2); });
   on('btn-zoom-out',()=>{ if(G) zoomAt(G, viewW()/2, VIEW_TOP+viewH()/2, 1/1.2); });
   on('btn-minimap', ()=>{ const mw=document.getElementById('minimap-wrap'); if(mw) mw.classList.toggle('as-overlay'); });

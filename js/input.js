@@ -2,7 +2,10 @@
 /* =====================================================================
    INPUT
    ===================================================================== */
-const mouse={ sx:0, sy:0, wx:0, wy:0, edge:{l:0,r:0,u:0,d:0} };
+const mouse={ sx:0, sy:0, wx:0, wy:0, edge:{l:0,r:0,u:0,d:0}, overHud:false };
+let edgeTopHold=0;           // seconds the cursor has dwelt in the TOP edge band
+const EDGE_TOP_DELAY=1.5;    // wait this long before the top edge starts panning up — keeps the
+                            // top-bar (and its drop-down menu) easy to reach without yanking the view
 const keys={};
 
 // ---- Unified pointer gesture state (mouse + touch via Pointer Events) ----
@@ -230,14 +233,21 @@ function updateCamera(state,dt){
   if(keys['d']||keys['arrowright']) dx+=spd;
   if(keys['w']||keys['arrowup']) dy-=spd;
   if(keys['s']||keys['arrowdown']) dy+=spd;
-  // edge-scroll is desktop-only — on touch the one-finger drag pans instead
-  if(lastPointerWasMouse){
+  // edge-scroll is desktop-only — on touch the one-finger drag pans instead.
+  // While the cursor is over the HUD (top bar / its menu) we suppress edge-scroll entirely
+  // so reaching the top-right menu — or hovering its open dropdown — never moves the view.
+  if(lastPointerWasMouse && !mouse.overHud){
     const m=18, vw=viewW(), vh=cv.height/dpr;
     if(mouse.sx<m) dx-=spd;
     if(mouse.sx>vw-m) dx+=spd;
-    if(mouse.sy<m+VIEW_TOP && mouse.sy>0) dy-=spd;
+    // TOP edge: require a short dwell first. A quick reach toward the top bar passes
+    // through in well under EDGE_TOP_DELAY, so it no longer yanks the camera up.
+    if(mouse.sy<m+VIEW_TOP && mouse.sy>0){
+      edgeTopHold+=dt;
+      if(edgeTopHold>=EDGE_TOP_DELAY) dy-=spd;
+    } else { edgeTopHold=0; }
     if(mouse.sy>vh-m) dy+=spd;
-  }
+  } else { edgeTopHold=0; }
   state.camX+=dx; state.camY+=dy; clampCam(state);
 }
 
