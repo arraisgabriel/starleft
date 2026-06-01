@@ -158,44 +158,25 @@
   function _updateFog(state){
     const el=document.getElementById('amb-fog'); if(!el) return;
     if((typeof running!=='undefined' && !running) || state.over){ el.style.opacity='0'; return; }
-    const [x0,y0,x1,y1]=_bounds(state), W=state.W, H=state.H, N=FEAT_SIZE;
-    // biome fractions — for full-biome ICE / VOLCANIC maps (those ARE the biome everywhere)
-    const sx=Math.max(1,((x1-x0)/36)|0), sy=Math.max(1,((y1-y0)/36)|0);
-    let tot=0,ice=0,vol=0;
-    for(let ty=y0;ty<y1;ty+=sy)for(let tx=x0;tx<x1;tx+=sx){
-      const i=ty*W+tx; if(!state.explored[i]) continue; tot++;
-      const b=state.biome[i]; if(b===B_ICE)ice++; else if(b===B_VOLCANIC)vol++;
-    }
-    if(!tot){ el.style.opacity='0'; return; }
-    const fi=ice/tot, fv=vol/tot;
-    // MOUNTAINS = the crystal ROCK FEATURES (biome B_MOUNTAIN), NOT the ground biome — on desert/grass
-    // maps the mountain biome is sparse, so the crystals sit on desert/grass; key off the features.
-    const z=state.zoom||1, vw=viewW()/z, vh=viewH()/z;
-    // The MOUNTAIN ROCK features (biome B_MOUNTAIN) — the "normal mountains". Funding/resource crystals
-    // are `goldmine` ENTITIES (not in state.features), so they never affect the fog.
+    const N=FEAT_SIZE, z=state.zoom||1, vw=viewW()/z, vh=viewH()/z;
+    // The CSS wash means EXACTLY ONE thing: a PLAYER unit standing among the MOUNTAIN rock features
+    // (state.features, biome B_MOUNTAIN). No biome-wide veils — the old ice/volcanic/forest washes are
+    // gone (their ambiance is the canvas snow/ember/firefly particles). Funding crystals are goldmine
+    // ENTITIES, never here. Strength = how SURROUNDED the unit is by mountains (peaks deep inside);
+    // gated to on-screen units so a far/off-screen one never washes; the base stays clear everywhere.
     _mtn.length=0;
     if(state.features) for(const f of state.features){ if(f.biome===B_MOUNTAIN) _mtn.push(f); }
-    // Wash strength = how SURROUNDED a PLAYER unit is by mountains, so it PEAKS when the unit is deep
-    // inside (not at the entrance). Gated to on-screen units (central 90% of the view) so a far /
-    // off-screen unit never washes; the base (no unit in mountains) stays clear.
     let surround=0;
     if(_mtn.length) for(const e of state.entities){
       if(e.dead || e.owner!=='player' || e.kind!=='unit') continue;
       if(e.x < state.camX+vw*0.05 || e.x > state.camX+vw*0.95 ||
-         e.y < state.camY+vh*0.05 || e.y > state.camY+vh*0.95) continue;       // must be within the viewed area
+         e.y < state.camY+vh*0.05 || e.y > state.camY+vh*0.95) continue;       // within the viewed area
       const utx=e.x/TILE, uty=e.y/TILE; let nearby=0;
       for(const f of _mtn) if(Math.abs(utx-(f.tx+N/2))<=5 && Math.abs(uty-(f.ty+N/2))<=5) nearby++;
-      surround += Math.min(1.15, nearby/4);                                    // ~1 mtn near = .25 (edge) → 4+ = full (deep in)
+      surround += Math.min(1.15, nearby/4);                                    // ~1 mtn near = edge → 4+ = deep in
     }
-    let op=0, tint='rgba(150,165,185,.55)';
-    if(surround>0){
-      op=Math.min(.384, surround*0.298); tint='rgba(154,170,194,.6)';         // a unit deep among mountains ≈ .34
-    }
-    else if(fv>0.25){ op=Math.min(.4, fv*0.55); tint='rgba(150,70,45,.45)'; }   // volcanic: warm smoke
-    else if(fi>0.25){ op=Math.min(.45, fi*0.6); tint='rgba(190,215,230,.45)'; } // ice: pale veil
-    // grass/forest: NO CSS wash — the open base stays clear (forest ambiance is the canvas fireflies/pollen)
-    el.style.setProperty('--fog-tint', tint);
-    el.style.opacity=op.toFixed(3);
+    el.style.setProperty('--fog-tint', 'rgba(154,170,194,.6)');
+    el.style.opacity = (surround>0 ? Math.min(.384, surround*0.298) : 0).toFixed(3);
   }
 
   window.updateParticles=updateParticles;
