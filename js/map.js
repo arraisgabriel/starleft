@@ -111,6 +111,24 @@ function dropFeaturesAt(state, cells){
   state.features = state.features.filter(f=>!kill.has(f));
 }
 
+// Stamp a funding node's 3x3 footprint into the topography masks so it occupies 9 slots
+// exactly like a tree/rock feature: the bottom FEAT_BLOCK_FROM rows block, the upper rows
+// are passable walk-under, and the center row stays passable so Interns can still reach it.
+// Never UNblocks (defensive ||) so it can't punch a hole in an overlapping mega/building.
+// Stores the footprint anchor (ftx,fty) for the renderer & minimap. Also called on load
+// (save.js), since feat[] is rebuilt from features[] only and would otherwise miss nodes.
+function markFundingNode(state, e){
+  const W=state.W, H=state.H, N=FEAT_SIZE;
+  const tx=((e.x/TILE)|0)-(N>>1), ty=((e.y/TILE)|0)-(N>>1);
+  e.ftx=tx; e.fty=ty;
+  for(let y=0;y<N;y++)for(let x=0;x<N;x++){
+    const gx=tx+x, gy=ty+y; if(gx<0||gy<0||gx>=W||gy>=H) continue;
+    const i=gy*W+gx, block=(y>=FEAT_BLOCK_FROM);
+    state.feat[i] = block ? 2 : 1;
+    if(state.blocked) state.blocked[i] = block ? 1 : (state.blocked[i]||baseBlocked(state,i));
+  }
+}
+
 // Cramped thickets (opt-in via cfg.thickets): pack a region wall-to-wall with 2x2
 // features on a 2-tile lattice, carve a guaranteed serpentine trail through it, and
 // validate reachability — geometric repair only (no rng) to stay deterministic.
@@ -374,9 +392,11 @@ function newMap(idx){
   // each footprint is validated by a flood-fill so it can't wall off a node/base.
   placeMegaSprites(state, makeRng(cfg.seed*1000+4242));
 
-  // gold nodes
+  // gold nodes. amount0 = starting funding (drives the glow's depletion fade); r is the
+  // gather radius, widened so Interns mine from the 3x3 rock's perimeter rather than one
+  // point. The 3x3 walk-under footprint is stamped after the relocation pass below.
   cfg.goldNodes.forEach(g=>{
-    state.entities.push(mkEntity(state,'goldmine', null, g.x, g.y, {amount:g.amt}));
+    state.entities.push(mkEntity(state,'goldmine', null, g.x, g.y, {amount:g.amt, amount0:g.amt, r:Math.round(TILE*1.5)}));
   });
 
   // ---- player start: HQ + Interns + Growth Hackers (+ optional People Ops) ----
@@ -459,6 +479,16 @@ function newMap(idx){
           if(reach[j]){ found=j; break; } q.push(j); } }   // expand across walls to the nearest reachable tile
       if(found>=0){ e.x=((found%W)+0.5)*TILE; e.y=(((found/W)|0)+0.5)*TILE; }
     }
+  }
+
+  // give every funding node its 3x3 walk-under footprint, now that relocation has
+  // settled each node's final tile: clear any topo feature it overlaps, then stamp.
+  for(const e of state.entities){
+    if(e.type!=='goldmine') continue;
+    const N=FEAT_SIZE, tx=((e.x/TILE)|0)-(N>>1), ty=((e.y/TILE)|0)-(N>>1), cells=new Set();
+    for(let y=0;y<N;y++)for(let x=0;x<N;x++){ const gx=tx+x, gy=ty+y; if(gx>=0&&gy>=0&&gx<W&&gy<H) cells.add(gy*W+gx); }
+    dropFeaturesAt(state, cells);
+    markFundingNode(state, e);
   }
 
   recomputeSupply(state);

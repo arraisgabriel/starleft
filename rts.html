@@ -547,9 +547,9 @@
   #amb-fog{ position:fixed; inset:0; z-index:15; pointer-events:none; opacity:0;
     transition:opacity 1.4s ease; will-change:opacity, transform;
     background:
-      radial-gradient(140% 100% at 50% 122%, var(--fog-tint, rgba(150,165,185,.5)) 0%, transparent 70%),
-      radial-gradient(160% 78% at 50% -14%,  var(--fog-tint, rgba(150,165,185,.45)) 0%, transparent 66%),
-      radial-gradient(118% 118% at 50% 48%,  var(--fog-tint, rgba(150,165,185,.4)) 0%, transparent 80%);
+      radial-gradient(120% 85% at 50% 116%, var(--fog-tint, rgba(150,165,185,.5)) 0%, transparent 72%),
+      radial-gradient(130% 68% at 50% -12%, var(--fog-tint, rgba(150,165,185,.45)) 0%, transparent 68%),
+      radial-gradient(108% 108% at 50% 50%, var(--fog-tint, rgba(150,165,185,.42)) 0%, transparent 82%);
     animation:ambFogDrift 26s ease-in-out infinite alternate; }
   @keyframes ambFogDrift{ 0%{ transform:translate3d(-1.6%,0,0) scale(1.06); } 100%{ transform:translate3d(1.6%,1%,0) scale(1.12); } }
   @media (prefers-reduced-motion: reduce){ #amb-fog{ animation:none; } }

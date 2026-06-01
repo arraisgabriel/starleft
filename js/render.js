@@ -95,13 +95,6 @@ function render(state){
     drawTile(state,tx,ty, tx*TILE+ox, ty*TILE+oy);
   }
 
-  // ---- gold mines ----
-  for(const e of state.entities){
-    if(e.dead||e.type!=='goldmine') continue;
-    if(!state.explored[((e.y/TILE)|0)*state.W+((e.x/TILE)|0)]) continue;
-    drawGoldmine(state, e, e.x+ox, e.y+oy);
-  }
-
   // ---- ambient particles: BACK pass (low mist) — behind the depth-sorted sprites ----
   if(typeof drawParticles==='function') drawParticles(state, x0,y0,x1,y1, 'back');
 
@@ -118,6 +111,17 @@ function render(state){
     const si=(f.ty+N-1)*state.W + (f.tx+(N>>1));                       // one bottom-row sample cell (shared w/ minimap/fog)
     if(!state.explored[si]) continue;                                 // hidden until explored
     depth.push({y:(f.ty+N)*TILE, f, dim:state.visible[si]!==1});      // neutral scenery: dim when not visible
+  } }
+  // funding nodes ("funding rock"): a 3x3 walk-under footprint like a topo feature —
+  // depth-sorted on the footprint ground line so Interns mining at the base draw in
+  // front while a unit in the passable upper rows is occluded (walks under the rock).
+  { const N=FEAT_SIZE; for(const e of state.entities){
+    if(e.dead || e.type!=='goldmine') continue;
+    const ftx=(e.ftx!=null)?e.ftx:(((e.x/TILE)|0)-(N>>1)), fty=(e.fty!=null)?e.fty:(((e.y/TILE)|0)-(N>>1));
+    if(ftx+N<=x0 || ftx>=x1 || fty+N<=y0 || fty>=y1) continue;        // AABB cull
+    const si=(fty+N-1)*state.W + (ftx+(N>>1));                        // bottom-row sample (shared w/ minimap/fog)
+    if(!state.explored[si]) continue;                                // hidden until explored
+    depth.push({y:(fty+N)*TILE, g:e, dim:state.visible[si]!==1});
   } }
   for(const e of state.entities){
     if(e.dead) continue;
@@ -139,6 +143,7 @@ function render(state){
     if(d.b) drawBuilding(state, d.b, ox,oy, d.dim);
     else if(d.m) drawOneMega(state, d.m, ox,oy, x0,y0,x1,y1);
     else if(d.f) drawFeature(state, d.f, ox,oy, d.dim);
+    else if(d.g) drawGoldmine(state, d.g, ox,oy, d.dim);
     else drawUnit(state, d.u, ox,oy);
   }
 
@@ -418,64 +423,47 @@ function drawFeatureSprite(f, dx, dy, dw, dh){
   ctx.restore();
 }
 
-// Funding node: a brilliant, enigmatic PURPLE crystal cluster with a live
-// shiny animation — pulsing aura, a specular gleam that sweeps the facets, and
-// floating sparkles. Uses the generated sprite if present, else draws the
-// faceted cluster procedurally. Per-node phase (e.id) so they don't pulse in sync.
-function drawGoldmine(state,e,px,py){
-  const t=state.time||0, ph=((e.id||0)*1.7)%6.283;
-  const pulse=0.5+0.5*Math.sin(t*2.0+ph);
-  ctx.save(); ctx.translate(px,py);
+// Funding node ("funding rock"): the base topography MOUNTAIN ROCK from the feature
+// atlas (assets/atlas/features.png, mountain biome), drawn exactly like an ordinary
+// walk-under topo feature — NO mega-sprite, no fog frames, no sparkles, no recolor.
+// The ONLY added animation is a pulsing PURPLE GLOW: a halo behind the rock plus an
+// additive emission over its body so it reads as glowing purple. Glow fades as the
+// node drains; per-node phase (e.id) so neighbours don't pulse in lockstep.
+function drawGoldmine(state,e,ox,oy,dim){
+  const N=FEAT_SIZE, t=state.time||0, ph=((e.id||0)*1.7)%6.283;
+  const ftx=(e.ftx!=null)?e.ftx:(((e.x/TILE)|0)-(N>>1));
+  const fty=(e.fty!=null)?e.fty:(((e.y/TILE)|0)-(N>>1));
+  const w=N*TILE, cx=ftx*TILE+ox+w/2, groundY=(fty+N)*TILE+oy, midY=groundY-w*0.5;
+  const frac=Math.max(0, Math.min(1, e.amount0 ? e.amount/e.amount0 : 1));   // 1 full → 0 drained
+  const pulse=0.5+0.5*Math.sin(t*2.0+ph), glow=0.45+0.55*frac;
+  ctx.save();
+  if(dim) ctx.globalAlpha*=0.5;                                             // explored-but-not-visible
 
-  // ground contact shadow
-  ctx.fillStyle='rgba(0,0,0,.28)'; ctx.beginPath(); ctx.ellipse(0,16,15,5,0,0,6.28); ctx.fill();
+  // purple glow HALO behind the rock (pulses) — the only animation
+  const hr=w*(0.52+0.06*pulse);
+  const hg=ctx.createRadialGradient(cx, midY, 3, cx, midY, hr);
+  hg.addColorStop(0,`rgba(170,86,238,${(0.675*glow*(0.7+0.3*pulse)).toFixed(3)})`);
+  hg.addColorStop(0.5,`rgba(112,40,192,${(0.3375*glow).toFixed(3)})`);
+  hg.addColorStop(1,'rgba(60,18,120,0)');
+  ctx.fillStyle=hg; ctx.beginPath(); ctx.arc(cx, midY, hr, 0, 6.28); ctx.fill();
 
-  // pulsing purple aura
-  const gr=ctx.createRadialGradient(0,2,2, 0,2, 24+pulse*7);
-  gr.addColorStop(0,`rgba(196,128,255,${(0.32+0.20*pulse).toFixed(3)})`);
-  gr.addColorStop(0.55,`rgba(140,60,240,${(0.12+0.08*pulse).toFixed(3)})`);
-  gr.addColorStop(1,'rgba(120,40,220,0)');
-  ctx.fillStyle=gr; ctx.beginPath(); ctx.arc(0,2,24+pulse*7,0,6.28); ctx.fill();
+  // base topography mountain ROCK from features.png (mountain biome) — drawn as a normal
+  // walk-under feature. Stable per-node mirror from e.id (never flips between frames).
+  drawFeature(state, {tx:ftx, ty:fty, biome:B_MOUNTAIN, slot:'rock', v:((e.id||0)&1)?0.72:0.18}, ox, oy, false);
 
-  // crystal body — generated sprite if available, else procedural cluster
-  const cim=crystalSprite();
-  if(cim){
-    const h=30, w=h*(cim.naturalWidth/cim.naturalHeight);
-    ctx.drawImage(cim, -w/2, -h*0.66, w, h);
-  } else {
-    drawCrystalCluster();
-  }
-
-  // specular gleam sweeping up across the crystal (additive)
-  const sweep=((t*0.45+ph*0.16)%1);
+  // additive PURPLE emission over the rock body so it reads as glowing purple (pulses)
   ctx.save(); ctx.globalCompositeOperation='lighter';
-  ctx.fillStyle=`rgba(210,160,255,${(0.55*Math.sin(sweep*Math.PI)).toFixed(3)})`;
-  ctx.beginPath(); ctx.ellipse(0, 14-sweep*30, 9, 2.4, 0,0,6.28); ctx.fill();
+  const er=w*0.44;
+  const eg=ctx.createRadialGradient(cx, midY, 2, cx, midY, er);
+  eg.addColorStop(0,`rgba(156,74,232,${(0.585*glow*(0.6+0.4*pulse)).toFixed(3)})`);
+  eg.addColorStop(1,'rgba(120,50,200,0)');
+  ctx.fillStyle=eg; ctx.beginPath(); ctx.arc(cx, midY, er, 0, 6.28); ctx.fill();
   ctx.restore();
 
-  // floating sparkles drifting upward
-  for(let i=0;i<3;i++){
-    const sp=((t*0.5)+i*0.34+ph*0.1)%1;
-    const a=Math.sin(sp*Math.PI);
-    if(a>0.02){ ctx.fillStyle=`rgba(232,205,255,${(a*0.9).toFixed(3)})`;
-      drawSparkle(Math.sin(i*2.1+t*1.2)*9, 8-sp*24, 1.6+a*1.8); }
-  }
-
-  // amount label
-  ctx.fillStyle='#e9d2ff'; ctx.font='10px sans-serif'; ctx.textAlign='center';
-  ctx.fillText(e.amount|0, 0, 30);
+  // remaining-funding label below the base
+  ctx.fillStyle='#e9d2ff'; ctx.font='11px sans-serif'; ctx.textAlign='center';
+  ctx.fillText(e.amount|0, cx, groundY+13);
   ctx.restore();
-}
-// faceted purple crystal cluster (a tall central shard flanked by two smaller)
-function drawCrystalCluster(){
-  const shards=[ {x:-7,top:-9,base:13,w:4.0,lean:-0.10}, {x:7,top:-5,base:13,w:3.6,lean:0.12}, {x:0,top:-19,base:14,w:5.5,lean:0} ];
-  for(const s of shards){
-    const tx=s.x+(s.base-s.top)*s.lean, ty=s.top, by=s.base, lx=s.x-s.w, rx=s.x+s.w, mid=(ty+by)/2-2;
-    ctx.beginPath(); ctx.moveTo(tx,ty); ctx.lineTo(lx,mid); ctx.lineTo(s.x,by); ctx.closePath(); ctx.fillStyle='#46167f'; ctx.fill(); // dark facet
-    ctx.beginPath(); ctx.moveTo(tx,ty); ctx.lineTo(rx,mid); ctx.lineTo(s.x,by); ctx.closePath(); ctx.fillStyle='#8a3ff0'; ctx.fill(); // lit facet
-    ctx.strokeStyle='rgba(224,184,255,.85)'; ctx.lineWidth=1; ctx.beginPath(); ctx.moveTo(tx,ty); ctx.lineTo(s.x,by); ctx.stroke(); // central edge
-    ctx.fillStyle='rgba(255,244,255,.95)'; ctx.beginPath(); ctx.arc(tx,ty+1,1.5,0,6.28); ctx.fill(); // tip glint
-  }
 }
 function drawSparkle(x,y,r){
   ctx.beginPath();
@@ -685,7 +673,7 @@ function renderMinimap(state){
   } }
   for(const e of state.entities){
     if(e.dead) continue;
-    if(e.type==='goldmine'){ if(state.explored[((e.y/TILE)|0)*state.W+((e.x/TILE)|0)]){ mmx.fillStyle='#c89bff'; mmx.fillRect(e.x/TILE*sx-1,e.y/TILE*sy-1,3,3);} continue; }
+    if(e.type==='goldmine'){ const N=FEAT_SIZE, ftx=(e.ftx!=null)?e.ftx:(((e.x/TILE)|0)-(N>>1)), fty=(e.fty!=null)?e.fty:(((e.y/TILE)|0)-(N>>1)); const si=(fty+N-1)*state.W+(ftx+(N>>1)); if(state.explored[si]){ mmx.fillStyle='#b06bff'; mmx.fillRect(ftx*sx, fty*sy, Math.ceil(sx*N), Math.ceil(sy*N));} continue; }
     if(e.owner==='enemy' && !isVisiblePix(state,e.x,e.y) && !(e.kind==='building'&&e._everSeen)) continue;
     mmx.fillStyle = e.abandoned ? '#8effb0' : isRedSide(e.owner)?'#ff6b6b':'#7fd6ff';
     const s = e.kind==='building'? (e.abandoned?4:3) :2;

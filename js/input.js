@@ -174,7 +174,11 @@ function pickEntity(state,wx,wy){
   }
   for(const e of state.entities){
     if(e.dead||e.type!=='goldmine')continue;
-    if(Math.hypot(e.x-wx,e.y-wy)<20) return e;
+    // hit-test the whole 3x3 footprint (matches the visible rock), not a small center
+    // circle — so it's easy to right-click anywhere on the rock to assign Interns to mine.
+    const N=FEAT_SIZE, ftx=(e.ftx!=null)?e.ftx:(((e.x/TILE)|0)-(N>>1)), fty=(e.fty!=null)?e.fty:(((e.y/TILE)|0)-(N>>1));
+    const px=ftx*TILE, py=fty*TILE, w=N*TILE;
+    if(wx>=px&&wx<=px+w&&wy>=py&&wy<=py+w) return e;
   }
   return null;
 }

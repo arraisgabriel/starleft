@@ -23,7 +23,7 @@
   const R = Math.random;
 
   // base opacity per behavior (× life-envelope × twinkle); glints/fireflies pop, mist is faint
-  const BASE_A = { glint:.95, hover:.95, rise:.9, fall:.72, drift:.5, soft:.38 };
+  const BASE_A = { glint:.95, hover:.95, rise:.9, fall:.72, drift:.5, soft:.46 };
 
   // ---- glow sprites cached per tint rgb ("r,g,b") — built once each ----
   const _gc = {};
@@ -78,7 +78,7 @@
     } else if(b===B_MOUNTAIN){
       if(r<0.16)     _make(f,'glint', (R()<0.5?'95,225,210':'185,140,255'), 3,7,  0.8,1.6, 2); // sparse, smaller crystal glints
       else if(r<0.30)_make(f,'rise', '150,200,212', 4,8,  2.4,4,   1);          // a few cool motes
-      else           _make(f,'soft', '150,172,194', 28,56, 6,9.5,  0, true);    // heavy drifting fog (bigger, ~70%)
+      else           _make(f,'soft', '150,172,194', 34,66, 6.5,10, 0, true, 0.85); // localized fog bank, contained ~3 tiles from the rock
     } else { // grass / forest (and any other land) — kept calm: emits ~half as often
       if(R()<0.5) return;
       if(rock){
@@ -100,6 +100,7 @@
 
   // ---- per-tick: advance + recycle, then density-targeted emission near in-view features ----
   const _inview=[];
+  const _mtn=[];                                  // reused scratch: mountain (crystal) features, for the fog wash
   let _emitAcc=0, _fogAcc=0;
   function updateParticles(state, dt){
     if(MAX<=0 || !state) return;
@@ -157,20 +158,42 @@
   function _updateFog(state){
     const el=document.getElementById('amb-fog'); if(!el) return;
     if((typeof running!=='undefined' && !running) || state.over){ el.style.opacity='0'; return; }
-    const [x0,y0,x1,y1]=_bounds(state), W=state.W;
+    const [x0,y0,x1,y1]=_bounds(state), W=state.W, H=state.H, N=FEAT_SIZE;
+    // biome fractions — for full-biome ICE / VOLCANIC maps (those ARE the biome everywhere)
     const sx=Math.max(1,((x1-x0)/36)|0), sy=Math.max(1,((y1-y0)/36)|0);
-    let tot=0,m=0,g=0,ice=0,vol=0;
+    let tot=0,ice=0,vol=0;
     for(let ty=y0;ty<y1;ty+=sy)for(let tx=x0;tx<x1;tx+=sx){
       const i=ty*W+tx; if(!state.explored[i]) continue; tot++;
-      const b=state.biome[i]; if(b===B_MOUNTAIN)m++; else if(b===B_GRASS)g++; else if(b===B_ICE)ice++; else if(b===B_VOLCANIC)vol++;
+      const b=state.biome[i]; if(b===B_ICE)ice++; else if(b===B_VOLCANIC)vol++;
     }
     if(!tot){ el.style.opacity='0'; return; }
-    const fm=m/tot, fg=g/tot, fi=ice/tot, fv=vol/tot;
+    const fi=ice/tot, fv=vol/tot;
+    // MOUNTAINS = the crystal ROCK FEATURES (biome B_MOUNTAIN), NOT the ground biome — on desert/grass
+    // maps the mountain biome is sparse, so the crystals sit on desert/grass; key off the features.
+    const z=state.zoom||1, ccx=state.camX+(viewW()/z)/2, ccy=state.camY+(viewH()/z)/2;
+    const Rc=0.40*Math.min(viewW()/z, viewH()/z);
+    // The MOUNTAIN ROCK features (biome B_MOUNTAIN) — the "normal mountains". The funding/resource
+    // crystals are `goldmine` ENTITIES (not in state.features), so they never affect the fog.
+    _mtn.length=0;
+    if(state.features) for(const f of state.features){ if(f.biome===B_MOUNTAIN) _mtn.push(f); }
+    // The wash appears ONLY when a PLAYER unit is standing AMONG the mountains, near the viewport
+    // centre. Mountains merely being IN VIEW (the base, a distant range) do NOT wash.
+    let centred=0;
+    if(_mtn.length) for(const e of state.entities){
+      if(e.dead || e.owner!=='player' || e.kind!=='unit') continue;
+      const d=Math.hypot(e.x-ccx, e.y-ccy); if(d>=Rc) continue;               // near viewport centre
+      const utx=e.x/TILE, uty=e.y/TILE;
+      for(const f of _mtn){
+        if(Math.abs(utx-(f.tx+N/2))<=N/2+2.5 && Math.abs(uty-(f.ty+N/2))<=N/2+2.5){ centred += 1 - d/Rc; break; }  // among the mountains
+      }
+    }
     let op=0, tint='rgba(150,165,185,.55)';
-    if(fm>0.12){ op=Math.min(.42, fm*0.78); tint='rgba(154,170,194,.62)'; }     // mountain: cold fog (halved; needs real mountain presence)
+    if(centred>0){                                                             // ONLY a unit standing among the mountains
+      op=Math.min(.8, centred*0.7); tint='rgba(154,170,194,.6)';              // centred unit among mountains ≈ .70
+    }
     else if(fv>0.25){ op=Math.min(.4, fv*0.55); tint='rgba(150,70,45,.45)'; }   // volcanic: warm smoke
     else if(fi>0.25){ op=Math.min(.45, fi*0.6); tint='rgba(190,215,230,.45)'; } // ice: pale veil
-    else if(fg>0.3){ op=Math.min(.3, fg*0.45); tint='rgba(120,165,135,.36)'; }  // forest: faint mist
+    // grass/forest: NO CSS wash — the open base stays clear (forest ambiance is the canvas fireflies/pollen)
     el.style.setProperty('--fog-tint', tint);
     el.style.opacity=op.toFixed(3);
   }

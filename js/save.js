@@ -69,6 +69,9 @@ function deserializeGame(s){
   g.entities = s.entities.map(e=>Object.assign({}, e));
   const byId = new Map(g.entities.map(e=>[e.id, e]));
   g.entities.forEach(e=>resolveRefs(e, byId));        // re-link cross-refs in place
+  // funding nodes carry a 3x3 footprint; feat[] was rebuilt from features[] only, so
+  // restamp each node's mask (blocked[] was serialized and is already correct).
+  if(typeof markFundingNode==='function') g.entities.forEach(e=>{ if(e.type==='goldmine'&&!e.dead) markFundingNode(g, e); });
   // back-fill hero sprite overrides for saves written before heroes[].sprite existed (e.g. a
   // carried Nino restored as a plain lobbyist) — derive it from the map configs by heroId.
   if(typeof heroSpriteFor==='function') g.entities.forEach(e=>{
