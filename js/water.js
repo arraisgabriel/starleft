@@ -277,7 +277,7 @@
         const b=B[i];
         if(b===B_VOLCANIC){ hasMagma=true; continue; }
         if(b===B_ICE) continue;                              // frozen — no caustic
-        ctx.rect(tx*TILE, ty*TILE, TILE+1, TILE+1);
+        ctx.rect(tx*TILE, ty*TILE, TILE, TILE);   // abut (no overscan): additive layers must not overlap or seams double-brighten
       }
       _setPat(_causticPat, -_fmod(_t*7,128),  -_fmod(_t*-4,128)); ctx.globalAlpha=0.15; ctx.fill();
       _setPat(_causticPat, -_fmod(_t*-5,128), -_fmod(_t*6,128));  ctx.globalAlpha=0.11; ctx.fill();
@@ -302,7 +302,7 @@
       if(h<=0.1) continue;                                   // only crests glow → broad bright bands, dark troughs
       let a=h*0.05; if(a>0.13) a=0.13;
       if(!state.visible[i]) a*=0.5;
-      ctx.globalAlpha=a; ctx.fillRect(px, py, TILE+1, TILE+1);
+      ctx.globalAlpha=a; ctx.fillRect(px, py, TILE, TILE);   // abut, not overscan → no double-bright seam between crest tiles
     }
     ctx.restore();
 
@@ -316,7 +316,7 @@
         for(let ty=y0;ty<y1;ty++)for(let tx=x0;tx<x1;tx++){
           const i=ty*W+tx; if(T[i]!==T_WATER || B[i]!==B_VOLCANIC || !EXP[i]) continue;
           if(DEP && DEP[i]<=0.001) continue;                 // skip the shore ring (keep the burnt rim clean)
-          ctx.rect(tx*TILE, ty*TILE, TILE+1, TILE+1);
+          ctx.rect(tx*TILE, ty*TILE, TILE, TILE);   // abut (no overscan): additive layers must not overlap or seams double-brighten
         }
         ctx.fill();
         ctx.restore();

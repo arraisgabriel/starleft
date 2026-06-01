@@ -82,11 +82,11 @@
     } else { // grass / forest (and any other land) — kept calm: emits ~half as often
       if(R()<0.5) return;
       if(rock){
-        if(r<0.5)    _make(f,'glint','120,230,180', 3,7,  1,1.8, 2);            // fewer/smaller teal-green glints
-        else         _make(f,'hover','205,250,150', 6,11, 3,6,  1);            // occasional stray firefly
+        if(r<0.6)    _make(f,'glint','120,230,180', 3,7,  1,1.8, 2);            // fewer/smaller teal-green glints
+        else         _make(f,'hover','205,250,150', 6,11, 3,6,  3);            // rare stray firefly (flicking light)
       } else {
-        if(r<0.5)    _make(f,'hover','210,250,150', 7,13, 3,6,  1, false, 0.65); // firefly (reined toward the tree)
-        else if(r<0.8) _make(f,'drift','175,215,150', 6,11, 4,7,  0, false, 0.5); // pollen drift (half the reach)
+        if(r<0.28)   _make(f,'hover','210,250,150', 7,13, 3,6,  3, false, 0.65); // fewer fireflies (flicking light, reined toward the tree)
+        else if(r<0.7) _make(f,'drift','175,215,150', 6,11, 4,7,  0, false, 0.5); // pollen drift (half the reach)
         else         _make(f,'glint','190,250,165', 4,7,  1,1.8, 2);             // leaf glint (stays on the tree)
       }
     }
@@ -144,6 +144,9 @@
       let a = age<0.18 ? age/0.18 : (age>0.72 ? (1-age)/0.28 : 1);     // fade in/out
       if(p.tw===2){ const s=0.5+0.5*Math.sin(t*7 + p.seed*6.283); a*= s*s*s; } // sharp sparkle
       else if(p.tw===1){ a*= 0.4 + 0.6*Math.sin(t*3 + p.seed*6.283); }         // gentle pulse
+      else if(p.tw===3){ const ph=t*2.3 + p.seed*6.283,                        // firefly: dim glow that
+              s=Math.sin(ph)*Math.sin(ph*0.33 + p.seed*5);                     // flicks bright now and then
+              a*= 0.16 + (s>0 ? s*s : 0); }                                    // (irregular AM beat, dark gaps)
       if(!state.visible[i2]) a*=0.4;
       a*= BASE_A[p.beh]||0.6;
       if(a<=0.02) continue;
