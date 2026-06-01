@@ -37,7 +37,8 @@ function serializeEntity(e){
 // Skip: cfg (re-derived from MAPS), visible (recomputed by computeFog each frame),
 // _cmdSig/placing (transient UI), and the fields handled specially below.
 // feat[] is the per-cell topography mask — rebuilt from features[] on load (keeps saves small).
-const SKIP = {cfg:1, visible:1, _cmdSig:1, placing:1, entities:1, selection:1, groups:1, blocked:1, explored:1, feat:1};
+// waterDepth: a renderer-only distance-to-shore field (js/water.js), rebuilt from tiles[] on load.
+const SKIP = {cfg:1, visible:1, _cmdSig:1, placing:1, entities:1, selection:1, groups:1, blocked:1, explored:1, feat:1, waterDepth:1};
 function serializeGame(){
   const s={};
   for(const k in G){ if(!SKIP[k]) s[k]=G[k]; }       // primitives + JSON-safe arrays (tiles/biome/megaSprites)
@@ -66,6 +67,8 @@ function deserializeGame(s){
   g.feat = new Uint8Array(g.W*g.H);
   if(g.features){ const N=FEAT_SIZE; for(const f of g.features){ for(let y=0;y<N;y++)for(let x=0;x<N;x++){
     const cx=f.tx+x, cy=f.ty+y; if(cx>=0&&cy>=0&&cx<g.W&&cy<g.H) g.feat[cy*g.W+cx]=(y>=FEAT_BLOCK_FROM)?2:1; } } }
+  // rebuild the renderer's distance-to-shore depth field + tide buffers from the restored tiles (js/water.js)
+  if(typeof buildWaterDepth==='function') buildWaterDepth(g);
   g.entities = s.entities.map(e=>Object.assign({}, e));
   const byId = new Map(g.entities.map(e=>[e.id, e]));
   g.entities.forEach(e=>resolveRefs(e, byId));        // re-link cross-refs in place

@@ -95,6 +95,9 @@ function render(state){
     drawTile(state,tx,ty, tx*TILE+ox, ty*TILE+oy);
   }
 
+  // ---- water/magma surface overlay: caustic shimmer + tide highlight + lava cracks/core (js/water.js) ----
+  if(typeof drawWater==='function') drawWater(state, x0,y0,x1,y1);
+
   // ---- ambient particles: BACK pass (low mist) — behind the depth-sorted sprites ----
   if(typeof drawParticles==='function') drawParticles(state, x0,y0,x1,y1, 'back');
 
@@ -337,18 +340,26 @@ function drawShoreline(b,mask,land,px,py){
 function drawWaterTile(state,tx,ty,b,v,px,py){
   const {mask,land}=waterEdges(state,tx,ty);
   const shore = mask!==0;
-  ctx.fillStyle=waterBody(b,v,shore); ctx.fillRect(px,py,TILE+1,TILE+1);
-  if(b===B_VOLCANIC){                               // lava glow
-    const g=0.5+0.5*Math.sin(state.time*1.8+v*10+px*0.05);
-    ctx.fillStyle='rgba(255,'+((80+120*g)|0)+',20,.9)'; ctx.fillRect(px+2,py+2,TILE-3,TILE-3);
-    ctx.fillStyle='rgba(255,225,120,'+(0.3+0.5*g).toFixed(2)+')'; ctx.fillRect(px+((v*16)|0),py+8,8,3);
-  } else if(b===B_ICE){                             // frozen crack
+  const i=ty*state.W+tx;
+  const depth = state.waterDepth ? state.waterDepth[i] : (shore?0:1);   // 0 shore .. 1 deep (js/water.js)
+
+  // ---- de-blocked base: continuous depth-gradient fill (kills the 32px checkerboard) ----
+  if(typeof drawWaterBaseTile==='function'){ drawWaterBaseTile(b,v,depth,px,py); }
+  else { ctx.fillStyle=waterBody(b,v,shore); ctx.fillRect(px,py,TILE+1,TILE+1); }   // legacy fallback if water.js absent
+
+  if(b===B_ICE){                                    // frozen crack stays per-tile (the drawWater span pass skips ice)
     ctx.strokeStyle='rgba(255,255,255,.4)'; ctx.lineWidth=1;
     ctx.beginPath(); ctx.moveTo(px+v*TILE,py); ctx.lineTo(px+TILE*0.5,py+TILE); ctx.stroke();
-  } else {                                          // gentle toxic-cyan shimmer
-    const sh=0.5+0.5*Math.sin(state.time*1.4 + v*8 + py*0.04);
-    ctx.fillStyle='rgba(120,225,225,'+(0.03+0.05*sh).toFixed(3)+')';
-    ctx.fillRect(px+((v*20)|0), py+8, 10, 2);
+  } else if(typeof drawWater!=='function'){          // water.js absent → keep the legacy animated overlay so nothing regresses
+    if(b===B_VOLCANIC){
+      const g=0.5+0.5*Math.sin(state.time*1.8+v*10+px*0.05);
+      ctx.fillStyle='rgba(255,'+((80+120*g)|0)+',20,.9)'; ctx.fillRect(px+2,py+2,TILE-3,TILE-3);
+      ctx.fillStyle='rgba(255,225,120,'+(0.3+0.5*g).toFixed(2)+')'; ctx.fillRect(px+((v*16)|0),py+8,8,3);
+    } else {
+      const sh=0.5+0.5*Math.sin(state.time*1.4 + v*8 + py*0.04);
+      ctx.fillStyle='rgba(120,225,225,'+(0.03+0.05*sh).toFixed(3)+')';
+      ctx.fillRect(px+((v*20)|0), py+8, 10, 2);
+    }
   }
   if(shore) drawShoreline(b,mask,land,px,py);
 }

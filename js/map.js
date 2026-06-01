@@ -386,6 +386,10 @@ function newMap(idx){
   // climate seams, cleared areas, or carved bridges (biome-only; passability set)
   despeckleBiome(biome, W, H);
 
+  // distance-to-shore depth field for smooth (non-blocky) water/magma rendering + tide buffers
+  // (js/water.js). MUST run after ALL tiles[] water mutation (despeckle + bridge carve above).
+  if(typeof buildWaterDepth==='function') buildWaterDepth(state);
+
   // big animated landmarks (megabuildings / mountains / volcanoes / ruins). Placed
   // after the connectivity bridges are carved and biome[] is final; uses a derived
   // seed so it doesn't perturb the rng stream the rest of generation consumed, and

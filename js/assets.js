@@ -58,6 +58,28 @@ function featSpriteFor(biome, slot){
   return [c*FEAT_CELL, r*FEAT_CELL, FEAT_CELL, FEAT_CELL];
 }
 
+/* ---- Optional WATER / MAGMA atlas (seamless tiles, dark Hades palette) — a DROP-IN upgrade
+   over the procedural water.js renderer. If assets/atlas/water.png is absent, WATER_READY stays
+   false and water.js renders procedurally (same resilience contract as the tileset/features atlas).
+   Could be generated with the Gemini image-pro API. Layout: WATER_CELL px cells, 7 biome rows
+   (ATLAS_BIOMES order). Columns by slot: depth 0..2 (shore->mid->deep), caustic 3.. (flow frames),
+   molten 11.. (lava-crack frames). water.js calls waterSpriteFor(biome,'depth',depthCell). ---- */
+const ATLAS_WATER = ASSET_BASE + 'atlas/water.png';
+const WATER_IMG = new Image();
+let WATER_READY = false;
+WATER_IMG.onload = ()=>{ WATER_READY = true; };
+WATER_IMG.onerror = ()=>{ WATER_READY = false; };
+WATER_IMG.src = ATLAS_WATER;
+const WATER_CELL = 128;
+const WATER_SLOT_COL = { depth:0, caustic:3, molten:11 };       // base column per slot
+const WATER_ROW = {}; ATLAS_BIOMES.forEach((b,i)=>{ WATER_ROW[b]=i; });
+function waterSpriteFor(biome, slot, frame){
+  if(!WATER_READY) return null;
+  const base = WATER_SLOT_COL[slot], r = WATER_ROW[biome];
+  if(base==null || r==null) return null;
+  return [(base+(frame||0))*WATER_CELL, r*WATER_CELL, WATER_CELL, WATER_CELL];
+}
+
 /* ---- Building sprites (dark cyberpunk-Hades, animated like the mega-sprites) ----
    Every building is a 9-frame strip (player cyan / enemy red), bottom-anchored and
    blitted aspect-preserved so it "stands" on its footprint and overhangs upward;

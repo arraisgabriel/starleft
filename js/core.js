@@ -64,6 +64,9 @@ function update(state, dt){
   // ---- ambient topography particles (fireflies/embers/snow/dust/motes; pure visual) ----
   if(typeof updateParticles==='function') updateParticles(state, dt);
 
+  // ---- water tide height-field + flow phase (pure visual; freezes on pause with state.time) ----
+  if(typeof updateWater==='function') updateWater(state, dt);
+
   // ---- cleanup dead ----
   let changed=false;
   for(const e of state.entities){
