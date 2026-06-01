@@ -24,6 +24,14 @@ function initialZoom(W,H){
 const T_GRASS=0, T_DIRT=1, T_WATER=2, T_ROCK=3, T_TREE=4;
 function passableTerrain(t){ return t===T_GRASS || t===T_DIRT; }
 
+/* ---- Topography feature size (trees/rocks rendered as multi-tile "walk-under" sprites) ----
+   THE tuning knob: FEAT_SIZE = footprint side length in TILES (square, so the sprite never
+   distorts). The bottom floor(SIZE/2) rows DENY passage; the upper rows are passable and units
+   walk UNDER the canopy. Blocks = SIZE²:   2 → 2x2 (4 blocks, original)   3 → 3x3 (9)   4 → 4x4 (16).
+   Change this one number to resize every tree & rock on every map. */
+const FEAT_SIZE = 3;
+const FEAT_BLOCK_FROM = FEAT_SIZE - (FEAT_SIZE>>1);   // first blocked row (rows >= this deny; rows above walk-under)
+
 /* ---- Biomes (visual region themes that coexist within a single map) ----
    A biome reskins the floor + features of a region; terrain type still
    controls gameplay. Water/Mountain biomes also bias terrain generation so

@@ -62,10 +62,10 @@ function deserializeGame(s){
   g.blocked  = Uint8Array.from(s.blocked);   // already carries feature-base blockers
   g.explored = Uint8Array.from(s.explored);
   g.visible  = new Uint8Array(g.W*g.H);
-  // rebuild the topography feature mask from features[] (not serialized): bottom row blocks, top passable
+  // rebuild the topography feature mask from features[] (not serialized): bottom rows block, upper walk-under
   g.feat = new Uint8Array(g.W*g.H);
-  if(g.features) for(const f of g.features){ for(let y=0;y<2;y++)for(let x=0;x<2;x++){
-    const cx=f.tx+x, cy=f.ty+y; if(cx>=0&&cy>=0&&cx<g.W&&cy<g.H) g.feat[cy*g.W+cx]=(y===1)?2:1; } }
+  if(g.features){ const N=FEAT_SIZE; for(const f of g.features){ for(let y=0;y<N;y++)for(let x=0;x<N;x++){
+    const cx=f.tx+x, cy=f.ty+y; if(cx>=0&&cy>=0&&cx<g.W&&cy<g.H) g.feat[cy*g.W+cx]=(y>=FEAT_BLOCK_FROM)?2:1; } } }
   g.entities = s.entities.map(e=>Object.assign({}, e));
   const byId = new Map(g.entities.map(e=>[e.id, e]));
   g.entities.forEach(e=>resolveRefs(e, byId));        // re-link cross-refs in place

@@ -54,22 +54,23 @@ function scaleCfg(cfg){
 // Tolerant of a missing feat[] (old saves) so it can be reused at runtime.
 function baseBlocked(state,i){ return (passableTerrain(state.tiles[i]) && (!state.feat || state.feat[i]!==2)) ? 0 : 1; }
 
-// Anchor a 2x2 feature at the even-lattice (tx,ty). TOLERANT: claims every land cell of
-// the 2x2 (floor-ifying any tree/rock), and simply SKIPS water cells (those keep blocking
-// as terrain — never paved). Fails only if the block is out of bounds, already owned by a
-// feature, or all-water. Floor-ifying makes the terrain pass draw ground so only drawFeature
-// draws the sprite. Consumes one rng() for the mirror seed.
+// Anchor a FEAT_SIZE×FEAT_SIZE feature at the lattice point (tx,ty). TOLERANT: claims every
+// land cell (floor-ifying any tree/rock), and simply SKIPS water cells (those keep blocking as
+// terrain — never paved). Fails only if out of bounds, fully owned, or all-water. The bottom
+// FEAT rows (y >= FEAT_BLOCK_FROM) block; the upper rows are passable (walk-under). Floor-ifying
+// makes the terrain pass draw ground so only drawFeature draws the sprite. One rng() for the mirror.
 function addFeature(state, tx, ty, slot, rng){
-  const W=state.W,H=state.H;
-  if(tx<0||ty<0||tx+1>=W||ty+1>=H) return false;
+  const W=state.W,H=state.H, N=FEAT_SIZE;
+  if(tx<0||ty<0||tx+N>W||ty+N>H) return false;
   let claimed=false, bsrc=-1;
-  for(let y=0;y<2;y++)for(let x=0;x<2;x++){
+  for(let y=0;y<N;y++)for(let x=0;x<N;x++){
     const i=(ty+y)*W+(tx+x), t=state.tiles[i];
     if(state.feat[i]) continue;                                     // cell owned by another feature → skip (no double-claim)
     if(t===T_WATER) continue;                                       // leave water as-is (still blocks); never pave it
     if(t===T_TREE || t===T_ROCK) state.tiles[i]=T_GRASS;            // floor-ify → terrain pass draws ground
-    state.feat[i] = (y===1) ? 2 : 1;                                // bottom row blocks, top row passable-occupied
-    if(bsrc<0 || y===1) bsrc=i;                                     // sample biome from a bottom (base) cell
+    const block = y>=FEAT_BLOCK_FROM;
+    state.feat[i] = block ? 2 : 1;                                  // bottom rows block, upper rows passable-occupied
+    if(bsrc<0 || block) bsrc=i;                                     // sample biome from a bottom (base) cell
     claimed=true;
   }
   if(!claimed) return false;                                        // nothing free (all-water / fully owned)
@@ -77,34 +78,34 @@ function addFeature(state, tx, ty, slot, rng){
   return true;
 }
 
-// Global rollout: turn EVERY tree & rock (incl. mountain-range rock) into a 2x2 walk-under
-// feature so none stay single-tile. Each tree/rock tile snaps to its even 2-tile lattice
-// anchor, so adjacent tiles merge into shared 2x2 blocks with no fragmentation or leftovers.
-// Geography-preserving — runs on a DERIVED rng so the main terrain stream is untouched.
+// Global rollout: turn EVERY tree & rock (incl. mountain-range rock) into a FEAT_SIZE walk-under
+// feature so none stay single-tile. Each tree/rock tile snaps to its FEAT_SIZE-lattice anchor, so
+// adjacent tiles merge into shared blocks with no fragmentation or leftovers. Geography-preserving
+// — runs on a DERIVED rng so the main terrain stream is untouched.
 function buildTopoFeatures(state, rng){
-  const {W,H,tiles,feat}=state;
+  const {W,H,tiles,feat}=state, N=FEAT_SIZE;
   for(let ty=0;ty<H;ty++)for(let tx=0;tx<W;tx++){
     const t=tiles[ty*W+tx];
     if(t!==T_TREE && t!==T_ROCK) continue;          // every tree/rock — no biome exclusion
     if(feat[ty*W+tx]) continue;                     // already absorbed into a feature
-    let ax=tx&~1, ay=ty&~1;                          // snap to the even 2-tile lattice
-    if(ax>W-2) ax=W-2; if(ay>H-2) ay=H-2;           // clamp so the 2x2 stays in-bounds
+    let ax=tx-(tx%N), ay=ty-(ty%N);                 // snap to the N-tile lattice
+    if(ax>W-N) ax=W-N; if(ay>H-N) ay=H-N; if(ax<0) ax=0; if(ay<0) ay=0;   // clamp so the N×N stays in-bounds
     addFeature(state, ax, ay, (t===T_TREE)?'tree':'rock', rng);
   }
 }
 
-// Remove the features owning any of `cells` (a Set of cell indices): clear their feat
-// mask, re-derive blocked for their footprints, and drop them from features[].
-// Deterministic (iterates features[] in order). Used by the bridge-carver + trail repair.
+// Remove the features owning any of `cells` (a Set of cell indices): clear their feat mask,
+// re-derive blocked for their footprints, and drop them from features[]. Deterministic
+// (iterates features[] in order). Used by the bridge-carver + trail repair.
 function dropFeaturesAt(state, cells){
   if(!cells || !cells.size) return;
-  const W=state.W, kill=new Set();
+  const W=state.W, N=FEAT_SIZE, kill=new Set();
   for(const f of state.features){
     for(const k of cells){ const x=k%W, y=(k/W)|0;
-      if(x>=f.tx && x<f.tx+2 && y>=f.ty && y<f.ty+2){ kill.add(f); break; } }
+      if(x>=f.tx && x<f.tx+N && y>=f.ty && y<f.ty+N){ kill.add(f); break; } }
   }
   if(!kill.size) return;
-  for(const f of kill) for(let y=0;y<2;y++)for(let x=0;x<2;x++){
+  for(const f of kill) for(let y=0;y<N;y++)for(let x=0;x<N;x++){
     const i=(f.ty+y)*W+(f.tx+x); state.feat[i]=0; if(state.blocked) state.blocked[i]=baseBlocked(state,i);
   }
   state.features = state.features.filter(f=>!kill.has(f));
@@ -126,23 +127,24 @@ function placeThickets(state, rng){
   (cfg.goldNodes||[]).forEach(g=> stamp(g.x|0,g.y|0,4));
   const mustReach=(cfg.goldNodes||[]).concat(cfg.enemies||[cfg.enemy]).concat(cfg.lostBases||[]).filter(Boolean);
 
+  const N=FEAT_SIZE;
   for(const t of cfg.thickets){
-    const rx=(t.x|0)&~1, ry=(t.y|0)&~1, rw=Math.max(2,t.w|0), rh=Math.max(2,t.h|0);   // even lattice (matches buildTopoFeatures)
+    const rx=(t.x|0)-((t.x|0)%N), ry=(t.y|0)-((t.y|0)%N), rw=Math.max(N,t.w|0), rh=Math.max(N,t.h|0);  // N-lattice (matches buildTopoFeatures)
     const density=(t.density!=null?t.density:0.7), mix=(t.mix!=null?t.mix:0.5);
     const axis=(t.trail==='h'||t.trail==='v')? t.trail : (rw>=rh?'h':'v');
     // (1) carve a serpentine trail FIRST — monotone advance guarantees it reaches the far edge
-    const trail=new Set(), PW=2;
+    const trail=new Set(), PW=Math.max(2,N-1);
     if(axis==='h'){ let cy=ry+(rh>>1);
       for(let x=rx;x<rx+rw;x++){ for(let k=0;k<PW;k++){ const yy=Math.max(ry,Math.min(ry+rh-1, cy-(PW>>1)+k)); if(inB(x,yy)) trail.add(yy*W+x); }
         cy=Math.max(ry+1,Math.min(ry+rh-2, cy+(((rng()*3)|0)-1))); } }
     else { let cx=rx+(rw>>1);
       for(let y=ry;y<ry+rh;y++){ for(let k=0;k<PW;k++){ const xx=Math.max(rx,Math.min(rx+rw-1, cx-(PW>>1)+k)); if(inB(xx,y)) trail.add(y*W+xx); }
         cx=Math.max(rx+1,Math.min(rx+rw-2, cx+(((rng()*3)|0)-1))); } }
-    // (2) cram on the 2-tile lattice, trail-aware (roll density BEFORE legality → rng-count stable)
-    const touchesTrail=(tx,ty)=>{ for(let y=0;y<2;y++)for(let x=0;x<2;x++){ if(trail.has((ty+y)*W+(tx+x))) return true; } return false; };
-    const anyProtected=(tx,ty)=>{ for(let y=0;y<2;y++)for(let x=0;x<2;x++){ const cx=tx+x,cy=ty+y; if(inB(cx,cy)&&protect[cy*W+cx]) return true; } return false; };
-    for(let b=0;b<(rh>>1);b++)for(let a=0;a<(rw>>1);a++){
-      const tx=rx+2*a, ty=ry+2*b;
+    // (2) cram on the N-tile lattice, trail-aware (roll density BEFORE legality → rng-count stable)
+    const touchesTrail=(tx,ty)=>{ for(let y=0;y<N;y++)for(let x=0;x<N;x++){ if(trail.has((ty+y)*W+(tx+x))) return true; } return false; };
+    const anyProtected=(tx,ty)=>{ for(let y=0;y<N;y++)for(let x=0;x<N;x++){ const cx=tx+x,cy=ty+y; if(inB(cx,cy)&&protect[cy*W+cx]) return true; } return false; };
+    for(let b=0;b<Math.floor(rh/N);b++)for(let a=0;a<Math.floor(rw/N);a++){
+      const tx=rx+N*a, ty=ry+N*b;
       if(rng()>=density) continue;
       if(anyProtected(tx,ty) || touchesTrail(tx,ty)) continue;
       addFeature(state, tx, ty, (rng()<mix?'tree':'rock'), rng);

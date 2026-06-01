@@ -233,9 +233,11 @@ off the static table for mid/late maps — run `--gate` and react to what carryo
   Mirror amounts roughly between the player's cluster and each enemy's so no side is starved.
 - **lakes / rockClusters / forests** are texture and chokepoints. Use them to shape lanes between
   bases; don't wall a base in completely (the generator will bridge, but it looks forced). `r` for
-  lakes ~3–7; `n` for rocks ~10–18; `n` for forests ~16–34. Scattered trees/rocks render as **2×2
-  walk-under features**: the lower 2 tiles block, the upper 2 are passable and units walk *under*
-  the canopy (depth-sorted). Mountain-range rock stays an impassable single-tile wall.
+  lakes ~3–7; `n` for rocks ~10–18; `n` for forests ~16–34. Every tree/rock (incl. mountain-range
+  rock) renders as an **N×N walk-under feature** (N = `FEAT_SIZE` in `js/config.js`, default 3): the
+  bottom `floor(N/2)` rows block, the upper rows are passable and units walk *under* the canopy
+  (depth-sorted). `FEAT_SIZE` is the single size knob (2/3/4…). Converting range rock makes ranges
+  semi-permeable — reachability is still validated.
 - **thickets** (optional): a dense maze region — packs a `w×h` rectangle with 2×2 walk-under
   trees/rocks at `density`, then carves and *guarantees* one traversable `trail` ('h'/'v'/'auto')
   through it. The generator keeps a keep-out around spawns/bases/gold and re-validates reachability,
