@@ -77,7 +77,11 @@ function buildDossier(u){
 // roll a new connected event for `level`, record it, return {text, fx, tone} (or null)
 function rollLifeEvent(u, level){
   const d = buildDossier(u);
-  const r = makeRng(u.lore.seed + level*101 + 7);
+  // % 233280 keeps the seed inside makeRng's LCG range. u.lore.seed is a 32-bit hash (~1e9);
+  // without this, makeRng's internal seed*9301*9301 overflows 2^53, rounds away its low bits and
+  // COLLAPSES onto a coarse lattice — making the event-index draw badly non-uniform (some events
+  // ~17× more likely than others). Reduced first, the draw is uniform (within the aspect/crime bias).
+  const r = makeRng((u.lore.seed + level*101 + 7) % 233280);
   const used = new Set(u.lore.events.map(e=>e.i));
   const ok = (e)=> (e.req!=='crime' || !!d.crime) && (!e.min || level>=e.min);
   const aspect = r() < LIFE_FX.aspectBias;   // bias toward the unit's personal-aspect events
