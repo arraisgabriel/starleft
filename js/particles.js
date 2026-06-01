@@ -55,7 +55,7 @@
     else if(beh==='drift'){p.x=cx+jx(1.0); p.y=top+R()*W;               p.vx=(R()<0.5?-1:1)*(11+R()*16)*rch; p.vy=(R()-0.5)*5; }
     else if(beh==='glint'){p.x=cx+jx(.9);  p.y=top+R()*W*0.85;          p.vx=(R()-0.5)*3;  p.vy=(R()-0.5)*3; }
     else if(beh==='soft'){ p.x=cx+jx(1.3); p.y=base-W*0.4+(R()-0.5)*W*0.3; p.vx=(R()<0.5?-1:1)*(4+R()*7); p.vy=(R()-0.5)*2; }
-    else /*hover*/{        p.x=cx+jx(.9);  p.y=top+R()*W*0.7;            p.vx=(R()-0.5)*11*rch; p.vy=(R()-0.5)*10*rch - 3; }
+    else /*hover*/{        p.x=cx+jx(.9);  p.y=top+R()*W*0.7;            p.vx=(R()-0.5)*7.5*rch; p.vy=(R()-0.5)*7*rch - 2; }
   }
 
   // per-feature emission — primary signature + diverse secondaries, biome+slot themed (Hades palette)
@@ -86,7 +86,7 @@
         else         _make(f,'hover','205,250,150', 6,11, 3,6,  3);            // rare stray firefly (flicking light)
       } else {
         if(r<0.28)   _make(f,'hover','210,250,150', 7,13, 3,6,  3, false, 0.65); // fewer fireflies (flicking light, reined toward the tree)
-        else if(r<0.7) _make(f,'drift','175,215,150', 6,11, 4,7,  0, false, 0.5); // pollen drift (half the reach)
+        else if(r<0.7) _make(f,'drift','175,215,150', 6,11, 4,7,  0, false, 0.32); // pollen drift (slower, nearer the tree)
         else         _make(f,'glint','190,250,165', 4,7,  1,1.8, 2);             // leaf glint (stays on the tree)
       }
     }
@@ -122,7 +122,9 @@
       _inview.push(f); if(_inview.length>=600) break;
     }
     if(!_inview.length) return;
-    const target=Math.min(MAX, _inview.length*PER_FEATURE);
+    // grass/forest topography stays sparse: scale the density target toward a third where trees dominate
+    let _grass=0; for(let i=0;i<_inview.length;i++) if(_inview[i].biome===B_GRASS) _grass++;
+    const target=Math.round(Math.min(MAX, _inview.length*PER_FEATURE) * (1 - (_grass/_inview.length)*(2/3)));
     let budget=SPAWN_PER_PASS;
     while(_alive<target && budget-->0 && _free.length){
       _spawnFor(_inview[(R()*_inview.length)|0]);
