@@ -38,6 +38,26 @@ function spriteFor(biome, slot){
   const s = SPRITES[biome]; return s ? (s[slot]||null) : null;
 }
 
+/* ---- Topography FEATURE atlas (transparent cut-out rock/tree for the 3x3 walk-under
+   features, cut from the originals by _dev/gen/slice_features.py). 2 cols (rock,tree) ×
+   7 biome rows (ATLAS_BIOMES order) of FEAT_CELL px. Optional: drawFeatureSprite falls
+   back to the opaque tileset cell, then procedural, if this PNG is missing. ---- */
+const ATLAS_FEATURES = ASSET_BASE + 'atlas/features.png';
+const FEAT_IMG = new Image();
+let FEAT_READY = false;
+FEAT_IMG.onload = ()=>{ FEAT_READY = true; };
+FEAT_IMG.onerror = ()=>{ FEAT_READY = false; };
+FEAT_IMG.src = ATLAS_FEATURES;
+const FEAT_CELL = 256;
+const FEAT_COL = { rock:0, tree:1 };
+const FEAT_ROW = {}; ATLAS_BIOMES.forEach((b,i)=>{ FEAT_ROW[b]=i; });
+function featSpriteFor(biome, slot){
+  if(!FEAT_READY) return null;
+  const c = FEAT_COL[slot], r = FEAT_ROW[biome];
+  if(c==null || r==null) return null;
+  return [c*FEAT_CELL, r*FEAT_CELL, FEAT_CELL, FEAT_CELL];
+}
+
 /* ---- Building sprites (dark cyberpunk-Hades, animated like the mega-sprites) ----
    Every building is a 9-frame strip (player cyan / enemy red), bottom-anchored and
    blitted aspect-preserved so it "stands" on its footprint and overhangs upward;

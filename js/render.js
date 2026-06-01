@@ -391,10 +391,15 @@ function drawFeature(state, f, ox, oy, dim){
 function drawFeatureSprite(f, dx, dy, dw, dh){
   ctx.save();
   if(f.v>=0.5){ ctx.translate(dx+dw/2, dy+dh/2); ctx.scale(-1,1); ctx.translate(-(dx+dw/2), -(dy+dh/2)); }
-  // PHASE 2 (art only): if a transparent feature atlas is loaded, blit it here and return.
-  const r = (typeof spriteFor==='function') ? spriteFor(f.biome, f.slot) : null;   // existing opaque atlas cell
+  // 1) transparent high-res cut-out (features.png) — only the rock/tree pixels, so terrain shows
+  //    through and units behind the canopy are occluded only by the silhouette (true walk-under).
+  const fr = (typeof featSpriteFor==='function') ? featSpriteFor(f.biome, f.slot) : null;
+  if(fr){ ctx.drawImage(FEAT_IMG, fr[0],fr[1],fr[2],fr[3], dx,dy,dw,dh); ctx.restore(); return; }
+  // 2) fallback: the opaque tileset cell (ground baked in), scaled up
+  const r = (typeof spriteFor==='function') ? spriteFor(f.biome, f.slot) : null;
   if(r){ ctx.drawImage(ATLAS_IMG, r[0],r[1],r[2],r[3], dx,dy,dw,dh); ctx.restore(); return; }
-  ctx.translate(dx,dy); ctx.scale(dw/TILE, dh/TILE);                                // procedural fallback (atlas missing)
+  // 3) fallback: procedural
+  ctx.translate(dx,dy); ctx.scale(dw/TILE, dh/TILE);
   if(f.slot==='rock') drawRockTile(f.biome, f.v, 0, 0); else drawTreeTile(f.biome, f.v, 0, 0);
   ctx.restore();
 }
