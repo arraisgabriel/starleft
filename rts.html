@@ -199,6 +199,14 @@
   .event-time { flex:0 0 auto; font-size:11px; color:#9e7780; font-variant-numeric:tabular-nums; letter-spacing:.5px; }
   .event-msg { flex:1; }
   .event-msg b { color:#ffd86b; }
+  /* the unit's spoken reaction to its life-event — emphasised as quoted speech,
+     gold-accented to echo the in-world lore dialog box */
+  .event-quote { display:block; margin-top:7px; padding:5px 11px 6px;
+    border-left:3px solid #ffd24a; border-radius:0 5px 5px 0;
+    background:rgba(255,206,77,.07); color:#ffe7b0;
+    font-style:italic; font-size:12.5px; line-height:1.4; }
+  .event-quote::before { content:'\1F4AC  \201C'; margin-right:1px; color:#ffd24a; font-style:normal; }
+  .event-quote::after  { content:'\201D'; margin-left:1px; color:#ffd24a; font-style:normal; font-size:14px; }
   /* victory-screen carryover chooser */
   .carry-head { font-size:14px; letter-spacing:1px; color:#ffd0d2; text-transform:uppercase; }
   .carry-count { color:#ffd86b; font-weight:700; }

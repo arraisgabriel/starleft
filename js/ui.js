@@ -220,9 +220,9 @@ let toastTimer=null;
    (insertion id -> record) so the player can reopen them from the Events panel. */
 const eventLog=new Map();
 let eventLogSeq=0, eventLogUnseen=0;
-function logEvent(msg,isEvent){
+function logEvent(msg,isEvent,say){
   const time=new Date().toLocaleTimeString([], {hour:'2-digit',minute:'2-digit',second:'2-digit'});
-  eventLog.set(++eventLogSeq, {msg, isEvent, time});
+  eventLog.set(++eventLogSeq, {msg, isEvent, say, time});
   if(eventLog.size>200) eventLog.delete(eventLog.keys().next().value);  // cap memory over long games
   eventLogUnseen++; updateEventsBadge();
 }
@@ -241,11 +241,12 @@ function toast(msg){
   clearTimeout(toastTimer); toastTimer=setTimeout(()=>t.classList.remove('show'),1800);
   logEvent(msg,false);
 }
-// richer, longer-lived toast for life-events & obituaries (multi-line; allows HTML)
-function eventToast(html,ms=9000){
+// richer, longer-lived toast for life-events & obituaries (multi-line; allows HTML).
+// Optional `say` is the unit's spoken reaction — logged for the Events panel (not the toast).
+function eventToast(html,ms=9000,say){
   const t=document.getElementById('toast'); t.innerHTML=html; t.classList.add('show','event');
   clearTimeout(toastTimer); toastTimer=setTimeout(()=>t.classList.remove('show'),ms);
-  logEvent(html,true);
+  logEvent(html,true,say);
 }
 
 /* =====================================================================
@@ -280,7 +281,9 @@ function showEvents(){
     const rows=[];
     eventLog.forEach(e=>rows.push(
       `<div class="event-row${e.isEvent?' event-hi':''}"><span class="event-time">${e.time}</span>`+
-      `<span class="event-msg">${e.isEvent? e.msg : _escHtml(e.msg)}</span></div>`));
+      `<span class="event-msg">${e.isEvent? e.msg : _escHtml(e.msg)}`+
+      (e.say ? `<span class="event-quote">${_escHtml(e.say)}</span>` : '')+
+      `</span></div>`));
     body.innerHTML=rows.reverse().join('');
   }
   eventLogUnseen=0; updateEventsBadge();   // mark all seen on open

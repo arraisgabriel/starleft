@@ -68,7 +68,7 @@ function gainXp(u, killed, state){
     for(let L=Math.max(2, old+1); L<=s; L++){ ensureDossier(u); const ev=rollLifeEvent(u,L); if(ev){ applyEventFx(u,ev.fx,state); last=ev; } }
     if(last && typeof eventToast==='function'){
       const d=buildDossier(u);
-      eventToast(u.lore.events.length<=1 ? `📖 <b>${d.full}</b> of ${d.home}: ${last.text}` : `📖 <b>${d.first}</b>: ${last.text}`, 8800);
+      eventToast(u.lore.events.length<=1 ? `📖 <b>${d.full}</b> of ${d.home}: ${last.text}` : `📖 <b>${d.first}</b>: ${last.text}`, 8800, last.say);
     }
     // in-world dialog: the unit speaks its freshest life-event in a box above its head
     if(last && last.say && typeof sayLoreEvent==='function') sayLoreEvent(u, last.say, last.tone);
