@@ -139,11 +139,6 @@ The board is watching. Synergy awaits....` },
     rockClusters:[ {x:15,y:14,n:14}, {x:34,y:22,n:12}, {x:24,y:8,n:10} ],
     forests:[ {x:10,y:20,n:30}, {x:38,y:30,n:26}, {x:25,y:34,n:20} ],
     goldNodes:[ {x:8,y:30,amt:1500},{x:11,y:34,amt:1500},{x:43,y:9,amt:1500},{x:38,y:5,amt:1500},{x:24,y:18,amt:2000} ],
-    // ===== TEMPORARY — Biba sprite preview only; REMOVE this heroes:[] before shipping =====
-    heroes:[ { name:'Biba', type:'recruiter', sprite:'biba', level:10,
-      dossier:{ first:'Biba', home:'the flooded arcologies of Lagos-2', family:'raised six younger siblings on relief credits',
-        trauma:'watched her first squad triaged out of existence by an algorithm', dream:'to keep one team alive long enough to age' } } ],
-    // ===== END TEMPORARY Biba preview =====
   },
   {
     name:'II — The Silicon Wastes',
