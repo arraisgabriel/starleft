@@ -52,7 +52,7 @@ function gestureMove(e){
 
   // keep mouse/world fresh for edge-scroll + placement ghost
   if(e.pointerType==='mouse' || gesture.id===e.pointerId){
-    if(e.pointerType==='mouse') lastPointerWasMouse=true;
+    if(e.pointerType==='mouse'){ lastPointerWasMouse=true; mouse.onCanvas=true; }  // moving here ⇒ over the play canvas
     mouse.sx=e.clientX; mouse.sy=e.clientY;
     const w=screenToWorld(G,e.clientX,e.clientY); mouse.wx=w.x; mouse.wy=w.y;
   }
@@ -98,6 +98,11 @@ cv.addEventListener('pointermove', gestureMove);
 addEventListener('pointerup', gestureEnd);
 addEventListener('pointercancel', gestureEnd);
 cv.addEventListener('contextmenu', e=>e.preventDefault());
+// edge-scroll only runs while the pointer is over the play canvas. These boundary events fire
+// when the cursor crosses onto the HUD bars or an overlay (all stacked above the canvas) and
+// when it leaves the window — so the camera can't keep drifting once the pointer leaves the field.
+cv.addEventListener('pointerenter', e=>{ if(e.pointerType==='mouse') mouse.onCanvas=true; });
+cv.addEventListener('pointerleave', e=>{ if(e.pointerType==='mouse') mouse.onCanvas=false; });
 
 // wheel zoom (desktop), anchored at the cursor
 cv.addEventListener('wheel', e=>{
@@ -199,13 +204,6 @@ function wireTouchControls(){
     // tap/click anywhere outside, or Esc, closes it
     document.addEventListener('click', e=>{ if(!wrap.contains(e.target)) close(); });
     document.addEventListener('keydown', e=>{ if(e.key==='Escape') close(); });
-  })();
-  // flag when the cursor is over the top bar (or its open dropdown, a descendant) so the
-  // camera's edge-scroll stands down there — see updateCamera() / mouse.overHud in input.js
-  (function trackHudHover(){
-    const tb=document.getElementById('topbar'); if(!tb) return;
-    tb.addEventListener('pointerenter', ()=>{ mouse.overHud=true;  });
-    tb.addEventListener('pointerleave', ()=>{ mouse.overHud=false; });
   })();
   on('btn-zoom-in', ()=>{ if(G) zoomAt(G, viewW()/2, VIEW_TOP+viewH()/2, 1.2); });
   on('btn-zoom-out',()=>{ if(G) zoomAt(G, viewW()/2, VIEW_TOP+viewH()/2, 1/1.2); });

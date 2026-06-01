@@ -2,7 +2,7 @@
 /* =====================================================================
    INPUT
    ===================================================================== */
-const mouse={ sx:0, sy:0, wx:0, wy:0, edge:{l:0,r:0,u:0,d:0}, overHud:false };
+const mouse={ sx:0, sy:0, wx:0, wy:0, edge:{l:0,r:0,u:0,d:0}, onCanvas:false };
 let edgeTopHold=0;           // seconds the cursor has dwelt in the TOP edge band
 const EDGE_TOP_DELAY=1.5;    // wait this long before the top edge starts panning up — keeps the
                             // top-bar (and its drop-down menu) easy to reach without yanking the view
@@ -234,9 +234,11 @@ function updateCamera(state,dt){
   if(keys['w']||keys['arrowup']) dy-=spd;
   if(keys['s']||keys['arrowdown']) dy+=spd;
   // edge-scroll is desktop-only — on touch the one-finger drag pans instead.
-  // While the cursor is over the HUD (top bar / its menu) we suppress edge-scroll entirely
-  // so reaching the top-right menu — or hovering its open dropdown — never moves the view.
-  if(lastPointerWasMouse && !mouse.overHud){
+  // Only scroll while the cursor is genuinely over the play canvas. The top bar, bottom bar
+  // and every modal overlay sit ON TOP of the canvas, so when the pointer is over any of them
+  // mouse.onCanvas is false — this stops the view drifting up while a menu modal is open and
+  // also keeps the top-right menu easy to reach.
+  if(lastPointerWasMouse && mouse.onCanvas){
     const m=18, vw=viewW(), vh=cv.height/dpr;
     if(mouse.sx<m) dx-=spd;
     if(mouse.sx>vw-m) dx+=spd;
