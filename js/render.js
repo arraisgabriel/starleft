@@ -7,10 +7,16 @@ function computeFog(state){
   const W=state.W,H=state.H;
   for(const e of state.entities){
     if(e.dead||e.owner!=='player') continue;
-    const sight=e.sight||5;
+    // You always see at least as far as you can shoot: reveal radius is the
+    // larger of sight and attack range (the Auditor's siege range while set up),
+    // so a unit/building can never fire into unrevealed fog.
+    const def=DEF[e.type]||{};
+    const baseR=(e.range!=null ? e.range : (def.range||0));
+    const atkR=(e.sieged && def.siege) ? def.siege.range : baseR;
+    const sight=Math.max(e.sight||5, atkR);
     const cx=(e.x/TILE)|0, cy=(e.y/TILE)|0;
-    const s2=sight*sight;
-    for(let y=-sight;y<=sight;y++)for(let x=-sight;x<=sight;x++){
+    const s2=sight*sight, R=Math.ceil(sight);   // R: integer loop bound (sight may be fractional, e.g. HQ 7.5)
+    for(let y=-R;y<=R;y++)for(let x=-R;x<=R;x++){
       if(x*x+y*y>s2) continue;
       const nx=cx+x, ny=cy+y;
       if(nx<0||ny<0||nx>=W||ny>=H) continue;
