@@ -3,7 +3,9 @@
      SELECT_LINES[type]  — 25 dark-comedy "unit selected" barks per unit type.
      LORE_SAY[i]         — first-person reaction to LORE_DATA.events[i] (APPEND-ONLY,
                            index-aligned with that array; null → tone+aspect fallback).
-     LORE_SAY_FALLBACK   — [aspect][tone] safety net so a level-up is never mute. */
+     LORE_SAY_FALLBACK   — [aspect][tone] safety net so a level-up is never mute.
+     HERO_SELECT_LINES   — 25 bespoke barks per named hero (keyed by heroId), used in
+                           place of the unit-type pool when a hero is selected. */
 
 const SELECT_LINES = {
   worker: [
@@ -302,6 +304,64 @@ const SELECT_LINES = {
     "I leverage gravity. It always delivers.",
     "Circling back. With high explosives.",
     "Onboarding the campus to a crater.",
+  ],
+};
+
+// named heroes speak from their own pool (keyed by u.heroId), not their unit type.
+const HERO_SELECT_LINES = {
+  "Nino": [
+    "I still know who owes us. Time to call it in.",
+    "One clean deal left in me. Let's make it count.",
+    "Came back to the crater. That has to count.",
+    "Wrote the laws that buried them. Better ones now.",
+    "One shot, then I reload. Make every favor land.",
+    "Half this town owes me. We rebuild on the debt.",
+    "Names on the wall. I'm collecting for all of them.",
+    "Bought the first votes. These ones are free.",
+    "I know every back room. One leads somewhere good.",
+    "Three streets out when it burned. Came back anyway.",
+    "Give me a phone and a room. I'll get us standing.",
+    "Traded favors for ruin once. Now for what lasts.",
+    "My Rolodex outlived the empire. Spend it right.",
+    "Aim slow, hit once. I only need one true shot left.",
+    "Favors in one hand, nothing to lose in the other.",
+    "I wrote names onto that wall. Let me earn one off.",
+    "Senators come cheap. A conscience is the spend.",
+    "I lost sleep over those laws. Now I lobby for us.",
+    "Buy the room, build the thing, outlast the money.",
+    "Every name I hired is gone. I stayed to honor them.",
+    "Long reload, longer memory. I forget no one we lost.",
+    "Sold its first lie. Let's sell it a future now.",
+    "Access is the weapon. This time I aim it at hope.",
+    "One devastating shot. Then we build while I reload.",
+    "Came back when I didn't have to. Don't waste it.",
+  ],
+  "Biba": [
+    "Healers don't quit. I never could.",
+    "I keep people alive. That's still the plan.",
+    "Death's a bug. I wrote the patch — hold still.",
+    "Raised six on relief credits. I can hold a squad.",
+    "I built the chip so the wall stops being final.",
+    "Out of the cell. Let's mend what they broke.",
+    "I don't fight. I make sure you walk home.",
+    "A&O caged the dream. The dream still works.",
+    "Big sister rules: nobody gets left behind.",
+    "Burnout's curable. I've cured worse, on less.",
+    "I'll stitch you up — we're a family now.",
+    "Grew up underwater. Learned to keep us afloat.",
+    "They triaged my squad. Not this one. Not again.",
+    "I engineer second chances. Yours starts now.",
+    "Hold still — I've got you, every time.",
+    "Lagos-2 taught me: you mend, then you build.",
+    "No damage from me. Just everyone breathing.",
+    "I dreamed a way past dying. Let me prove it.",
+    "Six kids, no money, all alive. You're easy.",
+    "Tired hands, steady work. We last together.",
+    "I lift minds out of failing bodies. Trust me.",
+    "Broke out, still building. Let's grow old loud.",
+    "I patch hearts and burnout. Lean on me.",
+    "The chip's mine. So is keeping this team whole.",
+    "We're like a family. I keep families alive.",
   ],
 };
 

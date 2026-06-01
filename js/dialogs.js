@@ -13,7 +13,7 @@
    (assets.js), roundRect (render.js), ctx (config.js), G (state.js). */
 
 const DIALOG = { fadeIn:0.15, fadeOut:0.6, maxConcurrent:14,
-                 maxChars:26, maxLines:2 };        // ~26×2 ≈ the 50-char soft limit
+                 maxChars:30, maxLines:2 };        // ~30×2 fits every bark in 2 clean lines, no clip
 // on-screen seconds by dialog type (scaled by text length within the range). Lore-event boxes
 // linger longer than selection barks so a career milestone reads as a beat, not a blip.
 const TTL = { select:{min:3,max:7}, lore:{min:6,max:9} };
@@ -32,7 +32,10 @@ function resetDialogs(){ _dialogs.length = 0; _lastSel.id = null; }
 /* ---------------- public producers ---------------- */
 function sayUnitSelected(u){
   if(!u || u.kind!=='unit' || u.owner!=='player') return;
-  const pool = (typeof SELECT_LINES!=='undefined' && SELECT_LINES[u.type]) || null;
+  // named heroes (Nino, Biba) speak from their OWN pool keyed by heroId; everyone else
+  // falls back to their unit type's pool.
+  let pool = (u.hero && u.heroId && typeof HERO_SELECT_LINES!=='undefined') ? HERO_SELECT_LINES[u.heroId] : null;
+  if(!pool || !pool.length) pool = (typeof SELECT_LINES!=='undefined' && SELECT_LINES[u.type]) || null;
   if(!pool || !pool.length) return;
   pushDialog(u, _pickLine(u, pool), { type:'select', tone:'neutral' });
 }
