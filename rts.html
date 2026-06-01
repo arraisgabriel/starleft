@@ -351,6 +351,42 @@
     #touch-controls{ padding:3px 6px; }
   }
 
+  /* ---- Wide & short viewports (phones in landscape, short windows) ----
+     Collapse the 150px bottom panel into two slim rows and float the minimap.
+     Shape-based (not touch-based) so it also fixes wide-short desktop windows;
+     the max-height guard spares ultrawide monitors. Placed last so it wins the
+     cascade where it overlaps the hover:none / max-height:480px blocks above. */
+  @media (min-aspect-ratio: 2/1) and (max-height: 600px){
+    #bottom{ height:auto; flex-direction:row; flex-wrap:wrap; align-items:stretch; }
+    #minimap-wrap{ display:none; }                       /* reachable via the floating 🗺 */
+
+    /* row 1 — command buttons, full width, scroll sideways (never wrap to a 3rd row).
+       min-height keeps the panel a constant height whether or not anything is selected,
+       so syncHud()'s VIEW_BOT (synced on resize) stays accurate as commands populate. */
+    #commands{ order:1; flex:1 1 100%; width:auto; border-left:none; min-height:48px;
+      flex-wrap:nowrap; overflow-x:auto; -webkit-overflow-scrolling:touch;
+      padding:4px 8px; gap:6px; align-items:center; }
+    .cmd-btn{ flex:0 0 auto; width:auto; min-width:58px; height:42px; min-height:42px;
+      font-size:11px; padding:3px 8px; }
+    .cmd-btn .emoji{ font-size:17px; }
+
+    /* row 2 — condensed one-line unit summary (left) shares the row with the controls (right) */
+    #selinfo{ display:block; order:2; flex:0 1 auto; max-width:46%;
+      padding:2px 10px; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }
+    #selinfo h3{ display:inline; font-size:12px; margin:0; }
+    #selinfo .stats{ display:inline-flex; gap:8px; font-size:10px; margin-left:8px; }
+    #selinfo .desc, #selinfo #prod-queue, #sel-dossier{ display:none; }
+
+    #touch-controls{ display:flex; order:3; flex:1 1 auto; justify-content:flex-end;
+      overflow-x:auto; -webkit-overflow-scrolling:touch; padding:3px 6px; }
+
+    /* minimap toggle becomes a floating corner button (reuses #btn-minimap → .as-overlay) */
+    #btn-minimap{ position:fixed; z-index:27; right:8px;
+      top:calc(var(--top-h) + 6px + var(--safe-t));
+      width:44px; height:44px; min-width:44px; min-height:44px; }
+    #minimap-wrap.as-overlay{ top:calc(var(--top-h) + 58px + var(--safe-t)); }  /* bloom under the 🗺 */
+  }
+
   /* ================= Revamped main menu (StarCraft-II layout, red accent) ================= */
   .overlay.menu{ display:block; padding:0; background:#07050a; }
   .menu-bg{ position:absolute; inset:0; z-index:0; background-repeat:no-repeat;
