@@ -35,13 +35,15 @@
      POSITION not per-tile random → the checkerboard disappears. Stays on the dark/
      devastated palette (BIOME_PAL water a:#0c2230 b:#103040). Magma base is dominantly
      DARK basalt; the glow comes from the crack/core overlay in drawWater, not the base. */
+  // Wider shallow->deep contrast so the depth gradient is clearly readable (was too shy).
+  // Shallow is a lit teal near shore; deep is near-black — average stays dark/devastated.
   const RAMP = {
-    [B_WATER]:    [[18,58,72],  [12,34,48]],   // toxic teal: #123a48 -> #0c2230
-    [B_ICE]:      [[44,77,92],  [26,51,64]],   // dirty slush: #2c4d5c -> #1a3340
-    [B_TECH]:     [[20,50,58],  [14,39,48]],   // dark cyan coolant: #14323a -> #0e2730
-    [B_VOLCANIC]: [[44,26,18],  [22,16,12]],   // scorched basalt crust: #2c1a12 -> #16100c
+    [B_WATER]:    [[34,96,116], [7,22,33]],    // lit toxic teal -> near-black abyss
+    [B_ICE]:      [[58,104,122],[20,42,54]],   // slush -> deep frozen
+    [B_TECH]:     [[26,74,86],  [9,26,34]],    // coolant cyan -> dark
+    [B_VOLCANIC]: [[52,30,20],  [16,11,8]],    // scorched edge -> near-black basalt
   };
-  const DEPTH_SCALE = 6;                       // tiles to reach "open deep" (depth 1.0)
+  const DEPTH_SCALE = 6;                       // tiles to reach "open deep" before smoothing/renorm
 
   function _ramp(b){ return RAMP[b] || RAMP[B_WATER]; }
 
@@ -52,9 +54,10 @@
       const r = waterSpriteFor(b, 'depth', (depth*2.999)|0);   // 3-cell shore->mid->deep strip
       if(r){ ctx.drawImage(WATER_IMG, r[0],r[1],r[2],r[3], px,py, TILE+1,TILE+1); return; }
     }
+    // NO per-tile dither — it was square-aligned and reintroduced the pixelated look. The depth
+    // field is now smoothed + renormalized in buildWaterDepth, so the lerp alone is a clean gradient.
     const ra=_ramp(b), sh=ra[0], dp=ra[1], t=depth;
-    const d=((v*6)|0)-3;                        // ±3 per-channel dither so big bodies don't band
-    ctx.fillStyle = 'rgb('+_c8(sh[0]+(dp[0]-sh[0])*t + d)+','+_c8(sh[1]+(dp[1]-sh[1])*t + d)+','+_c8(sh[2]+(dp[2]-sh[2])*t + d)+')';
+    ctx.fillStyle = 'rgb('+_c8(sh[0]+(dp[0]-sh[0])*t)+','+_c8(sh[1]+(dp[1]-sh[1])*t)+','+_c8(sh[2]+(dp[2]-sh[2])*t)+')';
     ctx.fillRect(px,py,TILE+1,TILE+1);          // 1px overscan hides seams (same as the old fill)
   }
 
@@ -96,6 +99,24 @@
       const dd = dist[i]<0 ? DEPTH_SCALE : dist[i];     // unreached (shouldn't happen post-erosion) -> deep
       depth[i] = dd>=DEPTH_SCALE ? 1 : dd/DEPTH_SCALE;
     }
+    // ---- smooth the integer-distance RINGS into a continuous gradient (kills the blocky
+    //      concentric bands), then renormalize to the full 0..1 range so every body shows a
+    //      clear shallow->deep gradient regardless of size (fixes "barely see it" + "squares"). ----
+    const tmp=new Float32Array(N);
+    for(let p=0;p<6;p++){
+      for(let i=0;i<N;i++){
+        if(!isW(i)){ tmp[i]=depth[i]; continue; }
+        const x=i%W, y=(i/W)|0; let s=depth[i], c=1;
+        if(x>0   && isW(i-1)){ s+=depth[i-1]; c++; }
+        if(x<W-1 && isW(i+1)){ s+=depth[i+1]; c++; }
+        if(y>0   && isW(i-W)){ s+=depth[i-W]; c++; }
+        if(y<H-1 && isW(i+W)){ s+=depth[i+W]; c++; }
+        tmp[i]=s/c;
+      }
+      depth.set(tmp);
+    }
+    let mx=0; for(let i=0;i<N;i++){ if(isW(i) && depth[i]>mx) mx=depth[i]; }
+    if(mx>0.001){ const inv=1/mx; for(let i=0;i<N;i++){ if(isW(i)) depth[i]*=inv; } }
     state.waterDepth = depth;
 
     // ---- allocate the tide field over the water bbox (1 cell per tile) ----
@@ -120,13 +141,14 @@
      The swell is always added analytically so even an un-agitated body breathes; the buffer
      adds propagating ripples on TIER 2. NO per-pixel ImageData refraction. */
   const DAMP = 0.985;            // research band 0.98-0.99; gentle, long-lived swell
-  const SWELL_AMP = 0.55;
-  const AMBIENT_AMP = 0.9;       // sparse ambient ripple impulse
-  const TIDE_DT = 0.10;          // field tick cadence (s) — ~every 6th frame at 60fps
+  const SWELL_AMP = 2.4;         // bold enough that the swell visibly moves the highlight wavefronts
+  const AMBIENT_AMP = 2.2;       // sparse ambient ripple impulse
+  const TIDE_DT = 0.09;          // field tick cadence (s) — ~every 5th-6th frame at 60fps
   let _t=0, _tideAcc=0;
 
   function waterField(wx,wy){
-    let h = SWELL_AMP * Math.sin(_t*0.5 + wx*0.012) * Math.sin(_t*0.37 + wy*0.015);
+    // crossed sines: faster in time + a touch higher spatial freq → more, clearly-travelling crests
+    let h = SWELL_AMP * Math.sin(_t*0.8 + wx*0.018) * Math.sin(_t*0.55 + wy*0.022);
     if(TIER>=2 && _box && _hCur){
       const fx = wx/TILE - _box.gx0, fy = wy/TILE - _box.gy0;
       const ix=Math.floor(fx), iy=Math.floor(fy), GW=_box.GW, GH=_box.GH;
@@ -172,7 +194,7 @@
     // sparse ambient seeding within the visible span only (off-screen water stays calm/invisible)
     if((typeof running!=='undefined' && !running) || state.over) return;
     const [x0,y0,x1,y1]=_bounds(state);
-    for(let k=0;k<5;k++){
+    for(let k=0;k<8;k++){
       const tx=x0+((R()*(x1-x0))|0), ty=y0+((R()*(y1-y0))|0);
       _impulse(tx*TILE+16, ty*TILE+16, (R()-0.5)*AMBIENT_AMP);
     }
@@ -206,9 +228,10 @@
     for(let y=0;y<S;y++)for(let x=0;x<S;x++){
       const n = nz ? _tnoise(nz,x,y,S,F) : (0.5+0.5*Math.sin(x*0.2)*Math.sin(y*0.2));
       const j=(y*S+x)*4;
-      // caustic: bright cyan where noise is high (vein-like)
-      let ci = (n-0.5)*2; ci = ci>0 ? ci*ci*ci : 0;          // emphasize peaks
-      cd[j]=150; cd[j+1]=232; cd[j+2]=236; cd[j+3]=(ci*255)|0;
+      // caustic: bright cyan where noise is high (vein-like). Squared (not cubed) → broader,
+      // more visible shimmer coverage rather than thin sparse veins.
+      let ci = (n-0.42)*1.9; ci = ci>0 ? ci*ci : 0;
+      cd[j]=160; cd[j+1]=236; cd[j+2]=240; cd[j+3]=(Math.min(1,ci)*255)|0;
       // lava cracks: orange ramp in top ~30% of noise; hotter toward the peak
       let li = (n-0.6)/0.4; li = li<0?0:(li>1?1:li);
       const hot = li>0.6 ? (li-0.6)/0.4 : 0;
@@ -243,11 +266,11 @@
     const W=state.W, T=state.tiles, B=state.biome, DEP=state.waterDepth, EXP=state.explored;
     let hasMagma=false;
 
-    // ---- pass A: cyan caustic over liquid water (batched) ----
+    // ---- pass A: cyan caustic over liquid water — TWO crossing layers (build the path once,
+    //      fill twice with different world-scroll offsets) so the shimmer visibly flows. ----
     if(_causticPat){
-      _setPat(_causticPat, -_fmod(_t*5, 128), -_fmod(_t*-3, 128));
       ctx.save();
-      ctx.globalCompositeOperation='lighter'; ctx.globalAlpha=0.07; ctx.fillStyle=_causticPat;
+      ctx.globalCompositeOperation='lighter'; ctx.fillStyle=_causticPat;
       ctx.beginPath();
       for(let ty=y0;ty<y1;ty++)for(let tx=x0;tx<x1;tx++){
         const i=ty*W+tx; if(T[i]!==T_WATER || !EXP[i]) continue;
@@ -256,24 +279,30 @@
         if(b===B_ICE) continue;                              // frozen — no caustic
         ctx.rect(tx*TILE, ty*TILE, TILE+1, TILE+1);
       }
-      ctx.fill();
+      _setPat(_causticPat, -_fmod(_t*7,128),  -_fmod(_t*-4,128)); ctx.globalAlpha=0.15; ctx.fill();
+      _setPat(_causticPat, -_fmod(_t*-5,128), -_fmod(_t*6,128));  ctx.globalAlpha=0.11; ctx.fill();
       ctx.restore();
     } else {
       for(let ty=y0;ty<y1;ty++)for(let tx=x0;tx<x1;tx++){ const i=ty*W+tx; if(T[i]===T_WATER&&EXP[i]&&B[i]===B_VOLCANIC){ hasMagma=true; ty=y1; break; } }
     }
 
-    // ---- pass B: per-tile specular tide band over liquid water ----
+    // ---- pass B: tide as a soft whole-tile brightness SWELL. Wave crests (positive height)
+    //      glow gently across the whole tile; troughs stay dark. Because the field varies
+    //      smoothly across tiles, this reads as broad MOVING bands of light drifting over the
+    //      water (a tide) — never hard lines or per-tile dashes. Sampled at the tile corners
+    //      and averaged so the brightness is smooth across the 32px seam, not a flat block. ----
     ctx.save();
-    ctx.globalCompositeOperation='lighter'; ctx.fillStyle='rgba(150,235,235,1)';
+    ctx.globalCompositeOperation='lighter'; ctx.fillStyle='rgba(120,210,222,1)';
     for(let ty=y0;ty<y1;ty++)for(let tx=x0;tx<x1;tx++){
       const i=ty*W+tx; if(T[i]!==T_WATER || !EXP[i]) continue;
       const b=B[i]; if(b===B_ICE || b===B_VOLCANIC) continue;
-      const wcx=tx*TILE+16, wcy=ty*TILE+16;
-      const h=waterField(wcx,wcy), g=waterGrad(wcx,wcy);
-      let a=0.03 + g*0.05; if(a>0.12) a=0.12;
+      const px=tx*TILE, py=ty*TILE;
+      // average the wave height at the four tile corners → smooth tile-to-tile (no blocky steps)
+      const h=(waterField(px,py)+waterField(px+TILE,py)+waterField(px,py+TILE)+waterField(px+TILE,py+TILE))*0.25;
+      if(h<=0.1) continue;                                   // only crests glow → broad bright bands, dark troughs
+      let a=h*0.05; if(a>0.13) a=0.13;
       if(!state.visible[i]) a*=0.5;
-      let by=8 + h*5; if(by<2)by=2; else if(by>TILE-3)by=TILE-3;
-      ctx.globalAlpha=a; ctx.fillRect(tx*TILE, ty*TILE+by, TILE, 2);
+      ctx.globalAlpha=a; ctx.fillRect(px, py, TILE+1, TILE+1);
     }
     ctx.restore();
 
