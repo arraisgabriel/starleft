@@ -11,6 +11,9 @@ function buildEnemyBase(state, base, idx){
   if(idx>=1 && ax+3<=state.W && ay+6<=state.H) mkBuilding(state,'garage','enemy', ax, ay+3, true); // 3×3, below HQ
   const ndef = base.defenders!=null ? base.defenders : (idx===0?2:4);
   for(let i=0;i<ndef;i++) mkUnit(state,'soldier','enemy', ax+1+i, ay+6);   // muster below the base (clear ground)
+  // dynamic difficulty: extra defenders scaled to the player's carried career power (balance.js).
+  // state._vpi is computed once in newMap before the bases are built; 0 (fresh) → no bonus.
+  if(typeof applyVetScalingToBase==='function') applyVetScalingToBase(state, base, idx, state._vpi||0);
 }
 
 // All maps are enlarged uniformly at load time: dimensions (w,h) and every tile
@@ -224,6 +227,10 @@ function newMap(idx){
   spawnVets(state);   // carry veterans from the previous campaign map (count grows every 2 maps)
   spawnHeroes(state); // named campaign heroes declared on the map (e.g. Nino on Episode VIII)
   if(cfg.startBarracks) mkBuilding(state,'barracks','player', cfg.player.x-3, cfg.player.y, true);
+
+  // dynamic difficulty: measure carried career power NOW (player units are placed, enemies aren't),
+  // so each enemy base can muster proportionate extra defenders (balance.js). 0 (fresh) → no bonus.
+  state._vpi = (typeof computePlayerVPI==='function') ? computePlayerVPI(state) : 0;
 
   // ---- enemy bases (one or more) ----
   bases.forEach(b=> buildEnemyBase(state, b, idx));

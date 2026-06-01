@@ -166,15 +166,49 @@ Two automated checks plus a human read.
    match — it previously omitted `js/megasprites.js`/`js/assets.js` so `newMap()` threw, and it
    checked unscaled coordinates.)
 
-3. **Narrative-coherence checklist** — read these yourself; scripts can't judge story:
+3. **Balance gate** — checks the map is neither unwinnable nor trivialized by carried career units
+   (the thing the difficulty table can't see). It has two tiers:
+   ```bash
+   node .claude/skills/starleft-mapmaker/scripts/simulate_balance.js <idx> --gate          # mandatory
+   node .claude/skills/starleft-mapmaker/scripts/simulate_balance.js <idx> --gate --play   # + advisory bot
+   node .claude/skills/starleft-mapmaker/scripts/simulate_balance.js --calibrate            # curve, all maps
+   ```
+   **The mandatory gate is a deterministic power-ratio check** (no RNG, instant). It computes, for
+   three carry profiles (fresh / typical / invested), the player's combat power entering the map
+   (economy-buildable army + carried veterans with their real career multipliers) vs the enemy's
+   total defensive power *after* `js/balance.js` has added its carry-scaled bonus defenders, and
+   prints the ratio per profile. It **hard-fails only on position-independent bugs**:
+   - **unwinnable** — `typical` (or `invested`) power ratio below ~1.0 (player under parity), or
+   - **carryover run-away** — `invested` ratio more than **1.5× the fresh ratio**, meaning carried
+     veterans trivialize the map and `js/balance.js` vetScaling isn't compensating. (This is the
+     exact failure the whole feature exists to prevent; the gate's swing metric directly measures
+     whether vetScaling is working — turn vetScaling off and the swing jumps, fail fires.)
+
+   It does **not** hard-fail "too easy in absolute terms," because the shipping campaign's ratio
+   legitimately declines ~18→2 across the arc — that decline *is* the difficulty curve. Instead it
+   prints an **advisory** comparing the map to the shipping curve at its slot ("easy/hard for its arc
+   position — OK if intentional, e.g. a restart map"). `--calibrate` dumps every map's ratios so the
+   bands (`PR` in the script) can be re-derived if engine stats change. Aim for `✅ POWER GATE PASS`.
+   See "Balancing for carryover" in `references/map-schema.md` for tuning. If `invested` runs away,
+   raise enemy pressure (defenders / `aggression` / base count) or `VET_SCALE`/`maxBonus` in
+   `js/balance.js`.
+
+   **`--play` adds an auto-player ADVISORY only — it never affects pass/fail.** A scripted bot plays
+   the map and flags *absurd extremes the power model could miss*: an invested deathball that can't
+   clear at all (suspect an unreachable / over-walled base — eyeball the layout) or a fresh start that
+   wins in under ~2.5 min (suspect far-too-easy). The bot is a heuristic, not a champion — it can't
+   reliably win fortified maps, so it is deliberately kept out of the gate and only surfaces gross
+   anomalies. Trust the deterministic ratio for pass/fail; use the bot as a sanity nudge.
+
+4. **Narrative-coherence checklist** — read these yourself; scripts can't judge story:
    - Does the crawl follow emotionally and financially from the *previous* episode's ending?
    - After this insertion, does the *next* episode's opening still make sense?
    - Is the tone dark, satirical, second-person, and un-triumphal (per the world bible)?
    - Faction, biome, and difficulty all matching the same arc position?
    - Objective's base count == placed enemy count == crawl's stated count?
 
-Fix and re-run until both scripts are clean and the checklist passes. Then summarize for the user
-what was added, where in the arc, and the validation results.
+Fix and re-run until the schema + geometry scripts are clean, the balance gate passes, and the
+checklist holds. Then summarize for the user what was added, where in the arc, and the results.
 
 ## Optional follow-through
 

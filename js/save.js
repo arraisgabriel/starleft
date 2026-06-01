@@ -64,6 +64,11 @@ function deserializeGame(s){
   g.entities = s.entities.map(e=>Object.assign({}, e));
   const byId = new Map(g.entities.map(e=>[e.id, e]));
   g.entities.forEach(e=>resolveRefs(e, byId));        // re-link cross-refs in place
+  // back-fill hero sprite overrides for saves written before heroes[].sprite existed (e.g. a
+  // carried Nino restored as a plain lobbyist) — derive it from the map configs by heroId.
+  if(typeof heroSpriteFor==='function') g.entities.forEach(e=>{
+    if(e.hero && !e.spriteType){ const sp=heroSpriteFor(e.heroId, e.type); if(sp) e.spriteType=sp; }
+  });
   g.selection = (s.selection||[]).map(id=>byId.get(id)).filter(Boolean);
   g.selection.forEach(e=>e.selected=true);
   g.groups={}; for(const k in (s.groups||{})) g.groups[k]=s.groups[k].map(id=>byId.get(id)).filter(Boolean);

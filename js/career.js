@@ -68,7 +68,7 @@ function gainXp(u, killed, state){
     for(let L=Math.max(2, old+1); L<=s; L++){ ensureDossier(u); const ev=rollLifeEvent(u,L); if(ev){ applyEventFx(u,ev.fx,state); last=ev; } }
     if(last && typeof eventToast==='function'){
       const d=buildDossier(u);
-      eventToast(u.lore.events.length<=1 ? `📖 <b>${d.full}</b> of ${d.home}: ${last.text}` : `📖 <b>${d.first}</b>: ${last.text}`);
+      eventToast(u.lore.events.length<=1 ? `📖 <b>${d.full}</b> of ${d.home}: ${last.text}` : `📖 <b>${d.first}</b>: ${last.text}`, 8800);
     }
   }
 }
@@ -154,19 +154,34 @@ function spawnVets(state){
 function captureHeroes(state){
   carryoverHeroes = state.entities
     .filter(e=>!e.dead && e.owner==='player' && e.hero)
-    .map(e=>({ heroId:e.heroId, type:e.type, stars:e.stars, xp:e.xp, lore:e.lore }));
+    .map(e=>({ heroId:e.heroId, type:e.type, sprite:e.spriteType, stars:e.stars, xp:e.xp, lore:e.lore }));
 }
 // clear the hero carryover (a brand-new campaign / map-select replay starts heroless)
 function resetHeroes(){ carryoverHeroes = []; }
 
+// Look up a hero's visual sprite override from the map configs (the single source of truth:
+// heroes[].sprite). Lets us derive it anywhere — for carried heroes whose map no longer lists
+// them, and to back-fill saves written before the field existed (see save.js). Matches by
+// heroId first; falls back to unit `type` for OLD saves whose hero lost its heroId (a saved
+// hero of type 'lobbyist' is Nino, the only lobbyist hero declared with a sprite).
+function heroSpriteFor(heroId, type){
+  for(const m of MAPS){ if(m.heroes) for(const h of m.heroes){ if(heroId && (h.id||h.name)===heroId && h.sprite) return h.sprite; } }
+  if(type){ for(const m of MAPS){ if(m.heroes) for(const h of m.heroes){ if(h.type===type && h.sprite) return h.sprite; } } }
+  return null;
+}
+
 // place ONE hero unit beside the player HQ; `pos` is the muster-slot index (for spacing).
-function _placeHero(state, c, pos, type, heroId, stars, xp, lore, dossier){
+// `sprite` is an optional visual-only sprite override (e.g. Nino's purple recolor); the hero
+// still plays as `type` in every gameplay respect (DEF stats, icon, AI). See drawUnit/unitDrawH.
+function _placeHero(state, c, pos, type, heroId, stars, xp, lore, dossier, sprite){
   if(!DEF[type]) return;                                       // unknown unit type → skip safely
   const u=mkUnit(state, type, 'player', c.x+1+(pos%3), c.y+5+((pos/3)|0));
   u.stars=Math.max(0, Math.min(CAREER.maxStars, stars||0));
   u.xp=(xp!=null)?xp:CAREER.xpFor(u.stars);
   applyVetHp(u, true);                                         // bake leveled max-HP and full-heal
   u.hero=true; u.heroId=heroId;
+  const sp = sprite || heroSpriteFor(heroId, type);            // fall back to config if the carryover predates `sprite`
+  if(sp) u.spriteType=sp;                                      // render his bespoke recolored strips
   u.lore = lore || { seed:(u.id||0)+1, events:[], fixed: dossier || { name:heroId } };
 }
 
@@ -176,14 +191,14 @@ function spawnHeroes(state){
   const cfg=state.cfg, c=cfg.player;
   let pos=0; const placed=new Set();
   for(const h of carryoverHeroes){                            // auto-carried survivors
-    _placeHero(state, c, pos++, h.type, h.heroId, h.stars, h.xp, h.lore, null);
+    _placeHero(state, c, pos++, h.type, h.heroId, h.stars, h.xp, h.lore, null, h.sprite);
     placed.add(h.heroId);
   }
   if(cfg && cfg.heroes) for(const h of cfg.heroes){           // first appearances on this map
     const hid = h.id || h.name;
     if(placed.has(hid)) continue;                             // already carried in — don't duplicate
     const lvl = Math.max(0, Math.min(CAREER.maxStars, h.level||0));
-    _placeHero(state, c, pos++, h.type, hid, lvl, CAREER.xpFor(lvl), null, h.dossier || { name:h.name });
+    _placeHero(state, c, pos++, h.type, hid, lvl, CAREER.xpFor(lvl), null, h.dossier || { name:h.name }, h.sprite);
     placed.add(hid);
   }
 }

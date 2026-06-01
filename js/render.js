@@ -487,7 +487,7 @@ function drawUnit(state,u,ox,oy){
   const px=u.x+ox, py=u.y+oy;
   const r=u.r;
   const alt = u.air?16:0;   // flyers are drawn raised
-  const vh = (UNIT_SPRITE_H[u.type]||r*2);   // drawn sprite height — HUD scales to this, not collision r
+  const vh = unitDrawH(u);   // drawn sprite height (incl. hero 15% bump) — HUD/ring scale to this, not collision r
 
   // ---- movement state for sprite animation (updated each render frame) ----
   const lax = u._ax==null?u.x:u._ax, lay = u._ay==null?u.y:u._ay;
@@ -506,10 +506,11 @@ function drawUnit(state,u,ox,oy){
   const team = _red ? '#c0392b' : '#3b7fd0';
   const teamL= _red ? '#e57368' : '#7fb7f0';
 
-  const anim = unitWalk(u.type, u.owner);
+  const sType = u.spriteType || u.type;   // hero visual override (e.g. Nino → 'nino'); gameplay still uses u.type
+  const anim = unitWalk(sType, u.owner);
   if(anim){
     const S = vh;
-    const act = u._actState ? actionAnim(u.type, u._actState, u.owner) : null;
+    const act = u._actState ? actionAnim(sType, u._actState, u.owner) : null;
     let fi, useAnim;
     if(act){
       useAnim = act; const n=act.frames.length;

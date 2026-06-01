@@ -121,7 +121,7 @@ function recordFallen(u){
   fallenVets.push({ name:d.full, type:u.type, lvl:u.stars||0, dream:d.dream, home:d.home,
                     map:(typeof G!=='undefined'&&G&&G.cfg)?G.cfg.name:'', dreamDone:!!u.dreamDone });
   if(typeof eventToast==='function')
-    eventToast(`🕯 <b>${d.full}</b> has fallen — ${u.dreamDone?'their dream fulfilled':'dream unfulfilled: '+_loCap(d.dream)}.`);
+    eventToast(`🕯 <b>${d.full}</b> has fallen — ${u.dreamDone?'their dream fulfilled':'dream unfulfilled: '+_loCap(d.dream)}.`, 10000);
 }
 
 /* ---- rendering (returns HTML strings; ui.js owns showing the overlays) ---- */

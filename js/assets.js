@@ -100,16 +100,27 @@ const UNIT_WALK = {
   recruiter:walkPair('recruiter','walk'), hustler:walkPair('hustler','walk'),   lobbyist:walkPair('lobbyist','walk'),
   foodtruck:walkPair('foodtruck','walk'), auditor:walkPair('auditor','walk'),   founder:walkPair('founder','walk'),
   courier:walkPair('courier','walk'),     bomber:walkPair('bomber','walk'),
+  // Hero-only recolor of the Lobbyist (purple suit / red accents / golden rifle) for Nino —
+  // selected via u.spriteType, NOT u.type, so gameplay still treats him as a lobbyist.
+  nino:walkPair('nino','walk'),
+  // Hero Recruiter "Biba" (Storm-likeness: white vest, silver hair) — visual override only;
+  // gameplay stays a recruiter. Bespoke palette written to both faction keys (see slice_biba.py).
+  biba:walkPair('biba','walk'),
 };
 // drawn sprite HEIGHT per type — ~2× the old values (bigger on screen). Collision
 // radius r / speed / range in DEF are UNCHANGED, so gameplay is unaffected.
-const UNIT_SPRITE_H = { worker:46, soldier:68, ranger:62, recruiter:54, hustler:56, lobbyist:64, foodtruck:64, auditor:72, founder:92, courier:36, bomber:96 };
+const UNIT_SPRITE_H = { worker:46, soldier:68, ranger:62, recruiter:54, hustler:56, lobbyist:64, foodtruck:64, auditor:72, founder:92, courier:36, bomber:96, biba:54 };
 function unitWalk(type,owner){ const e=UNIT_WALK[type]; const a=e&&e[factionKey(owner)]; return (a&&a.ready)?a:null; }
 // Drawn-sprite world metrics — shared by the selection ring AND click hit-testing so
 // they track the (now big) VISIBLE sprite, not the small collision radius r. The sprite
 // is blitted from -0.7*h (top) to +0.3*h (feet) around the unit's (x,y) (see blitFrame),
 // raised by `alt` for flyers. footY is the on-the-ground point under the sprite.
-function unitDrawH(u){ return (UNIT_SPRITE_H[u.type] || u.r*2); }
+// Named campaign heroes (e.g. Nino) render 15% bigger so they stand out from rank-and-file
+// units of the same type. spriteType (a visual-only override) falls back to the gameplay type,
+// so a hero's drawn height tracks its base unit (Nino → lobbyist) before the hero bump.
+const HERO_SCALE = 1.15;
+function unitDrawH(u){ const base = (UNIT_SPRITE_H[u.spriteType] || UNIT_SPRITE_H[u.type] || u.r*2);
+  return base * (u.hero ? HERO_SCALE : 1); }
 function unitHitBox(u){ const h=unitDrawH(u), alt=u.air?16:0, hw=h*0.34;
   return { cx:u.x, hw, top:u.y-alt-h*0.7, bot:u.y-alt+h*0.3, footY:u.y-alt+h*0.3 }; }
 
@@ -120,7 +131,8 @@ const UNIT_ACTION = {
   hustler:{ attack:walkPair('hustler','attack') },     lobbyist:{ attack:walkPair('lobbyist','attack') },
   foodtruck:{ attack:walkPair('foodtruck','attack') }, auditor:{ attack:walkPair('auditor','attack') },
   founder:{ attack:walkPair('founder','attack') },     courier:{ heal:walkPair('courier','heal') },
-  bomber:{ attack:walkPair('bomber','attack') },
+  bomber:{ attack:walkPair('bomber','attack') },       nino:{ attack:walkPair('nino','attack') },
+  biba:{ heal:walkPair('biba','heal') },               // hero Recruiter — custom heal animation
 };
 function actionAnim(type,action,owner){ const t=UNIT_ACTION[type]; const a=t&&t[action]; const x=a&&a[factionKey(owner)]; return (x&&x.ready)?x:null; }
 // blit one frame of an animation for a unit, mirrored on facing, foot-anchored.

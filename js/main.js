@@ -156,13 +156,35 @@ function updateBoxBtn(){
   const b=document.getElementById('btn-box');
   if(b) b.classList.toggle('armed', armBoxSelect);
 }
+/* ---- Fullscreen toggle (menu bottom-right + in-game top bar) ---- */
+function fsActive(){ return !!(document.fullscreenElement || document.webkitFullscreenElement); }
+function toggleFullscreen(){
+  const el=document.documentElement;
+  if(!fsActive()){
+    const req=el.requestFullscreen||el.webkitRequestFullscreen||el.webkitRequestFullScreen;
+    if(req){ const p=req.call(el); if(p&&p.catch) p.catch(()=>{}); }
+  }else{
+    const ex=document.exitFullscreen||document.webkitExitFullscreen;
+    if(ex){ const p=ex.call(document); if(p&&p.catch) p.catch(()=>{}); }
+  }
+}
+function syncFsButtons(){
+  const on=fsActive();
+  const top=document.getElementById('btn-fs'); if(top) top.innerHTML = on?'⛶ Windowed':'⛶ Fullscreen';
+  const menu=document.getElementById('btn-fs-menu'); if(menu) menu.innerHTML = on?'⛶ Exit Fullscreen':'⛶ Fullscreen';
+}
+document.addEventListener('fullscreenchange', syncFsButtons);
+document.addEventListener('webkitfullscreenchange', syncFsButtons);
 function wireTouchControls(){
   const on=(id,fn)=>{ const el=document.getElementById(id); if(el) el.addEventListener('click', fn); };
+  on('btn-fs', toggleFullscreen);
+  on('btn-fs-menu', toggleFullscreen);
   on('btn-box', ()=>{ armBoxSelect=!armBoxSelect; updateBoxBtn(); toast(armBoxSelect?'Box select: drag to select':'Box select off'); });
   on('btn-army', ()=>{ selectAllArmy(); });
   on('btn-cancel', ()=>{ if(G&&G.placing){ G.placing=null; refreshUI(); } });
   on('btn-save', ()=>{ saveGame(); });
   on('btn-roster', ()=>{ if(typeof showRoster==='function') showRoster(); });
+  on('btn-events', ()=>{ if(typeof showEvents==='function') showEvents(); });
   on('btn-zoom-in', ()=>{ if(G) zoomAt(G, viewW()/2, VIEW_TOP+viewH()/2, 1.2); });
   on('btn-zoom-out',()=>{ if(G) zoomAt(G, viewW()/2, VIEW_TOP+viewH()/2, 1/1.2); });
   on('btn-minimap', ()=>{ const mw=document.getElementById('minimap-wrap'); if(mw) mw.classList.toggle('as-overlay'); });
@@ -179,6 +201,7 @@ function wireTouchControls(){
 wireTouchControls();
 
 buildMapSelect();
+startTipRotation();   // random rotating Field Tip in the menu panel
 /* =====================================================================
    MAIN LOOP
    ===================================================================== */

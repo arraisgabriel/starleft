@@ -173,6 +173,49 @@ Rules of thumb:
 
 ---
 
+## 4b. Balancing for carryover (the simulator + the vetScaling module)
+
+The escalation table tunes a map for a *fresh* start, but in real play the player **carries career
+units between episodes**, and a leveled roster can trivialize a map balanced for raw starters. Two
+things address this — know both when you set difficulty.
+
+**The carry table** — how many veterans deploy into each map (`vetCarryCountFor`, `js/career.js`),
+and how strong they are (`js/career.js`: +15% dmg, +33% HP per level):
+
+| entering map idx | 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 |
+|---|---|---|---|---|---|---|---|---|---|
+| veterans carried | 2 | 2 | 2 | 3 | 3 | 4 | 4 | 5 | 5 |
+
+A level-5 unit is ×1.75 dmg / ×2.65 HP; a level-10 is ×2.50 / ×4.30. So three L5 vets + a couple of
+healers can clear a mid map in minutes — fine when *earned*, but it means raw map stats undersell the
+real difficulty. **Named heroes** (e.g. Nino, `cfg.heroes`) add to this and persist until death,
+*outside* the carry cap.
+
+**`js/balance.js` (always on)** answers carried power at runtime: it computes a **Veteran Power
+Index** (VPI = Σ `stars·dmgMul·hpMul` over the player's career units at map load) and adds
+proportional **bonus defenders to every enemy base** (`vetScalingBonus`, capped at `VET_MAXBONUS`).
+With no carryover VPI is 0 and nothing changes — so the shipping no-carry baseline is untouched; the
+more career power you bring, the more the enemy musters. Tunables (`VET_SCALE`, `VET_MAXBONUS`,
+`VET_MINT_MAX`) live at the top of `js/balance.js`.
+
+**The gate** (`scripts/simulate_balance.js --gate`) is a **deterministic power-ratio check** (no RNG):
+it computes player combat power (economy army + carried veterans × their career multipliers) vs the
+enemy's defensive power *after* `js/balance.js` scaling, for fresh / typical / invested profiles, and
+prints the ratio of each. Read its verdict like this:
+- **typical & invested ratio ≥ ~1.0** → winnable. Below → too hard (hard fail).
+- **carryover swing (invested ÷ fresh ratio) ≤ 1.5×** → vetScaling is containing carried power. Above
+  → carryover trivializes the map (hard fail); raise enemy pressure or `VET_SCALE`/`maxBonus`.
+- **swing ≈ 0.8–1.0×** (the shipping norm) → vetScaling fully offsets carryover; the enemy grows to
+  match the roster you bring. (If you *want* investing to still feel rewarding, lower `VET_SCALE` a
+  little so the swing sits slightly above 1.)
+- **arc-position note** ("easy/hard for its slot vs the shipping curve") is advisory — the ratio
+  legitimately declines ~18→2 across the campaign, so "high ratio" on an early or restart map is fine.
+
+`--calibrate` prints every map's ratios (the curve the bands are anchored to). The optional `--play`
+flag adds an auto-player advisory that only flags *absurd* outcomes (a base nothing can crack, or a
+fresh faceroll); it never changes pass/fail — the deterministic ratio is the gate. Don't tune purely
+off the static table for mid/late maps — run `--gate` and react to what carryover actually does.
+
 ## 5. Feature-placement guidance
 
 - **Player start** in a corner/edge with breathing room and a nearby gold cluster (3–5 nodes) so the

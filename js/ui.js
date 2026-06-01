@@ -191,14 +191,31 @@ function addCmd(emoji,label,cost,fn){
 
 /* toast */
 let toastTimer=null;
+/* Notifications log: every toast / eventToast also accumulates here, keyed in a Map
+   (insertion id -> record) so the player can reopen them from the Events panel. */
+const eventLog=new Map();
+let eventLogSeq=0, eventLogUnseen=0;
+function logEvent(msg,isEvent){
+  const time=new Date().toLocaleTimeString([], {hour:'2-digit',minute:'2-digit',second:'2-digit'});
+  eventLog.set(++eventLogSeq, {msg, isEvent, time});
+  if(eventLog.size>200) eventLog.delete(eventLog.keys().next().value);  // cap memory over long games
+  eventLogUnseen++; updateEventsBadge();
+}
+function updateEventsBadge(){
+  const b=document.getElementById('events-badge'); if(!b) return;
+  b.textContent = eventLogUnseen>99? '99+' : eventLogUnseen;
+  b.style.display = eventLogUnseen? '' : 'none';
+}
 function toast(msg){
   const t=document.getElementById('toast'); t.textContent=msg; t.classList.remove('event'); t.classList.add('show');
   clearTimeout(toastTimer); toastTimer=setTimeout(()=>t.classList.remove('show'),1800);
+  logEvent(msg,false);
 }
 // richer, longer-lived toast for life-events & obituaries (multi-line; allows HTML)
-function eventToast(html){
+function eventToast(html,ms=9000){
   const t=document.getElementById('toast'); t.innerHTML=html; t.classList.add('show','event');
-  clearTimeout(toastTimer); toastTimer=setTimeout(()=>t.classList.remove('show'),4400);
+  clearTimeout(toastTimer); toastTimer=setTimeout(()=>t.classList.remove('show'),ms);
+  logEvent(html,true);
 }
 
 /* =====================================================================
@@ -221,6 +238,23 @@ function showRoster(){
     el.onclick=()=>{ const id=+el.dataset.uid; const u=G&&G.entities.find(e=>e.id===id&&!e.dead); if(u){ hideSub('rosterScreen'); showDossier(u); } };
   });
   showSub('rosterScreen');
+}
+
+// Notifications panel — renders the accumulated toast log (newest first).
+function _escHtml(s){ return String(s).replace(/[&<>]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c])); }
+function showEvents(){
+  const body=document.getElementById('eventsBody'); if(!body) return;
+  if(!eventLog.size){
+    body.innerHTML='<div class="muted">No dispatches yet — promotions, obituaries and incoming-attack alerts collect here.</div>';
+  } else {
+    const rows=[];
+    eventLog.forEach(e=>rows.push(
+      `<div class="event-row${e.isEvent?' event-hi':''}"><span class="event-time">${e.time}</span>`+
+      `<span class="event-msg">${e.isEvent? e.msg : _escHtml(e.msg)}</span></div>`));
+    body.innerHTML=rows.reverse().join('');
+  }
+  eventLogUnseen=0; updateEventsBadge();   // mark all seen on open
+  showSub('eventsScreen');
 }
 
 // Field Manual: shown from "Documentation" (footer = Back) OR before "New Campaign"
@@ -254,6 +288,18 @@ function buildMapSelect(){
     b.onclick=()=>startGame(i);
     wrap.appendChild(b);
   });
+}
+// ---- Field-Tip panel: show a random tip, rotating while the menu is up ----
+let _tipIdx=-1;
+function pickTip(){
+  if(typeof GAME_TIPS==='undefined' || !GAME_TIPS.length) return;
+  let i; do { i=Math.floor(Math.random()*GAME_TIPS.length); } while(GAME_TIPS.length>1 && i===_tipIdx);
+  _tipIdx=i;
+  const el=document.getElementById('tip-text'); if(el) el.innerHTML=GAME_TIPS[i];
+}
+function startTipRotation(){
+  pickTip();   // first tip immediately
+  setInterval(()=>{ const s=document.getElementById('startScreen'); if(s && s.style.display!=='none') pickTip(); }, 15000);
 }
 function loadMap(idx){
   G=newMap(idx); syncHud(); clampCam(G); refreshUI(); running=true;
