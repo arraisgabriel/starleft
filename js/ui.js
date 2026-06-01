@@ -132,7 +132,7 @@ function selectedBuilding(type){
 function buildCommands(sel){
   elCmd.innerHTML='';
   const owned=sel.filter(e=>e.owner==='player');
-  if(!owned.length) return;
+  if(!owned.length){ elCmd.classList.remove('has-cmds'); syncCmdLine(); return; }
   const hasFinished=t=>G.entities.some(e=>!e.dead&&e.owner==='player'&&e.type===t&&!e.constructing);
   const train=(bType,uType)=>{ const b=selectedBuilding(bType); if(b) tryTrain(G,b,uType); };
   if(owned.some(e=>e.type==='hq'&&!e.constructing))
@@ -161,8 +161,30 @@ function buildCommands(sel){
     addCmd(DEF.garage.icon,'The Garage',DEF.garage.cost,()=>tryPlace(G,'garage'));
     if(hasFinished('garage')) addCmd(DEF.launchpad.icon,'Launch Pad',DEF.launchpad.cost,()=>tryPlace(G,'launchpad'));
   }
+  // production/build buttons fill the command line; flag it so compact (mobile) layouts
+  // can collapse the whole line when a unit has none — Stop now lives in #touch-controls.
+  elCmd.classList.toggle('has-cmds', elCmd.children.length>0);
+  // Desktop keeps an in-panel Stop button (touch layouts hide .cmd-stop via CSS and
+  // surface Stop in the #touch-controls row instead).
   if(owned.some(e=>e.kind==='unit'))
-    addCmd('🛑','Stop',null,()=>{ G.selection.forEach(u=>{ if(u.kind==='unit'&&u.owner==='player'){ resetMotion(u); u.cmd={type:'hold'}; u._healTarget=null; u._toHeal=false; u.sieged=false; u._setupT=0; u.state='idle'; } }); });
+    addCmd('🛑','Stop',null,stopSelection,'cmd-stop');
+  syncCmdLine();
+}
+// Stop = hold position: cancel orders/motion for every selected player unit.
+function stopSelection(){
+  if(!G) return;
+  G.selection.forEach(u=>{ if(u.kind==='unit'&&u.owner==='player'){ resetMotion(u); u.cmd={type:'hold'}; u._healTarget=null; u._toHeal=false; u.sieged=false; u._setupT=0; u.state='idle'; } });
+}
+// The touch-controls Stop button (#btn-stop) is only clickable when a player unit is selected.
+function updateStopBtn(){
+  const sb=document.getElementById('btn-stop'); if(!sb) return;
+  sb.disabled = !(G && G.selection.some(e=>!e.dead && e.kind==='unit' && e.owner==='player'));
+}
+// The command line changes height when it collapses (non-builder unit) or appears
+// (intern/building), so re-sync the Stop button and the HUD heights for the viewport.
+function syncCmdLine(){
+  updateStopBtn();
+  if(typeof syncHud==='function'){ syncHud(); if(G && typeof clampCam==='function') clampCam(G); }
 }
 // Keep the affordability dimming fresh without destroying (and re-creating) buttons.
 function updateAffordability(){
@@ -180,8 +202,8 @@ function tryPlaceFixed(type){
   }
 }
 
-function addCmd(emoji,label,cost,fn){
-  const b=document.createElement('div'); b.className='cmd-btn';
+function addCmd(emoji,label,cost,fn,extraClass){
+  const b=document.createElement('div'); b.className='cmd-btn'+(extraClass?' '+extraClass:'');
   b._cost = cost;                              // used by updateAffordability()
   if(cost!=null && G.gold<cost) b.classList.add('disabled');
   b.innerHTML=`<span class="emoji">${emoji}</span><span>${label}</span>${cost!=null?`<span class="cost">${cost}🪙</span>`:''}`;

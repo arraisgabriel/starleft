@@ -184,6 +184,7 @@ function wireTouchControls(){
   const on=(id,fn)=>{ const el=document.getElementById(id); if(el) el.addEventListener('click', fn); };
   on('btn-fs', toggleFullscreen);
   on('btn-fs-menu', toggleFullscreen);
+  on('btn-stop', ()=>{ if(G){ stopSelection(); refreshUI(); } });
   on('btn-box', ()=>{ armBoxSelect=!armBoxSelect; updateBoxBtn(); toast(armBoxSelect?'Box select: drag to select':'Box select off'); });
   on('btn-army', ()=>{ selectAllArmy(); });
   on('btn-cancel', ()=>{ if(G&&G.placing){ G.placing=null; refreshUI(); } });
@@ -205,8 +206,6 @@ function wireTouchControls(){
     document.addEventListener('click', e=>{ if(!wrap.contains(e.target)) close(); });
     document.addEventListener('keydown', e=>{ if(e.key==='Escape') close(); });
   })();
-  on('btn-zoom-in', ()=>{ if(G) zoomAt(G, viewW()/2, VIEW_TOP+viewH()/2, 1.2); });
-  on('btn-zoom-out',()=>{ if(G) zoomAt(G, viewW()/2, VIEW_TOP+viewH()/2, 1/1.2); });
   on('btn-minimap', ()=>{ const mw=document.getElementById('minimap-wrap'); if(mw) mw.classList.toggle('as-overlay'); });
   // control-group chips: tap = recall, long-press = assign
   document.querySelectorAll('.grp-chip').forEach(el=>{

@@ -282,6 +282,7 @@
     display:inline-flex; align-items:center; justify-content:center; touch-action:manipulation;
     box-shadow:0 2px 8px rgba(0,0,0,.5), inset 0 0 14px rgba(255,60,60,.05); }
   .tc-btn.armed{ border-color:#ff9a9a; border-left-color:#ff9a9a; box-shadow:0 0 12px rgba(255,80,80,.6); color:#fff; }
+  .tc-btn:disabled{ opacity:.32; cursor:default; box-shadow:0 1px 4px rgba(0,0,0,.4); }   /* e.g. Stop with nothing selected */
   #touch-controls > .tc-btn, #touch-controls .grp-chips{ flex:0 0 auto; }   /* keep tap-size in the scrollable single row */
   .grp-chips{ display:inline-flex; gap:4px; }
   .grp-chip{ min-width:38px; font-weight:700; font-size:15px; }
@@ -342,6 +343,10 @@
       font-size:11px; padding:4px 8px; }
     .cmd-btn .emoji{ font-size:18px; }
     #touch-controls{ display:flex; overflow-x:auto; }
+    /* Stop now lives in the touch-controls row; hide the in-panel copy and collapse the
+       whole command line unless there are build/train buttons (only the intern + buildings). */
+    .cmd-btn.cmd-stop{ display:none; }
+    #commands:not(.has-cmds){ display:none; }
   }
 
   /* ---- Phones in landscape: claw back vertical space ---- */
@@ -385,6 +390,11 @@
       top:calc(var(--top-h) + 6px + var(--safe-t));
       width:44px; height:44px; min-width:44px; min-height:44px; }
     #minimap-wrap.as-overlay{ top:calc(var(--top-h) + 58px + var(--safe-t)); }  /* bloom under the 🗺 */
+
+    /* Stop lives in the touch-controls row here too — drop the in-panel copy and let the
+       command row vanish for non-builder units (only the intern keeps a 2nd line). */
+    .cmd-btn.cmd-stop{ display:none; }
+    #commands:not(.has-cmds){ display:none; }
   }
 
   /* ================= Revamped main menu (StarCraft-II layout, red accent) ================= */
@@ -656,11 +666,10 @@
     <div id="commands"></div>
     <!-- On-screen controls (touch / narrow screens; hidden on desktop) -->
     <div id="touch-controls">
+      <button class="tc-btn" id="btn-stop" title="Stop (hold position)" disabled>🛑</button>
       <button class="tc-btn" id="btn-box" title="Box select">▭</button>
       <button class="tc-btn" id="btn-army" title="Select all units">⛶</button>
       <button class="tc-btn" id="btn-minimap" title="Toggle minimap">🗺</button>
-      <button class="tc-btn" id="btn-zoom-out" title="Zoom out">－</button>
-      <button class="tc-btn" id="btn-zoom-in" title="Zoom in">＋</button>
       <button class="tc-btn" id="btn-cancel" title="Cancel placement" style="display:none;">✕</button>
       <span class="grp-chips">
         <button class="tc-btn grp-chip" data-g="1" title="Group 1 (tap recall, hold set)">1</button>
