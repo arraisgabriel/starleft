@@ -202,6 +202,7 @@ wireTouchControls();
 
 buildMapSelect();
 startTipRotation();   // random rotating Field Tip in the menu panel
+LNS.init();           // Live News Stream — menu + in-game RSS headline ticker
 /* =====================================================================
    MAIN LOOP
    ===================================================================== */

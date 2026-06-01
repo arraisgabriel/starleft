@@ -44,6 +44,8 @@ function resize(){
 function syncHud(){
   const tb=document.getElementById('topbar'), bp=document.getElementById('bottom');
   if(tb) VIEW_TOP = tb.offsetHeight;
+  const news=document.getElementById('lns-ingame');   // live-news ticker reserves a band under the topbar when shown
+  if(news && news.offsetHeight) VIEW_TOP += news.offsetHeight;
   if(bp) VIEW_BOT = bp.offsetHeight;
   cssH = cv.getBoundingClientRect().height || innerHeight;
 }
@@ -94,6 +96,9 @@ function render(state){
     drawGoldmine(state, e, e.x+ox, e.y+oy);
   }
 
+  // ---- ambient particles: BACK pass (low mist) — behind the depth-sorted sprites ----
+  if(typeof drawParticles==='function') drawParticles(state, x0,y0,x1,y1, 'back');
+
   // ---- buildings + mega sprites + units: ALL depth-sorted by ground-line Y so a unit
   //      BEHIND a tall building/landmark is occluded by it (drawn first) and a unit in
   //      FRONT draws over it. Sprite transparency makes the occlusion pixel-correct. ----
@@ -130,6 +135,9 @@ function render(state){
     else if(d.f) drawFeature(state, d.f, ox,oy, d.dim);
     else drawUnit(state, d.u, ox,oy);
   }
+
+  // ---- ambient particles: FRONT pass (fireflies/embers/snow/dust/motes) — over the sprites ----
+  if(typeof drawParticles==='function') drawParticles(state, x0,y0,x1,y1, 'front');
 
   // ---- shoot FX ----
   for(const e of state.entities){

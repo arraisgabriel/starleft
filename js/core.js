@@ -61,6 +61,9 @@ function update(state, dt){
   // ---- fog of war ----
   computeFog(state);
 
+  // ---- ambient topography particles (fireflies/embers/snow/dust/motes; pure visual) ----
+  if(typeof updateParticles==='function') updateParticles(state, dt);
+
   // ---- cleanup dead ----
   let changed=false;
   for(const e of state.entities){
