@@ -170,26 +170,26 @@
     const fi=ice/tot, fv=vol/tot;
     // MOUNTAINS = the crystal ROCK FEATURES (biome B_MOUNTAIN), NOT the ground biome — on desert/grass
     // maps the mountain biome is sparse, so the crystals sit on desert/grass; key off the features.
-    const z=state.zoom||1, ccx=state.camX+(viewW()/z)/2, ccy=state.camY+(viewH()/z)/2;
-    const Rc=0.40*Math.min(viewW()/z, viewH()/z);
-    // The MOUNTAIN ROCK features (biome B_MOUNTAIN) — the "normal mountains". The funding/resource
-    // crystals are `goldmine` ENTITIES (not in state.features), so they never affect the fog.
+    const z=state.zoom||1, vw=viewW()/z, vh=viewH()/z;
+    // The MOUNTAIN ROCK features (biome B_MOUNTAIN) — the "normal mountains". Funding/resource crystals
+    // are `goldmine` ENTITIES (not in state.features), so they never affect the fog.
     _mtn.length=0;
     if(state.features) for(const f of state.features){ if(f.biome===B_MOUNTAIN) _mtn.push(f); }
-    // The wash appears ONLY when a PLAYER unit is standing AMONG the mountains, near the viewport
-    // centre. Mountains merely being IN VIEW (the base, a distant range) do NOT wash.
-    let centred=0;
+    // Wash strength = how SURROUNDED a PLAYER unit is by mountains, so it PEAKS when the unit is deep
+    // inside (not at the entrance). Gated to on-screen units (central 90% of the view) so a far /
+    // off-screen unit never washes; the base (no unit in mountains) stays clear.
+    let surround=0;
     if(_mtn.length) for(const e of state.entities){
       if(e.dead || e.owner!=='player' || e.kind!=='unit') continue;
-      const d=Math.hypot(e.x-ccx, e.y-ccy); if(d>=Rc) continue;               // near viewport centre
-      const utx=e.x/TILE, uty=e.y/TILE;
-      for(const f of _mtn){
-        if(Math.abs(utx-(f.tx+N/2))<=N/2+2.5 && Math.abs(uty-(f.ty+N/2))<=N/2+2.5){ centred += 1 - d/Rc; break; }  // among the mountains
-      }
+      if(e.x < state.camX+vw*0.05 || e.x > state.camX+vw*0.95 ||
+         e.y < state.camY+vh*0.05 || e.y > state.camY+vh*0.95) continue;       // must be within the viewed area
+      const utx=e.x/TILE, uty=e.y/TILE; let nearby=0;
+      for(const f of _mtn) if(Math.abs(utx-(f.tx+N/2))<=5 && Math.abs(uty-(f.ty+N/2))<=5) nearby++;
+      surround += Math.min(1.15, nearby/4);                                    // ~1 mtn near = .25 (edge) → 4+ = full (deep in)
     }
     let op=0, tint='rgba(150,165,185,.55)';
-    if(centred>0){                                                             // ONLY a unit standing among the mountains
-      op=Math.min(.8, centred*0.7); tint='rgba(154,170,194,.6)';              // centred unit among mountains ≈ .70
+    if(surround>0){
+      op=Math.min(.384, surround*0.298); tint='rgba(154,170,194,.6)';         // a unit deep among mountains ≈ .34
     }
     else if(fv>0.25){ op=Math.min(.4, fv*0.55); tint='rgba(150,70,45,.45)'; }   // volcanic: warm smoke
     else if(fi>0.25){ op=Math.min(.45, fi*0.6); tint='rgba(190,215,230,.45)'; } // ice: pale veil
