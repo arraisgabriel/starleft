@@ -578,6 +578,18 @@
     .save-row{ max-width:none; }
   }
 
+  /* mobile landscape (wider than tall, short height): the generous logo top-margin +
+     14px column gap push the 4th nav button (Documentation) down under the fixed LNS
+     stripe. Tighten the logo↔buttons vertical spacing — and trim the logo/buttons a
+     touch — so the whole button group clears the news stripe. */
+  @media (orientation:landscape) and (max-height:480px){
+    .overlay.menu{ gap:5px; }
+    .menu-logo{ padding:5px 0 0; }
+    .menu-logo .emblem{ height:clamp(38px,12vh,64px); }
+    .menu-nav{ gap:6px; }
+    .sc-btn{ min-height:42px; padding:9px 18px; }
+  }
+
   /* ===================== LNS — Live News Stream ticker =====================
      Two cyberpunk news stripes (menu lower-third + in-game under the topbar)
      share one marquee. The track holds TWO identical sequences; translateX(-50%)
