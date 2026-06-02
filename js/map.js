@@ -332,6 +332,9 @@ function newMap(idx){
     gold: cfg.startGold!=null ? cfg.startGold : 300,   // explicit 0 must stay 0 (Ep X infiltration: no funding)
     supply: 0, supplyCap: 0,
     nextId: 1,
+    // per-map entropy for the unit dossier seeds (lore.js ensureDossier): fresh recruits get new
+    // backstories every game/map/replay. Saved with G, so a reloaded match keeps its people.
+    runSalt: (Math.random()*0x7fffffff)|0,
     zoom: zoom0,
     camX: cfg.player.x*TILE - (innerWidth/zoom0)/2 + 100,
     camY: cfg.player.y*TILE - (innerHeight/zoom0)/2 + 100,
