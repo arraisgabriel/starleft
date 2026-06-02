@@ -148,6 +148,9 @@ The board is watching. Synergy awaits....` },
     // a green starting valley — lush temperate grassland, gentle water & low hills
     terrain:{ biomes:['grass'], seaFrac:0.08, mtnFrac:0.07, moist:{base:0.62,noise:0.45}, forest:0.10 },
     aggression:1.0,
+    // tutorial map: long peace so new players can learn the mechanics without dying —
+    // no enemy waves invade the base until ~3 minutes in.
+    graceTime:180, waveTimer:180,
     enemies:[ {x:40,y:6, defenders:2}, {x:30,y:24, defenders:2} ],
     objective:'DISRUPTR INC. now holds TWO outposts. Mine Funding, scale your team, and raze both.',
     lakes:[ {x:20,y:20,r:4}, {x:30,y:28,r:3} ],
