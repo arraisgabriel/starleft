@@ -18,6 +18,15 @@ window.NET = window.NET || {};
   NET.DELTA_HZ = 15;       // compact-snapshot rate (each snap is a full entity set, so it self-heals)
   NET.SMOOTH_RATE = 18;    // client: ease rate for gliding unit positions between snapshots
   NET._sAcc = 0;
+  // ---- client host-liveness watchdog: the host streams snapshots ~15Hz; a long gap = crash/disconnect ----
+  NET.STALL_MS = 3500;     // no snapshot this long → "connection unstable" hint (still recoverable)
+  NET.LOST_MS  = 8000;     // no snapshot this long → host is gone, end the session
+  NET.lastRecvAt = 0; NET._stalled = false; NET._hostGone = false;
+  function _now(){ return (typeof performance!=='undefined' && performance.now) ? performance.now() : Date.now(); }
+  NET.markRecv = function(){ NET.lastRecvAt = _now();
+    if(NET._stalled){ NET._stalled = false; if(typeof NET.onReconnected==='function') NET.onReconnected(); } };
+  NET.touchWatchdog  = function(){ NET.lastRecvAt = _now(); };                 // grace (e.g. on tab re-focus)
+  NET.resetWatchdog  = function(){ NET.lastRecvAt = _now(); NET._stalled = false; NET._hostGone = false; };
   NET.peerCtrl = {};       // host: peerId -> ctrl ('p2'…)
   NET.ctrlPeer = {};       // host: ctrl -> peerId
   NET._chunk = {};         // client: full-snapshot chunk reassembly buffers
@@ -187,11 +196,17 @@ window.NET = window.NET || {};
     if(typeof updateDialogs==='function')   updateDialogs(G, dt);
     // the client owns its fog: it has every unit's position, so computeFog reproduces shared vision.
     if(typeof computeFog==='function')      computeFog(G);
+    // 3) host-liveness watchdog: no snapshot for too long → the host crashed/dropped. Warn first, then end.
+    if(netRole==='client' && running && !NET._hostGone && NET.lastRecvAt){
+      const gap = _now() - NET.lastRecvAt;
+      if(gap > NET.LOST_MS){ NET._hostGone = true; if(typeof NET.onHostLost==='function') NET.onHostLost(); }
+      else if(gap > NET.STALL_MS && !NET._stalled){ NET._stalled = true; if(typeof NET.onStall==='function') NET.onStall(); }
+    }
   };
 
   /* ---------------- receive wiring (registered once a room is entered) ---------------- */
   NET.bindClientReceivers = function(){
-    MP.on('mpfull', (p)=>NET._recvFull(p));
-    MP.on('mpsnap', (s)=>{ if(netRole==='client' && G && NET.lastFull>=0) NET.applySnap(s); });   // ignore until first full keyframe
+    MP.on('mpfull', (p)=>{ NET.markRecv(); NET._recvFull(p); });
+    MP.on('mpsnap', (s)=>{ NET.markRecv(); if(netRole==='client' && G && NET.lastFull>=0) NET.applySnap(s); });
   };
 })();

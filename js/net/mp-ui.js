@@ -92,7 +92,26 @@
     if(window.LNS && typeof LNS.relayout==='function') LNS.relayout();
   };
   window.mpUiLeftRoom = function(){ hideSub('mpRoomScreen'); window.mpBackToMenu(); };
-  window.mpUiHostGone = function(){ toast('Host left — match ended'); if(typeof mpLeave==='function') mpLeave(); window.mpUiLeftRoom(); };
+  // Host disconnected mid-match: show a clear end overlay over the (now frozen) world with a Back-to-Menu
+  // action, so the client is always notified and never stuck. reason: 'left' (clean) | 'lost' (timed out).
+  window.mpUiHostGone = function(reason){
+    if(typeof running!=='undefined') running = false;
+    const es = $('endScreen');
+    if(es){
+      es.className = 'overlay lose'; es.style.display = 'flex';
+      es.innerHTML =
+        '<div class="big">🔌</div><h1>DISCONNECTED</h1>'+
+        '<h2>'+(reason==='left' ? 'The host left the match' : 'Lost connection to the host')+'</h2>'+
+        '<p>The co-op session has ended.</p>'+
+        '<button class="btn" onclick="mpReturnFromHostLost()">◀ Back to Menu</button>';
+    } else { toast('🔌 Host disconnected — match ended'); window.mpReturnFromHostLost(); }
+  };
+  window.mpReturnFromHostLost = function(){
+    const es = $('endScreen'); if(es){ es.style.display='none'; es.innerHTML=''; }
+    if(typeof mpLeave==='function') mpLeave();              // leave the dead room, reset to solo, return to menu
+  };
+  window.mpUiStall       = function(){ toast('⚠ Connection to host unstable — reconnecting…'); };
+  window.mpUiReconnected = function(){ toast('✅ Reconnected to host'); };
   window.mpUiEnterGame = function(){ ['mpScreen','mpRoomScreen','startScreen','mapScreen','loadScreen'].forEach(hideSub); };
   window.mpUiSyncing = function(){ setConn('Syncing battlefield…','wait'); const w=$('mp-wait'); if(w) w.textContent='Host started — syncing…'; };
   window.mpUiPeerDropped = function(){ toast('🔌 Co-founder dropped — you’re holding their base'); renderPeers(); };

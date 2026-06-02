@@ -260,23 +260,10 @@ html,body{ overscroll-behavior:none; -webkit-touch-callout:none; }
   #commands:not(.has-cmds){ display:none; }
 }
 
-/* ---- ambient fog wash: ONE opacity-only layer (no blur, no blend) above the canvas, below the
-   HUD. Opacity + --fog-tint are set by js/particles.js from the dominant in-view biome; the drift
-   is transform-only so it's compositor-cheap. The moving lights are canvas particles, not CSS. ---- */
-#amb-fog{ position:fixed; inset:0; z-index:15; pointer-events:none; opacity:0;
-  transition:opacity 1.4s ease; will-change:opacity, transform;
-  background:
-    radial-gradient(120% 85% at 50% 116%, var(--fog-tint, rgba(150,165,185,.5)) 0%, transparent 72%),
-    radial-gradient(130% 68% at 50% -12%, var(--fog-tint, rgba(150,165,185,.45)) 0%, transparent 68%),
-    radial-gradient(108% 108% at 50% 50%, var(--fog-tint, rgba(150,165,185,.42)) 0%, transparent 82%);
-  animation:ambFogDrift 26s ease-in-out infinite alternate; }
-@keyframes ambFogDrift{ 0%{ transform:translate3d(-1.6%,0,0) scale(1.06); } 100%{ transform:translate3d(1.6%,1%,0) scale(1.12); } }
-@media (prefers-reduced-motion: reduce){ #amb-fog{ animation:none; } }
-
 /* ---- The Sprint destination ripple: a point-anchored node (left/top set per-frame by
    js/sprint.js' updateSprintRipple) whose two staggered rings pulse continuously while the
-   player keeps tapping. z-index 15 keeps it above the canvas but below the HUD bars (z 20),
-   mirroring #amb-fog. Accent is the attack-command red (#ff5b5b family) — a charging,
+   player keeps tapping. z-index 15 keeps it above the canvas but below the HUD bars (z 20).
+   Accent is the attack-command red (#ff5b5b family) — a charging,
    "danger" pulse, kept glowing-but-deep to sit in the dark cyberpunk palette. */
 #sprint-ripple{ position:fixed; z-index:15; pointer-events:none; display:none;
   width:0; height:0; transform:translate(-50%,-50%); }

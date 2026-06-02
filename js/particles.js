@@ -4,7 +4,6 @@
    tech, frost on ice, green on forest), fireflies + drifting spores in forests, rising embers + ash
    over volcanic, falling snow over ice, blowing dust over desert, data-motes over tech, cool mist by
    mountains. Drawn on the existing #cv with additive 'lighter' bloom (same idiom as drawGoldmine).
-   Plus one opacity-only CSS fog wash (#amb-fog) for the uniform mountain haze.
 
    Perf contract: ZERO per-frame allocation (pre-allocated pool + free-list), ZERO per-frame gradients
    (glow sprites cached per tint), hard cap quality-tiered by device, density target scaled to in-view
@@ -102,8 +101,7 @@
 
   // ---- per-tick: advance + recycle, then density-targeted emission near in-view features ----
   const _inview=[];
-  const _mtn=[];                                  // reused scratch: mountain (crystal) features, for the fog wash
-  let _emitAcc=0, _fogAcc=0;
+  let _emitAcc=0;
   function updateParticles(state, dt){
     if(MAX<=0 || !state) return;
     for(let i=0;i<MAX;i++){ const p=_pool[i]; if(!p.active) continue;
@@ -111,7 +109,6 @@
       if(p.beh==='rise') p.vy*=(1-0.35*dt);            // embers/ash ease as they climb
       if(p.life<=0){ p.active=false; _free.push(p.idx); _alive--; }
     }
-    _fogAcc+=dt; if(_fogAcc>=0.4){ _fogAcc=0; _updateFog(state); }
     if((typeof running!=='undefined' && !running) || state.over) return;
     if(!state.features || !state.features.length) return;
     _emitAcc+=dt; if(_emitAcc<0.05) return; _emitAcc=0;
@@ -160,31 +157,6 @@
       ctx.drawImage(g, p.x-p.size/2, p.y-p.size/2, p.size, p.size);
     }
     ctx.restore();
-  }
-
-  // ---- the one CSS layer: uniform fog/haze wash, opacity+tint by dominant in-view biome ----
-  function _updateFog(state){
-    const el=document.getElementById('amb-fog'); if(!el) return;
-    if((typeof running!=='undefined' && !running) || state.over){ el.style.opacity='0'; return; }
-    const N=FEAT_SIZE, z=state.zoom||1, vw=viewW()/z, vh=viewH()/z;
-    // The CSS wash means EXACTLY ONE thing: a PLAYER unit standing among the MOUNTAIN rock features
-    // (state.features, biome B_MOUNTAIN). No biome-wide veils — the old ice/volcanic/forest washes are
-    // gone (their ambiance is the canvas snow/ember/firefly particles). Funding crystals are goldmine
-    // ENTITIES, never here. Strength = how SURROUNDED the unit is by mountains (peaks deep inside);
-    // gated to on-screen units so a far/off-screen one never washes; the base stays clear everywhere.
-    _mtn.length=0;
-    if(state.features) for(const f of state.features){ if(f.biome===B_MOUNTAIN) _mtn.push(f); }
-    let surround=0;
-    if(_mtn.length) for(const e of state.entities){
-      if(e.dead || e.owner!=='player' || e.kind!=='unit') continue;
-      if(e.x < state.camX+vw*0.05 || e.x > state.camX+vw*0.95 ||
-         e.y < state.camY+vh*0.05 || e.y > state.camY+vh*0.95) continue;       // within the viewed area
-      const utx=e.x/TILE, uty=e.y/TILE; let nearby=0;
-      for(const f of _mtn) if(Math.abs(utx-(f.tx+N/2))<=5 && Math.abs(uty-(f.ty+N/2))<=5) nearby++;
-      surround += Math.min(1.15, nearby/4);                                    // ~1 mtn near = edge → 4+ = deep in
-    }
-    el.style.setProperty('--fog-tint', 'rgba(154,170,194,.6)');
-    el.style.opacity = (surround>0 ? Math.min(.384, surround*0.298) : 0).toFixed(3);
   }
 
   window.updateParticles=updateParticles;

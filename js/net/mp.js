@@ -19,7 +19,7 @@
   function resetToSolo(){
     netRole='solo'; LOCAL_CTRL='p1'; pendingPlayers=1;
     NET.peerCtrl={}; NET.ctrlPeer={};
-    S.role='solo'; S.code=null; S.started=false; S.peerId=null; S.joiner=null; S.host=null;
+    S.role='solo'; S.code=null; S.started=false; S.peerId=null; S.joiner=null; S.host=null; S._gone=false;
   }
   window.mpResetToSolo = resetToSolo;
 
@@ -78,9 +78,12 @@
   /* ---------------- JOIN ---------------- */
   function mpJoin(code){
     if(!mpAvailable()){ toast('Multiplayer unavailable on this network'); return; }
-    S.me=profile(); S.role='client'; S.code=code; S.started=false;
+    S.me=profile(); S.role='client'; S.code=code; S.started=false; S._gone=false;
     MP.enter(code);
     NET.bindClientReceivers();                       // 'mpfull','mpsnap'
+    // re-focusing a long-backgrounded tab shouldn't instantly read as "host lost" — give the watchdog grace
+    S._visGrace = ()=>{ if(document.visibilityState==='visible' && NET.touchWatchdog) NET.touchWatchdog(); };
+    document.addEventListener('visibilitychange', S._visGrace);
     MP.on('mphello', (msg, peerId)=>{                 // host welcomed us
       S.host = msg.profile; S.peerId = peerId; LOCAL_CTRL = msg.youCtrl || 'p2';
       S.mode = msg.mode || S.mode; S.mapIndex = msg.mapIndex|0;
@@ -89,9 +92,11 @@
       ui('Peers');
     });
     MP.on('mpstart', (msg)=> beginClientMatch(msg.mapIndex|0, msg.mode));
-    MP.on('mpbye', (msg)=>{ toast(msg && msg.reason==='full' ? 'Room is full' : 'Host left the room'); mpLeave(); });
-    MP.onLeave(()=>{ // host vanished
-      toast('Host disconnected'); ui('HostGone'); });
+    MP.on('mpbye', (msg)=>{ if(msg && msg.reason==='full'){ toast('Room is full'); mpLeave(); } else mpHostGone('left'); });
+    MP.onLeave(()=> mpHostGone('left'));                  // Trystero peer-leave (clean close)
+    NET.onHostLost    = ()=> mpHostGone('lost');          // watchdog: snapshots stopped (crash / network drop)
+    NET.onStall       = ()=> ui('Stall');                 // transient gap → "reconnecting" hint
+    NET.onReconnected = ()=> ui('Reconnected');
     NET.onFullApplied = ()=>{
       if(running) return;          // one-shot: only the FIRST full "drops you in" — never re-centre/re-toast later
       running = true;
@@ -112,6 +117,7 @@
     netRole='client'; pendingPlayers=2; mapIndex=idx;
     G = newMap(idx);                                 // regenerate identical terrain + pads (deterministic)
     running = false;                                  // hold until the host's full snapshot lands
+    if(NET.resetWatchdog) NET.resetWatchdog();        // start the host-liveness clock fresh for this match
     if(typeof clampCam==='function') clampCam(G);
     if(NET.flushPendingFull) NET.flushPendingFull();  // a full snapshot may have raced ahead of 'mpstart'
     ui('Syncing');
@@ -123,12 +129,25 @@
     if(typeof stopHostClock==='function') stopHostClock();   // tear down worker + audio/wake-lock keep-alive
     if(window.COMMS) try{ COMMS.leave(); }catch(_){}
     if(typeof mpStopRtt==='function') mpStopRtt();
+    if(S._visGrace){ document.removeEventListener('visibilitychange', S._visGrace); S._visGrace=null; }
     try{ MP.leaveRoom(); }catch(_){}
     running=false; G=null;
     resetToSolo();
     ui('LeftRoom');
   }
   window.mpLeave = mpLeave;
+
+  // The host vanished (clean BYE, Trystero peer-leave, OR the snapshot-watchdog timed out). Notify the
+  // client and freeze its world behind an end overlay so it never sits open forever. Idempotent.
+  function mpHostGone(reason){
+    if(S.role!=='client' || S._gone) return;
+    S._gone = true;
+    running = false;                                         // freeze the world view immediately
+    if(typeof mpStopRtt==='function') mpStopRtt();
+    if(window.COMMS) try{ COMMS.leave(); }catch(_){}
+    ui('HostGone', reason);                                  // mp-ui shows the "disconnected" overlay + Back to Menu
+  }
+  window.mpHostGone = mpHostGone;
 
   function handlePeerDrop(){
     // host keeps playing solo-co-op; adopt the orphaned ally's units so the map stays winnable
