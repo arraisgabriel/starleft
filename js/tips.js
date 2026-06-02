@@ -19,6 +19,8 @@ const GAME_TIPS = [
   "<b>Tech tree:</b> People Ops 🎯 trains infantry; build The Garage 🔧 for vehicles, then a Launch Pad 🚀 (needs a Garage) for flyers. Climb it as your Funding grows.",
   "<b>Defend chokes</b> with Legal Team ⚖️ turrets, and let your HQ 🏢 chip attackers with its rooftop shot — a couple of turrets buy time to rally a counter-attack.",
   "<b>Units fight back</b> on their own when attacked, and nearby allies pile in automatically. A plain <b>Move</b> order ignores enemies, though — use it to retreat cleanly.",
+  "<b>The Sprint 🏃:</b> keep <i>tapping</i> one spot and your selected squad runs there — speeding up to 1.5× and <b>ignoring incoming fire</b> instead of stopping to fight back. It's the cleanest way to flee a losing fight: hammer taps toward safety and they run rather than trade blows. Stop tapping and they coast to a halt and behave normally again.",
+  "<b>Sprint to kite 💨:</b> every tap re-aims the run mid-sprint, so keep tapping fresh spots to lead chasing enemies in circles — loop them past your Legal Team ⚖️ turrets or a waiting army and shred them while they're stuck giving chase. A good Sprint turns a retreat into a trap.",
   "<b>Pull wounded units out.</b> Veterans slowly heal when out of combat (faster near a Recruiter or Drugztore Delivery Drone). A rescued unit is free reinforcement next fight.",
   "<b>Production queue:</b> select a building to see its hire line — each card is a queued unit. Tap the ✕ to cancel one and get the Funding back.",
   "<b>Keep dying on a map?</b> Stop attacking and fix the economy first: more Interns, a Satellite Office, then a bigger <i>mixed</i> army with a healer. Out-produce the rival, then push as one group and regroup between fights.",
