@@ -77,9 +77,13 @@ function commandUnits(state, wx, wy, target){
   const sel = state.selection.filter(e=>!e.dead);
   if(!sel.length) return;
 
+  // co-op: only command the ACTING controller's units (LOCAL_CTRL locally; the remote peer's ctrl
+  // when the host replays their command). Solo → actingCtrl is 'p1' and everything is 'p1' → no-op.
+  const _ac = (netRole==='solo') ? null : actingCtrl(state);
+  const _mine = e => !_ac || (e.ctrl||'p1')===_ac;
   // If only buildings selected → set rally point
-  const units = sel.filter(e=>e.kind==='unit'&&e.owner==='player');
-  const buildings = sel.filter(e=>e.kind==='building'&&e.owner==='player');
+  const units = sel.filter(e=>e.kind==='unit'&&e.owner==='player'&&_mine(e));
+  const buildings = sel.filter(e=>e.kind==='building'&&e.owner==='player'&&_mine(e));
   if(units.length===0 && buildings.length){
     buildings.forEach(b=>{ if(!b.constructing){ b.rally={x:wx,y:wy}; }});
     toast('Rally point set'); spawnRing(wx,wy,'#7fd6ff');
@@ -152,11 +156,12 @@ function gatherFrom(state,u,mine){
    ===================================================================== */
 function tryTrain(state, building, type){
   const d=DEF[type];
-  if(state.gold < d.cost){ toast('Not enough gold'); return; }
-  if(d.supply && state.supply + (state.queuedSupply||0) + d.supply > state.supplyCap){
+  const eco=playerEco(state, building.ctrl);          // train from the producing player's pool
+  if(eco.gold < d.cost){ toast('Not enough gold'); return; }
+  if(d.supply && eco.supply + (state.queuedSupply||0) + d.supply > eco.supplyCap){
     toast('Not enough supply — build a Command Center'); return;
   }
-  state.gold -= d.cost;
+  eco.gold -= d.cost;
   building.prodQueue.push(type);
   if(building.prodTotal===0){ building.prodTotal=d.build; building.prodTime=0; }
 }
@@ -166,7 +171,7 @@ function cancelTrain(state, building, index){
   const q=building.prodQueue;
   if(!q || index<0 || index>=q.length) return;
   const type=q.splice(index,1)[0];
-  state.gold += (DEF[type].cost||0);
+  playerEco(state, building.ctrl).gold += (DEF[type].cost||0);   // refund to the producing player
   if(index===0){ building.prodTime=0; building.prodTotal = q.length ? DEF[q[0]].build : 0; }
 }
 
@@ -174,7 +179,7 @@ function tryPlace(state, type){
   const sel = state.selection.find(e=>e.kind==='unit'&&e.type==='worker'&&!e.dead);
   if(!sel){ toast('Select a Worker first'); return; }
   const d=DEF[type];
-  if(state.gold < d.cost){ toast('Not enough gold'); return; }
+  if(playerEco(state, sel.ctrl).gold < d.cost){ toast('Not enough gold'); return; }
   state.placing = { type, def:d, builder:sel };
   toast('Tap a spot to build the '+d.name+' (Cancel / Esc to abort)');
 }
@@ -230,8 +235,10 @@ function assignBuild(state, u, b){
 
 function placeBuilding(state, type, tx, ty, builder){
   const d=DEF[type];
-  state.gold -= d.cost;
+  const ctrl = (builder && builder.ctrl) || state._defaultCtrl || 'p1';
+  playerEco(state, ctrl).gold -= d.cost;          // charge the building player's pool
   const b = mkBuilding(state,type,'player',tx,ty,false);
+  b.ctrl = ctrl;                                  // the new building belongs to its placer
   b.hp=1;
   assignBuild(state, builder, b);     // robust approach + re-pathing
   recomputeSupply(state);
@@ -299,6 +306,7 @@ function spawnTrained(state,b,type){
   }
   if(!placed) placed=[b.tx,b.ty+b.h];
   const u=mkUnit(state,type,b.owner,placed[0],placed[1]);  // mkUnit already pushes to entities
+  if(b.owner==='player') u.ctrl = b.ctrl || 'p1';          // trained units inherit the producing player's tag
   if(b.rally){ if(b.owner==='player'){ issueMove(state,u,b.rally.x,b.rally.y,{type:'amove',x:b.rally.x,y:b.rally.y}); } }
   recomputeSupply(state);
 }
@@ -409,7 +417,7 @@ function updateUnit(state,u,dt){
       if(!dep){ u.state='idle'; return; }
       const reach=entRadius(dep)+14;
       if(dist(u,dep)<=reach){
-        state.gold += u.carrying; state.gold_collected+=u.carrying; u.carrying=0;
+        const eco=playerEco(state, u.ctrl); eco.gold += u.carrying; eco.gold_collected += u.carrying; u.carrying=0;
         u.path=null;
       } else {
         if(!u._toDep){ issueMoveKeepCmd(state,u,dep.x,dep.y); u._toDep=true; u._toMine=false; }

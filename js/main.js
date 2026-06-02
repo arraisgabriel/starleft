@@ -191,7 +191,7 @@ function wireTouchControls(){
   const on=(id,fn)=>{ const el=document.getElementById(id); if(el) el.addEventListener('click', fn); };
   on('btn-fs', toggleFullscreen);
   on('btn-fs-menu', toggleFullscreen);
-  on('btn-stop', ()=>{ if(G){ stopSelection(); refreshUI(); } });
+  on('btn-stop', ()=>{ if(G){ (typeof netStop==='function'?netStop:stopSelection)(); refreshUI(); } });
   on('btn-box', ()=>{ armBoxSelect=!armBoxSelect; updateBoxBtn(); toast(armBoxSelect?'Box select: drag to select':'Box select off'); });
   on('btn-army', ()=>{ selectAllArmy(); });
   on('btn-clear', ()=>{ if(G && G.selection.length){ clearSelection(); refreshUI(); } });   // Esc equivalent: drop the current selection
@@ -232,6 +232,7 @@ wireTouchControls();
 buildMapSelect();
 startTipRotation();   // random rotating Field Tip in the menu panel
 LNS.init();           // Live News Stream — menu + in-game RSS headline ticker
+if(typeof mpCheckInviteHash==='function') mpCheckInviteHash();   // #mp=CODE invite link → auto-join co-op
 /* =====================================================================
    MAIN LOOP
    ===================================================================== */
@@ -241,7 +242,13 @@ let autoTick=0;
 function loop(now){
   const dt=Math.min(0.05,(now-last)/1000); last=now;
   if(G){
-    if(running && !G.over){ update(G,dt); autoTick+=dt; if(autoTick>60){ autoTick=0; autosaveGame(); } }
+    if(running && !G.over){
+      if(netRole!=='client'){
+        update(G,dt);                                              // host & solo own the simulation
+        if(netRole==='host' && typeof NET!=='undefined') NET.hostTick(dt);   // broadcast snapshots
+        autoTick+=dt; if(autoTick>60){ autoTick=0; autosaveGame(); }
+      } else if(typeof NET!=='undefined'){ NET.clientTick(dt); }   // client: no sim, just local fog/render
+    }
     updateCamera(G,dt);
     render(G);
     if(typeof updateSprintRipple==='function') updateSprintRipple(G);   // glue the sprint ripple to its world point

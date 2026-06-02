@@ -1,0 +1,154 @@
+/* css/mp.css — multiplayer lobby/room screens. Matches the dark-cyberpunk palette
+   (burgundy panels, red accents #ff5a5a, amber headings #ffd86b). p1 = cyan, p2 = amber. */
+
+/* ---- panel: stretch every block to the panel's full content width (parent centers by default,
+   which made the rows ragged), centre the heading + tagline, and tighten the rhythm ---- */
+#mpScreen .submenu-panel, #mpRoomScreen .submenu-panel { max-width:520px; align-items:stretch; gap:13px; }
+#mpScreen .submenu-panel h2, #mpRoomScreen .submenu-panel h2 { text-align:center; margin-bottom:-4px; }
+#mpScreen .panel-label, #mpRoomScreen .panel-label { text-align:center; }
+#mpScreen h3, #mpRoomScreen h3 { color:#ffd86b; font-size:13px; letter-spacing:2px; text-transform:uppercase; margin:0 0 8px; }
+
+/* ---- buttons: kill the inherited fixed width + full-edge diagonal; one tidy corner-cut, full width,
+   matched heights, clear hover + disabled states (so file:// shows them inert, not falsely active) ---- */
+#mpScreen .sc-btn, #mpRoomScreen .sc-btn {
+  width:100%; max-width:none; justify-content:center; text-align:center; gap:10px;
+  min-height:50px; padding:13px 22px; letter-spacing:2px; border-radius:5px;
+  clip-path:polygon(0 0, calc(100% - 12px) 0, 100% 12px, 100% 100%, 0 100%);
+  transition:transform .14s ease, box-shadow .14s ease, background .14s ease, border-color .14s ease, opacity .14s; }
+#mpScreen .sc-btn:hover, #mpRoomScreen .sc-btn:hover { transform:translateY(-2px); }
+#mpScreen .sc-btn:active, #mpRoomScreen .sc-btn:active { transform:translateY(0); }
+#mpScreen .sc-btn:disabled, #mpRoomScreen .sc-btn:disabled {
+  opacity:.4; filter:grayscale(.4); cursor:not-allowed; transform:none; box-shadow:none; }
+#mpScreen .sc-btn.back, #mpRoomScreen .sc-btn.back { width:auto; min-width:160px; align-self:center; }
+
+/* primary call-to-action: a brighter, taller Create Room */
+#mp-create { min-height:56px; font-size:15px;
+  background:linear-gradient(100deg, rgba(154,34,46,.96), rgba(56,14,20,.92));
+  box-shadow:0 3px 16px rgba(255,46,46,.22), inset 0 0 22px rgba(255,90,90,.07); }
+#mp-create:hover { box-shadow:0 8px 26px rgba(255,64,64,.42), inset 0 0 30px rgba(255,120,120,.18); }
+
+/* ---- identity (callsign) row ---- */
+.mp-id-row { display:flex; align-items:center; gap:12px; margin:4px 0 2px; }
+.mp-id-row label { color:#9a6b78; font-size:11px; letter-spacing:2px; text-transform:uppercase; white-space:nowrap; }
+.mp-id-row input, .mp-join input, .mp-chat-in input, .mp-relay-in input {
+  flex:1; min-width:0; background:rgba(14,5,8,.9); border:1px solid #6f2630; border-left:3px solid #ff5a5a;
+  border-radius:5px; color:#ffe6ea; padding:11px 13px; font-size:14px; outline:none; transition:border-color .14s, box-shadow .14s; }
+.mp-id-row input:focus, .mp-join input:focus, .mp-chat-in input:focus, .mp-relay-in input:focus {
+  border-left-color:#ff9a9a; box-shadow:0 0 0 1px rgba(255,90,90,.18), inset 0 0 18px rgba(255,60,60,.05); }
+.mp-selfid { color:#8c6570; font-size:12px; font-family:ui-monospace,Menlo,monospace; letter-spacing:.5px; white-space:nowrap; }
+
+/* ---- create + join cluster: input grows, Join is a fixed companion, both 56px and aligned ---- */
+.mp-actions { display:flex; flex-direction:column; gap:12px; margin:2px 0 6px; }
+.mp-join { display:flex; gap:10px; align-items:stretch; }
+.mp-join input { min-height:56px; text-transform:uppercase; letter-spacing:2.5px;
+  font-family:ui-monospace,Menlo,monospace; font-size:13px;
+  clip-path:polygon(0 0, calc(100% - 12px) 0, 100% 12px, 100% 100%, 0 100%); }
+.mp-join input::placeholder { color:#9a6b78; letter-spacing:2.5px; }
+.mp-join #mp-joinbtn { flex:0 0 128px; width:128px; min-height:56px; }
+
+/* presence / friends */
+.mp-pres-head { display:flex; justify-content:space-between; align-items:center; }
+/* ---- "Appear online": custom checkbox echoing the buttons (angular cut, crimson gradient, glowing tick) ---- */
+.mp-online-toggle { color:#c8aeb4; font-size:12px; display:flex; align-items:center; gap:9px; cursor:pointer; user-select:none; transition:color .14s; }
+.mp-online-toggle:hover { color:#ffd0d2; }
+.mp-online-toggle input[type=checkbox] {
+  appearance:none; -webkit-appearance:none; margin:0; flex:0 0 auto; position:relative; cursor:pointer;
+  width:20px; height:20px;
+  background:linear-gradient(100deg, rgba(66,16,22,.92), rgba(18,8,11,.85));
+  border:1px solid #6f2630; border-left:2px solid #ff5a5a;
+  clip-path:polygon(0 0, calc(100% - 6px) 0, 100% 6px, 100% 100%, 0 100%);   /* matches the button corner-cut */
+  box-shadow:inset 0 0 10px rgba(255,60,60,.06); transition:transform .14s, box-shadow .14s, background .14s, border-color .14s; }
+.mp-online-toggle input[type=checkbox]:hover {
+  border-color:#ff9a9a; border-left-color:#ff9a9a;
+  box-shadow:inset 0 0 12px rgba(255,90,90,.16), 0 0 9px rgba(255,60,60,.3); }
+.mp-online-toggle input[type=checkbox]:active { transform:translateY(1px); }
+.mp-online-toggle input[type=checkbox]:focus-visible { outline:2px solid rgba(255,120,120,.55); outline-offset:2px; }
+.mp-online-toggle input[type=checkbox]:checked {
+  background:linear-gradient(100deg, rgba(170,38,50,.97), rgba(58,14,20,.94));
+  border-color:#ff5a5a; border-left-color:#ff8a8a;
+  box-shadow:inset 0 0 14px rgba(255,120,120,.28), 0 0 13px rgba(255,64,64,.5); }
+/* the tick — a rotated border-corner, hidden until checked, with a glowing stroke */
+.mp-online-toggle input[type=checkbox]::after {
+  content:''; position:absolute; left:6.5px; top:2px; width:5px; height:10px;
+  border:solid #fff0f1; border-width:0 2px 2px 0; transform:rotate(42deg) scale(0);
+  opacity:0; transition:transform .16s cubic-bezier(.2,1.4,.4,1), opacity .12s;
+  filter:drop-shadow(0 0 3px rgba(255,150,150,.85)); }
+.mp-online-toggle input[type=checkbox]:checked::after { transform:rotate(42deg) scale(1); opacity:1; }
+.mp-list { display:flex; flex-direction:column; gap:6px; margin:6px 0; max-height:170px; overflow:auto; }
+.mp-friend, .mp-peer { display:flex; align-items:center; gap:9px; background:rgba(40,20,28,.6);
+  border:1px solid #5a2f3a; border-radius:6px; padding:8px 11px; }
+.mp-fname, .mp-peer-name { flex:1; color:#f0d6da; font-size:14px; }
+.mp-dot { width:9px; height:9px; border-radius:50%; background:#5a2f3a; }
+.mp-dot.online { background:#5fe08a; box-shadow:0 0 8px #5fe08a90; }
+.mp-inv { white-space:nowrap; }
+
+/* controller swatches + peer badges */
+.mp-swatch { width:12px; height:12px; border-radius:3px; box-shadow:0 0 6px #0008 inset; }
+.mp-swatch.ctrl-p1 { background:#7fd6ff; }
+.mp-swatch.ctrl-p2 { background:#ff9d3c; }
+.mp-badge { font-size:10px; letter-spacing:1px; padding:2px 7px; border-radius:10px;
+  border:1px solid #6f3644; color:#ffd0d2; background:rgba(60,28,40,.6); }
+.mp-badge.host { color:#cfeeff; border-color:#3b6f86; }
+.mp-badge.guest { color:#ffd9b0; border-color:#86603b; }
+.mp-speak { color:#3a2630; font-size:15px; transition:.1s; }
+.mp-speak.on { color:#5fe08a; text-shadow:0 0 8px #5fe08a; }
+
+/* invite block */
+.mp-invite { background:rgba(20,8,12,.6); border:1px solid #4f2530; border-radius:8px; padding:12px; margin:6px 0 12px; }
+.mp-code { color:#c8aeb4; font-size:13px; margin-bottom:8px; }
+.mp-code b { color:#ffd86b; font-family:monospace; font-size:16px; letter-spacing:1px; }
+.mp-invite-btns { display:flex; gap:8px; flex-wrap:wrap; }
+.mp-qr { margin-top:10px; text-align:center; background:#fff; padding:8px; border-radius:6px; display:inline-block; }
+.mp-qr img { display:block; }
+
+/* connection chip */
+.mp-conn { display:flex; align-items:center; gap:8px; font-size:13px; padding:7px 11px; border-radius:20px;
+  border:1px solid #4f2530; background:rgba(30,14,18,.7); color:#c8aeb4; margin:4px 0 12px; width:fit-content; }
+.mp-conn .dot { width:9px; height:9px; border-radius:50%; background:#8c6570; }
+.mp-conn.ok   { color:#bfeccb; border-color:#2f6f44; } .mp-conn.ok .dot   { background:#5fe08a; box-shadow:0 0 8px #5fe08a; }
+.mp-conn.wait { color:#ffe0b0; border-color:#86603b; } .mp-conn.wait .dot { background:#ffb84d; animation:mp-pulse 1s infinite; }
+.mp-rtt { color:#8c6570; font-size:12px; font-family:monospace; }
+@keyframes mp-pulse { 0%,100%{ opacity:.4; } 50%{ opacity:1; } }
+
+/* host controls */
+.mp-host-ctrls { display:flex; flex-direction:column; gap:10px; margin:6px 0; }
+.mp-mode-row { display:flex; align-items:center; gap:8px; color:#9a6b78; font-size:12px; }
+.mp-mode { background:rgba(40,20,28,.6); border:1px solid #6f2630; color:#f0d6da; border-radius:4px;
+  padding:6px 14px; cursor:pointer; font-size:13px; }
+.mp-mode.on { background:linear-gradient(100deg,#801c26,#3a1016); border-left:3px solid #ff5a5a; color:#fff; }
+.mp-map-row { display:flex; align-items:center; gap:10px; }
+.mp-map-row label { color:#9a6b78; font-size:12px; }
+.mp-map-row select { flex:1; background:rgba(20,8,12,.85); color:#ffe6ea; border:1px solid #6f2630; border-radius:4px; padding:8px; }
+.mp-ready-row { display:flex; align-items:center; gap:12px; margin:6px 0; }
+#mp-ready.on { background:linear-gradient(100deg,#2f6f44,#16321f); border-left-color:#5fe08a; }
+
+/* voice + chat */
+.mp-voice-ctrls { display:flex; align-items:center; gap:10px; margin:10px 0; flex-wrap:wrap; }
+.mp-voice-ctrls .on { color:#bfeccb; border-left-color:#5fe08a; }
+.mp-ptt-hint { color:#8c6570; font-size:12px; } .mp-ptt-hint b { color:#ffd86b; }
+.mp-chat { margin:8px 0; }
+.mp-chat-log { background:rgba(12,4,6,.7); border:1px solid #4f2530; border-radius:6px; height:96px; overflow:auto;
+  padding:8px 10px; font-size:13px; color:#d8c2c6; display:flex; flex-direction:column; gap:3px; }
+.mp-chat-row b { color:#ffb84d; } .mp-chat-row span { color:#e8ccd2; }
+.mp-quick-emotes { display:flex; gap:6px; margin:6px 0; flex-wrap:wrap; }
+.mp-quick-emotes .emote { background:rgba(40,20,28,.7); border:1px solid #6f3644; color:#ffd0d2; border-radius:14px;
+  padding:4px 12px; font-size:12px; cursor:pointer; letter-spacing:1px; }
+.mp-quick-emotes .emote:hover { background:rgba(60,28,40,.9); color:#fff; }
+.mp-chat-in { display:flex; gap:8px; }
+
+/* relay disclosure + net note */
+.mp-relay { margin:8px 0; color:#9a6b78; font-size:12px; }
+.mp-relay summary { cursor:pointer; }
+.mp-relay-in { display:flex; gap:8px; margin-top:8px; }
+.mp-net-note { color:#b89aa0; font-size:11.5px; line-height:1.6; margin:4px 0 0; padding:10px 13px;
+  background:rgba(18,7,10,.55); border:1px solid #4f2530; border-left:3px solid #c47a1f; border-radius:5px; }
+.mp-net-note:empty { display:none; }
+.mp-net-note b { color:#ffd0a0; }
+.mp-net-note code { font-family:ui-monospace,Menlo,monospace; font-size:11px; color:#ffd86b;
+  background:rgba(255,216,107,.08); padding:1px 5px; border-radius:3px; }
+
+/* heading accent bar + a hairline divider before the friends list, for rhythm */
+#mpScreen .submenu-panel h2::after, #mpRoomScreen .submenu-panel h2::after {
+  content:''; display:block; width:62px; height:2px; margin:11px auto 0;
+  background:linear-gradient(90deg, transparent, #ff5a5a, transparent); border-radius:2px; }
+.mp-presence { border-top:1px solid rgba(111,54,68,.45); padding-top:14px; margin-top:4px; }

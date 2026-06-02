@@ -10,8 +10,9 @@ const elDossierBtn=document.getElementById('sel-dossier');
 
 function refreshUI(){
   if(!G) return;
-  document.getElementById('gold').textContent = G.gold|0;
-  document.getElementById('supply').textContent = G.supply+'/'+G.supplyCap;
+  const _eco=playerEco(G, LOCAL_CTRL);              // HUD shows THIS client's own pool
+  document.getElementById('gold').textContent = _eco.gold|0;
+  document.getElementById('supply').textContent = _eco.supply+'/'+_eco.supplyCap;
   document.getElementById('mapname').textContent = G.cfg.name;
   document.getElementById('objective').textContent = G.cfg.objective;
 
@@ -97,7 +98,7 @@ function buildProdCards(wrap,b){
     const cv=document.createElement('canvas'); cv.width=40; cv.height=40; cv.className='pq-spr'; card.appendChild(cv);
     if(i===0){ const pr=document.createElement('div'); pr.className='pq-prog'; pr.innerHTML='<i></i>'; card.appendChild(pr); }
     const x=document.createElement('button'); x.className='pq-x'; x.textContent='✕';
-    x.onclick=(ev)=>{ ev.stopPropagation(); cancelTrain(G, b, [...wrap.children].indexOf(card)); refreshUI(); };
+    x.onclick=(ev)=>{ ev.stopPropagation(); (typeof netCancelTrain==='function'?netCancelTrain:cancelTrain)(G, b, [...wrap.children].indexOf(card)); refreshUI(); };
     card.appendChild(x);
     wrap.appendChild(card);
   });
@@ -137,7 +138,7 @@ function buildCommands(sel){
   const owned=sel.filter(e=>e.owner==='player');
   if(!owned.length){ elCmd.classList.remove('has-cmds'); syncCmdLine(); return; }
   const hasFinished=t=>G.entities.some(e=>!e.dead&&e.owner==='player'&&e.type===t&&!e.constructing);
-  const train=(bType,uType)=>{ const b=selectedBuilding(bType); if(b) tryTrain(G,b,uType); };
+  const train=(bType,uType)=>{ const b=selectedBuilding(bType); if(b) (typeof netTrain==='function'?netTrain:tryTrain)(G,b,uType); };
   if(owned.some(e=>e.type==='hq'&&!e.constructing))
     addCmd(DEF.worker.icon,'Hire Intern',DEF.worker.cost,()=>train('hq','worker'));
   if(owned.some(e=>e.type==='barracks'&&!e.constructing)){
@@ -192,12 +193,13 @@ function syncCmdLine(){
 // Keep the affordability dimming fresh without destroying (and re-creating) buttons.
 function updateAffordability(){
   const kids=elCmd.children; if(!kids) return;
-  for(const b of kids){ if(b._cost!=null) b.classList.toggle('disabled', G.gold < b._cost); }
+  const _g=playerEco(G, LOCAL_CTRL).gold;
+  for(const b of kids){ if(b._cost!=null) b.classList.toggle('disabled', _g < b._cost); }
 }
 // HQ has cost 0 in DEF (starting), but expanding should cost something:
 function tryPlaceFixed(type){
   if(type==='hq'){ // override cost for extra HQ
-    if(G.gold<350){ toast('Extra Command Center costs 350 gold'); return; }
+    if(playerEco(G, LOCAL_CTRL).gold<350){ toast('Extra Command Center costs 350 gold'); return; }
     const sel=G.selection.find(e=>e.kind==='unit'&&e.type==='worker'&&!e.dead);
     if(!sel){ toast('Select a Worker first'); return; }
     G.placing={type:'hq', def:Object.assign({},DEF.hq,{cost:350}), builder:sel};
@@ -208,7 +210,7 @@ function tryPlaceFixed(type){
 function addCmd(emoji,label,cost,fn,extraClass){
   const b=document.createElement('div'); b.className='cmd-btn'+(extraClass?' '+extraClass:'');
   b._cost = cost;                              // used by updateAffordability()
-  if(cost!=null && G.gold<cost) b.classList.add('disabled');
+  if(cost!=null && playerEco(G, LOCAL_CTRL).gold<cost) b.classList.add('disabled');
   b.innerHTML=`<span class="emoji">${emoji}</span><span>${label}</span>${cost!=null?`<span class="cost">${cost}🪙</span>`:''}`;
   b.onclick=()=>{ fn(); refreshUI(); };
   elCmd.appendChild(b);
@@ -386,7 +388,7 @@ function onVictory(){
     es.innerHTML=`<div class="big">📉</div><h1>ACQUIHIRED</h1>
       <h2>${beaten} has pivoted to bankruptcy</h2>
       <p>Their assets are yours, their founders are "exploring new opportunities," and TechCrunch loves you.<br>
-      Funding raised this quarter: <b>💰 ${G.gold_collected|0}</b></p>
+      Funding raised this quarter: <b>💰 ${teamGoldCollected(G)|0}</b></p>
       ${vets.length? `<div class="carry-head">Who deploys to the next quarter? <span class="carry-count" id="carry-count"></span></div>
         <div class="carry-list" id="carry-list"></div>` : ''}
       <button class="btn" id="nextBtn">▶ Next Quarter</button>`;

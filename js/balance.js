@@ -13,6 +13,12 @@
    Depends on globals: DEF, CAREER, vetDmgMul, mkUnit (config.js / career.js / map.js). */
 
 /* --- tunables (kept here so balance is easy to adjust in one place) --- */
+// Co-op enemy multiplier: extra human players each add COOP_PER_PLAYER of enemy throughput.
+// Deliberately sub-linear (2p → 1.85×, not 2×) so it doesn't compound with the nBases + VPI
+// scaling into an unwinnable wall. players<=1 → 1 → shipping single-player values exactly.
+const COOP_PER_PLAYER = 0.85;
+function coopFactor(players){ return 1 + (Math.max(1, players||1) - 1) * COOP_PER_PLAYER; }
+
 const VET_SCALE   = 25;   // VPI per +1 enemy soldier per base (≈ 3×L5 vets, VPI~70 → +3)
 const VET_MAXBONUS = 4;   // hard cap on bonus defenders per base (never an unwinnable wall)
 const VET_MINT_MAX = 0.25; // up to -25% enemy mint interval at very high VPI (faster reinforcement)

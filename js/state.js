@@ -6,6 +6,22 @@ let G = null;       // active game/map state
 let mapIndex = 0;
 let running = false;
 
+/* ---- multiplayer role (js/net/*). 'solo' is the untouched single-player path. ---- */
+let netRole = 'solo';     // 'solo' | 'host' | 'client'
+let LOCAL_CTRL = 'p1';    // which controller THIS client drives & sees the economy for ('p1' host, 'p2' joiner)
+let pendingPlayers = 1;   // human count newMap() bakes into state.players (set by the lobby before loadMap)
+
+/* Per-controller economy accessor: state.eco = { p1:{gold,supply,supplyCap,gold_collected}, p2:{…} }.
+   In solo only 'p1' exists and every entity defaults to ctrl 'p1', so playerEco() is always eco.p1. */
+function playerEco(state, ctrl){ return (state.eco && (state.eco[ctrl||'p1'] || state.eco.p1)) || {gold:0,supply:0,supplyCap:0,gold_collected:0}; }
+function teamGoldCollected(state){ let g=0; if(state.eco) for(const k in state.eco) g+=state.eco[k].gold_collected||0; return g; }
+
+/* Co-op controller gating. isMine() decides what THIS client may put in its commandable selection.
+   actingCtrl() is whose units a command applies to — normally LOCAL_CTRL, but the host temporarily
+   sets state._cmdCtrl when replaying a remote peer's command. Solo: LOCAL_CTRL='p1', everything 'p1'. */
+function isMine(e){ return netRole==='solo' || (((e&&e.ctrl)||'p1')===LOCAL_CTRL); }
+function actingCtrl(state){ return (state&&state._cmdCtrl) || LOCAL_CTRL; }
+
 function makeRng(seed){ let s = seed*9301+49297; return ()=>{ s=(s*9301+49297)%233280; return s/233280; }; }
 
 /* Deterministic 2D value-noise + fBm, seeded so the whole field is reproducible.

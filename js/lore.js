@@ -150,7 +150,7 @@ function rollLifeEvent(u, level){
 function applyEventFx(u, fx, state){
   if(!fx) return;
   if(fx.t==='heal'){ u.hp = u.maxHp; return; }
-  if(fx.t==='fine'){ if(state && u.owner==='player') state.gold = Math.max(0,(state.gold||0)-(fx.gold||0)); return; }
+  if(fx.t==='fine'){ if(state && u.owner==='player'){ const eco=playerEco(state, u.ctrl); eco.gold = Math.max(0,(eco.gold||0)-(fx.gold||0)); } return; }
   if(fx.t==='buff' || fx.t==='capstone'){
     u.buff = { dmgMul:fx.dmg||1, regenMul:fx.regen||1, until:(state?state.time:0)+(fx.dur||LIFE_FX.buffDur) };
     if(fx.t==='capstone') u.dreamDone = true;

@@ -12,6 +12,7 @@
 <link rel="stylesheet" href="css/screens.css">
 <link rel="stylesheet" href="css/menu.css">
 <link rel="stylesheet" href="css/lns.css">
+<link rel="stylesheet" href="css/mp.css">
 </head>
 <body>
 <div id="game">
@@ -97,6 +98,7 @@
     <nav class="menu-nav">
       <button class="sc-btn" onclick="showDocs(true)">New Campaign</button>
       <button class="sc-btn" onclick="showSub('mapScreen')">Map Selection</button>
+      <button class="sc-btn" id="btn-mp" onclick="showMpLobby()">Multiplayer · Co-op</button>
       <button class="sc-btn" onclick="openLoadMenu()">Load Game</button>
       <button class="sc-btn" onclick="showDocs(false)">Documentation</button>
     </nav>
@@ -119,6 +121,90 @@
       <div id="mapButtons"></div>
       <button class="sc-btn back" onclick="hideSub('mapScreen')">◀ Back</button>
     </div>
+  </div>
+
+  <!-- Multiplayer lobby hub -->
+  <div class="overlay submenu" id="mpScreen" style="display:none;">
+    <div class="submenu-panel">
+      <h2>Co-op Network</h2>
+      <div class="panel-label">Disrupt together — serverless · peer-to-peer · encrypted</div>
+      <div class="mp-id-row">
+        <label>Callsign</label>
+        <input id="mp-handle" maxlength="20" autocomplete="off" placeholder="e.g. SeriesA_Sam">
+        <span class="mp-selfid" id="mp-selfid"></span>
+      </div>
+      <div class="mp-actions">
+        <button class="sc-btn" id="mp-create" onclick="mpCreateRoom()">+ Create Room</button>
+        <div class="mp-join">
+          <input id="mp-joincode" maxlength="32" placeholder="ROOM CODE" autocomplete="off">
+          <button class="sc-btn" id="mp-joinbtn" onclick="mpJoinByCode()">Join ▶</button>
+        </div>
+      </div>
+      <div class="mp-presence">
+        <div class="mp-pres-head">
+          <h3>Known Operators</h3>
+          <label class="mp-online-toggle"><input type="checkbox" id="mp-presence-on" onchange="mpTogglePresence(this.checked)"> Appear online</label>
+        </div>
+        <div id="mp-friends-list" class="mp-list"></div>
+      </div>
+      <div class="mp-net-note" id="mp-net-note"></div>
+      <button class="sc-btn back" onclick="hideSub('mpScreen'); showSub('startScreen');">◀ Back</button>
+    </div>
+  </div>
+
+  <!-- Multiplayer room / lobby -->
+  <div class="overlay submenu" id="mpRoomScreen" style="display:none;">
+    <div class="submenu-panel mp-room">
+      <h2 id="mp-room-title">Room Lobby</h2>
+      <div class="mp-invite">
+        <div class="mp-code">Room code <b id="mp-room-code">—</b></div>
+        <div class="mp-invite-btns">
+          <button class="tc-btn" id="mp-copy"  onclick="mpCopyInvite()">⧉ Copy link</button>
+          <button class="tc-btn" id="mp-share" onclick="mpShareInvite()" style="display:none;">↗ Share</button>
+          <button class="tc-btn" id="mp-qr"    onclick="mpToggleQR()">▦ QR</button>
+        </div>
+        <div id="mp-qr-box" class="mp-qr" style="display:none;"></div>
+      </div>
+      <div class="mp-conn wait" id="mp-conn"><span class="dot"></span><span id="mp-conn-txt">Connecting…</span><span id="mp-rtt" class="mp-rtt"></span></div>
+      <div id="mp-peers" class="mp-list"></div>
+      <div class="mp-host-ctrls" id="mp-host-ctrls" style="display:none;">
+        <div class="mp-mode-row">
+          <span>Mode</span>
+          <button class="mp-mode on" id="mp-mode-skirmish" onclick="mpUiSetMode('skirmish')">Skirmish</button>
+          <button class="mp-mode" id="mp-mode-campaign" onclick="mpUiSetMode('campaign')">Campaign</button>
+        </div>
+        <div class="mp-map-row"><label>Quarter</label><select id="mp-map-pick"></select></div>
+        <button class="sc-btn" id="mp-start" onclick="mpHostStartClick()" disabled>▶ Start Match</button>
+      </div>
+      <div class="mp-ready-row" id="mp-ready-row">
+        <button class="sc-btn" id="mp-ready" onclick="mpToggleReady()">✓ Ready</button>
+        <span class="muted" id="mp-wait">Waiting for host to start…</span>
+      </div>
+      <div class="mp-voice-ctrls">
+        <button class="tc-btn" id="mp-mic"  onclick="mpToggleMic()">🎙 Comms off</button>
+        <button class="tc-btn" id="mp-mute" onclick="mpToggleMute()" disabled>🔇 Mute</button>
+        <span class="mp-ptt-hint">Hold <b>V</b> to talk</span>
+      </div>
+      <div class="mp-chat">
+        <div id="mp-chat-log" class="mp-chat-log"></div>
+        <div class="mp-quick-emotes">
+          <button class="emote" onclick="mpEmote('gg')">GG</button>
+          <button class="emote" onclick="mpEmote('help')">HELP</button>
+          <button class="emote" onclick="mpEmote('attack')">PUSH</button>
+          <button class="emote" onclick="mpEmote('defend')">HOLD</button>
+          <button class="emote" onclick="mpEmote('thanks')">TY</button>
+        </div>
+        <div class="mp-chat-in">
+          <input id="mp-chat-text" maxlength="140" placeholder="Message your co-founder…" onkeydown="if(event.key==='Enter')mpSendChat()">
+          <button class="tc-btn" onclick="mpSendChat()">Send</button>
+        </div>
+      </div>
+      <details class="mp-relay"><summary>Hard network? Add a TURN relay</summary>
+        <div class="mp-relay-in"><input id="mp-relay-url" placeholder="turn:host:3478 (optional)"><button class="tc-btn" onclick="mpAddRelay()">Add</button></div>
+      </details>
+      <button class="sc-btn back" onclick="mpLeaveRoomClick()">◀ Leave Room</button>
+    </div>
+    <div id="mp-audio-sinks" aria-hidden="true" style="display:none;"></div>
   </div>
 
   <!-- Load game sub-screen -->
@@ -225,6 +311,18 @@
 <script src="js/save.js"></script>
 <script src="js/lns.js"></script>
 <script src="js/particles.js"></script>
+<!-- ── multiplayer (classic; define functions only — must load before main.js) ── -->
+<script src="js/profile.js"></script>
+<script src="js/net/mp-ready.js"></script>
+<script src="js/net/sync.js"></script>
+<script src="js/net/commands.js"></script>
+<script src="js/net/mp.js"></script>
+<script src="js/net/lobby.js"></script>
+<script src="js/net/mp-ui.js"></script>
+<script src="js/net/voice-chat.js"></script>
+<script src="js/net/features.js"></script>
 <script src="js/main.js"></script>
+<!-- the project's ONLY ES module — deferred, runs after all classic scripts; publishes window.MP -->
+<script type="module" src="js/net/trystero-boot.js"></script>
 </body>
 </html>

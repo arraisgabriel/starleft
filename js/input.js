@@ -34,7 +34,7 @@ function isAdditive(e){ return !!(e.shiftKey || e.metaKey); }
 function clickSelectAt(state, w, e){
   const ent=pickEntity(state,w.x,w.y);
   if(isAdditive(e) && state.selection.length){
-    if(ent && ent.kind==='unit' && ent.owner==='player'){
+    if(ent && ent.kind==='unit' && ent.owner==='player' && isMine(ent)){
       if(ent.selected){ ent.selected=false; state.selection=state.selection.filter(s=>s!==ent); }
       else { ent.selected=true; state.selection.push(ent); }
     }
@@ -59,7 +59,7 @@ function dispatchTap(e, opts){
     const def=G.placing.def;
     const tx=Math.floor(w.x/TILE - (def.w-1)/2 + 0.0001);
     const ty=Math.floor(w.y/TILE - (def.h-1)/2 + 0.0001);
-    if(canPlaceAt(G,G.placing.type,tx,ty) && G.gold>=def.cost) placeBuilding(G,G.placing.type,tx,ty,G.placing.builder);
+    if(canPlaceAt(G,G.placing.type,tx,ty) && playerEco(G, LOCAL_CTRL).gold>=def.cost) netPlace(G,G.placing.type,tx,ty,G.placing.builder);
     else toast('Cannot build there');
     G.placing=null; refreshUI(); return;
   }
@@ -70,12 +70,12 @@ function dispatchTap(e, opts){
   if(opts.forceCommand){
     let target=ent;
     if(ent && ent.kind && ent.owner==='enemy' && !isVisiblePix(G,ent.x,ent.y)) target=null;
-    commandUnits(G, w.x, w.y, target); return;
+    netCommand(G, w.x, w.y, target); return;
   }
 
   if(isAdditive(e)){ clickSelectAt(G,w,e); return; }   // ⌘/Shift+tap aggregates
 
-  const friendlyFinished = ent && ent.owner==='player' &&
+  const friendlyFinished = ent && ent.owner==='player' && isMine(ent) &&
         (ent.kind==='unit' || (ent.kind==='building' && !ent.constructing));
   const canCommand = G.selection.some(s=>!s.dead && s.owner==='player' && (s.kind==='unit'||s.kind==='building'));
 
@@ -95,7 +95,7 @@ function dispatchTap(e, opts){
     // an active sprint and sends the squad as a tight pack (no formation) to the exact
     // point. Taps that hit a real target (enemy/mine/build) don't refresh it → sprint ends.
     if(!ent) registerSprintTap(G, w.x, w.y);
-    commandUnits(G, w.x, w.y, target); return;
+    netCommand(G, w.x, w.y, target); return;
   }
 
   // nothing to command — inspect what's there (or clear)
@@ -107,7 +107,7 @@ function dispatchTap(e, opts){
 function boxSelectRect(x0,y0,x1,y1, additive){
   const a=screenToWorld(G, Math.min(x0,x1), Math.min(y0,y1));
   const b=screenToWorld(G, Math.max(x0,x1), Math.max(y0,y1));
-  const inBox=G.entities.filter(en=>!en.dead&&en.kind==='unit'&&en.owner==='player'&&en.x>=a.x&&en.x<=b.x&&en.y>=a.y&&en.y<=b.y);
+  const inBox=G.entities.filter(en=>!en.dead&&en.kind==='unit'&&en.owner==='player'&&isMine(en)&&en.x>=a.x&&en.x<=b.x&&en.y>=a.y&&en.y<=b.y);
   if(additive && G.selection.length){
     inBox.forEach(u=>{ if(!u.selected){ u.selected=true; G.selection.push(u); } });
     refreshUI(); return;
@@ -115,7 +115,7 @@ function boxSelectRect(x0,y0,x1,y1, additive){
   clearSelection();
   let sel=inBox;
   if(!sel.length){
-    const bld=G.entities.find(en=>!en.dead&&en.kind==='building'&&en.owner==='player'&&en.x>=a.x-20&&en.x<=b.x+20&&en.y>=a.y-20&&en.y<=b.y+20);
+    const bld=G.entities.find(en=>!en.dead&&en.kind==='building'&&en.owner==='player'&&isMine(en)&&en.x>=a.x-20&&en.x<=b.x+20&&en.y>=a.y-20&&en.y<=b.y+20);
     if(bld) sel=[bld];
   }
   sel.forEach(s=>s.selected=true); G.selection=sel;
@@ -126,7 +126,7 @@ function boxSelectRect(x0,y0,x1,y1, additive){
 function selectAllArmy(){
   if(!G) return;
   clearSelection();
-  const army=G.entities.filter(e=>!e.dead && e.kind==='unit' && e.owner==='player');
+  const army=G.entities.filter(e=>!e.dead && e.kind==='unit' && e.owner==='player' && isMine(e));
   army.forEach(u=>u.selected=true); G.selection=army;
   refreshUI();
 }
@@ -195,7 +195,7 @@ function clearSelection(){ G.selection.forEach(s=>s.selected=false); G.selection
 /* ---------- Control groups (Ctrl/Cmd + 0-9 assign, 0-9 recall) ---------- */
 function assignGroup(g){
   if(!G) return;
-  const members = G.selection.filter(s=>!s.dead && s.owner==='player');
+  const members = G.selection.filter(s=>!s.dead && s.owner==='player' && isMine(s));
   const mset = new Set(members);
   // a unit belongs to at most ONE group — pull these members out of every other group first,
   // so re-assigning to a new slot moves them rather than duplicating their membership.
@@ -209,7 +209,7 @@ function assignGroup(g){
 }
 function recallGroup(g){
   if(!G) return;
-  const members = (G.groups[g]||[]).filter(s=>!s.dead && s.owner==='player');
+  const members = (G.groups[g]||[]).filter(s=>!s.dead && s.owner==='player' && isMine(s));
   G.groups[g] = members;                  // prune any that died
   if(!members.length) return;
   clearSelection();

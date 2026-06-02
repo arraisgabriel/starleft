@@ -9,8 +9,10 @@ function buildEnemyBase(state, base, idx){
   if(base.extraBarracks) mkBuilding(state,'barracks','enemy', ax+4, ay+3, true); // below the barracks
   mkBuilding(state,'turret','enemy', ax-2, ay, true);           // 2×2, left of HQ
   if(idx>=1 && ax+3<=state.W && ay+6<=state.H) mkBuilding(state,'garage','enemy', ax, ay+3, true); // 3×3, below HQ
-  const ndef = base.defenders!=null ? base.defenders : (idx===0?2:4);
-  for(let i=0;i<ndef;i++) mkUnit(state,'soldier','enemy', ax+1+i, ay+6);   // muster below the base (clear ground)
+  const ndef0 = base.defenders!=null ? base.defenders : (idx===0?2:4);
+  // co-op: more starting defenders so 2 players don't trivially rush a base (sub-linear, balance.js)
+  const ndef = Math.round(ndef0 * ((typeof coopFactor==='function')?coopFactor(state.players):1));
+  for(let i=0;i<ndef;i++) mkUnit(state,'soldier','enemy', ax+1+(i%6), ay+6+((i/6)|0));   // muster below the base (clear ground)
   // dynamic difficulty: extra defenders scaled to the player's carried career power (balance.js).
   // state._vpi is computed once in newMap before the bases are built; 0 (fresh) → no bonus.
   if(typeof applyVetScalingToBase==='function') applyVetScalingToBase(state, base, idx, state._vpi||0);
@@ -329,8 +331,10 @@ function newMap(idx){
     explored: new Uint8Array(W*H),
     visible:  new Uint8Array(W*H),
     entities: [],
-    gold: cfg.startGold!=null ? cfg.startGold : 300,   // explicit 0 must stay 0 (Ep X infiltration: no funding)
-    supply: 0, supplyCap: 0,
+    // per-controller economy pools — p1 is the only one in single-player; addCoopPlayer() seeds p2.
+    // explicit startGold 0 must stay 0 (Ep X infiltration: no funding).
+    eco: { p1: { gold: cfg.startGold!=null ? cfg.startGold : 300, supply:0, supplyCap:0, gold_collected:0 } },
+    players: pendingPlayers||1,        // human count (co-op): drives the 2nd base + enemy scaling
     nextId: 1,
     // per-map entropy for the unit dossier seeds (lore.js ensureDossier): fresh recruits get new
     // backstories every game/map/replay. Saved with G, so a reloaded match keeps its people.
@@ -348,7 +352,6 @@ function newMap(idx){
     enemyWaveTimer: (cfg.waveTimer!=null? cfg.waveTimer : (idx===0? 110 : 96)),
     waveCount:0,
     time:0,
-    gold_collected:0,
     over:false,
     // The Sprint — transient run-while-tapping state (js/sprint.js). Excluded from saves.
     sprint:{ active:false, window:0, t:0, mul:1, x:0, y:0, tapCount:0 },
@@ -423,6 +426,11 @@ function newMap(idx){
   spawnVets(state);   // carry veterans from the previous campaign map (count grows every 2 maps)
   spawnHeroes(state); // named campaign heroes declared on the map (e.g. Nino on Episode VIII)
   if(cfg.startBarracks) mkBuilding(state,'barracks','player', cfg.player.x-3, cfg.player.y, true);
+
+  // ---- co-op: duplicate the player base for each extra human, so a 2-player map starts balanced ----
+  // Runs 0× in single-player (state.players===1). Placed BEFORE the gold-reachability relocation pass
+  // (so any node p2 shadows gets nudged) and BEFORE _vpi (so p2's starters fold into the difficulty).
+  for(let p=2;p<=(state.players||1);p++) addCoopPlayer(state, 'p'+p);
 
   // dynamic difficulty: measure carried career power NOW (player units are placed, enemies aren't),
   // so each enemy base can muster proportionate extra defenders (balance.js). 0 (fresh) → no bonus.
@@ -502,6 +510,85 @@ function newMap(idx){
 
   recomputeSupply(state);
   return state;
+}
+
+/* ---------- co-op: 2nd player base ---------- */
+// Spawn a full base (HQ + workers + soldiers + optional barracks) for an extra human `slot` ('p2'…),
+// auto-deriving a fair, mutually-reachable start so no per-map cfg.player2 has to be hand-authored.
+// Reuses the same reachability flood + nearest-open BFS that newMap() uses to keep gold nodes reachable.
+function addCoopPlayer(state, slot){
+  const W=state.W, H=state.H, blocked=state.blocked, cfg=state.cfg;
+  const p1={x:cfg.player.x, y:cfg.player.y};
+
+  // tiles reachable (open) from p1's muster — proves the two bases can path to each other
+  const reach=new Uint8Array(W*H);
+  { let sx=p1.x, sy=p1.y+4;
+    if(blocked[sy*W+sx]){ for(let r=1;r<10;r++){ let done=false;
+      for(let dy=-r;dy<=r&&!done;dy++)for(let dx=-r;dx<=r&&!done;dx++){ const nx=p1.x+dx,ny=p1.y+dy;
+        if(nx>=0&&ny>=0&&nx<W&&ny<H&&!blocked[ny*W+nx]){ sx=nx; sy=ny; done=true; } } if(done) break; } }
+    const q=[sy*W+sx]; reach[sy*W+sx]=1;
+    for(let h=0;h<q.length;h++){ const k=q[h], x=k%W, y=(k/W)|0;
+      for(const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1]]){ const nx=x+dx,ny=y+dy;
+        if(nx<0||ny<0||nx>=W||ny>=H) continue; const j=ny*W+nx; if(!reach[j]&&!blocked[j]){ reach[j]=1; q.push(j); } } }
+  }
+
+  const bases=(cfg.enemies||(cfg.enemy?[cfg.enemy]:[]));
+  const farFromEnemy=(x,y)=>{ for(const b of bases){ if(Math.hypot(x-b.x,y-b.y)<10) return false; } return true; };
+
+  // candidate seeds: reflection across map centre first, a widening ring around it, then near p1
+  const seeds=[ {x:W-1-p1.x, y:H-1-p1.y} ];
+  for(let r=4;r<=12;r+=4) for(const [dx,dy] of [[r,0],[-r,0],[0,r],[0,-r],[r,r],[-r,-r],[r,-r],[-r,r]])
+    seeds.push({x:W-1-p1.x+dx, y:H-1-p1.y+dy});
+  seeds.push({x:p1.x+8,y:p1.y}, {x:p1.x,y:p1.y+8});
+
+  let origin=null;
+  for(const s of seeds){
+    const sx=Math.max(2,Math.min(W-8,s.x|0)), sy=Math.max(2,Math.min(H-8,s.y|0));
+    // BFS from the seed (crossing walls) to the nearest p1-reachable open tile — exactly the
+    // gold-node relocation trick in newMap(), guaranteeing the chosen origin is on open, pathable floor
+    const seen=new Uint8Array(W*H), q=[sy*W+sx]; seen[sy*W+sx]=1; let found=-1;
+    for(let h=0;h<q.length&&found<0;h++){ const k=q[h]; if(reach[k]){ found=k; break; }
+      const x=k%W, y=(k/W)|0;
+      for(const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1]]){ const nx=x+dx,ny=y+dy;
+        if(nx<0||ny<0||nx>=W||ny>=H) continue; const j=ny*W+nx; if(!seen[j]){ seen[j]=1; q.push(j); } } }
+    if(found>=0){ const ox=found%W, oy=(found/W)|0;
+      if(ox>=2&&oy>=2&&ox<W-7&&oy<H-7&&farFromEnemy(ox,oy)){ origin={x:ox,y:oy}; break; } }
+  }
+  if(!origin) origin={x:Math.max(2,Math.min(W-8,p1.x+6)), y:Math.max(2,Math.min(H-8,p1.y))};  // safe last resort
+
+  coopClearArea(state, origin.x, origin.y, 6);                 // open a build pad
+
+  // seed this controller's economy pool (same starting Funding as p1)
+  if(!state.eco[slot]) state.eco[slot]={ gold: cfg.startGold!=null?cfg.startGold:300, supply:0, supplyCap:0, gold_collected:0 };
+
+  const prev=state._defaultCtrl; state._defaultCtrl=slot;       // tag everything spawned below as this slot
+  mkBuilding(state,'hq','player', origin.x, origin.y, true);
+  const nW = cfg.startWorkers!=null?cfg.startWorkers:4, nS = cfg.startSoldiers!=null?cfg.startSoldiers:2;
+  for(let i=0;i<nW;i++) mkUnit(state,'worker','player', origin.x+(i%3), origin.y+4+((i/3)|0));
+  for(let i=0;i<nS;i++) mkUnit(state,'soldier','player', origin.x-1+(i%5), origin.y-2-((i/5)|0));
+  if(cfg.startBarracks) mkBuilding(state,'barracks','player', origin.x-3, origin.y, true);
+  // NOTE: deliberately no spawnVets/spawnHeroes/startUnits — those are p1's campaign roster (no clone of Nino).
+  state._defaultCtrl=prev;
+
+  for(let y=-5;y<=6;y++)for(let x=-5;x<=6;x++){ const gx=origin.x+x, gy=origin.y+y;   // reveal p2's start
+    if(gx>=0&&gy>=0&&gx<W&&gy<H) state.explored[gy*W+gx]=1; }
+  recomputeSupply(state);
+  (state._coopOrigins||(state._coopOrigins={}))[slot]=origin;   // remembered so the joiner's camera centres here
+  return origin;
+}
+
+// State-based clear pad — mirrors newMap()'s clearArea closure but operates on the live grids
+// (used by addCoopPlayer, which runs after the blocked grid is built).
+function coopClearArea(state, px, py, rad){
+  const W=state.W, H=state.H, tiles=state.tiles, biome=state.biome;
+  const land = (typeof B_GRASS!=='undefined')?B_GRASS:0;
+  for(let y=-rad;y<=rad;y++)for(let x=-rad;x<=rad;x++){
+    const gx=px+x, gy=py+y; if(gx<0||gy<0||gx>=W||gy>=H) continue;
+    const j=gy*W+gx; tiles[j]=T_GRASS;
+    if(typeof B_WATER!=='undefined' && (biome[j]===B_WATER||biome[j]===B_MOUNTAIN)) biome[j]=land;
+    if(state.feat) state.feat[j]=0;                 // drop any walk-under feature base on the pad
+    state.blocked[j]=baseBlocked(state, j);         // refresh passability from the cleared terrain
+  }
 }
 
 /* ---------- procedural-terrain helpers ---------- */
@@ -605,6 +692,9 @@ function mkEntity(state,type,owner,tx,ty,extra={}){
     x: tx*TILE+TILE/2, y: ty*TILE+TILE/2,
     selected:false, dead:false,
   }, extra);
+  // co-op controller tag: which human owns this player entity ('p1'|'p2'). Enemy/neutral get none.
+  // Solo + legacy: state._defaultCtrl is unset → 'p1', so behaviour is unchanged.
+  if(owner==='player' && e.ctrl==null) e.ctrl = state._defaultCtrl || 'p1';
   return e;
 }
 function mkBuilding(state,type,owner,tx,ty,instant=false){
@@ -646,12 +736,13 @@ function markBuilding(state,e,blockedVal){
 }
 
 function recomputeSupply(state){
-  let cap=0, used=0;
+  // per-controller supply: each human's units/buildings only count toward THEIR pool.
+  for(const k in state.eco){ state.eco[k].supply=0; state.eco[k].supplyCap=0; }
   for(const e of state.entities){
     if(e.dead||e.owner!=='player') continue;
-    if(e.kind==='building' && !e.constructing){ cap += (DEF[e.type].supply||0); }
-    if(e.kind==='unit'){ used += (DEF[e.type].supply||0); }
+    const eco=state.eco[e.ctrl||'p1']; if(!eco) continue;
+    if(e.kind==='building' && !e.constructing){ eco.supplyCap += (DEF[e.type].supply||0); }
+    if(e.kind==='unit'){ eco.supply += (DEF[e.type].supply||0); }
   }
-  state.supplyCap=cap; state.supply=used;
 }
 

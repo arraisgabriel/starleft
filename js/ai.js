@@ -25,13 +25,16 @@ function enemyAI(state,dt){
     hardCap = grace? 3*nBases : Math.round((4 + 2*aggr) * nBases * 0.6);    // ~9 (map3/4): harder than 1-base maps, still beatable
     cap = Math.min(hardCap, ((grace?3:5) + Math.floor(state.time/45)*2*aggr) * nBases);
   }
+  // co-op: each extra human raises the enemy ceiling (sub-linear via coopFactor in balance.js); 1 player → ×1
+  const pf = (typeof coopFactor==='function') ? coopFactor(state.players) : 1;
+  if(pf>1){ hardCap = Math.round(hardCap*pf); cap = Math.min(hardCap, Math.round(cap*pf)); }
 
   const enemyGarages = state.entities.filter(e=>e.owner==='enemy'&&e.type==='garage'&&!e.dead&&!e.constructing);
   state.enemySpawnTimer-=dt;
   if(state.enemySpawnTimer<=0 && enemyUnits.length<cap && (enemyBarracks.length||enemyGarages.length)){
     // slow trickle during grace, slower replacement afterwards (so a player
     // assault that kills units faster than they respawn can break the base)
-    state.enemySpawnTimer = grace? 18 : Math.max(7, 12/aggr);
+    state.enemySpawnTimer = grace? 18 : Math.max(5, (12/aggr)/pf);   // faster reinforcement with more players
     if(enemyGarages.length && !grace && Math.random()<0.25){
       // a vehicle rolls out of the rival's garage
       const b=enemyGarages[(Math.random()*enemyGarages.length)|0];
@@ -47,7 +50,7 @@ function enemyAI(state,dt){
   // waves: send only the SURPLUS beyond a home garrison, so the base stays guarded
   state.enemyWaveTimer-=dt;
   if(!grace && state.enemyWaveTimer<=0){
-    state.enemyWaveTimer = Math.max(20, 38/aggr);   // calmer cadence between waves
+    state.enemyWaveTimer = Math.max(16, (38/aggr)/pf);   // calmer cadence between waves (quicker with more players)
     const idle=enemyUnits.filter(u=>!u.cmd||u.cmd.type==='amove'||u.state==='idle');
     const garrison = Math.round((2 + aggr) * (nBases>1?1.4:1));  // keep more home when defending multiple bases
     if(idle.length > garrison + 2){
@@ -71,7 +74,7 @@ function enemyAI(state,dt){
     // out-pace rebuilds and break through (no hydra), yet the base stays
     // defended again between attacks.
     state.enemyFortifyTimer = 18;   // faster watchtower progression (was 40s)
-    const maxTur = Math.round(1 + aggr*2);                                   // per base: 3 (map1) .. 5 (map6)
+    const maxTur = Math.round((1 + aggr*2) * Math.min(pf,1.5));               // per base: 3 (map1) .. 5 (map6); mild co-op bump, no hydra
     const target = Math.min(maxTur, 1 + Math.floor((state.time-state.graceTime)/18));
     enemyFortify(state, target);   // fortifies the neediest base (per-base turret cap)
   }

@@ -25,7 +25,7 @@ function update(state, dt){
       if(tgt && b.cd<=0){ damage(state,tgt,bd.dmg, b); b.cd=bd.cd; b.shootFx={x:tgt.x,y:tgt.y,t:0.12}; }
     }
     // passive auto-extraction (Satellite Office trickles Funding for the player)
-    if(bd.trickle && b.owner==='player'){ state.gold += bd.trickle*dt; state.gold_collected += bd.trickle*dt; }
+    if(bd.trickle && b.owner==='player'){ const eco=playerEco(state, b.ctrl); eco.gold += bd.trickle*dt; eco.gold_collected += bd.trickle*dt; }
     // unit production
     if(b.prodQueue.length){
       b.prodTime+=dt;

@@ -60,6 +60,10 @@ function deserializeGame(s){
   const META={v:1, mapIndex:1, savedAt:1, mapName:1, gameTime:1};
   for(const k in s){ if(!SKIP[k] && !META[k]) g[k]=s[k]; }
   g.cfg = scaleCfg(MAPS[s.mapIndex]);   // match the scaled cfg newMap() produces
+  // legacy saves (pre-co-op) carried flat gold/supply/supplyCap/gold_collected — fold them into the
+  // p1 economy pool so they keep loading; recomputeSupply below recomputes supply/cap from entities.
+  if(!g.eco){ g.eco = { p1: { gold:(s.gold||0), supply:0, supplyCap:0, gold_collected:(s.gold_collected||0) } }; }
+  if(g.players==null) g.players = 1;
   g.blocked  = Uint8Array.from(s.blocked);   // already carries feature-base blockers
   g.explored = Uint8Array.from(s.explored);
   g.visible  = new Uint8Array(g.W*g.H);
@@ -90,6 +94,7 @@ function deserializeGame(s){
   // u.sprinting=true would permanently suppress that unit's combat (chokepoint guard).
   g.sprint={ active:false, window:0, t:0, mul:1, x:0, y:0, tapCount:0 };
   g.entities.forEach(e=>{ if(e.sprinting) e.sprinting=false; });
+  if(typeof recomputeSupply==='function') recomputeSupply(g);   // rebuild per-pool supply (esp. legacy saves)
   return g;
 }
 
@@ -113,6 +118,7 @@ function enforceCap(){
 
 /* ---------- public: save / autosave / load ---------- */
 function saveGame(){
+  if(netRole!=='solo'){ toast('Saving is disabled in co-op'); return; }
   if(!(G && running && !G.over)){ toast('Can only save during a match'); return; }
   try{
     const payload=serializeGame(), now=payload.savedAt;
@@ -125,10 +131,12 @@ function saveGame(){
   }catch(_){ toast('Save failed: storage full'); }
 }
 function autosaveGame(){
+  if(netRole!=='solo') return;                    // never autosave a co-op (half-applied) state
   if(!(G && running && !G.over)) return;
   try{ localStorage.setItem(AUTO_KEY, JSON.stringify(serializeGame())); }catch(_){}
 }
 function loadGame(key){
+  if(netRole!=='solo'){ toast('Loading is disabled in co-op'); return; }
   let d; try{ d=JSON.parse(localStorage.getItem(key)); }catch(_){ d=null; }
   if(!d){ toast('Save not found'); return; }
   if(d.v!==SAVE_VERSION){ toast('Incompatible save'); return; }

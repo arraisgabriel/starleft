@@ -520,7 +520,7 @@ function drawBuilding(state,e,ox,oy,dim){
     ctx.strokeStyle=shade(col,-50); ctx.lineWidth=2; ctx.stroke();
     ctx.fillStyle='rgba(255,255,255,.85)'; ctx.textAlign='center'; ctx.textBaseline='middle';
     ctx.font=(w*0.42|0)+'px sans-serif'; ctx.fillText(d.icon||'🏢', px+w/2, py+h/2+1);
-    ctx.fillStyle = isRedSide(e.owner)?'#ff8a8a':'#7fd6ff'; ctx.fillRect(px+w/2-3, py+2, 6, 9);
+    ctx.fillStyle = isRedSide(e.owner)?'#ff8a8a':(e.ctrl==='p2'?'#ffb84d':'#7fd6ff'); ctx.fillRect(px+w/2-3, py+2, 6, 9);
   }
   // derelict: desaturating grey wash + a pulsing reclaim beacon over the roof
   if(e.abandoned){
@@ -542,8 +542,18 @@ function drawBuilding(state,e,ox,oy,dim){
     if(e.hp<e.maxHp || e.selected){ barAt(px+6, topY-7, w-12, 5, e.hp/e.maxHp, hpColor(e.hp/e.maxHp)); }
     if(e.prodQueue && e.prodQueue.length){ barAt(px+6, py+h-8, w-12, 5, e.prodTime/e.prodTotal, '#7fd6ff'); }
   }
+  // co-op controller pip — corner dot marking which player owns this building (sprite-agnostic)
+  if(netRole!=='solo' && e.owner==='player'){
+    ctx.fillStyle=ctrlColor(e.ctrl); ctx.strokeStyle='rgba(0,0,0,.55)'; ctx.lineWidth=1;
+    ctx.beginPath(); ctx.arc(px+8, topY+6, 4, 0, 6.28); ctx.fill(); ctx.stroke();
+  }
   if(e.hitFx>0){ ctx.fillStyle='rgba(255,80,80,'+(e.hitFx*2)+')'; roundRect(px+3,py+3,w-6,h-6,6); ctx.fill(); e.hitFx-=1/60; }
 }
+
+// Co-op controller colour: p1 keeps the established player cyan-blue, p2 gets amber
+// (distinct from enemy red, goldmine violet, neutral green). Used for the per-unit/building
+// controller pip + minimap blips, shown only when networked (netRole!=='solo').
+function ctrlColor(ctrl){ return ctrl==='p2' ? '#ff9d3c' : '#7fd6ff'; }
 
 function drawUnit(state,u,ox,oy){
   const px=u.x+ox, py=u.y+oy;
@@ -565,8 +575,9 @@ function drawUnit(state,u,ox,oy){
   if(u.selected){ const fy=py-alt+vh*0.3; ctx.strokeStyle='#8effb0'; ctx.lineWidth=2; ctx.beginPath(); ctx.ellipse(px,fy,vh*0.34,vh*0.14,0,0,6.28); ctx.stroke(); }
 
   const _red = isRedSide(u.owner);
-  const team = _red ? '#c0392b' : '#3b7fd0';
-  const teamL= _red ? '#e57368' : '#7fb7f0';
+  const _p2  = (u.owner==='player' && u.ctrl==='p2');   // co-op 2nd player → amber fallback shapes
+  const team = _red ? '#c0392b' : (_p2 ? '#c47a1f' : '#3b7fd0');
+  const teamL= _red ? '#e57368' : (_p2 ? '#ffb84d' : '#7fb7f0');
 
   const sType = u.spriteType || u.type;   // hero visual override (e.g. Nino → 'nino'); gameplay still uses u.type
   const anim = unitWalk(sType, u.owner);
@@ -621,6 +632,11 @@ function drawUnit(state,u,ox,oy){
     ctx.fillStyle='#cfe9ff'; ctx.font='bold 9px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
     ctx.fillText(g, bx, by+0.5);
   }
+  // co-op controller pip — small dot at the foot so you can tell p1/p2 units apart (sprite-agnostic)
+  if(netRole!=='solo' && u.owner==='player'){
+    ctx.fillStyle=ctrlColor(u.ctrl); ctx.strokeStyle='rgba(0,0,0,.55)'; ctx.lineWidth=1;
+    ctx.beginPath(); ctx.arc(px - vh*0.30, py-alt+vh*0.30, 3, 0, 6.28); ctx.fill(); ctx.stroke();
+  }
   if(u.hitFx>0){ ctx.fillStyle='rgba(255,80,80,'+(u.hitFx*3)+')'; ctx.beginPath(); ctx.arc(px,py-vh*0.2,vh*0.38,0,6.28); ctx.fill(); u.hitFx-=1/60; }
 }
 
@@ -656,7 +672,7 @@ function drawPlacement(state,ox,oy){
   const wx=mouse.wx, wy=mouse.wy;
   const tx=Math.floor((wx)/TILE - (p.def.w-1)/2 +0.0001);
   const ty=Math.floor((wy)/TILE - (p.def.h-1)/2 +0.0001);
-  const ok=canPlaceAt(state,p.type,tx,ty) && state.gold>=p.def.cost;
+  const ok=canPlaceAt(state,p.type,tx,ty) && playerEco(state, LOCAL_CTRL).gold>=p.def.cost;
   const px=tx*TILE+ox, py=ty*TILE+oy, w=p.def.w*TILE, h=p.def.h*TILE;
   ctx.fillStyle= ok? 'rgba(120,255,150,.3)':'rgba(255,90,90,.3)';
   ctx.fillRect(px,py,w,h);
@@ -708,7 +724,7 @@ function renderMinimap(state){
     if(e.dead) continue;
     if(e.type==='goldmine'){ const N=FEAT_SIZE, ftx=(e.ftx!=null)?e.ftx:(((e.x/TILE)|0)-(N>>1)), fty=(e.fty!=null)?e.fty:(((e.y/TILE)|0)-(N>>1)); const si=(fty+N-1)*state.W+(ftx+(N>>1)); if(state.explored[si]){ mmx.fillStyle='#b06bff'; mmx.fillRect(ftx*sx, fty*sy, Math.ceil(sx*N), Math.ceil(sy*N));} continue; }
     if(e.owner==='enemy' && !isVisiblePix(state,e.x,e.y) && !(e.kind==='building'&&e._everSeen)) continue;
-    mmx.fillStyle = e.abandoned ? '#8effb0' : isRedSide(e.owner)?'#ff6b6b':'#7fd6ff';
+    mmx.fillStyle = e.abandoned ? '#8effb0' : isRedSide(e.owner)?'#ff6b6b': (e.ctrl==='p2'?'#ff9d3c':'#7fd6ff');
     const s = e.kind==='building'? (e.abandoned?4:3) :2;
     mmx.fillRect(e.x/TILE*sx - s/2, e.y/TILE*sy - s/2, s, s);
   }
