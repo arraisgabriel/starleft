@@ -426,6 +426,59 @@ Weaponize your buzzwords, circle back, and disrupt MegaCorp into bankruptcy. The
     goldNodes:[ {x:43,y:6,amt:1800},{x:48,y:7,amt:1800},
                 {x:45,y:154,amt:2600},{x:38,y:166,amt:1800},{x:52,y:166,amt:1800},
                 {x:18,y:222,amt:1800},{x:24,y:230,amt:1800},{x:45,y:250,amt:2200},{x:66,y:230,amt:1800},{x:72,y:222,amt:1800} ],
+  },
+  {
+    name:'XI — The Launch',
+    enemyName:'A&O',
+    // The pilgrimage to the altar. A normal economy map again (you build and assault, unlike the Ep X
+    // infiltration) but the longest march yet: a guided central road walled by tech-server rock ranges
+    // and coolant seas, down through six A&O campuses to the dark tower on a peninsula at the sea's
+    // edge. The carried roster + Nino/Biba arrive by CARRYOVER only (no cfg.heroes here — dead heroes
+    // stay dead, matching the contextual crawl). Career units are the spearhead again; the always-on
+    // vetScaling (js/balance.js) musters proportionate base defenders for the power you bring.
+    aggression:1.6,
+    startGold:1100, startWorkers:7, startSoldiers:5, startBarracks:true,
+    graceTime:120, waveTimer:116,
+    crawl:{ episode:'EPISODE XI', title:'THE LAUNCH',
+      text:'Biba is free and the blueprint is yours, but a blueprint is not a factory. A&O already built the only one that works — and they are about to launch it.\n\nThe altar stands at the top of A&O\'s dark tower: a black spire on a spit of land in a coolant sea, where the GRAAL writes the dying into fresh metal and the dead into product. The keynote is scheduled; the line to the people who live inside went quiet long ago.\n\n{?party}The pilgrimage walks in with you: {party} — the survivors of every quarter since the crater, here to take the thing that was built to take them.{/party}{^party}You walk the road alone. Everyone who carried you this far went on ahead, into the ground.{/party}{?fallen} You carry the wall with you too — {fallen} — names A&O filed as churn, the reason you march toward the altar instead of away from it.{/fallen}{?biba} Biba says the chip cannot tell salvation from theft. She solders anyway.{/biba}\n\nFight down the guided road, liquidate all SIX A&O campuses between you and the sea, and seize the dark tower at the peninsula\'s end. Steal the GRAAL before they ship it.\n\nThere is no launch but yours now. Go to market....' },
+    w:96, h:156,
+    seed:11,
+    player:{ x:48, y:8 },
+    // the inside of A&O at last: an endless black server-farm, coolant seas in the margins, no growing
+    // thing — pure tech. Hand-placed rock ranges wall a central road; the southern third is mostly sea
+    // around the tower's peninsula.
+    terrain:{ biomes:['tech'], seaFrac:0.12, mtnFrac:0.08, forest:0 },
+    enemies:[
+      {x:30,y:38, defenders:3},                          // left gateway campus
+      {x:66,y:38, defenders:3},                          // right gateway campus
+      {x:48,y:66, extraBarracks:true, defenders:4},      // central chokepoint on the road
+      {x:20,y:92, defenders:3},                          // the mountain-ringed campus (rock chains)
+      {x:48,y:112, defenders:4},                         // neck guardian — gates the peninsula
+      {x:48,y:140, extraBarracks:true, defenders:6},     // THE DARK TOWER — the GRAAL altar, on the peninsula
+    ],
+    objective:'A&O is launching the GRAAL from the altar in its dark tower. Fight down the guided road and liquidate all SIX A&O campuses — the last is the tower on the peninsula. Raze it to steal the GRAAL.',
+    // a guided central lane (x~40–56): rock ranges flank it left (x~28–30) and right (x~64–66), funneling
+    // the player down through the campuses toward the sea. A separate ring of mountains girds campus #4.
+    rockClusters:[
+      {x:28,y:30,n:14},{x:28,y:52,n:14},{x:30,y:74,n:14},{x:30,y:104,n:14},
+      {x:66,y:30,n:14},{x:66,y:52,n:14},{x:64,y:74,n:14},{x:64,y:104,n:14},
+      // chains of mountains ringing the fourth campus (20,92) — left open on its road-facing (east) side
+      {x:12,y:84,n:16},{x:12,y:100,n:16},{x:20,y:78,n:14},{x:20,y:106,n:14},{x:28,y:88,n:12},
+    ],
+    // coolant seas: side pools down the road, then a broad southern sea leaving the tower on a peninsula
+    // joined to the road by a single land neck (x~44–52, y~120–138).
+    lakes:[
+      {x:10,y:54,r:5},{x:86,y:54,r:5},{x:12,y:118,r:6},{x:84,y:118,r:6},
+      {x:24,y:140,r:7},{x:72,y:140,r:7},{x:38,y:150,r:5},{x:58,y:150,r:5},{x:48,y:152,r:5},
+    ],
+    goldNodes:[
+      {x:44,y:5,amt:2600},{x:50,y:6,amt:2400},{x:42,y:11,amt:2200},        // player start cluster (north)
+      {x:30,y:34,amt:1800},{x:66,y:34,amt:1800},                            // gateways
+      {x:48,y:58,amt:3000},{x:24,y:64,amt:1800},{x:72,y:64,amt:1800},       // mid contested
+      {x:18,y:96,amt:2200},                                                 // mountain campus
+      {x:52,y:108,amt:1800},{x:40,y:116,amt:1800},                          // neck approach
+      {x:48,y:134,amt:3500},{x:42,y:144,amt:2000},{x:54,y:144,amt:2000},    // the altar prize (peninsula)
+    ],
   }
 ];
 
