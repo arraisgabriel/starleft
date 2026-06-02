@@ -6,6 +6,7 @@
 
    Producers:
      VOICE.playBark(speakerKey, idx)   — unit/hero selection bark            (from dialogs.js)
+                                         (rate-capped: ≤3 per speaker, ≤5 total, per rolling 30s)
      VOICE.playLore(speakerKey, sayIdx)— career life-event line              (from dialogs.js)
      VOICE.playCrawl(idx) / stopCrawl()— intro story crawl narration         (from ui.js showCrawl)
    Settings (HUD toggle, persisted): isEnabled/setEnabled/toggle, getVolume/setVolume.
@@ -43,6 +44,20 @@ const VOICE = (function(){
   let crawlAudio = null;
   let unlocked = false;
 
+  // Bark rate-limit: chain-selecting several units (esp. same-type interns) spams their voice.
+  // Hard caps over a rolling 30s window — at most 3 barks per speaker, 5 across all speakers.
+  const BARK_WINDOW = 30000, BARK_PER_SPEAKER = 3, BARK_GLOBAL = 5;
+  const barkLog = [];                              // { key, t } recent bark plays, pruned to the window
+  function barkAllowed(key){
+    const now = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+    while(barkLog.length && now - barkLog[0].t > BARK_WINDOW) barkLog.shift();   // drop entries past 30s
+    if(barkLog.length >= BARK_GLOBAL) return false;
+    let n = 0; for(const b of barkLog) if(b.key === key) n++;
+    if(n >= BARK_PER_SPEAKER) return false;
+    barkLog.push({ key, t: now });
+    return true;
+  }
+
   // iOS/Safari unlock: silently nudge each channel within the first user gesture so later plays pass.
   function unlock(){
     if(unlocked) return; unlocked = true;
@@ -66,6 +81,7 @@ const VOICE = (function(){
   return {
     playBark(speakerKey, idx){
       if(!enabled || idx == null || typeof barkPath !== 'function') return;
+      if(!barkAllowed(speakerKey)) return;          // rolling 30s caps: 3 per speaker, 5 total
       playClip(barkPath(speakerKey, idx));
     },
     playLore(speakerKey, sayIdx){
