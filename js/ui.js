@@ -357,9 +357,14 @@ function showCrawl(idx, done){
   scr.classList.remove('fast'); content.style.animation='none'; void content.offsetWidth;
   content.style.animation='';
   scr.style.display='flex';
-  if(typeof VOICE!=='undefined') VOICE.playCrawl(idx);   // rod-clone narration, synced to the scroll
   let finished=false;
-  const finish=()=>{ if(finished) return; finished=true; clearTimeout(timer);
+  // Hold the rod-clone narration until the crawl TEXT is actually on screen, never over the black
+  // lead-in: the content scrolls up from top:83% (below the masked viewport), and on Episode I the
+  // 5s "A long sprint ago…" introFade plays first. Tune CRAWL_VOICE_DELAY_MS to taste.
+  const CRAWL_VOICE_DELAY_MS = (idx===0 ? 5200 : 3500);   // idx 0: after the 5s intro fades; else: text risen into view
+  let voiceTimer = (typeof VOICE!=='undefined')
+    ? setTimeout(()=>{ if(!finished) VOICE.playCrawl(idx); }, CRAWL_VOICE_DELAY_MS) : null;
+  const finish=()=>{ if(finished) return; finished=true; clearTimeout(timer); clearTimeout(voiceTimer);
     if(typeof VOICE!=='undefined') VOICE.stopCrawl();     // stop narration on skip OR auto-advance
     scr.style.display='none'; done&&done(); };
   document.getElementById('crawl-skip').onclick=finish;
