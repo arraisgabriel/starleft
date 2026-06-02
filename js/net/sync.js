@@ -15,9 +15,9 @@ window.NET = window.NET || {};
   const NET = window.NET;
   NET.tick = 0;            // host authoritative tick counter (stamped into snapshots)
   NET.lastFull = -1;       // client: tick of the last full snapshot applied
-  NET.DELTA_HZ = 12;       // compact-snapshot rate
-  NET.KEY_SEC  = 5;        // full-keyframe interval (drift insurance + late-joiner safety)
-  NET._sAcc = 0; NET._kAcc = 0;
+  NET.DELTA_HZ = 15;       // compact-snapshot rate (each snap is a full entity set, so it self-heals)
+  NET.SMOOTH_RATE = 18;    // client: ease rate for gliding unit positions between snapshots
+  NET._sAcc = 0;
   NET.peerCtrl = {};       // host: peerId -> ctrl ('p2'…)
   NET.ctrlPeer = {};       // host: ctrl -> peerId
   NET._chunk = {};         // client: full-snapshot chunk reassembly buffers
@@ -66,6 +66,7 @@ window.NET = window.NET || {};
     if(e.kind==='unit'){
       if(e.state) o.s=e.state;
       if(e._actState) o.as=e._actState;
+      if(e._actState==='attack' && e._actStamp!=null) o.ast=Math.round(e._actStamp*1000)/1000;  // strike time → drives the attack windup frame
       if(e._face) o.f=e._face;
       if(e.dir) o.d=Math.round(e.dir*100)/100;
       if(e.carrying) o.cr=e.carrying;
@@ -92,15 +93,21 @@ window.NET = window.NET || {};
     if(o.gm){ e.type='goldmine'; e.owner=null; e.x=o.x; e.y=o.y; e.amount=o.amt; e.amount0=o.a0;
               e.ftx=o.ftx; e.fty=o.fty; e.r=o.r; e.dead=false; return; }
     const d=DEF[o.t]||{};
-    e.type=o.t; e.owner=o.o; e.kind=o.k; e.ctrl=o.c; e.x=o.x; e.y=o.y; e.hp=o.hp; e.maxHp=o.mh; e.dead=false;
+    e.type=o.t; e.owner=o.o; e.kind=o.k; e.ctrl=o.c; e.hp=o.hp; e.maxHp=o.mh; e.dead=false;
     if(o.k==='unit'){
+      // Store the snapshot position as a SMOOTHING TARGET (_sx/_sy); clientTick eases the rendered
+      // e.x/e.y toward it so units glide at render rate instead of teleporting at the 15 Hz snap rate.
+      if(e.x==null){ e.x=o.x; e.y=o.y; }        // first sighting → snap into place
+      e._sx=o.x; e._sy=o.y;
       // static stats come from DEF — the client never simulates, it only renders/picks
       e.r=d.r; e.sight=d.sight; e.air=!!o.air; e.speed=d.speed; e.range=d.range; e.dmg=d.dmg;
       e.state=o.s||'idle'; e._actState=o.as||null; e._face=o.f||e._face||1; e.dir=o.d||0;
+      if(o.ast!=null) e._actStamp=o.ast;                 // sync the strike time so the attack animation plays
       e.carrying=o.cr||0; e.stars=o.st||0; e.spriteType=o.sp||null;
       e.hero=!!o.h; e.sieged=!!o.sg; e.captive=!!o.cap; e.sprinting=!!o.spr;
       e._tgtId = o.tg!=null ? o.tg : null;
     } else if(o.k==='building'){
+      e.x=o.x; e.y=o.y;                          // buildings don't move → snap directly
       e.tx=o.tx; e.ty=o.ty; e.w=o.w; e.h=o.h; e.sight=d.sight; e.cd=e.cd||0;
       e.constructing=!!o.cn; e.buildProg=o.bp||0; e.buildTime=o.bt||d.build;
       e.prodQueue=o.pq||[]; e.prodTime=o.pt||0; e.prodTotal=o.ptt||0;
@@ -114,7 +121,9 @@ window.NET = window.NET || {};
   };
   NET.applySnap = function(snap){
     if(snap.eco) G.eco = snap.eco;
-    if(snap.time!=null) G.time = snap.time;
+    // G.time is advanced locally every frame (clientTick) so time-driven sprite animations run at
+    // render rate; only HARD-resync it if it has drifted far from the host (e.g. after a background gap).
+    if(snap.time!=null && (G.time==null || Math.abs(G.time - snap.time) > 0.5)) G.time = snap.time;
     if(snap.wave!=null) G.waveCount = snap.wave;
     // merge entities by id (preserves per-entity render transients: _ax/_ay/hitFx/_walkDist)
     const incoming = new Map(snap.ents.map(o=>[o.id,o]));
@@ -150,14 +159,34 @@ window.NET = window.NET || {};
   /* ---------------- per-frame driver (called from main.js loop) ---------------- */
   NET.hostTick = function(dt){
     NET.tick++;
-    NET._sAcc += dt; NET._kAcc += dt;
-    if(NET._kAcc >= NET.KEY_SEC){ NET._kAcc = 0; NET.sendFull(); }      // periodic keyframe (drift/late-join safety)
+    NET._sAcc += dt;
+    // No periodic full keyframe: each compact snap is already a full entity set (adds spawns, drops
+    // deaths), so it self-heals — and a recurring full would yank the joiner's camera/selection.
     if(NET._sAcc >= 1/NET.DELTA_HZ){ NET._sAcc = 0; MP.send('mpsnap', NET.buildSnap()); }
   };
   NET.clientTick = function(dt){
-    // v1: no interpolation — positions snap at the snapshot rate (render.js already eases animation).
-    // The client owns its fog: it has every unit's position, so computeFog reproduces shared vision.
-    if(typeof computeFog==='function' && G) computeFog(G);
+    if(!G) return;
+    // 0) advance the animation clock locally so time-driven sprite anims (attack windup, mine/heal loops,
+    //    idle breathing) play smoothly at render rate instead of stepping at the snapshot rate / stalling
+    //    under load. applySnap soft-resyncs it to the host's authoritative time when drift is large.
+    G.time = (G.time||0) + dt;
+    // 1) glide unit positions toward their latest snapshot target so movement is smooth at render rate
+    //    rather than stepping at the 15 Hz snapshot rate. Big jumps (spawn/teleport) snap instantly.
+    const k = Math.min(1, dt * NET.SMOOTH_RATE), snap2 = (TILE*2.5)*(TILE*2.5);
+    for(const e of G.entities){
+      if(e.kind!=='unit' || e.dead || e._sx==null) continue;
+      const dx=e._sx-e.x, dy=e._sy-e.y;
+      if(dx*dx+dy*dy > snap2){ e.x=e._sx; e.y=e._sy; }
+      else { e.x += dx*k; e.y += dy*k; }
+    }
+    // 2) cosmetic systems that normally live inside update() — the client skips update(), so without
+    //    these the sprint ripple never decays, ambient visuals freeze, and speech boxes stay invisible.
+    if(typeof updateSprint==='function')    updateSprint(G, dt);
+    if(typeof updateParticles==='function') updateParticles(G, dt);
+    if(typeof updateWater==='function')     updateWater(G, dt);
+    if(typeof updateDialogs==='function')   updateDialogs(G, dt);
+    // the client owns its fog: it has every unit's position, so computeFog reproduces shared vision.
+    if(typeof computeFog==='function')      computeFog(G);
   };
 
   /* ---------------- receive wiring (registered once a room is entered) ---------------- */

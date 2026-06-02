@@ -38,6 +38,26 @@ function isVisiblePix(state,x,y){
 let VIEW_TOP=46, VIEW_BOT=150;
 let cssH=innerHeight;   // canvas CSS-pixel height (cv.height is device px once DPR-scaled)
 
+/* ---- Idle "life" animation (render-only; reuses existing sprites) ----
+   Idle units used to freeze on walk frame 0. These give them gentle in-place
+   motion so the crowd feels alive (Hades-ish), without touching the simulation:
+   no bullets, no damage, no _actState — purely cosmetic in drawUnit. */
+const IDLE = {              // Balanced tier (tuned down)
+  rampFrames: 18,          // ease-in frames after a unit stops (~0.3s @60fps)
+  phaseStep:  0.7,         // per-unit breathing phase desync (radians × id)
+  breathHz:   0.9,         // breaths/sec — quicker, shallower breath
+  breathAmp:  0.009,       // ±0.9% height squash/stretch (foot-planted breathing)
+  bobPx:      1.0,         // ±px vertical breathing bob (flyers only — ground units don't float)
+  fidgetMin:  30, fidgetMax: 60,    // per-unit seconds between gestures (infrequent)
+  gestureMin: 1.6, gestureMax: 2.2, // gesture duration (s) — slower, calmer motion
+  hoverPx:    3,  hoverHz:  1.0,     // air-unit continuous hover
+};
+// deterministic per-unit [0,1) hash → varied-but-stable timing, NO per-unit state,
+// NO reset-on-move bookkeeping, and identical across co-op clients.
+function h01(n){ const s=Math.sin(n*12.9898)*43758.5453; return s - Math.floor(s); }
+// the single action key for a sprite type ('mine' | 'heal' | 'attack'), or null
+function fidgetAction(sType){ const t=UNIT_ACTION[sType]; return t ? Object.keys(t)[0] : null; }
+
 function resize(){
   dpr = window.devicePixelRatio || 1;
   cv.width  = Math.round(innerWidth*dpr);  cv.height = Math.round(innerHeight*dpr);
@@ -584,14 +604,42 @@ function drawUnit(state,u,ox,oy){
   if(anim){
     const S = vh;
     const act = u._actState ? actionAnim(sType, u._actState, u.owner) : null;
-    let fi, useAnim;
+    let fi, useAnim, bScale=1, bShift=0;   // bScale/bShift: idle breathing (1/0 = none)
     if(act){
       useAnim = act; const n=act.frames.length;
       if(u._actState==='attack'){ const t = state.time-(u._actStamp||0);          // swing windup→strike→recover across the strip
-        fi = t<0.42 ? Math.min(n-1, (t/0.42*n)|0) : 0; }
+        fi = t<0.8 ? Math.min(n-1, (t/0.8*n)|0) : 0; }
       else { fi = ((state.time*7)|0) % n; }                                        // mine / heal loop
-    } else { useAnim = anim; fi = moving ? (((u._walkDist||0)/9)|0) % anim.frames.length : 0; }
-    const dh = blitFrame(u,px,py-alt,useAnim,S,fi);
+    } else {
+      // ---- IDLE PATH: walk frame 0 when still, plus render-only "life" layers ----
+      useAnim = anim; fi = moving ? (((u._walkDist||0)/9)|0) % anim.frames.length : 0;
+      if(!u.captive){                                  // captives stay frozen
+        const idleAmount = moving ? 0 : Math.max(0, Math.min(1, ((u._still||0)-6)/IDLE.rampFrames));
+        // LAYER 2 — occasional action fidget (settled, grounded units): replay the
+        // unit's own action strip once as a gesture (no _actState → no combat/bullets).
+        if(!moving && idleAmount>0){
+          const fa = fidgetAction(sType), a = fa ? actionAnim(sType, fa, u.owner) : null;
+          if(a){
+            const cyc = IDLE.fidgetMin + h01(u.id+1.3)*(IDLE.fidgetMax-IDLE.fidgetMin);
+            const dur = IDLE.gestureMin + h01(u.id*1.7+2.1)*(IDLE.gestureMax-IDLE.gestureMin);
+            const local = (state.time + h01(u.id*2.9+0.7)*cyc) % cyc;
+            if(local < dur){ const p=local/dur, n=a.frames.length, tri=1-Math.abs(1-2*p);   // 0→1→0 ping-pong
+              useAnim = a; fi = Math.min(n-1, (tri*(n-1))|0); }
+          }
+        }
+        // LAYER 1 — breathing: foot-anchored squash/stretch (idle only). The vertical
+        // bob (float) is FLYERS-ONLY — ground units stay planted so they don't float.
+        if(idleAmount>0){
+          const ph = state.time*IDLE.breathHz*6.2831853 + (u.id||0)*IDLE.phaseStep;
+          bScale = 1 + IDLE.breathAmp*idleAmount*Math.sin(ph);
+          bShift = 0.3*S*(1-bScale);                                          // foot anchor only — no float
+          if(u.air) bShift -= IDLE.bobPx*idleAmount*Math.sin(ph*0.5 + 1.7);   // breathing bob kept for flyers
+        }
+        // LAYER 3 — air hover: continuous float, even while moving
+        if(u.air) bShift -= IDLE.hoverPx*Math.sin(state.time*IDLE.hoverHz + (u.id||0)*0.7);
+      }
+    }
+    const dh = blitFrame(u,px,(py-alt)+bShift,useAnim,S*bScale,fi);
     if(u.type==='worker' && u.carrying>0){ ctx.fillStyle='#ffd86b'; ctx.beginPath(); ctx.arc(px,py-alt-dh*0.7-4,3,0,6.28); ctx.fill(); }
   } else if(u.type==='worker'){
     ctx.fillStyle=team; ctx.beginPath(); ctx.arc(px,py,r,0,6.28); ctx.fill();

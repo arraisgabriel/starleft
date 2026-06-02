@@ -83,26 +83,37 @@
     if(typeof mpStartRtt==='function') mpStartRtt();
     showSub('mpRoomScreen');
   };
-  window.mpUiLeftRoom = function(){ hideSub('mpRoomScreen'); showSub('startScreen'); };
+  // Return to the main menu and re-tune the LNS news ticker. The menu's #lns-menu stripe lives
+  // inside #startScreen, which the MP overlay hides — so on the way back we relayout it to recover
+  // the correct (tuned) scroll speed and pick up any headlines that arrived while it was hidden.
+  window.mpBackToMenu = function(fromId){
+    if(fromId) hideSub(fromId);
+    showSub('startScreen');
+    if(window.LNS && typeof LNS.relayout==='function') LNS.relayout();
+  };
+  window.mpUiLeftRoom = function(){ hideSub('mpRoomScreen'); window.mpBackToMenu(); };
   window.mpUiHostGone = function(){ toast('Host left — match ended'); if(typeof mpLeave==='function') mpLeave(); window.mpUiLeftRoom(); };
   window.mpUiEnterGame = function(){ ['mpScreen','mpRoomScreen','startScreen','mapScreen','loadScreen'].forEach(hideSub); };
   window.mpUiSyncing = function(){ setConn('Syncing battlefield…','wait'); const w=$('mp-wait'); if(w) w.textContent='Host started — syncing…'; };
   window.mpUiPeerDropped = function(){ toast('🔌 Co-founder dropped — you’re holding their base'); renderPeers(); };
   window.mpUiClientGameOver = function(){ running=false; toast('Match over'); };
 
+  function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
   function renderPeers(){
     const wrap=$('mp-peers'); if(!wrap) return;
-    const s=S(); const rows=[];
-    const me=s.me||getOrCreateProfile();
+    const s=S(); const me=s.me||getOrCreateProfile();
     const host = s.role==='host' ? me : s.host;
     const join = s.role==='host' ? s.joiner : me;
-    const mk=(p,ctrl,isHost,isYou)=> p ? `<div class="mp-peer"><span class="mp-swatch ${ctrl}"></span>`+
-      `<span class="mp-peer-name">${(p.handle||'Operator')}${isYou?' (you)':''}</span>`+
-      `<span class="mp-badge ${isHost?'host':'guest'}">${isHost?'HOST · p1':'GUEST · p2'}</span>`+
-      `<span class="mp-speak" data-pid="${p.id||''}">●</span></div>` : '';
-    rows.push(mk(host,'ctrl-p1',true, s.role==='host'));
-    rows.push(mk(join,'ctrl-p2',false, s.role!=='host'));
-    wrap.innerHTML = rows.join('') || '<div class="muted">Waiting for a co-founder…</div>';
+    const slot=(p,ctrl,isHost,isYou)=> p
+      ? `<div class="mp-peer filled ${isHost?'host':'guest'}"><span class="mp-swatch ${ctrl}"></span>`+
+        `<span class="mp-peer-name">${esc(p.handle||'Operator')}${isYou?' <em>(you)</em>':''}</span>`+
+        `<span class="mp-badge ${isHost?'host':'guest'}">${isHost?'HOST · P1':'GUEST · P2'}</span>`+
+        `<span class="mp-speak" data-pid="${esc(p.id||'')}">●</span></div>`
+      : `<div class="mp-peer open ${isHost?'host':'guest'}"><span class="mp-swatch ${ctrl}"></span>`+
+        `<span class="mp-peer-name">Open slot — share the room code to fill it</span>`+
+        `<span class="mp-badge ${isHost?'host':'guest'}">${isHost?'P1':'P2'}</span></div>`;
+    wrap.innerHTML = slot(host,'ctrl-p1',true, s.role==='host') + slot(join,'ctrl-p2',false, s.role!=='host');
+    const oc=$('mp-opcount'); if(oc) oc.textContent = ((host?1:0)+(join?1:0)) + ' / 2';
     const startBtn=$('mp-start'); if(startBtn) startBtn.disabled = !(s.role==='host' && s.peerId);
     setConn(s.peerId ? 'Connected' : 'Waiting for co-founder…', s.peerId?'ok':'wait');
   }

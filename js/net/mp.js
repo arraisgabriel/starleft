@@ -64,6 +64,7 @@
     if(typeof clampCam==='function') clampCam(G);
     if(typeof refreshUI==='function') refreshUI();
     running = true;
+    if(typeof startHostClock==='function') startHostClock();   // keep the host simulating + broadcasting off-focus
     // tell the joiner to build the same map, then ship the authoritative dynamic state
     MP.send('mpstart', { mapIndex:S.mapIndex, mode:S.mode });
     NET.tick = 0; NET._sAcc = 0; NET._kAcc = 0;
@@ -92,6 +93,7 @@
     MP.onLeave(()=>{ // host vanished
       toast('Host disconnected'); ui('HostGone'); });
     NET.onFullApplied = ()=>{
+      if(running) return;          // one-shot: only the FIRST full "drops you in" — never re-centre/re-toast later
       running = true;
       // centre the joiner's camera on their own (p2) base
       const o = G._coopOrigins && G._coopOrigins.p2;
@@ -118,6 +120,7 @@
   /* ---------------- leave / drop ---------------- */
   function mpLeave(){
     try{ MP.send('mpbye', { reason:'leave' }); }catch(_){}
+    if(typeof stopHostClock==='function') stopHostClock();   // tear down worker + audio/wake-lock keep-alive
     if(window.COMMS) try{ COMMS.leave(); }catch(_){}
     if(typeof mpStopRtt==='function') mpStopRtt();
     try{ MP.leaveRoom(); }catch(_){}

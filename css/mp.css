@@ -152,3 +152,131 @@
   content:''; display:block; width:62px; height:2px; margin:11px auto 0;
   background:linear-gradient(90deg, transparent, #ff5a5a, transparent); border-radius:2px; }
 .mp-presence { border-top:1px solid rgba(111,54,68,.45); padding-top:14px; margin-top:4px; }
+
+/* =====================================================================
+   ROOM SCREEN — full-bleed "operations console" (revamped layout).
+   Sectioned framed panels spread across the desktop, separate bottom
+   comms channel. Crimson/Hades palette, signature corner-cut framing.
+   Scoped to #mpRoomScreen so the lobby hub (#mpScreen) is untouched.
+   ===================================================================== */
+#mpRoomScreen { align-items:stretch; justify-content:flex-start; gap:0; text-align:left;
+  padding:clamp(14px,2.2vw,38px); overflow:auto; }
+.mpr {
+  --edge:rgba(143,58,72,.5); --edge-lit:#ff5a5a; --amber:#ffd86b; --muted:#9a6b78;
+  flex:1 1 auto; min-height:0; width:100%; max-width:1560px; margin-inline:auto; position:relative;
+  display:grid; grid-template-rows:auto minmax(0,1fr) auto; gap:clamp(11px,1.2vw,17px); }
+.mpr, .mpr * { box-sizing:border-box; }   /* never let padding/borders push past the viewport */
+/* faint scanline atmosphere behind the panels */
+.mpr::before { content:''; position:absolute; inset:0; pointer-events:none; z-index:0; opacity:.45;
+  background:repeating-linear-gradient(to bottom, transparent 0 3px, rgba(255,90,90,.022) 3px 4px); }
+.mpr > * { position:relative; z-index:1; }
+
+/* ---- header strip ---- */
+.mpr-head { display:flex; align-items:center; flex-wrap:wrap; gap:10px 14px; padding:0 4px 2px; }
+.mpr-titlewrap { display:flex; flex-direction:column; gap:3px; min-width:0; flex:1 1 auto; }
+.mpr-eyebrow { font-size:10.5px; letter-spacing:4px; color:#a8636f; text-transform:uppercase; }
+.mpr-head h2 { margin:0; font-size:clamp(19px,2.3vw,30px); letter-spacing:3px; color:#ff7676;
+  text-transform:uppercase; text-shadow:0 0 20px rgba(255,40,40,.35); }
+.mpr-head .mp-conn { margin:0 0 0 auto; }
+.mpr-leave { display:inline-flex; align-items:center; gap:7px; cursor:pointer; white-space:nowrap;
+  padding:10px 18px; font:700 12px/1 inherit; letter-spacing:2px; text-transform:uppercase; color:#ffd0d2;
+  background:linear-gradient(100deg, rgba(66,16,22,.92), rgba(22,10,14,.82));
+  border:1px solid #6f2630; border-left:2px solid #ff5a5a;
+  clip-path:polygon(0 0, calc(100% - 10px) 0, 100% 10px, 100% 100%, 0 100%); transition:.14s; }
+.mpr-leave:hover { color:#fff; border-left-color:#ff9a9a; transform:translateY(-1px); background:linear-gradient(100deg, rgba(120,26,36,.95), rgba(48,16,22,.9)); }
+.mpr-leave .ic { color:#ff8a8a; }
+
+/* ---- body: two columns ---- */
+.mpr-body { display:grid; grid-template-columns:minmax(0,1.55fr) minmax(0,1fr); gap:clamp(11px,1.2vw,17px); min-height:0; }
+.mpr-col { display:flex; flex-direction:column; gap:clamp(11px,1.2vw,17px); min-height:0; min-width:0; }
+.mpr-operators, .mpr-comms { flex:1 1 auto; }   /* these fill the remaining column height */
+
+/* ---- framed console panel ---- */
+.mpr-panel { position:relative; min-height:0; display:flex; flex-direction:column;
+  padding:clamp(13px,1.05vw,18px);
+  background:linear-gradient(180deg, rgba(42,16,20,.85), rgba(15,8,11,.85));
+  border:1px solid var(--edge);
+  clip-path:polygon(0 0, calc(100% - 13px) 0, 100% 13px, 100% 100%, 0 100%);
+  filter:drop-shadow(0 7px 16px rgba(0,0,0,.42)); }
+.mpr-panel::before { content:''; position:absolute; left:0; right:0; top:0; height:2px;
+  background:linear-gradient(90deg, var(--edge-lit), rgba(255,90,90,.04) 55%, transparent); }
+/* panel header: red tick + stenciled amber label + hairline */
+.mpr-h { display:flex; align-items:center; flex-wrap:wrap; gap:8px 9px; flex:none;
+  font:700 12px/1 inherit; letter-spacing:2.6px; text-transform:uppercase; color:var(--amber);
+  padding-bottom:11px; margin-bottom:13px; border-bottom:1px solid rgba(143,58,72,.32); }
+.mpr-h-tick { width:7px; height:15px; flex:none; border-radius:1px;
+  background:linear-gradient(#ff8a8a,#c0303a); box-shadow:0 0 9px rgba(255,70,70,.55); }
+.mpr-h-count { margin-left:auto; color:var(--muted); font-weight:600; font-size:11px; letter-spacing:1.5px; }
+
+/* ---- room access / sharing ---- */
+.mpr-access-grid { display:grid; grid-template-columns:1.1fr 1fr; gap:18px; align-items:center; }
+.mpr-code-block { display:flex; flex-direction:column; gap:5px; }
+.mpr-code-label { font-size:10.5px; letter-spacing:3px; color:var(--muted); text-transform:uppercase; }
+.mpr-code { font-family:ui-monospace,Menlo,monospace; font-size:clamp(22px,2.6vw,34px); font-weight:700;
+  letter-spacing:2px; color:#ffe7a0; text-shadow:0 0 16px rgba(255,180,70,.25); line-height:1.05;
+  word-break:break-word; }
+.mpr-code-hint { font-size:11.5px; color:var(--muted); line-height:1.5; margin-top:3px; }
+.mpr-share { display:flex; flex-direction:column; gap:9px; }
+.mpr-share .mp-invite-btns { flex-direction:column; gap:8px; }
+.mpr-share .mp-invite-btns .tc-btn { width:100%; justify-content:center; }
+.mpr-access .mp-qr { align-self:center; margin-top:4px; }
+
+/* ---- operators / player slots ---- */
+.mpr-operators .mp-list { flex:1 1 auto; gap:11px; max-height:none; }
+.mpr-operators .mp-peer { padding:14px 16px; gap:13px; border-radius:5px;
+  background:linear-gradient(100deg, rgba(48,20,26,.6), rgba(18,10,14,.5));
+  border:1px solid #5a2f3a; border-left:3px solid #5a2f3a; transition:.14s; }
+.mpr-operators .mp-peer.host  { border-left-color:#7fd6ff; }
+.mpr-operators .mp-peer.guest { border-left-color:#ff9d3c; }
+.mpr-operators .mp-peer.open  { border-style:dashed; border-left-style:solid; opacity:.62; }
+.mpr-operators .mp-peer.open .mp-peer-name { color:var(--muted); font-style:italic; }
+.mpr-operators .mp-swatch { width:16px; height:16px; }
+.mpr-operators .mp-peer-name { font-size:15px; }
+.mpr-operators .mp-peer-name em { color:#a8636f; font-style:normal; font-size:12px; }
+
+/* ---- deployment / comms inner reuse tweaks ---- */
+.mpr-deploy .mp-host-ctrls, .mpr-deploy .mp-ready-row { margin:0; }
+.mpr-deploy .mp-map-row select { padding:10px; border-radius:4px; }
+#mp-start { min-height:54px; font-size:15px;
+  background:linear-gradient(100deg, rgba(154,34,46,.96), rgba(56,14,20,.92));
+  box-shadow:0 3px 16px rgba(255,46,46,.2), inset 0 0 22px rgba(255,90,90,.07); }
+#mp-start:hover:not(:disabled) { box-shadow:0 8px 26px rgba(255,64,64,.42), inset 0 0 30px rgba(255,120,120,.18); }
+.mpr-comms .mp-voice-ctrls { margin:0 0 10px; }
+.mpr-comms .mp-relay { margin:auto 0 0; }
+
+/* ---- bottom comms channel ---- */
+.mpr-chat { }
+.mpr-chat .mpr-h { margin-bottom:11px; }
+.mpr-emotes-inline { margin-left:auto; display:flex; flex-wrap:wrap; gap:6px; }
+.mpr-emotes-inline .emote { background:rgba(40,20,28,.7); border:1px solid #6f3644; color:#ffd0d2;
+  border-radius:13px; padding:3px 11px; font-size:11px; letter-spacing:1px; cursor:pointer; transition:.12s; }
+.mpr-emotes-inline .emote:hover { background:rgba(80,30,42,.95); color:#fff; transform:translateY(-1px); }
+.mpr-chat .mp-chat-log { height:clamp(74px,11vh,128px); flex:none; margin-bottom:10px; }
+.mpr-chat .mp-chat-in { display:flex; gap:10px; }
+.mpr-chat .mp-chat-in input { flex:1; min-width:0; background:rgba(14,5,8,.9); border:1px solid #6f2630;
+  border-left:3px solid #ff5a5a; border-radius:5px; color:#ffe6ea; padding:11px 13px; font-size:14px; outline:none; }
+.mpr-chat .mp-chat-in input:focus { border-left-color:#ff9a9a; box-shadow:0 0 0 1px rgba(255,90,90,.18); }
+
+/* ---- responsive: below 920px the fixed-height console becomes a natural-height
+   vertical stack that scrolls (panels keep their content height instead of being
+   squeezed to fit one screen) ---- */
+@media (max-width:920px) {
+  #mpRoomScreen { justify-content:flex-start; }
+  .mpr { max-width:680px; flex:0 0 auto; display:flex; flex-direction:column; }
+  .mpr-body { display:flex; flex-direction:column; }
+  .mpr-operators, .mpr-comms { flex:0 0 auto; }      /* take content height, don't stretch */
+  .mpr-operators .mp-list { max-height:none; }
+  .mpr-access-grid { grid-template-columns:1fr; gap:13px; }
+}
+/* ---- phones: tighten padding/typography so nothing spills past the viewport ---- */
+@media (max-width:560px) {
+  #mpRoomScreen { padding:10px; overflow-x:hidden; }
+  .mpr { gap:10px; }
+  .mpr-head { gap:8px 10px; }
+  .mpr-head h2 { font-size:18px; letter-spacing:1.5px; }
+  .mpr-eyebrow { letter-spacing:3px; }
+  .mpr-leave { padding:8px 13px; }
+  .mpr-panel { padding:13px; }
+  .mpr-code { font-size:23px; letter-spacing:1px; }
+  .mpr-chat .mp-chat-log { height:84px; }
+}

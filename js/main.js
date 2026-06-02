@@ -243,11 +243,16 @@ function loop(now){
   const dt=Math.min(0.05,(now-last)/1000); last=now;
   if(G){
     if(running && !G.over){
-      if(netRole!=='client'){
-        update(G,dt);                                              // host & solo own the simulation
-        if(netRole==='host' && typeof NET!=='undefined') NET.hostTick(dt);   // broadcast snapshots
+      if(netRole==='solo'){
+        update(G,dt);                                              // single-player: rAF drives the sim
         autoTick+=dt; if(autoTick>60){ autoTick=0; autosaveGame(); }
-      } else if(typeof NET!=='undefined'){ NET.clientTick(dt); }   // client: no sim, just local fog/render
+      } else if(netRole==='host'){
+        // host sim + snapshot broadcast run via the host-clock (real-time dt); the worker keeps them
+        // going when this window is backgrounded and rAF stalls. rAF here just renders (below).
+        if(typeof NET!=='undefined' && NET.hostRafStep) NET.hostRafStep();
+      } else if(typeof NET!=='undefined'){
+        NET.clientTick(dt);                                        // client: no sim, just local fog/visuals
+      }
     }
     updateCamera(G,dt);
     render(G);

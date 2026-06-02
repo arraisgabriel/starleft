@@ -183,7 +183,13 @@ var LNS = (function(){
   }
   function host(id){
     const el = document.getElementById(id);
-    return (el && el.style.display!=='none') ? el.querySelector('.lns-host') : null;
+    // The element must be ACTUALLY rendered — not merely have its own display!=='none'.
+    // When an ancestor is hidden (e.g. the main menu sitting behind the Multiplayer overlay,
+    // which hides #startScreen — and #lns-menu lives inside it), a rebuild here would measure
+    // scrollWidth=0 and tuneTicker() couldn't set the duration, leaving the marquee at the CSS
+    // default 60s (too fast). getClientRects().length is 0 for a display:none ancestor and works
+    // for the position:fixed menu stripe, so this skips the rebuild and keeps the tuned track.
+    return (el && el.style.display!=='none' && el.getClientRects().length) ? el.querySelector('.lns-host') : null;
   }
   function buildTicker(hostEl, speed){
     if(!hostEl) return;
@@ -254,5 +260,5 @@ var LNS = (function(){
     let rt; addEventListener('resize', ()=>{ clearTimeout(rt); rt=setTimeout(renderAll, 250); }); // re-tune marquee width
   }
 
-  return { init, toggleIngame, refresh };
+  return { init, toggleIngame, refresh, relayout: renderAll };
 })();
