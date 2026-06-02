@@ -10,7 +10,8 @@ description: >-
   references to the campaign, episodes, missions, quarters, battlefields, chapters, or its enemy
   factions (DISRUPTR INC., MEGACORP, A&O, THE BOARD, …) as STARLEFT even when the game isn't named.
   This skill knows the map schema in js/config.js, the procedural generator, the career/dossier lore
-  system, and the campaign's moral-descent arc. Reach for it before hand-editing the MAPS array, so
+  system, the campaign's moral-descent arc, and the TTS pipeline that voices each chapter's opening
+  crawl. Reach for it before hand-editing the MAPS array, so
   the new map fits the schema, validates, and lands on the right story beat. Skip only non-campaign
   code: bug fixes, AI/balance tuning, new unit or building types, save/serialization code, and
   art/sprite generation.
@@ -208,7 +209,43 @@ Two automated checks plus a human read.
    - Objective's base count == placed enemy count == crawl's stated count?
 
 Fix and re-run until the schema + geometry scripts are clean, the balance gate passes, and the
-checklist holds. Then summarize for the user what was added, where in the arc, and the results.
+checklist holds.
+
+### Phase 7 — Render the chapter's crawl voiceover
+
+A chapter isn't finished until its opening crawl is *spoken*. The intro narration is a pre-rendered
+clip the game plays over the crawl — `assets/audio/voice/crawl/ep_NN.mp3`, in the "rod" narrator
+voice. It's **non-blocking**: a missing clip just plays silent (the game never depends on audio), so
+this step *completes* the chapter rather than gating it — but a shipped chapter should narrate.
+
+The clip id is keyed by **map array index** (`ep_NN` == the map's position in `MAPS`, the same index
+`showCrawl`/`crawlPath` use), which drives how much you must re-render:
+- **Append** — only the new episode's clip is new.
+- **Insert** — every later episode's index shifted in Phase 5, so their existing `ep_NN.mp3` now maps
+  to the wrong chapter. The manifest is rebuilt from the live `MAPS`, so re-rendering crawls realigns
+  the whole tail automatically — but you *must* re-render the crawls, not just the one new map.
+
+Run from the repo root, only once the crawl text is final and the map is at its final index:
+
+1. Rebuild the TTS manifests from the shipped data — writes `_dev/gen/voice_manifest_rod.json`, one
+   `{id:"ep_NN", text}` per map crawl (crawl `{?key}`/`{^key}` show/fallback tokens are neutralized):
+   ```bash
+   node _dev/gen/build_voice_manifests.mjs
+   ```
+2. Render + transcode **just the crawls** into `assets/audio/voice/crawl/`:
+   ```bash
+   bash _dev/gen/gen_voices.sh crawl
+   ```
+   (No arg = full barks+lore+crawl run; `crawl` does only the narration, which is all a new map needs.)
+
+This needs the local Qwen3-TTS / "rod"-clone toolchain that `gen_voices.sh` documents in its header
+(Apple-Silicon venv, ffmpeg, the twilightZone setup). **If that toolchain isn't on this machine, don't
+fake it** — tell the user, hand them the two commands above to run where it's set up, and note the map
+ships and simply narrates silently until the clip exists. After rendering, listen to
+`assets/audio/voice/crawl/ep_NN.mp3` and confirm it matches the final crawl text.
+
+Then summarize for the user what was added, where in the arc, the validation/balance results, and
+whether the crawl voiceover was rendered here or handed off.
 
 ## Optional follow-through
 
@@ -232,5 +269,9 @@ checklist holds. Then summarize for the user what was added, where in the arc, a
   the validator catches them, so always run it.
 - Don't fabricate lore that contradicts the world bible (e.g. a heroic, bright, or redemptive
   ending). The campaign is a descent; keep new chapters honest to that.
+- The crawl voiceover is keyed by map **index** (`ep_NN.mp3`), so an *insert* (not an append) shifts
+  every later chapter's narration — after renumbering, re-render the crawls (Phase 7), don't just
+  voice the new map. Audio is non-blocking (missing clips play silent), so a map can ship before its
+  clip exists, but the chapter isn't "done" until the narration matches the text.
 - If the user's request is vague ("add a cool map"), don't guess the whole thing — propose a story
   beat and placement from the arc and let them steer. Narrative cohesion is the whole point.
