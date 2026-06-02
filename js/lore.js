@@ -26,11 +26,32 @@ function _attachParas(d, rng){
     crime:_loPick(rng,P.crime), assessment:_loPick(rng,P.assessment) };
 }
 
+// ---- name gender: a unit's first name must match the gender of its unit-type VOICE ----
+// recruiter/foodtruck/auditor/courier are female-voiced; every other type is male-voiced
+// (see js/voice.js SPEAKER_VOICE / _dev/gen/voice_map.mjs). Backstory text is pronoun-free for
+// the unit (it uses the first name), so matching the NAME is all that's needed to keep a unit's
+// name + voice + story consistent. Heroes keep their hand-authored names (makeHeroDossier).
+const _UNIT_GENDER = { worker:'m', soldier:'m', ranger:'m', recruiter:'f', hustler:'m',
+  lobbyist:'m', foodtruck:'f', auditor:'f', founder:'m', courier:'f', bomber:'m' };
+const _NAME_POOL = {
+  m: (LORE_DATA.namesM||[]).concat(LORE_DATA.namesX||[]),   // male voice → male + unisex names
+  f: (LORE_DATA.namesF||[]).concat(LORE_DATA.namesX||[]),   // female voice → female + unisex names
+};
+function _namePool(type){ const p=_NAME_POOL[_UNIT_GENDER[type]]; return (p&&p.length)?p:LORE_DATA.firstNames; }
+
 /* ---- backstory assignment ---- */
 const _dossierCache = new Map();   // seed -> built backstory (module-global; not serialized)
 
 function ensureDossier(u){
-  if(!u.lore) u.lore = { seed: _loHash((u.id||0)+1), events: [] };
+  // Mint a backstory seed ONCE, then freeze it on the unit (saved with the entity). The seed mixes
+  // in G.runSalt — a per-map random value (set in map.js newMap) — so a fresh recruit gets a DIFFERENT
+  // dossier every game / map / replay, instead of a fixed table keyed only by spawn-order id. Carried
+  // veterans already carry u.lore (frozen seed), so this no-ops for them and their identity persists.
+  // salt 0 (pre-salt saves, or G absent) reduces to _loHash(id+1) — identical to the legacy behavior.
+  if(!u.lore){
+    const salt = (typeof G!=='undefined' && G && G.runSalt) ? (G.runSalt|0) : 0;
+    u.lore = { seed: _loHash(((u.id||0)+1) ^ salt), events: [] };
+  }
 }
 
 // HERO dossier: a hand-authored, FIXED backstory (named campaign characters like Nino) instead of
@@ -60,9 +81,13 @@ function makeHeroDossier(spec){
 function buildDossier(u){
   if(u.lore && u.lore.fixed) return makeHeroDossier(u.lore.fixed);   // named hero — skip the RNG
   const seed = u.lore.seed;
-  if(_dossierCache.has(seed)) return _dossierCache.get(seed);
-  const r = makeRng(seed);
-  const first  = _loPick(r, LORE_DATA.firstNames);
+  const ck = seed+'|'+(_UNIT_GENDER[u.type]||'');   // gender shapes the name pool → part of the cache key
+  if(_dossierCache.has(ck)) return _dossierCache.get(ck);
+  // % 233280 reduces the 32-bit hash into makeRng's LCG range BEFORE the first step. Without it,
+  // makeRng's internal seed*9301*9301 overflows 2^53 and rounds away its low bits, biasing the early
+  // draws toward repeats among the small/consecutive ids real games use (see rollLifeEvent's note).
+  const r = makeRng(seed % 233280);
+  const first  = _loPick(r, _namePool(u.type));   // gender-matched to the unit's voice
   const last   = _loPick(r, LORE_DATA.surnames);
   const home   = _loPick(r, LORE_DATA.hometowns);
   const fam    = _loPick(r, LORE_DATA.family);
@@ -80,8 +105,8 @@ function buildDossier(u){
   // event/prose filler: person slots (baseFill) + the already-resolved backstory slots
   d.fill = (t)=> baseFill(t).replace(/\{dream\}/g, dream).replace(/\{trauma\}/g, trauma)
     .replace(/\{crime\}/g, crime||'an old mistake').replace(/\{family\}/g, familyText);
-  _attachParas(d, r);   // appended last → existing name/trauma/dream/crime draws are unchanged
-  _dossierCache.set(seed, d);
+  _attachParas(d, r);   // appended last → existing trauma/dream/crime draws are unchanged
+  _dossierCache.set(ck, d);
   return d;
 }
 
