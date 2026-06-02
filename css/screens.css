@@ -46,7 +46,9 @@
 .save-row { display:flex; gap:8px; align-items:stretch; width:100%; max-width:560px; box-sizing:border-box; }
 .save-row .save-load { flex:1 1 auto; text-align:left; min-width:0; }
 .save-row .save-load b { display:block; }
+.save-row .save-exp { flex:0 0 auto; align-self:center; }
 .save-row .save-del { flex:0 0 auto; align-self:center; }
+.submenu-actions { display:flex; gap:8px; flex-wrap:wrap; justify-content:center; }
 .controls-box { font-size:13px; color:#ccaab0; line-height:1.9; text-align:left;
   background:rgba(255,255,255,.04); padding:14px 22px; border-radius:8px; border:1px solid #4f2530;}
 .controls-box b { color:#f8d0d6; }

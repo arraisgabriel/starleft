@@ -24,7 +24,7 @@ const VOICE = (function(){
   const SPEAKER_VOICE = {
     worker:'Ryan', soldier:'Aiden', ranger:'Eric', recruiter:'Sohee', hustler:'Dylan',
     lobbyist:'Uncle_Fu', foodtruck:'Sohee', auditor:'Ono_Anna', founder:'Uncle_Fu',
-    courier:'Serena', bomber:'Dylan', Nino:'Aiden', Biba:'Vivian',
+    courier:'Serena', bomber:'Dylan', Nino:'cast1', Biba:'Vivian',
   };
 
   // persisted settings

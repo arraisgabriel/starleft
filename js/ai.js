@@ -37,7 +37,7 @@ function enemyAI(state,dt){
       const b=enemyGarages[(Math.random()*enemyGarages.length)|0];
       spawnTrained(state,b, Math.random()<0.3?'auditor':'foodtruck');
     } else if(enemyBarracks.length){
-      // varied infantry: mostly Growth Hackers/Consultants, plus Hustlers, Lobbyists, and the odd Recruiter
+      // varied infantry: mostly Growth Cyborgs/Consultants, plus Hustlers, Lobbyists, and the odd Recruiter
       const b=enemyBarracks[(Math.random()*enemyBarracks.length)|0];
       const pool=['soldier','soldier','soldier','ranger','ranger','hustler','lobbyist','recruiter'];
       spawnTrained(state,b, pool[(Math.random()*pool.length)|0]);

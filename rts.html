@@ -127,7 +127,12 @@
       <h2>Load Game</h2>
       <div class="panel-label">Resume a saved match</div>
       <div id="loadSlots"></div>
-      <button class="sc-btn back" onclick="hideSub('loadScreen')">◀ Back</button>
+      <input type="file" id="importFile" accept=".json,application/json" style="display:none;"
+             onchange="importSaveFile(this.files[0]); this.value='';">
+      <div class="submenu-actions">
+        <button class="sc-btn" onclick="document.getElementById('importFile').click()">⬆ Import Save File</button>
+        <button class="sc-btn back" onclick="hideSub('loadScreen')">◀ Back</button>
+      </div>
     </div>
   </div>
 
@@ -164,7 +169,7 @@
     <div class="submenu-panel">
       <h2>Field Manual</h2>
       <div class="controls-box">
-        <b>The hustle:</b> Mine <b>Funding</b> 💰, hire an army of Interns &amp; Growth Hackers, and disrupt two rival empires into bankruptcy.<br>
+        <b>The hustle:</b> Mine <b>Funding</b> 💰, hire an army of Interns &amp; Growth Cyborgs, and disrupt two rival empires into bankruptcy.<br>
         <b>Tap / click</b> — select your unit, or command it: tap an enemy to attack, a gold mine to mine, ground to move, an unfinished building to send an Intern<br>
         <b>Drag</b> — pan the map &nbsp;•&nbsp; <b>Pinch</b> (or mouse <span class="key">wheel</span> / on-screen <span class="key">＋－</span>) — zoom &nbsp;•&nbsp; <b>Minimap</b> — tap to jump<br>
         <b>Units box-select</b> — <span class="key">Shift</span>+drag, or tap the <span class="key">▭</span> button then drag &nbsp;•&nbsp; desktop also: <span class="key">WASD</span>/<span class="key">arrows</span> &amp; screen-edge scroll, right-click to command<br>

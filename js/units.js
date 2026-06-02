@@ -322,7 +322,7 @@ function updateUnit(state,u,dt){
     else { u._setupT=0; u.sieged=false; }
   }
 
-  // ---- auto-heal (Recruiter / Courier): follow & mend the most-hurt ally in sight ----
+  // ---- auto-heal (Recruiter / Drugztore Delivery Drone): follow & mend the most-hurt ally in sight ----
   // (a sprinting healer ignores wounded allies and keeps running with the squad)
   if(def.heal && !u.sprinting){
     if(!cmd || cmd.type==='amove' || cmd.type==='move' || u.state==='idle'){

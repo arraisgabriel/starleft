@@ -408,7 +408,7 @@ function newMap(idx){
     state.entities.push(mkEntity(state,'goldmine', null, g.x, g.y, {amount:g.amt, amount0:g.amt, r:Math.round(TILE*1.5)}));
   });
 
-  // ---- player start: HQ + Interns + Growth Hackers (+ optional People Ops) ----
+  // ---- player start: HQ + Interns + Growth Cyborgs (+ optional People Ops) ----
   const phq = mkBuilding(state,'hq','player', cfg.player.x, cfg.player.y, true);
   const nW = cfg.startWorkers!=null ? cfg.startWorkers : 4;   // explicit 0 must stay 0 (Ep X starts economy-less)
   const nS = cfg.startSoldiers!=null ? cfg.startSoldiers : 2;

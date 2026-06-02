@@ -505,7 +505,8 @@ function drawBuilding(state,e,ox,oy,dim){
     // buildings don't flicker in lockstep. No ground shadow (intentionally dropped).
     const n=spr.frames, fi=((((state.time*BUILDING_FPS + e.id*0.13)|0)%n)+n)%n;
     const overhang = e.type==='turret'?1.18:1.08;
-    const dw=w*overhang, dh=dw*(spr.fh/spr.fw);
+    const tall = e.type==='hq'?1.5625:1;   // HQ renders taller (1.25 × 1.25; footprint unchanged)
+    const dw=w*overhang, dh=dw*(spr.fh/spr.fw)*tall;
     const dx=px+(w-dw)/2, dy=py+h-dh+2;
     topY=dy;
     if(e.constructing) ctx.globalAlpha*=0.5;   // rises faintly while building

@@ -155,9 +155,52 @@ function buildLoadSlots(){
         <span class="mn">elapsed ${fmtElapsed(s.gameTime)}</span>
         <small>${fmtWhen(s.savedAt)}</small>
       </button>
+      <button class="tc-btn save-exp" title="Export to file">⬇</button>
       <button class="tc-btn save-del" title="Delete save">✕</button>`;
     row.querySelector('.save-load').onclick=()=>loadGame(s.key);
+    row.querySelector('.save-exp').onclick=()=>exportSave(s.key);
     row.querySelector('.save-del').onclick=()=>{ localStorage.removeItem(s.key); buildLoadSlots(); };
     wrap.appendChild(row);
   });
+}
+
+/* ---------- export / import save files (share a save between devices) ----------
+   Saves are stored verbatim as JSON strings, so export just downloads the stored
+   string and import validates + writes it back as a new slot — no (de)serialize needed. */
+function saveSlug(name){
+  return (name||'save').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'') || 'save';
+}
+// save timestamp for filenames, e.g. 06-02-14:30 (month-day-hours:minutes)
+function fmtStamp(ms){
+  const d=new Date(ms||Date.now()), p=n=>(n<10?'0':'')+n;
+  return p(d.getMonth()+1)+'-'+p(d.getDate())+'-'+p(d.getHours())+':'+p(d.getMinutes());
+}
+function exportSave(key){
+  const raw=localStorage.getItem(key);
+  if(!raw){ toast('Save not found'); return; }
+  let d=null; try{ d=JSON.parse(raw); }catch(_){}
+  const fname='starleft-'+saveSlug(d&&d.mapName)+'-'+fmtStamp(d&&d.savedAt)+'.json';
+  const url=URL.createObjectURL(new Blob([raw], {type:'application/json'}));
+  const a=document.createElement('a');
+  a.href=url; a.download=fname; document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url), 1000);
+  toast('Save exported');
+}
+function importSaveFile(file){
+  if(!file) return;
+  const r=new FileReader();
+  r.onerror=()=>toast('Could not read file');
+  r.onload=()=>{
+    let d=null; try{ d=JSON.parse(r.result); }catch(_){ toast('Not a valid save file'); return; }
+    if(!d || typeof d!=='object' || d.v==null || !Array.isArray(d.entities)){ toast('Not a STARLEFT save'); return; }
+    if(d.v!==SAVE_VERSION){ toast('Incompatible save version'); return; }
+    try{
+      enforceCap();               // respect the 8-manual-slot FIFO cap (same as saveGame)
+      d.savedAt=Date.now();       // re-stamp so the import lands at the top & survives the cap
+      localStorage.setItem(SAVE_PREFIX+d.savedAt, JSON.stringify(d));
+      buildLoadSlots();           // refresh the open Load Game list
+      toast('Save imported');
+    }catch(_){ toast('Import failed: storage full'); }
+  };
+  r.readAsText(file);
 }

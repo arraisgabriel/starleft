@@ -141,7 +141,7 @@ function buildCommands(sel){
   if(owned.some(e=>e.type==='hq'&&!e.constructing))
     addCmd(DEF.worker.icon,'Hire Intern',DEF.worker.cost,()=>train('hq','worker'));
   if(owned.some(e=>e.type==='barracks'&&!e.constructing)){
-    addCmd(DEF.soldier.icon,'Growth Hacker',DEF.soldier.cost,()=>train('barracks','soldier'));
+    addCmd(DEF.soldier.icon,'Growth Cyborg',DEF.soldier.cost,()=>train('barracks','soldier'));
     addCmd(DEF.ranger.icon,'Consultant',DEF.ranger.cost,()=>train('barracks','ranger'));
     addCmd(DEF.recruiter.icon,'Recruiter',DEF.recruiter.cost,()=>train('barracks','recruiter'));
     addCmd(DEF.hustler.icon,'Hustler',DEF.hustler.cost,()=>train('barracks','hustler'));
@@ -153,7 +153,7 @@ function buildCommands(sel){
     addCmd(DEF.founder.icon,'Founder Mech',DEF.founder.cost,()=>train('garage','founder'));
   }
   if(owned.some(e=>e.type==='launchpad'&&!e.constructing)){
-    addCmd(DEF.courier.icon,'Courier Drone',DEF.courier.cost,()=>train('launchpad','courier'));
+    addCmd(DEF.courier.icon,'Drugztore Delivery Drone',DEF.courier.cost,()=>train('launchpad','courier'));
     addCmd(DEF.bomber.icon,'Buzzword Bomber',DEF.bomber.cost,()=>train('launchpad','bomber'));
   }
   if(owned.some(e=>e.type==='worker')){

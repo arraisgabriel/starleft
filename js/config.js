@@ -90,14 +90,14 @@ const DEF = {
   hq:       { name:'Open-Plan HQ', icon:'🏢', kind:'building', w:4,h:3, hp:3000, cost:0,   build:35,  sight:7, supply:24, color:'#3b7fd0',
               dmg:8, range:7.5, cd:1.6, flavor:'Stores Funding and onboards unpaid Interns. Fires the occasional warning shot from the rooftop.' },
   barracks: { name:'People Ops',   icon:'🎯', kind:'building', w:3,h:3, hp:900,  cost:150, build:20,  sight:5, supply:0,  color:'#5a6b8a',
-              flavor:'"Recruiting" department. Turns Funding into Growth Hackers and Consultants.' },
+              flavor:'"Recruiting" department. Turns Funding into Growth Cyborgs and Consultants.' },
   turret:   { name:'Legal Team',   icon:'⚖️', kind:'building', w:2,h:2, hp:550,  cost:100, build:14,  sight:7, supply:0,  color:'#7a8aa8',
               dmg:14, range:6.0, cd:0.7, flavor:'Fires cease-and-desist letters at anything that trespasses on your IP.' },
   outpost:  { name:'Satellite Office', icon:'📡', kind:'building', w:3,h:3, hp:650, cost:175, build:16, sight:5, supply:0, color:'#5a6b8a',
               deposit:true, trickle:2, flavor:'A scrappy forward branch — Interns drop Funding here instead of trekking back to HQ, and its rig slowly auto-extracts a little on its own. Cheaper and flimsier than a second HQ.' },
   worker:   { name:'Intern',         icon:'🧑‍💻', kind:'unit', hp:60,  cost:50,  build:10, sight:5, supply:1, speed:2.6, dmg:4,  range:1.0, cd:1.0, r:9,
               flavor:'Mines Funding "for the exposure." Builds things. Equity will never vest.' },
-  soldier:  { name:'Growth Hacker',  icon:'🚀', kind:'unit', hp:140, cost:80,  build:13, sight:6, supply:1, speed:2.4, dmg:17, range:1.3, cd:0.9, r:10,
+  soldier:  { name:'Growth Cyborg',  icon:'🚀', kind:'unit', hp:140, cost:80,  build:13, sight:6, supply:1, speed:2.4, dmg:17, range:1.3, cd:0.9, r:10,
               flavor:'Moves fast and breaks things — primarily skulls. Hates meetings, loves disruption.' },
   ranger:   { name:'Consultant',     icon:'💼', kind:'unit', hp:95,  cost:95,  build:16, sight:7, supply:1, speed:2.4, dmg:14, range:5.0, cd:1.1, r:9,
               flavor:'Bills $400/hr to lob synergy buzzwords at the enemy from a safe distance.' },
@@ -117,7 +117,7 @@ const DEF = {
   /* ---- Launch Pad (Starport) tier ---- */
   founder:  { name:'Founder Mech', icon:'🦄', kind:'unit', hp:600, cost:400, build:45, sight:8, supply:6, speed:1.6, dmg:45, range:3.5, cd:1.5, r:16, vehicle:true,
               splash:20, splashR:1.3, antiAir:true, flavor:'A visionary in a 12-ft exosuit. Hits anything, ground or air.' },
-  courier:  { name:'Courier Drone', icon:'🛸', kind:'unit', hp:120, cost:90, build:16, sight:7, supply:2, speed:3.0, dmg:0, range:4.0, cd:1.0, r:10, air:true, action:'heal',
+  courier:  { name:'Drugztore Delivery Drone', icon:'🛸', kind:'unit', hp:120, cost:90, build:16, sight:7, supply:2, speed:3.0, dmg:0, range:4.0, cd:1.0, r:10, air:true, action:'heal',
               heal:7, flavor:'Same-day delivery of medkits and morale. Flies over everything.' },
   bomber:   { name:'Buzzword Bomber', icon:'🛩️', kind:'unit', hp:480, cost:450, build:50, sight:9, supply:6, speed:1.7, dmg:26, range:6.0, cd:0.9, r:16, air:true,
               flavor:'Capital airship. Rains cyan ordnance on the campus below.' },
@@ -126,7 +126,7 @@ const DEF = {
   garage:   { name:'The Garage', icon:'🔧', kind:'building', w:3,h:3, hp:1000, cost:200, build:24, sight:4, supply:0, color:'#4a6b5a',
               flavor:'Vehicle bay. Turns Funding into Food Trucks, Auditors and Founder Mechs.' },
   launchpad:{ name:'Launch Pad', icon:'🚀', kind:'building', w:3,h:3, hp:850,  cost:250, build:28, sight:5, supply:0, color:'#5a6b8a',
-              flavor:'Starport. Assembles Courier Drones and Buzzword Bombers. Requires a Garage.' },
+              flavor:'Starport. Assembles Drugztore Delivery Drones and Buzzword Bombers. Requires a Garage.' },
 };
 
 /* =====================================================================
