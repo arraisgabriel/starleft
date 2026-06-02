@@ -182,12 +182,6 @@ function dossierHTML(u){
   let h = `<div class="dossier">`;
   h += `<h2>${def.icon?def.icon+' ':''}${d.full}</h2>`;
   h += `<div class="dossier-sub">${careerTitle(lvl)} ${def.name} · Level ${lvl} · from ${d.home}</div>`;
-  h += `<div class="dossier-grid">`;
-  h += `<div><span class="dk">Family</span>${d.familyText}</div>`;
-  h += `<div><span class="dk">Trauma</span>${_loCap(d.fill('{trauma}'))}.</div>`;
-  h += `<div><span class="dk">Dream</span>${_loCap(d.fill('{dream}'))}${u.dreamDone?' <em>— fulfilled ✓</em>':''}.</div>`;
-  if(d.crime) h += `<div><span class="dk">Crime</span>${_loCap(d.crime)}.</div>`;
-  h += `</div>`;
   // narrative prose: one deterministically-chosen paragraph per lore area, slots resolved here
   // ({rank}/{unit}/{lvl} only exist at render time; {me}/{home}/{trauma}/{dream}/{crime}/{family} via d.fill)
   if(d.paras){
