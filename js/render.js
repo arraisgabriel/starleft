@@ -624,12 +624,30 @@ function drawUnit(state,u,ox,oy){
 }
 
 function drawFog(state,ox,oy,x0,y0,x1,y1){
+  // Two passes, each accumulated into ONE path and filled ONCE. The +1 tile
+  // overlap (gap-killer) made the translucent "seen but not visible" veil
+  // double-composite along every tile seam (alpha .5 over .5 ≈ .75), painting a
+  // dark grid that read as a pixelated frame. A single fill() composites the
+  // union of the rects against the backdrop a single time, so overlaps no
+  // longer stack — the dim veil stays a uniform .5 with no internal grid.
+  const W=state.W;
+  // unexplored: pitch black, opaque (overlap is invisible, but batch anyway)
+  ctx.beginPath();
+  let any=false;
   for(let ty=y0;ty<y1;ty++)for(let tx=x0;tx<x1;tx++){
-    const i=ty*state.W+tx;
-    const px=tx*TILE+ox, py=ty*TILE+oy;
-    if(!state.explored[i]){ ctx.fillStyle='#05070b'; ctx.fillRect(px,py,TILE+1,TILE+1); }
-    else if(!state.visible[i]){ ctx.fillStyle='rgba(5,8,14,.5)'; ctx.fillRect(px,py,TILE+1,TILE+1); }
+    const i=ty*W+tx;
+    if(state.explored[i]) continue;
+    ctx.rect(tx*TILE+ox, ty*TILE+oy, TILE+1, TILE+1); any=true;
   }
+  if(any){ ctx.fillStyle='#05070b'; ctx.fill(); }
+  // explored but not currently visible: single translucent dim veil
+  ctx.beginPath(); any=false;
+  for(let ty=y0;ty<y1;ty++)for(let tx=x0;tx<x1;tx++){
+    const i=ty*W+tx;
+    if(!state.explored[i] || state.visible[i]) continue;
+    ctx.rect(tx*TILE+ox, ty*TILE+oy, TILE+1, TILE+1); any=true;
+  }
+  if(any){ ctx.fillStyle='rgba(5,8,14,.5)'; ctx.fill(); }
 }
 
 function drawPlacement(state,ox,oy){

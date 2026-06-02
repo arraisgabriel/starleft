@@ -426,6 +426,24 @@
     #commands:not(.has-cmds){ display:none; }
   }
 
+  /* ---- Win / lose end screen on SHORT viewports (phone landscape, short windows) ----
+     The end overlay centers its content and clips the overflow, so on a short screen the
+     carry-over unit picker and the Next Quarter button drop below the fold, unreachable
+     and unscrollable. Top-align it, let the WHOLE overlay scroll as one piece (dropping the
+     list's own nested scrollbox), and tighten the vertical rhythm so the unit list shows. */
+  @media (max-height: 600px){
+    #endScreen{ justify-content:flex-start; align-items:center; overflow-y:auto;
+      -webkit-overflow-scrolling:touch; gap:8px; padding:14px 14px calc(16px + var(--safe-b)); }
+    #endScreen .big{ font-size:26px; line-height:1; }
+    #endScreen h1{ font-size:clamp(24px,7vw,40px); }
+    #endScreen h2{ font-size:clamp(14px,4vw,20px); }
+    #endScreen p{ font-size:12px; line-height:1.45; margin:0; }
+    #endScreen .carry-head{ font-size:12px; }
+    #endScreen .carry-list{ max-height:none; overflow:visible; max-width:min(960px,96vw); gap:8px; }
+    #endScreen .carry-card{ width:clamp(150px,30vw,210px); min-height:0; padding:7px 10px; }
+    #endScreen .btn{ margin-top:2px; }
+  }
+
   /* ================= Revamped main menu (StarCraft-II layout, red accent) ================= */
   .overlay.menu{ display:block; padding:0; background:#07050a; }
   .menu-bg{ position:absolute; inset:0; z-index:0; background-repeat:no-repeat;
