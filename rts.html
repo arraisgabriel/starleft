@@ -387,14 +387,31 @@
       font-size:11px; padding:3px 8px; }
     .cmd-btn .emoji{ font-size:17px; }
 
-    /* row 2 — condensed one-line unit summary (left) shares the row with the controls (right) */
-    #selinfo{ display:block; order:2; flex:0 1 auto; max-width:46%;
-      padding:2px 10px; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }
-    #selinfo h3{ display:inline; font-size:12px; margin:0; }
-    #selinfo .stats{ display:inline-flex; gap:8px; font-size:10px; margin-left:8px; }
-    #selinfo .desc, #selinfo #prod-queue, #sel-dossier{ display:none; }
+    /* row 2 — selection summary (left) shares the row with the controls (right). The summary
+       WRAPS: a long unit name takes line 1 and its stats + Dossier button flow onto line 2 so
+       nothing is clipped. A building's short name + HP stay on line 1 with its live production
+       queue inline to the right (the queue's flex-basis:0 keeps it from forcing a wrap). */
+    /* flex-basis:0 (not auto) so a long name doesn't bloat #selinfo's basis and shove the
+       controls onto their own row — instead #selinfo is capped to the leftover width beside
+       the controls, which is what forces a long name's stats/Dossier onto the second line. */
+    #selinfo{ display:flex; flex-wrap:wrap; align-items:center; align-content:center;
+      column-gap:8px; row-gap:2px; order:2; flex:1 1 0; min-width:0; max-width:none;
+      padding:2px 10px; overflow:hidden; }
+    #selinfo h3{ display:block; font-size:12px; margin:0; flex:0 1 auto; min-width:0; max-width:100%;
+      white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    #selinfo .stats{ display:inline-flex; gap:8px; font-size:10px; margin:0; flex:0 0 auto; white-space:nowrap; }
+    #selinfo .desc{ display:none; }
+    /* Dossier button: shown here (was hidden), compact, sits on the wrapped detail line */
+    #sel-dossier{ display:inline-flex; align-items:center; margin:0; padding:2px 8px;
+      font-size:10px; min-height:0; flex:0 0 auto; }
+    /* production queue: inline, just right of the building name/HP, scrolls sideways if long.
+       flex:1 1 0 (basis 0) means it never adds width that would push a building onto two lines. */
+    #selinfo #prod-queue{ display:flex; flex:1 1 0; min-width:0; margin:0; gap:5px;
+      flex-wrap:nowrap; overflow-x:auto; -webkit-overflow-scrolling:touch; }
+    #selinfo #prod-queue .pq-card{ width:38px; height:38px; }
+    #selinfo #prod-queue .pq-spr{ width:32px; height:32px; }
 
-    #touch-controls{ display:flex; order:3; flex:1 1 auto; justify-content:flex-end;
+    #touch-controls{ display:flex; order:3; flex:0 0 auto; justify-content:flex-end;
       overflow-x:auto; -webkit-overflow-scrolling:touch; padding:3px 6px; }
 
     /* minimap toggle becomes a floating corner button (reuses #btn-minimap → .as-overlay) */
@@ -664,11 +681,11 @@
     <div id="top-menu">
       <button class="tc-btn" id="btn-topmenu" title="Menu" aria-haspopup="true" aria-expanded="false">☰ Menu<span id="topmenu-badge" class="tc-badge" style="display:none;">0</span></button>
       <div id="topmenu-panel" style="display:none;">
-        <button class="tc-btn" id="btn-news" title="Toggle live news ticker">📡 News</button>
-        <button class="tc-btn" id="btn-roster" title="Veterans &amp; Memorial">🎖 Roster</button>
-        <button class="tc-btn" id="btn-events" title="Notifications log">📜 Events<span id="events-badge" class="tc-badge" style="display:none;">0</span></button>
-        <button class="tc-btn" id="btn-save" title="Save game (⌘/Ctrl+S)">💾 Save</button>
-        <button class="tc-btn" id="btn-fs" title="Toggle fullscreen">⛶ Fullscreen</button>
+        <button class="tc-btn" id="btn-news" title="Toggle live news ticker">News</button>
+        <button class="tc-btn" id="btn-roster" title="Veterans &amp; Memorial">Roster</button>
+        <button class="tc-btn" id="btn-events" title="Notifications log">Events<span id="events-badge" class="tc-badge" style="display:none;">0</span></button>
+        <button class="tc-btn" id="btn-save" title="Save game (⌘/Ctrl+S)">Save</button>
+        <button class="tc-btn" id="btn-fs" title="Toggle fullscreen">Fullscreen</button>
       </div>
     </div>
     <!-- Live News Stream — thin ticker flush under the top bar (toggled by 📡 News) -->

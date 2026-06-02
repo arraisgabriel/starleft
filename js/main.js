@@ -175,7 +175,7 @@ function toggleFullscreen(){
 }
 function syncFsButtons(){
   const on=fsActive();
-  const top=document.getElementById('btn-fs'); if(top) top.innerHTML = on?'⛶ Windowed':'⛶ Fullscreen';
+  const top=document.getElementById('btn-fs'); if(top) top.innerHTML = on?'Windowed':'Fullscreen';
   const menu=document.getElementById('btn-fs-menu'); if(menu) menu.innerHTML = on?'⛶ Exit Fullscreen':'⛶ Fullscreen';
 }
 document.addEventListener('fullscreenchange', syncFsButtons);
