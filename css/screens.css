@@ -1,0 +1,211 @@
+/* =====================================================================
+   screens.css — full-screen overlay views + the intro crawl. Loaded SECOND
+   (after hud.css, before menu.css). Concern: the .overlay shell and its
+   buttons; map-select / load / dossier / roster / events / win-lose carry
+   screens; the toast; the Star-Wars intro crawl; the shared submenu panel;
+   and the fluid/touch responsive rules that target these screen + button
+   selectors. The press-feedback + hover:none reset live here so they land
+   AFTER the base .btn/.map-btn rules they override (cascade order).
+   ===================================================================== */
+
+/* ---------- Overlays ---------- */
+.overlay {
+  position:fixed; inset:0; z-index:50; display:flex; align-items:center; justify-content:center;
+  background:radial-gradient(ellipse at center,rgba(34,12,14,.86),rgba(12,4,5,.97));
+  text-align:center; flex-direction:column; gap:18px;
+}
+.overlay h1 { font-size:54px; letter-spacing:6px; color:#ff7676;
+  text-shadow:0 0 22px #d6353580; font-weight:800; }
+.overlay h2 { font-size:24px; color:#ffd86b; letter-spacing:2px; }
+.overlay p  { max-width:560px; font-size:15px; color:#d6b0b6; line-height:1.7; }
+.overlay .big { font-size:46px; }
+.btn {
+  margin-top:6px; padding:13px 32px; font-size:16px; font-weight:700; letter-spacing:1.4px; text-transform:uppercase;
+  background:linear-gradient(100deg, rgba(128,28,38,.95), rgba(58,16,22,.9));
+  border:1px solid #6f2630; border-left:3px solid #ff5a5a; border-radius:3px;
+  clip-path:polygon(0 0,100% 0,98% 100%,0 100%);
+  color:#ffd9dd; cursor:pointer; transition:.12s;
+  box-shadow:0 3px 14px rgba(255,46,46,.3), inset 0 0 20px rgba(255,80,80,.08);
+}
+.btn:hover { color:#fff; border-left-color:#ff9a9a; transform:translateY(-2px);
+  box-shadow:0 6px 20px rgba(255,46,46,.45), inset 0 0 24px rgba(255,90,90,.14); }
+.hint { font-size:12px; color:#9c6f78; }
+.map-select { display:flex; flex-direction:column; align-items:center; gap:10px; margin-top:2px; }
+#mapButtons { display:flex; gap:14px; flex-wrap:wrap; justify-content:center; max-width:640px; }
+.map-btn { background:linear-gradient(135deg, rgba(70,18,24,.92), rgba(28,10,14,.82)); color:#f6dbe0;
+  border:1px solid #6f2630; border-left:3px solid #ff5a5a; border-radius:3px;
+  clip-path:polygon(0 0,100% 0,97% 100%,0 100%);
+  padding:12px 18px; min-width:150px; cursor:pointer; transition:.12s; text-align:center; font-family:inherit;
+  box-shadow:0 2px 10px rgba(0,0,0,.5), inset 0 0 16px rgba(255,60,60,.05); }
+.map-btn:hover { border-left-color:#ff9a9a; transform:translateY(-2px);
+  box-shadow:0 5px 18px rgba(255,46,46,.35), inset 0 0 20px rgba(255,90,90,.12); }
+.map-btn b { color:#ff7676; font-size:15px; letter-spacing:1px; }
+.map-btn .mn { display:block; font-size:13px; margin-top:3px; color:#f8d0d6; }
+.map-btn small { color:#ffb45a; font-size:11px; }
+#loadSlots { display:flex; flex-direction:column; gap:10px; align-items:center; width:100%; max-height:60vh; overflow:auto; }
+.save-row { display:flex; gap:8px; align-items:stretch; width:100%; max-width:560px; box-sizing:border-box; }
+.save-row .save-load { flex:1 1 auto; text-align:left; min-width:0; }
+.save-row .save-load b { display:block; }
+.save-row .save-del { flex:0 0 auto; align-self:center; }
+.controls-box { font-size:13px; color:#ccaab0; line-height:1.9; text-align:left;
+  background:rgba(255,255,255,.04); padding:14px 22px; border-radius:8px; border:1px solid #4f2530;}
+.controls-box b { color:#f8d0d6; }
+.win  h1 { color:#7af09a; text-shadow:0 0 22px #3ad15a80;}
+.lose h1 { color:#ff7676; text-shadow:0 0 22px #d1313180;}
+#toast {
+  position:fixed; top:60px; left:50%; transform:translateX(-50%);
+  background:rgba(44,20,24,.95); border:1px solid #753a48; padding:9px 20px; border-radius:20px;
+  font-size:13px; color:#ffd86b; z-index:30; pointer-events:none; opacity:0; transition:.3s;
+  box-shadow:0 4px 14px rgba(0,0,0,.5);
+}
+#toast.show { opacity:1; }
+#toast.event { max-width:min(520px,92vw); white-space:normal; line-height:1.45; text-align:center;
+  padding:11px 22px; color:#ffe6b0; }
+/* career v3 — dossier + roster/memorial */
+#sel-dossier { margin-top:4px; background:#2a1620; border:1px solid #753a48; color:#ffd0d2;
+  font-size:11px; padding:3px 9px; border-radius:5px; cursor:pointer; }
+#sel-dossier:hover { background:#3a1d2a; color:#fff; }
+.dossier h2 { color:#ff9aa0; letter-spacing:1px; margin-bottom:2px; font-size:clamp(18px,4vw,24px); }
+.dossier-sub { color:#e7c8a0; font-size:13px; margin-bottom:13px; }
+.dossier-grid { display:grid; gap:9px; margin-bottom:14px; text-align:left; }
+.dossier .dk { display:block; font-size:10px; letter-spacing:1.5px; text-transform:uppercase;
+  color:#9a6b78; margin-bottom:1px; }
+.dossier-grid > div { color:#d8c2c6; font-size:14px; line-height:1.4; }
+.dossier-log { text-align:left; margin:6px 0 0; padding-left:18px; color:#c8aeb4; font-size:13px; line-height:1.5; }
+.dossier-log li { margin-bottom:5px; }
+.dossier-log b { color:#ffd86b; }
+.roster-cols { display:flex; gap:18px; text-align:left; flex-wrap:wrap; }
+.roster-col { flex:1; min-width:230px; }
+.roster-col h3 { color:#ffd86b; font-size:14px; letter-spacing:1px; margin-bottom:8px; }
+.roster-row { display:block; width:100%; text-align:left; background:rgba(40,20,28,.6);
+  border:1px solid #5a2f3a; border-radius:6px; padding:8px 10px; margin-bottom:6px; color:#f0d6da; cursor:pointer; }
+button.roster-row:hover { background:rgba(60,28,40,.85); color:#fff; }
+.roster-row.fallen { opacity:.72; cursor:default; border-style:dashed; }
+.roster-row .rr-sub { display:block; font-size:11px; color:#a88a92; margin-top:2px; }
+.muted { color:#8c6570; font-size:13px; }
+/* notifications / events log rows */
+#eventsBody { width:100%; text-align:left; }
+.event-row { display:flex; gap:10px; align-items:baseline; background:rgba(40,20,28,.5);
+  border:1px solid #4a2730; border-left:3px solid #6f3644; border-radius:6px;
+  padding:7px 11px; margin-bottom:6px; color:#e8ccd2; font-size:13px; line-height:1.4; }
+.event-row.event-hi { border-left-color:#ffb700; background:rgba(48,24,18,.6); color:#ffe6b0; }
+.event-time { flex:0 0 auto; font-size:11px; color:#9e7780; font-variant-numeric:tabular-nums; letter-spacing:.5px; }
+.event-msg { flex:1; }
+.event-msg b { color:#ffd86b; }
+/* the unit's spoken reaction to its life-event — emphasised as quoted speech,
+   gold-accented to echo the in-world lore dialog box */
+.event-quote { display:block; margin-top:7px; padding:5px 11px 6px;
+  border-left:3px solid #ffd24a; border-radius:0 5px 5px 0;
+  background:rgba(255,206,77,.07); color:#ffe7b0;
+  font-style:italic; font-size:12.5px; line-height:1.4; }
+.event-quote::before { content:'\1F4AC  \201C'; margin-right:1px; color:#ffd24a; font-style:normal; }
+.event-quote::after  { content:'\201D'; margin-left:1px; color:#ffd24a; font-style:normal; font-size:14px; }
+/* victory-screen carryover chooser */
+.carry-head { font-size:14px; letter-spacing:1px; color:#ffd0d2; text-transform:uppercase; }
+.carry-count { color:#ffd86b; font-weight:700; }
+.carry-count.flash { animation:ccflash .4s ease; }
+@keyframes ccflash { 0%,100%{ color:#ffd86b; } 35%{ color:#ff6b6b; transform:scale(1.18); } }
+.carry-list { display:flex; flex-wrap:wrap; gap:10px; justify-content:center;
+  max-height:42vh; overflow:auto; max-width:min(720px,92vw); padding:4px; }
+.carry-card { width:clamp(180px,30vw,230px); text-align:left; cursor:pointer;
+  background:rgba(40,20,28,.6); border:1px solid #5a2f3a; border-radius:8px; padding:9px 11px;
+  color:#f0d6da; display:flex; flex-direction:column; gap:3px; min-height:58px; transition:.12s; }
+.carry-card:hover { background:rgba(60,28,40,.85); }
+.carry-card.sel { border-color:#8effb0; box-shadow:0 0 0 1px #8effb0 inset, 0 0 12px rgba(142,255,176,.25); }
+.carry-card.sel .cc-top::after { content:' ✓'; color:#8effb0; }
+.carry-card .cc-top { font-size:14px; }
+.carry-card .cc-stat { font-size:11px; color:#e7c8a0; }
+.carry-card .cc-dream { font-size:11px; color:#9e8088; font-style:italic; line-height:1.3; }
+.key { display:inline-block; background:#3d1c24; border:1px solid #753a48; border-radius:4px;
+  padding:1px 7px; font-size:12px; color:#f8d0d6; font-family:monospace;}
+
+/* ---------- Intro text crawl ---------- */
+#crawlScreen { background:#000; overflow:hidden; justify-content:flex-start; }
+#crawl-intro {
+  position:absolute; top:50%; left:50%; transform:translate(-50%,-50%);
+  color:#e06b5b; font-size:24px; letter-spacing:1px; text-align:center; max-width:80%;
+  opacity:0; animation: introFade 5s ease-in-out forwards;
+}
+@keyframes introFade { 0%{opacity:0;} 15%{opacity:1;} 80%{opacity:1;} 100%{opacity:0;} }
+#crawl-viewport {
+  position:absolute; top:0; left:0; right:0; bottom:0;
+  perspective:520px; perspective-origin:50% 0%; overflow:hidden;
+  /* fade the bottom out earlier so the most-magnified (overflow-prone) rows are cut off */
+  -webkit-mask-image:linear-gradient(180deg, transparent 0%, #000 24%, #000 54%, transparent 80%);
+          mask-image:linear-gradient(180deg, transparent 0%, #000 24%, #000 54%, transparent 80%);
+}
+#crawl-content {
+  position:absolute; top:100%; left:50%; width:min(600px,58vw); box-sizing:border-box;
+  transform:translateX(-50%) rotateX(18deg);
+  transform-origin:50% 0%; color:#ffd75e; text-align:justify;
+  animation: crawlUp 86.97s linear forwards; animation-delay:0.1s;
+}
+#crawlScreen.fast #crawl-content { animation-duration:0s; }
+.crawl-ep { text-align:center; font-size:22px; letter-spacing:6px; margin-bottom:10px; color:#ffd75e; }
+.crawl-title { text-align:center; font-size:46px; letter-spacing:3px; margin-bottom:36px; color:#ffd75e; text-shadow:0 0 14px #ffb70060; }
+.crawl-text { font-size:26px; line-height:1.7; white-space:pre-wrap; font-weight:600; }
+@keyframes crawlUp { 0%{ top:83%; } 100%{ top:-260%; } }
+#crawl-skip { position:absolute; bottom:34px; right:34px; padding:9px 20px; font-size:14px; z-index:5; }
+
+/* ---------- Shared press / touch responsive rules (target screen + button selectors) ---------- */
+/* press feedback for touch (hover does nothing on a touch screen) */
+.cmd-btn:active, .btn:active, .map-btn:active, .tc-btn:active{ transform:translateY(0); filter:brightness(1.15); }
+@media (hover:none){
+  .cmd-btn:hover, .btn:hover, .map-btn:hover{ transform:none;
+    background:linear-gradient(135deg, rgba(70,18,24,.92), rgba(28,10,14,.82));
+    border-color:#6f2630; border-left-color:#ff5a5a; color:#ffd9dd;
+    box-shadow:0 2px 8px rgba(0,0,0,.5), inset 0 0 16px rgba(255,60,60,.05); }
+}
+
+/* fluid overlay/menu typography so it fits any screen */
+.overlay h1{ font-size:clamp(30px,9vw,54px); }
+.overlay h2{ font-size:clamp(16px,5vw,24px); }
+.overlay p { font-size:clamp(13px,3.6vw,15px); max-width:min(560px,92vw); }
+.overlay .big{ font-size:clamp(34px,11vw,46px); }
+.btn{ min-height:44px; }
+.map-btn{ min-height:44px; min-width:clamp(120px,40vw,150px); }
+#mapButtons{ max-width:min(640px,94vw); }
+.controls-box{ font-size:clamp(11px,3vw,13px); max-width:94vw; overflow:auto; }
+.crawl-title{ font-size:clamp(18px,5vw,40px); letter-spacing:clamp(1px,0.6vw,3px); margin-bottom:clamp(16px,4vw,36px); }
+.crawl-text { font-size:clamp(12px,3.2vw,22px); line-height:1.55; }
+.crawl-ep   { font-size:clamp(12px,3.6vw,20px); letter-spacing:clamp(2px,1.2vw,6px); }
+/* larger perspective value = flatter projection = less edge-overflow; scales with width */
+#crawl-viewport{ perspective:clamp(460px,90vw,680px); }
+#crawl-content { width:min(600px,58vw); }
+#crawl-skip{ min-height:44px; padding:10px 18px; bottom:calc(20px + var(--safe-b));
+  right:clamp(12px,4vw,34px); touch-action:manipulation; }
+
+/* submenu screens (map select / documentation) */
+.overlay.submenu{ background:radial-gradient(ellipse at center, rgba(20,8,11,.93), rgba(4,3,6,.97)); }
+.submenu-panel{ width:min(720px,92vw); max-height:86vh; overflow:auto; padding:clamp(18px,3vw,30px);
+  background:linear-gradient(180deg, rgba(38,14,18,.97), rgba(18,8,11,.97)); border:1px solid #6f3644;
+  border-radius:10px; box-shadow:0 12px 44px rgba(0,0,0,.62);
+  display:flex; flex-direction:column; gap:16px; align-items:center; }
+.submenu-panel h2{ color:#ff7676; letter-spacing:2px; text-transform:uppercase; font-size:clamp(18px,4vw,26px);
+  text-shadow:0 0 18px rgba(255,40,40,.3); }
+.sc-btn.back{ width:auto; min-width:150px; justify-content:center; text-align:center; clip-path:none; }
+
+/* ---- Win / lose end screen on SHORT viewports (phone landscape, short windows) ----
+   The end overlay centers its content and clips the overflow, so on a short screen the
+   carry-over unit picker and the Next Quarter button drop below the fold, unreachable
+   and unscrollable. Top-align it, let the WHOLE overlay scroll as one piece (dropping the
+   list's own nested scrollbox), and tighten the vertical rhythm so the unit list shows. */
+@media (max-height: 600px){
+  #endScreen{ justify-content:flex-start; align-items:center; overflow-y:auto;
+    -webkit-overflow-scrolling:touch; gap:8px; padding:14px 14px calc(16px + var(--safe-b)); }
+  #endScreen .big{ font-size:26px; line-height:1; }
+  #endScreen h1{ font-size:clamp(24px,7vw,40px); }
+  #endScreen h2{ font-size:clamp(14px,4vw,20px); }
+  #endScreen p{ font-size:12px; line-height:1.45; margin:0; }
+  #endScreen .carry-head{ font-size:12px; }
+  #endScreen .carry-list{ max-height:none; overflow:visible; max-width:min(960px,96vw); gap:8px; }
+  #endScreen .carry-card{ width:clamp(150px,30vw,210px); min-height:0; padding:7px 10px; }
+  #endScreen .btn{ margin-top:2px; }
+}
+
+/* mobile / narrow: let the load-game panel scroll as one piece (shared with the menu's
+   narrow breakpoint in menu.css; these two rules target screen selectors so they live here) */
+@media (hover:none), (max-width:760px){
+  #loadSlots{ max-height:none; overflow:visible; align-items:stretch; }
+  .save-row{ max-width:none; }
+}

@@ -1,0 +1,274 @@
+/* =====================================================================
+   hud.css — in-game HUD + global base. Loaded FIRST (see rts.html <head>).
+   Holds the universal reset and the :root custom properties, so every other
+   stylesheet (screens / menu / lns) inherits them. Concern: topbar, bottom
+   command panel, minimap, selection info, command buttons, production queue,
+   on-screen touch controls, the HUD's responsive reflow, and the ambient fog.
+   ===================================================================== */
+
+/* ---------- Global reset / base ---------- */
+* { margin:0; padding:0; box-sizing:border-box; }
+html,body { width:100%; height:100%; overflow:hidden; background:#0a0e14;
+  font-family: 'Segoe UI', Tahoma, sans-serif; color:#dfe7ef; user-select:none; }
+#game { position:fixed; inset:0; }
+canvas { display:block; image-rendering:auto; }
+
+/* ---------- Layout variables + touch/safe-area base ---------- */
+:root{
+  --top-h:46px; --bot-h:150px;
+  --lns-menu-h:clamp(32px,5.05vh,48px);   /* main-menu live-news "lower third" stripe height */
+  --safe-b:env(safe-area-inset-bottom,0px);
+  --safe-t:env(safe-area-inset-top,0px);
+}
+/* the canvas owns all pan/pinch gestures — stop the browser hijacking them */
+#cv, #minimap{ touch-action:none; }
+html,body{ overscroll-behavior:none; -webkit-touch-callout:none; }
+#topbar{ padding-top:var(--safe-t); }       /* 0 on desktop; clears notches on phones */
+#bottom{ padding-bottom:var(--safe-b); }
+
+/* ---------- HUD ---------- */
+#topbar {
+  position:fixed; top:0; left:0; right:0; height:46px;
+  display:flex; align-items:center; gap:24px; padding:0 18px;
+  background:linear-gradient(180deg,rgba(38,20,24,.95),rgba(30,15,17,.88));
+  border-bottom:1px solid #522a32; box-shadow:0 2px 10px rgba(0,0,0,.5);
+  z-index:20; font-size:14px;
+}
+.stat { display:flex; align-items:center; gap:7px; font-weight:600; }
+.stat .ico { width:16px; height:16px; border-radius:3px; display:inline-block; }
+.ico.gold { background:linear-gradient(135deg,#ffe27a,#f0a500); box-shadow:0 0 6px #f0a50080;}
+.ico.sup  { background:linear-gradient(135deg,#ffb0a0,#d64141); box-shadow:0 0 6px #d6414180;}
+#objective { margin-left:auto; font-size:13px; color:#ccaab0; font-weight:500; max-width:46%; }
+/* Unified top-right menu — one button (same look as the in-game buttons) that
+   toggles a dropdown holding News / Roster / Events / Save / Fullscreen.
+   Lives in the top bar so it works on desktop and mobile alike. */
+#top-menu{ position:relative; flex:0 0 auto; }
+#topbar #btn-topmenu{ position:relative; min-width:0; min-height:0; height:34px; padding:0 16px;
+  font-size:13px; font-weight:700; letter-spacing:.6px; gap:6px; white-space:nowrap;
+  clip-path:polygon(0 0,100% 0,94% 100%,0 100%); }
+#btn-topmenu.open{ border-color:#ff9a9a; border-left-color:#ff9a9a; color:#fff;
+  box-shadow:0 0 12px rgba(255,80,80,.55), inset 0 0 14px rgba(255,90,90,.12); }
+#btn-topmenu .tc-badge{ position:absolute; top:-6px; right:-5px; margin-left:0; }
+#topmenu-panel{ position:absolute; top:calc(100% + 8px); right:0; z-index:30;
+  display:flex; flex-direction:column; gap:6px; padding:8px; min-width:184px;
+  background:linear-gradient(180deg,rgba(40,21,25,.98),rgba(24,12,15,.98));
+  border:1px solid #6f2630; border-top:2px solid #ff5a5a; border-radius:4px;
+  box-shadow:0 10px 28px rgba(0,0,0,.6), inset 0 0 18px rgba(255,60,60,.05); }
+#topmenu-panel .tc-btn{ width:100%; height:42px; min-height:42px; min-width:0;
+  justify-content:flex-start; gap:11px; padding:0 14px;
+  font-size:14px; font-weight:700; letter-spacing:.4px; white-space:nowrap;
+  clip-path:polygon(0 0,100% 0,97% 100%,0 100%); }
+.tc-badge { display:inline-flex; align-items:center; justify-content:center; min-width:16px; height:16px;
+  padding:0 4px; margin-left:5px; border-radius:9px; background:#d64141; color:#fff;
+  font-size:10px; font-weight:800; line-height:1; box-shadow:0 0 6px #d6414188; }
+#mapname { color:#ff7676; font-weight:700; letter-spacing:1px; }
+.lbl { font-size:11px; color:#9e7780; font-weight:500; letter-spacing:.5px; }
+
+/* ---------- Bottom command panel ---------- */
+#bottom {
+  position:fixed; bottom:0; left:0; right:0; height:150px;
+  display:flex; align-items:stretch; z-index:20;
+  background:linear-gradient(0deg,rgba(33,17,19,.97),rgba(33,17,19,.80));
+  border-top:1px solid #522a32;
+}
+#minimap-wrap {
+  width:170px; padding:8px; display:flex; flex-direction:column; align-items:center;
+  border-right:1px solid #462430;
+}
+#minimap { background:#05080d; border:1px solid #522a32; border-radius:4px; cursor:pointer; }
+.panel-label { font-size:10px; letter-spacing:1.5px; color:#8c6570; margin-bottom:4px; text-transform:uppercase;}
+
+#selinfo { flex:1; padding:10px 14px; overflow:hidden; }
+#selinfo h3 { font-size:15px; color:#ffd0d2; margin-bottom:4px; }
+#selinfo .stats { display:flex; gap:10px; flex-wrap:wrap; font-size:12px; color:#e7c8a0; margin:2px 0 4px; }
+#selinfo .stats .st { white-space:nowrap; }
+#selinfo .desc { font-size:12px; color:#b89aa0; line-height:1.5; }
+.hpbar { height:7px; width:160px; background:#3e2228; border-radius:4px; margin-top:6px; overflow:hidden;}
+.hpbar > i { display:block; height:100%; background:linear-gradient(90deg,#3ad15a,#7af07a); }
+
+#commands {
+  width:330px; padding:10px; border-left:1px solid #462430;
+  display:flex; flex-wrap:wrap; align-content:flex-start; gap:8px;
+}
+/* in-game command buttons — same angular red-accent look as the menu .sc-btn */
+.cmd-btn {
+  width:88px; height:58px; border-radius:3px; cursor:pointer;
+  background:linear-gradient(135deg, rgba(70,18,24,.92), rgba(28,10,14,.82));
+  border:1px solid #6f2630; border-left:3px solid #ff5a5a;
+  clip-path:polygon(0 0,100% 0,95% 100%,0 100%);
+  color:#ffd9dd; font-size:11px; font-weight:600; line-height:1.2;
+  display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px;
+  transition:.1s; text-align:center; padding:3px;
+  box-shadow:0 2px 8px rgba(0,0,0,.5), inset 0 0 16px rgba(255,60,60,.05);
+}
+.cmd-btn:hover { color:#fff; border-left-color:#ff9a9a;
+  background:linear-gradient(135deg, rgba(128,28,38,.96), rgba(54,16,22,.9));
+  box-shadow:0 3px 14px rgba(255,46,46,.35), inset 0 0 20px rgba(255,90,90,.12); transform:translateY(-1px);}
+.cmd-btn:active { transform:translateY(0); }
+.cmd-btn.disabled { opacity:.4; cursor:not-allowed; }
+.cmd-btn .cost { font-size:10px; color:#ffd86b; }
+.cmd-btn .emoji { font-size:20px; }
+
+/* ---------- Production queue (in the selected building's info panel) ---------- */
+#prod-queue { display:flex; flex-wrap:wrap; gap:6px; margin-top:8px; }
+.pq-card { position:relative; width:46px; height:46px; border-radius:3px; flex:0 0 auto;
+  background:linear-gradient(135deg, rgba(70,18,24,.92), rgba(28,10,14,.82));
+  border:1px solid #6f2630; border-left:3px solid #ff5a5a;
+  clip-path:polygon(0 0,100% 0,92% 100%,0 100%);
+  box-shadow:0 2px 8px rgba(0,0,0,.5), inset 0 0 14px rgba(255,60,60,.05);
+  display:flex; align-items:center; justify-content:center; overflow:hidden; }
+.pq-card .pq-spr { width:40px; height:40px; pointer-events:none; }
+.pq-card .pq-x { position:absolute; top:0; right:0; width:17px; height:16px; line-height:14px;
+  font-size:11px; text-align:center; cursor:pointer; color:#ffd9dd; padding:0;
+  background:rgba(40,10,14,.92); border:1px solid #ff5a5a; border-radius:0 3px 0 6px;
+  touch-action:manipulation; }
+.pq-card .pq-x:hover { background:#c0392b; color:#fff; }
+.pq-card .pq-prog { position:absolute; left:0; right:0; bottom:0; height:3px; background:rgba(0,0,0,.45); }
+.pq-card .pq-prog>i { display:block; height:100%; width:0; background:#ff7676; }
+
+/* on-screen control cluster — hidden on desktop, shown on touch / narrow */
+/* single horizontal row that scrolls sideways if it overflows — never wraps to a 2nd line */
+#touch-controls{ display:none; gap:6px; align-items:center; flex-wrap:nowrap;
+  padding:5px 8px; border-top:1px solid #462430; }
+.tc-btn{ min-width:44px; min-height:44px; padding:0 8px; border-radius:3px; cursor:pointer;
+  background:linear-gradient(135deg, rgba(70,18,24,.92), rgba(28,10,14,.82));
+  border:1px solid #6f2630; border-left:3px solid #ff5a5a;
+  color:#ffd9dd; font-size:18px; font-family:inherit; line-height:1;
+  display:inline-flex; align-items:center; justify-content:center; touch-action:manipulation;
+  box-shadow:0 2px 8px rgba(0,0,0,.5), inset 0 0 14px rgba(255,60,60,.05); }
+.tc-btn.armed{ border-color:#ff9a9a; border-left-color:#ff9a9a; box-shadow:0 0 12px rgba(255,80,80,.6); color:#fff; }
+.tc-btn:disabled{ opacity:.32; cursor:default; box-shadow:0 1px 4px rgba(0,0,0,.4); }   /* e.g. Stop with nothing selected */
+/* Clear selection = the box-select glyph with a red ✕ struck over it (Esc equivalent) */
+.tc-btn.ic-clear{ position:relative; }
+.tc-btn.ic-clear .clr-x{ position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
+  color:#ff4d4d; font-weight:800; font-size:21px; line-height:1; text-shadow:0 1px 2px rgba(0,0,0,.85); pointer-events:none; }
+#touch-controls > .tc-btn, #touch-controls .grp-chips{ flex:0 0 auto; }   /* keep tap-size in the scrollable single row */
+.grp-chips{ display:inline-flex; gap:4px; }
+.grp-chip{ min-width:38px; font-weight:700; font-size:15px; }
+
+/* minimap as a floating corner overlay (toggled by 🗺 on phones) */
+#minimap-wrap.as-overlay{ display:flex !important; position:fixed; z-index:26;
+  top:calc(var(--top-h) + 8px + var(--safe-t)); right:8px; width:auto; padding:5px;
+  background:rgba(20,10,12,.92); border:1px solid #522a32; border-radius:6px; }
+#minimap-wrap.as-overlay #minimap{ width:118px; height:auto; }
+
+/* ===================================================================
+   RESPONSIVE / TOUCH — desktop look is preserved at wide widths; these
+   blocks reflow the HUD for phones & tablets.
+   =================================================================== */
+
+/* ---- Mouse tablets / small landscape (no pointer change) ---- */
+@media (max-width:900px){
+  #topbar{ gap:14px; font-size:13px; }
+  #minimap-wrap{ width:140px; }
+  #commands{ width:280px; }
+  .cmd-btn{ width:80px; height:54px; }
+}
+
+/* ---- Touch devices OR narrow windows: reflow to a stacked HUD ----
+   (placed last so it overrides the desktop/tablet rules above) ---- */
+@media (hover:none), (max-width:640px){
+  #topbar{ height:auto; min-height:var(--top-h); gap:10px; padding:4px 10px;
+    font-size:12px; flex-wrap:wrap; }
+  #topbar .lbl{ display:none; }
+  /* keep the menu button on row 1 (pushed hard-right) and let the objective wrap below it
+     so the top bar stays two compact rows instead of sprawling */
+  #top-menu{ order:1; margin-left:auto; }
+  #objective{ order:2; font-size:11px; max-width:100%; flex-basis:100%; margin-left:0; }
+  #topmenu-panel{ min-width:180px; }
+
+  #bottom{ height:auto; flex-direction:column; align-items:stretch; }
+  #minimap-wrap{ display:none; }            /* reachable via the 🗺 overlay toggle */
+  #selinfo{ flex:0 0 auto; padding:4px 10px; }
+  #selinfo h3{ font-size:13px; margin-bottom:0; }
+  #selinfo .stats{ gap:8px; font-size:11px; margin:1px 0 2px; }   /* stays visible on mobile */
+  #selinfo .desc{ display:none; }
+  #commands{ width:auto; border-left:none; padding:6px;
+    flex-wrap:nowrap; overflow-x:auto; -webkit-overflow-scrolling:touch; align-content:center; }
+  .cmd-btn{ flex:0 0 auto; width:auto; min-width:62px; height:48px; min-height:48px;
+    font-size:11px; padding:4px 8px; }
+  .cmd-btn .emoji{ font-size:18px; }
+  #touch-controls{ display:flex; overflow-x:auto; }
+  /* Stop now lives in the touch-controls row; hide the in-panel copy and collapse the
+     whole command line unless there are build/train buttons (only the intern + buildings). */
+  .cmd-btn.cmd-stop{ display:none; }
+  #commands:not(.has-cmds){ display:none; }
+}
+
+/* ---- Phones in landscape: claw back vertical space ---- */
+@media (orientation:landscape) and (max-height:480px){
+  #selinfo{ display:none; }
+  .cmd-btn{ height:44px; min-height:44px; }
+  #touch-controls{ padding:3px 6px; }
+}
+
+/* ---- Wide & short viewports (phones in landscape, short windows) ----
+   Collapse the 150px bottom panel into two slim rows and float the minimap.
+   Shape-based (not touch-based) so it also fixes wide-short desktop windows;
+   the max-height guard spares ultrawide monitors. Placed last so it wins the
+   cascade where it overlaps the hover:none / max-height:480px blocks above. */
+@media (min-aspect-ratio: 2/1) and (max-height: 600px){
+  #bottom{ height:auto; flex-direction:row; flex-wrap:wrap; align-items:stretch; }
+  #minimap-wrap{ display:none; }                       /* reachable via the floating 🗺 */
+
+  /* row 1 — command buttons, full width, scroll sideways (never wrap to a 3rd row).
+     min-height keeps the panel a constant height whether or not anything is selected,
+     so syncHud()'s VIEW_BOT (synced on resize) stays accurate as commands populate. */
+  #commands{ order:1; flex:1 1 100%; width:auto; border-left:none; min-height:48px;
+    flex-wrap:nowrap; overflow-x:auto; -webkit-overflow-scrolling:touch;
+    padding:4px 8px; gap:6px; align-items:center; }
+  .cmd-btn{ flex:0 0 auto; width:auto; min-width:58px; height:42px; min-height:42px;
+    font-size:11px; padding:3px 8px; }
+  .cmd-btn .emoji{ font-size:17px; }
+
+  /* row 2 — selection summary (left) shares the row with the controls (right). The summary
+     WRAPS: a long unit name takes line 1 and its stats + Dossier button flow onto line 2 so
+     nothing is clipped. A building's short name + HP stay on line 1 with its live production
+     queue inline to the right (the queue's flex-basis:0 keeps it from forcing a wrap). */
+  /* flex-basis:0 (not auto) so a long name doesn't bloat #selinfo's basis and shove the
+     controls onto their own row — instead #selinfo is capped to the leftover width beside
+     the controls, which is what forces a long name's stats/Dossier onto the second line. */
+  #selinfo{ display:flex; flex-wrap:wrap; align-items:center; align-content:center;
+    column-gap:8px; row-gap:2px; order:2; flex:1 1 0; min-width:0; max-width:none;
+    padding:2px 10px; overflow:hidden; }
+  #selinfo h3{ display:block; font-size:12px; margin:0; flex:0 1 auto; min-width:0; max-width:100%;
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  #selinfo .stats{ display:inline-flex; gap:8px; font-size:10px; margin:0; flex:0 0 auto; white-space:nowrap; }
+  #selinfo .desc{ display:none; }
+  /* Dossier button: shown here (was hidden), compact, sits on the wrapped detail line */
+  #sel-dossier{ display:inline-flex; align-items:center; margin:0; padding:2px 8px;
+    font-size:10px; min-height:0; flex:0 0 auto; }
+  /* production queue: inline, just right of the building name/HP, scrolls sideways if long.
+     flex:1 1 0 (basis 0) means it never adds width that would push a building onto two lines. */
+  #selinfo #prod-queue{ display:flex; flex:1 1 0; min-width:0; margin:0; gap:5px;
+    flex-wrap:nowrap; overflow-x:auto; -webkit-overflow-scrolling:touch; }
+  #selinfo #prod-queue .pq-card{ width:38px; height:38px; }
+  #selinfo #prod-queue .pq-spr{ width:32px; height:32px; }
+
+  #touch-controls{ display:flex; order:3; flex:0 0 auto; justify-content:flex-end;
+    overflow-x:auto; -webkit-overflow-scrolling:touch; padding:3px 6px; }
+
+  /* minimap toggle becomes a floating corner button (reuses #btn-minimap → .as-overlay) */
+  #btn-minimap{ position:fixed; z-index:27; right:8px;
+    top:calc(var(--top-h) + 6px + var(--safe-t));
+    width:44px; height:44px; min-width:44px; min-height:44px; }
+  #minimap-wrap.as-overlay{ top:calc(var(--top-h) + 58px + var(--safe-t)); }  /* bloom under the 🗺 */
+
+  /* Stop lives in the touch-controls row here too — drop the in-panel copy and let the
+     command row vanish for non-builder units (only the intern keeps a 2nd line). */
+  .cmd-btn.cmd-stop{ display:none; }
+  #commands:not(.has-cmds){ display:none; }
+}
+
+/* ---- ambient fog wash: ONE opacity-only layer (no blur, no blend) above the canvas, below the
+   HUD. Opacity + --fog-tint are set by js/particles.js from the dominant in-view biome; the drift
+   is transform-only so it's compositor-cheap. The moving lights are canvas particles, not CSS. ---- */
+#amb-fog{ position:fixed; inset:0; z-index:15; pointer-events:none; opacity:0;
+  transition:opacity 1.4s ease; will-change:opacity, transform;
+  background:
+    radial-gradient(120% 85% at 50% 116%, var(--fog-tint, rgba(150,165,185,.5)) 0%, transparent 72%),
+    radial-gradient(130% 68% at 50% -12%, var(--fog-tint, rgba(150,165,185,.45)) 0%, transparent 68%),
+    radial-gradient(108% 108% at 50% 50%, var(--fog-tint, rgba(150,165,185,.42)) 0%, transparent 82%);
+  animation:ambFogDrift 26s ease-in-out infinite alternate; }
+@keyframes ambFogDrift{ 0%{ transform:translate3d(-1.6%,0,0) scale(1.06); } 100%{ transform:translate3d(1.6%,1%,0) scale(1.12); } }
+@media (prefers-reduced-motion: reduce){ #amb-fog{ animation:none; } }
