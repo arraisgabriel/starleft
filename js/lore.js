@@ -17,6 +17,14 @@ const LIFE_FX = { aspectBias: 0.70, crimeChance: 0.45, buffDur: 25 };
 function _loHash(n){ let h=((n|0)*2654435761) ^ 0x9e3779b9; h=Math.imul(h^(h>>>15),2246822519); return (h>>>0); }
 function _loPick(rng, arr){ return arr[(rng()*arr.length)|0]; }
 function _loCap(s){ return s ? s[0].toUpperCase()+s.slice(1) : s; }
+// Pick one prose variation per lore area from a (deterministic) rng. Stored raw on the dossier;
+// slots are resolved at render time by dossierHTML's fillP. See LORE_DATA.paras.
+function _attachParas(d, rng){
+  const P = LORE_DATA.paras; if(!P) return;
+  d.paras = { origin:_loPick(rng,P.origin), family:_loPick(rng,P.family),
+    trauma:_loPick(rng,P.trauma), dream:_loPick(rng,P.dream),
+    crime:_loPick(rng,P.crime), assessment:_loPick(rng,P.assessment) };
+}
 
 /* ---- backstory assignment ---- */
 const _dossierCache = new Map();   // seed -> built backstory (module-global; not serialized)
@@ -40,9 +48,11 @@ function makeHeroDossier(spec){
   const trauma = baseFill(spec.trauma || '');
   const dream  = baseFill(spec.dream || '');
   const crime  = spec.crime ? baseFill(spec.crime) : null;
-  const d = { first, last, full, home, rel, relName, trauma, dream, crime, hero:true };
-  d.fill = (t)=> baseFill(t).replace(/\{dream\}/g, dream).replace(/\{trauma\}/g, trauma).replace(/\{crime\}/g, crime||'an old mistake');
-  d.familyText = baseFill(spec.family || '');
+  const familyText = baseFill(spec.family || '');
+  const d = { first, last, full, home, rel, relName, trauma, dream, crime, familyText, hero:true };
+  d.fill = (t)=> baseFill(t).replace(/\{dream\}/g, dream).replace(/\{trauma\}/g, trauma)
+    .replace(/\{crime\}/g, crime||'an old mistake').replace(/\{family\}/g, familyText);
+  _attachParas(d, makeRng(_loHash(full)));   // name-seeded → stable prose for hand-authored heroes
   return d;
 }
 
@@ -65,10 +75,12 @@ function buildDossier(u){
   const trauma = baseFill(_loPick(r, LORE_DATA.traumas));
   const dream  = baseFill(_loPick(r, LORE_DATA.dreams));
   const crime  = (r() < LIFE_FX.crimeChance) ? baseFill(_loPick(r, LORE_DATA.crimes)) : null;
-  const d = { first, last, full, home, rel:fam.rel, relName, trauma, dream, crime };
-  // event filler: person slots (baseFill) + the already-resolved backstory slots
-  d.fill = (t)=> baseFill(t).replace(/\{dream\}/g, dream).replace(/\{trauma\}/g, trauma).replace(/\{crime\}/g, crime||'an old mistake');
-  d.familyText = baseFill(fam.text);
+  const familyText = baseFill(fam.text);
+  const d = { first, last, full, home, rel:fam.rel, relName, trauma, dream, crime, familyText };
+  // event/prose filler: person slots (baseFill) + the already-resolved backstory slots
+  d.fill = (t)=> baseFill(t).replace(/\{dream\}/g, dream).replace(/\{trauma\}/g, trauma)
+    .replace(/\{crime\}/g, crime||'an old mistake').replace(/\{family\}/g, familyText);
+  _attachParas(d, r);   // appended last → existing name/trauma/dream/crime draws are unchanged
   _dossierCache.set(seed, d);
   return d;
 }
@@ -151,6 +163,17 @@ function dossierHTML(u){
   h += `<div><span class="dk">Dream</span>${_loCap(d.fill('{dream}'))}${u.dreamDone?' <em>— fulfilled ✓</em>':''}.</div>`;
   if(d.crime) h += `<div><span class="dk">Crime</span>${_loCap(d.crime)}.</div>`;
   h += `</div>`;
+  // narrative prose: one deterministically-chosen paragraph per lore area, slots resolved here
+  // ({rank}/{unit}/{lvl} only exist at render time; {me}/{home}/{trauma}/{dream}/{crime}/{family} via d.fill)
+  if(d.paras){
+    const fillP = (t)=> t ? _loCap(d.fill(t).replace(/\{rank\}/g, careerTitle(lvl))
+      .replace(/\{unit\}/g, def.name).replace(/\{lvl\}/g, lvl)) : '';
+    h += `<div class="dk">Personnel file</div><div class="dossier-prose">`;
+    h += `<p>${fillP(d.paras.origin)}</p><p>${fillP(d.paras.family)}</p>`;
+    h += `<p>${fillP(d.paras.trauma)}</p><p>${fillP(d.paras.dream)}</p>`;
+    if(d.crime) h += `<p>${fillP(d.paras.crime)}</p>`;
+    h += `<p class="assess">${fillP(d.paras.assessment)}</p></div>`;
+  }
   h += `<div class="dk">Service record</div><ol class="dossier-log">`;
   for(const ev of u.lore.events){ const t = LORE_DATA.events[ev.i]; if(!t) continue;
     h += `<li><b>Lv ${ev.lvl}</b> — ${_loCap(d.fill(t.text))}</li>`; }
