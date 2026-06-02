@@ -440,7 +440,7 @@ Weaponize your buzzwords, circle back, and disrupt MegaCorp into bankruptcy. The
     startGold:1100, startWorkers:7, startSoldiers:5, startBarracks:true,
     graceTime:120, waveTimer:116,
     crawl:{ episode:'EPISODE XI', title:'THE LAUNCH',
-      text:'Biba is free and the blueprint is yours, but a blueprint is not a factory. A&O already built the only one that works — and they are about to launch it.\n\nThe altar stands at the top of A&O\'s dark tower: a black spire on a spit of land in a coolant sea, where the GRAAL writes the dying into fresh metal and the dead into product. The keynote is scheduled; the line to the people who live inside went quiet long ago.\n\n{?party}The pilgrimage walks in with you: {party} — the survivors of every quarter since the crater, here to take the thing that was built to take them.{/party}{^party}You walk the road alone. Everyone who carried you this far went on ahead, into the ground.{/party}{?fallen} You carry the wall with you too — {fallen} — names A&O filed as churn, the reason you march toward the altar instead of away from it.{/fallen}{?biba} Biba says the chip cannot tell salvation from theft. She solders anyway.{/biba}\n\nFight down the guided road, liquidate all SIX A&O campuses between you and the sea, and seize the dark tower at the peninsula\'s end. Steal the GRAAL before they ship it.\n\nThere is no launch but yours now. Go to market....' },
+      text:'Biba is free and the blueprint is yours, but a blueprint is not a factory. A&O has the only one that works, The DARK TOWER.\n\nThe altar stands at the top of A&O\'s peninsula: a black spire on a spit of land in a coolant sea, where the GRAAL writes the dying into fresh metal and the dead into product. The keynote is scheduled; the line to the people who live inside went quiet long ago.\n\n{?party}The pilgrimage walks in with you: {party} — the survivors of every battle since the crater, here to take the thing that was built to take them.{/party}{^party}You walk the road alone. Everyone who carried you this far went on ahead, into the ground.{/party}{?fallen} You carry the wall with you too — {fallen} — names A&O filed as churn, the reason you march toward the altar instead of away from it.{/fallen}{?biba} Biba says the chip cannot tell salvation from theft. She solders anyway.{/biba}\n\nFight down the guided road, liquidate all SIX A&O campuses between you and the sea, and seize the dark tower at the peninsula\'s end. Steal the GRAAL before they ship it.\n\n It`s time to bring them back.' },
     w:96, h:156,
     seed:11,
     player:{ x:48, y:8 },
@@ -456,7 +456,7 @@ Weaponize your buzzwords, circle back, and disrupt MegaCorp into bankruptcy. The
       {x:48,y:112, defenders:4},                         // neck guardian — gates the peninsula
       {x:48,y:140, extraBarracks:true, defenders:6},     // THE DARK TOWER — the GRAAL altar, on the peninsula
     ],
-    objective:'A&O is launching the GRAAL from the altar in its dark tower. Fight down the guided road and liquidate all SIX A&O campuses — the last is the tower on the peninsula. Raze it to steal the GRAAL.',
+    objective:'A&O is building the GRAAL on Dark Tower altar. Fight the road and liquidate all SIX A&O Labs — At the peninsula, raze the Dark Tower to create the GRAAL.',
     // a guided central lane (x~40–56): rock ranges flank it left (x~28–30) and right (x~64–66), funneling
     // the player down through the campuses toward the sea. A separate ring of mountains girds campus #4.
     rockClusters:[
