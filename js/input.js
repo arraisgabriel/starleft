@@ -91,6 +91,10 @@ function dispatchTap(e, opts){
   if(canCommand && (isEnemy || isGold || isConstructing || !ent)){
     let target=ent;
     if(isEnemy && !isVisiblePix(G,ent.x,ent.y)) target=null;
+    // Empty-ground tap feeds the Sprint window FIRST, so commandUnits' move branch sees
+    // an active sprint and sends the squad as a tight pack (no formation) to the exact
+    // point. Taps that hit a real target (enemy/mine/build) don't refresh it → sprint ends.
+    if(!ent) registerSprintTap(G, w.x, w.y);
     commandUnits(G, w.x, w.y, target); return;
   }
 

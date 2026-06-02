@@ -114,14 +114,18 @@ function commandUnits(state, wx, wy, target){
     spawnRing(target.x,target.y,'#ffd86b');
     return;
   }
-  // move (formation offsets)
+  // move — a normal move fans units into a small grid (formation offsets) and flashes the
+  // cyan ring; an active Sprint instead sends the whole squad to the EXACT point as a tight
+  // pack and skips the ring (the #sprint-ripple CSS overlay marks the spot).
+  const sprinting = state.sprint && state.sprint.active;
   const n=units.length; const cols=Math.ceil(Math.sqrt(n));
   units.forEach((u,i)=>{
-    const ox=((i%cols)-(cols-1)/2)*26, oy=((Math.floor(i/cols))-(cols-1)/2)*26;
+    let tx=wx, ty=wy;
+    if(!sprinting){ tx=wx+((i%cols)-(cols-1)/2)*26; ty=wy+((Math.floor(i/cols))-(cols-1)/2)*26; }
     resetMotion(u);
-    issueMove(state,u, wx+ox, wy+oy); // plain move — obey the order, don't divert to auto-attack
+    issueMove(state,u, tx, ty); // plain move — obey the order, don't divert to auto-attack
   });
-  spawnRing(wx,wy,'#7fd6ff');
+  if(!sprinting) spawnRing(wx,wy,'#7fd6ff');
 }
 
 // Clear all transient movement/targeting state so a fresh command isn't
@@ -319,7 +323,8 @@ function updateUnit(state,u,dt){
   }
 
   // ---- auto-heal (Recruiter / Courier): follow & mend the most-hurt ally in sight ----
-  if(def.heal){
+  // (a sprinting healer ignores wounded allies and keeps running with the squad)
+  if(def.heal && !u.sprinting){
     if(!cmd || cmd.type==='amove' || cmd.type==='move' || u.state==='idle'){
       let best=null,bd=(u.sight*TILE)**2;
       for(const o of state.entities){ if(o.dead||o.owner!==u.owner||o.kind!=='unit'||o===u)continue; if(o.hp>=o.maxHp)continue;
@@ -351,6 +356,10 @@ function updateUnit(state,u,dt){
   // ---- handle attack target (explicit or auto) ----
   let atk = (cmd&&cmd.type==='attack'&&cmd.target&&!cmd.target.dead) ? cmd.target : null;
   if(!atk && u.autoTarget && !u.autoTarget.dead) atk=u.autoTarget;
+  // SPRINT: ignore the fight entirely. Whatever set a target (auto-acquire, retaliation in
+  // damage(), a callToArms rally, or an explicit attack cmd), a sprinting unit drops it and
+  // falls through to the move handler — so it keeps running and never fights back.
+  if(u.sprinting){ u.autoTarget=null; atk=null; }
   if(atk && atk.air && !canHitAir(u)){ atk=null; u.autoTarget=null; if(cmd&&cmd.type==='attack')u.cmd=null; }  // can't reach flyers
 
   if(atk){
@@ -472,11 +481,13 @@ function faceTo(u,t){ u.dir=Math.atan2(t.y-u.y,t.x-u.x); }
 
 // returns true when arrived
 function followPath(state,u,dt){
+  // Sprint accelerates the run a little (up to SPRINT_MAX_BONUS over base) while active.
+  const sm=(u.sprinting && state.sprint && state.sprint.active) ? state.sprint.mul : 1;
   if(!u.path){
     if(u.dest){ // direct
       const dx=u.dest.x-u.x, dy=u.dest.y-u.y, d=Math.hypot(dx,dy);
       if(d<4){ u.dest=null; return true; }
-      const sp=u.speed*TILE*dt; u.x+=dx/d*Math.min(sp,d); u.y+=dy/d*Math.min(sp,d); u.dir=Math.atan2(dy,dx);
+      const sp=u.speed*TILE*dt*sm; u.x+=dx/d*Math.min(sp,d); u.y+=dy/d*Math.min(sp,d); u.dir=Math.atan2(dy,dx);
       return false;
     }
     return true;
@@ -485,7 +496,7 @@ function followPath(state,u,dt){
   if(!node){ u.path=null; return true; }
   const tx=node[0]*TILE+TILE/2, ty=node[1]*TILE+TILE/2;
   const dx=tx-u.x, dy=ty-u.y, d=Math.hypot(dx,dy);
-  const sp=u.speed*TILE*dt;
+  const sp=u.speed*TILE*dt*sm;
   if(d<6){
     u.pathIdx++;
     if(u.pathIdx>=u.path.length){ u.path=null;
@@ -623,6 +634,7 @@ function callToArms(state, foe, side, from){
   const R=7*TILE, r2=R*R, cx=from.x, cy=from.y;
   for(const o of state.entities){
     if(o.dead||o.kind!=='unit'||o.owner!==side||o===from) continue;
+    if(o.sprinting) continue;                                               // sprinting allies stay on the run
     if(o.type==='worker' || !(DEF[o.type].dmg>0)) continue;                 // combat units only
     if(o.cmd && (o.cmd.type==='move'||o.cmd.type==='gather'||o.cmd.type==='build')) continue; // respect explicit orders
     if((o.cmd&&o.cmd.type==='attack'&&o.cmd.target&&!o.cmd.target.dead) || (o.autoTarget&&!o.autoTarget.dead)) continue; // busy fighting
@@ -638,8 +650,9 @@ function damage(state, t, amt, src){
   t.hitFx=0.12;
   t._lastHit=state.time;   // pauses veteran self-heal (vetRegen) while in/near combat
   // RETALIATE: any unit attacked by an enemy fights back, unless it's already
-  // engaging a live target or busy on an explicit gather/build order.
-  if(t.kind==='unit' && src && !src.dead && t.owner!==src.owner){
+  // engaging a live target or busy on an explicit gather/build order. A SPRINTING
+  // unit ignores the hit — it neither acquires the attacker nor rallies neighbours.
+  if(t.kind==='unit' && src && !src.dead && t.owner!==src.owner && !t.sprinting){
     const engaged=(t.cmd&&t.cmd.type==='attack'&&t.cmd.target&&!t.cmd.target.dead) || (t.autoTarget&&!t.autoTarget.dead);
     const onTask = t.cmd && (t.cmd.type==='gather'||t.cmd.type==='build');
     if(!engaged && !onTask && !(src.air && !canHitAir(t))){

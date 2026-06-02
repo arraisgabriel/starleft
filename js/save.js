@@ -38,7 +38,7 @@ function serializeEntity(e){
 // _cmdSig/placing (transient UI), and the fields handled specially below.
 // feat[] is the per-cell topography mask — rebuilt from features[] on load (keeps saves small).
 // waterDepth: a renderer-only distance-to-shore field (js/water.js), rebuilt from tiles[] on load.
-const SKIP = {cfg:1, visible:1, _cmdSig:1, placing:1, entities:1, selection:1, groups:1, blocked:1, explored:1, feat:1, waterDepth:1};
+const SKIP = {cfg:1, visible:1, _cmdSig:1, placing:1, sprint:1, entities:1, selection:1, groups:1, blocked:1, explored:1, feat:1, waterDepth:1};
 function serializeGame(){
   const s={};
   for(const k in G){ if(!SKIP[k]) s[k]=G[k]; }       // primitives + JSON-safe arrays (tiles/biome/megaSprites)
@@ -86,6 +86,10 @@ function deserializeGame(s){
   // rebuild per-unit control-group tags (Sets don't serialize) so the on-unit badge shows after load
   for(const k in g.groups){ for(const u of g.groups[k]){ if(!(u._groups instanceof Set)) u._groups=new Set(); u._groups.add(k); } }
   g.placing=null; g._cmdSig=null;
+  // The Sprint is a transient, tap-driven run; start every load idle. A leftover
+  // u.sprinting=true would permanently suppress that unit's combat (chokepoint guard).
+  g.sprint={ active:false, window:0, t:0, mul:1, x:0, y:0, tapCount:0 };
+  g.entities.forEach(e=>{ if(e.sprinting) e.sprinting=false; });
   return g;
 }
 

@@ -13,6 +13,15 @@ function buildingSheet(name, faction){ return ASSET_BASE + 'buildings/' + name +
 // unit sheet: type worker|soldier|... , action walk|mine|attack|heal , enemy bool
 function unitSheet(type, action, enemy){ return ASSET_BASE + 'units/' + type + '/' + action + (enemy ? '_enemy' : '') + '.png'; }
 
+/* ---- Voice audio (locally TTS-generated; see _dev/gen/ + js/voice.js) ----
+   Optional like every other asset: VOICE plays a clip if present and silently no-ops if missing.
+   barks keyed by speaker (unit type | heroId); lore by qwen voice; crawls by MAP index. */
+const AUDIO_BASE = ASSET_BASE + 'audio/';
+const VOICE_BASE = AUDIO_BASE + 'voice/';
+function barkPath(speakerKey, idx){ return VOICE_BASE + 'barks/' + speakerKey + '_' + String(idx).padStart(2,'0') + '.mp3'; }
+function lorePath(voice, idx){      return VOICE_BASE + 'lore/'  + voice      + '_' + String(idx).padStart(3,'0') + '.mp3'; }
+function crawlPath(mapIdx){         return VOICE_BASE + 'crawl/ep_' + String(mapIdx).padStart(2,'0') + '.mp3'; }
+
 /* ---- Dark / devastated cyberpunk tile atlas (tileset.png) ----
    A clean, gutterless 3×7 grid composed from per-biome Gemini generations
    (Hades-inspired dark palette; see _dev/gen/ + _dev/prompts/terrain-dark.md).

@@ -347,6 +347,8 @@ function newMap(idx){
     time:0,
     gold_collected:0,
     over:false,
+    // The Sprint — transient run-while-tapping state (js/sprint.js). Excluded from saves.
+    sprint:{ active:false, window:0, t:0, mul:1, x:0, y:0, tapCount:0 },
   };
 
   // topography features (2x2 walk-under trees/rocks). A DERIVED rng keeps the main

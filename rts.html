@@ -17,6 +17,7 @@
 <div id="game">
   <canvas id="cv"></canvas>
   <div id="amb-fog" aria-hidden="true"></div>   <!-- ambient biome fog wash (js/particles.js) -->
+  <div id="sprint-ripple" aria-hidden="true"></div>   <!-- The Sprint destination ripple (js/sprint.js + css/hud.css) -->
 
 
   <div id="topbar">
@@ -30,6 +31,7 @@
         <button class="tc-btn" id="btn-news" title="Toggle live news ticker">News</button>
         <button class="tc-btn" id="btn-roster" title="Veterans &amp; Memorial">Roster</button>
         <button class="tc-btn" id="btn-events" title="Notifications log">Events<span id="events-badge" class="tc-badge" style="display:none;">0</span></button>
+        <button class="tc-btn" id="btn-voice" title="Toggle unit &amp; narrator voices">🔊 Voices</button>
         <button class="tc-btn" id="btn-save" title="Save game (⌘/Ctrl+S)">Save</button>
         <button class="tc-btn" id="btn-fs" title="Toggle fullscreen">Fullscreen</button>
       </div>
@@ -103,7 +105,7 @@
       <p id="tip-text">Mine <b style="color:#ffd9dd">Funding</b> 💰, scale your team, and disrupt the rival empires into bankruptcy.</p>
       <div class="stat-line">Series ∞ secured · equity not guaranteed</div>
     </aside>
-    <div class="menu-hint">No sound · best played fullscreen · a mini-RTS</div>
+    <div class="menu-hint">🔊 Voiced · best played fullscreen · a mini-RTS</div>
     <button class="menu-fs" id="btn-fs-menu" title="Toggle fullscreen">⛶ Fullscreen</button>
     <!-- Live News Stream — full-width "lower third" headline ticker -->
     <div class="lns-menu" id="lns-menu"><div class="lns-tag">LIVE</div><div class="lns-host"></div></div>
@@ -201,6 +203,7 @@
 <script src="js/megasprites.js"></script>
 <script src="js/map.js"></script>
 <script src="js/units.js"></script>
+<script src="js/sprint.js"></script>
 <script src="js/career.js"></script>
 <script src="js/balance.js"></script>
 <script src="js/lore_data.js"></script>
@@ -208,6 +211,7 @@
 <script src="js/lore.js"></script>
 <script src="js/ai.js"></script>
 <script src="js/render.js"></script>
+<script src="js/voice.js"></script>
 <script src="js/dialogs.js"></script>
 <script src="js/water.js"></script>
 <script src="js/ui.js"></script>

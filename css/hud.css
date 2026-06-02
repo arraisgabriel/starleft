@@ -272,3 +272,24 @@ html,body{ overscroll-behavior:none; -webkit-touch-callout:none; }
   animation:ambFogDrift 26s ease-in-out infinite alternate; }
 @keyframes ambFogDrift{ 0%{ transform:translate3d(-1.6%,0,0) scale(1.06); } 100%{ transform:translate3d(1.6%,1%,0) scale(1.12); } }
 @media (prefers-reduced-motion: reduce){ #amb-fog{ animation:none; } }
+
+/* ---- The Sprint destination ripple: a point-anchored node (left/top set per-frame by
+   js/sprint.js' updateSprintRipple) whose two staggered rings pulse continuously while the
+   player keeps tapping. z-index 15 keeps it above the canvas but below the HUD bars (z 20),
+   mirroring #amb-fog. Accent is the attack-command red (#ff5b5b family) — a charging,
+   "danger" pulse, kept glowing-but-deep to sit in the dark cyberpunk palette. */
+#sprint-ripple{ position:fixed; z-index:15; pointer-events:none; display:none;
+  width:0; height:0; transform:translate(-50%,-50%); }
+#sprint-ripple::before, #sprint-ripple::after{
+  content:''; position:absolute; left:0; top:0; transform:translate(-50%,-50%);
+  width:60px; height:60px; border-radius:50%;
+  border:3px solid rgba(255,91,91,.95);
+  box-shadow:0 0 26px rgba(255,60,60,.7), 0 0 8px rgba(255,90,90,.9), inset 0 0 16px rgba(255,70,70,.5);
+  background:radial-gradient(circle, rgba(255,70,70,.22) 0%, transparent 62%);
+  animation:sprintRipple .85s ease-out infinite; }
+#sprint-ripple::after{ animation-delay:.42s; }
+@keyframes sprintRipple{
+  0%{ width:18px; height:18px; opacity:0; }
+  15%{ opacity:1; }
+  100%{ width:108px; height:108px; opacity:0; } }
+@media (prefers-reduced-motion: reduce){ #sprint-ripple::before, #sprint-ripple::after{ animation-duration:1.4s; } }

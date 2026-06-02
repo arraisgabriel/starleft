@@ -173,6 +173,13 @@ function toggleFullscreen(){
     if(ex){ const p=ex.call(document); if(p&&p.catch) p.catch(()=>{}); }
   }
 }
+/* ---- Voices toggle (top-menu): reflect VOICE on/off on the button ---- */
+function syncVoiceBtn(){
+  const b=document.getElementById('btn-voice'); if(!b) return;
+  const on = (typeof VOICE!=='undefined') ? VOICE.isEnabled() : true;
+  b.innerHTML = on ? '🔊 Voices' : '🔇 Voices';
+  b.classList.toggle('armed', on);
+}
 function syncFsButtons(){
   const on=fsActive();
   const top=document.getElementById('btn-fs'); if(top) top.innerHTML = on?'Windowed':'Fullscreen';
@@ -192,6 +199,8 @@ function wireTouchControls(){
   on('btn-save', ()=>{ saveGame(); });
   on('btn-roster', ()=>{ if(typeof showRoster==='function') showRoster(); });
   on('btn-events', ()=>{ if(typeof showEvents==='function') showEvents(); });
+  on('btn-voice', ()=>{ if(typeof VOICE!=='undefined'){ VOICE.toggle(); syncVoiceBtn(); } });
+  syncVoiceBtn();   // reflect the persisted on/off state on the button label
   // unified top-right menu: one button toggles a dropdown of News/Roster/Events/Save/Fullscreen
   (function wireTopMenu(){
     const wrap=document.getElementById('top-menu');
@@ -235,6 +244,7 @@ function loop(now){
     if(running && !G.over){ update(G,dt); autoTick+=dt; if(autoTick>60){ autoTick=0; autosaveGame(); } }
     updateCamera(G,dt);
     render(G);
+    if(typeof updateSprintRipple==='function') updateSprintRipple(G);   // glue the sprint ripple to its world point
     uiTick+=dt; if(uiTick>0.2){ uiTick=0; if(running) refreshUI(); }
   }
   requestAnimationFrame(loop);

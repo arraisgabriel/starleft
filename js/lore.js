@@ -100,10 +100,13 @@ function rollLifeEvent(u, level){
   // companion "say" for the in-world dialog box: a short first-person reaction. LORE_SAY
   // (dialog_data.js) is index-aligned with this APPEND-ONLY events array; fall back to a
   // tone+aspect bucket so a level-up is never mute. Filled through the same dossier slots.
-  const _sayRaw = (typeof LORE_SAY!=='undefined' && LORE_SAY[i]) ? LORE_SAY[i]
-                : (typeof loreSayFallback==='function' ? loreSayFallback(t.req, t.tone) : null);
+  const indexed = (typeof LORE_SAY!=='undefined' && LORE_SAY[i]) ? LORE_SAY[i] : null;
+  const _sayRaw = indexed || (typeof loreSayFallback==='function' ? loreSayFallback(t.req, t.tone) : null);
   const say = _sayRaw ? _loCap(d.fill(_sayRaw)) : null;
-  return { text:_loCap(d.fill(t.text)), fx:t.fx, tone:t.tone, say };
+  // sayIdx: index of a variable-free indexed line → it has a pre-rendered voice clip (voice.js).
+  // Templated/fallback lines have no matching clip, so they stay text-only (sayIdx null).
+  const sayIdx = (indexed && indexed.indexOf('{')<0) ? i : null;
+  return { text:_loCap(d.fill(t.text)), fx:t.fx, tone:t.tone, say, sayIdx };
 }
 
 /* ---- light effects (only a minority of events carry fx) ---- */

@@ -12,6 +12,13 @@ const mmx = mm.getContext('2d');
    dpr is refreshed by resize(); ZOOM_* bound pinch / wheel / button zoom. */
 let dpr = window.devicePixelRatio || 1;
 const ZOOM_MIN = 0.35, ZOOM_MAX = 2.0;
+
+/* ---- The Sprint: keep-tapping a spot makes the selected squad RUN there,
+   accelerating a little and ignoring incoming fire (they don't fight back)
+   until the player stops tapping. See js/sprint.js. ---- */
+const SPRINT_TAP_WINDOW = 0.6;  // s — max gap between taps before the sprint ends
+const SPRINT_ACCEL      = 0.4;  // speed-bonus gained per second of sustained sprint
+const SPRINT_MAX_BONUS  = 0.5;  // cap → top speed = 1.5× base ("accelerates a little")
 // Desktop plays at 1:1; phones/tablets start zoomed out to fit more of the map.
 function initialZoom(W,H){
   const touch = (innerWidth < 820) || ('ontouchstart' in window);

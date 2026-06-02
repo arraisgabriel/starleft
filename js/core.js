@@ -2,6 +2,7 @@
 function update(state, dt){
   if(state.over) return;
   state.time+=dt;
+  if(typeof updateSprint==='function') updateSprint(state, dt);   // decay the tap window / ramp accel
   recomputeSupply(state);
 
   // ---- production for player & enemy buildings ----

@@ -34,14 +34,24 @@ function sayUnitSelected(u){
   if(!u || u.kind!=='unit' || u.owner!=='player') return;
   // named heroes (Nino, Biba) speak from their OWN pool keyed by heroId; everyone else
   // falls back to their unit type's pool.
-  let pool = (u.hero && u.heroId && typeof HERO_SELECT_LINES!=='undefined') ? HERO_SELECT_LINES[u.heroId] : null;
-  if(!pool || !pool.length) pool = (typeof SELECT_LINES!=='undefined' && SELECT_LINES[u.type]) || null;
+  const heroPool = (u.hero && u.heroId && typeof HERO_SELECT_LINES!=='undefined') ? HERO_SELECT_LINES[u.heroId] : null;
+  const usedHero = !!(heroPool && heroPool.length);
+  const pool = usedHero ? heroPool : ((typeof SELECT_LINES!=='undefined' && SELECT_LINES[u.type]) || null);
   if(!pool || !pool.length) return;
-  pushDialog(u, _pickLine(u, pool), { type:'select', tone:'neutral' });
+  const line = _pickLine(u, pool);
+  pushDialog(u, line, { type:'select', tone:'neutral' });
+  // voice bark: the clip is keyed by the SPEAKER (heroId or unit type) and the line's index
+  if(typeof VOICE!=='undefined'){
+    const idx = (u._lastLineIdx!=null) ? u._lastLineIdx : pool.indexOf(line);
+    VOICE.playBark(usedHero ? u.heroId : u.type, idx);
+  }
 }
-function sayLoreEvent(u, say, tone){
+// sayIdx (when provided) is the LORE_SAY index of a variable-free line → it has a pre-rendered clip.
+function sayLoreEvent(u, say, tone, sayIdx){
   if(!u || !say) return;
   pushDialog(u, say, { type:'lore', tone:tone||'neutral' });
+  if(typeof VOICE!=='undefined' && sayIdx!=null)
+    VOICE.playLore((u.hero && u.heroId) ? u.heroId : u.type, sayIdx);
 }
 
 // fired from refreshUI() each HUD tick — bark only on a genuinely NEW single-unit selection

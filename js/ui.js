@@ -357,8 +357,10 @@ function showCrawl(idx, done){
   scr.classList.remove('fast'); content.style.animation='none'; void content.offsetWidth;
   content.style.animation='';
   scr.style.display='flex';
+  if(typeof VOICE!=='undefined') VOICE.playCrawl(idx);   // rod-clone narration, synced to the scroll
   let finished=false;
   const finish=()=>{ if(finished) return; finished=true; clearTimeout(timer);
+    if(typeof VOICE!=='undefined') VOICE.stopCrawl();     // stop narration on skip OR auto-advance
     scr.style.display='none'; done&&done(); };
   document.getElementById('crawl-skip').onclick=finish;
   // auto-advance when the crawl scrolls off (anim 86.97s + 0.2s delay) — but keep it skippable
