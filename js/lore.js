@@ -125,6 +125,8 @@ function vetBuff(u, state){
 
 /* ---- memorial (module-global; survives newMap like carryoverVets) ---- */
 let fallenVets = [];
+// wipe the memorial for a brand-new campaign (called from startGame, alongside the carry resets)
+function resetFallen(){ fallenVets.length = 0; }
 function recordFallen(u){
   if(!u.lore) return;
   const d = buildDossier(u);

@@ -308,6 +308,7 @@ function startGame(idx){
   // don't bleed into this one (heroes persist WITHIN a run, not across a brand-new start).
   if(typeof setCarryover==='function') setCarryover([]);
   if(typeof resetHeroes==='function') resetHeroes();
+  if(typeof resetFallen==='function') resetFallen();   // {fallen} crawl var: empty memorial on a fresh start
   mapIndex=idx; showCrawl(idx, ()=>{ loadMap(idx); });
 }
 // Build a "jump to any Quarter" row on the title screen from the MAPS list.
@@ -346,7 +347,10 @@ function showCrawl(idx, done){
   const scr=document.getElementById('crawlScreen');
   document.getElementById('crawl-ep').textContent=cr.episode;
   document.getElementById('crawl-title').textContent=cr.title;
-  document.getElementById('crawl-text').textContent=cr.text;
+  const _ct=document.getElementById('crawl-text');
+  try { _ct.textContent = (typeof fillCrawl==='function')
+        ? fillCrawl(cr.text, typeof crawlVars==='function'?crawlVars():{}) : cr.text; }
+  catch(e){ _ct.textContent = cr.text; }   // never soft-lock the crawl on a templating/data error
   document.getElementById('crawl-intro').style.display = idx===0? 'block':'none';
   // restart the CSS animation by reflow
   const content=document.getElementById('crawl-content');

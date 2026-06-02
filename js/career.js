@@ -165,6 +165,59 @@ function resetHeroes(){ carryoverHeroes = []; }
 // rides the carryover and spawns at HQ, so map.js must NOT also spawn her as a captive again.)
 function heroIsCarried(name){ return carryoverHeroes.some(h=>h.heroId===name); }
 
+/* ---- opening-crawl contextual variables ----
+   MAPS[idx].crawl.text may weave in live campaign memory via {token}, {?key}...{/key}
+   (show if set) and {^key}...{/key} (fallback). Resolved in showCrawl (ui.js). */
+
+// "" / "A" / "A and B" / "A, B, and C"
+function joinNames(arr){
+  const a=(arr||[]).filter(Boolean);
+  if(a.length<=1) return a[0]||'';
+  if(a.length===2) return a[0]+' and '+a[1];
+  return a.slice(0,-1).join(', ')+', and '+a[a.length-1];
+}
+// cap a long list: first `max` names, then a "+N more" tail (keeps the crawl readable)
+function capNames(names, max){
+  if(names.length<=max) return names.slice();
+  const extra=names.length-max;
+  return names.slice(0,max).concat(extra===1?'one more':extra+' more');
+}
+// display name for a carried vet snapshot — mirrors buildCarryChooser (ui.js).
+// GUARD: buildDossier throws when lore is undefined (level-1 vets have none) → rank+role fallback.
+function vetName(v){
+  if(v && v.lore && typeof buildDossier==='function') return buildDossier(v).full;
+  return (careerTitle((v&&v.stars)||0)+' '+((v&&DEF[v.type]&&DEF[v.type].name)||'')).trim();
+}
+// contextual variables for the opening crawl, from current campaign memory (extensible)
+function crawlVars(){
+  const heroAlive=(id)=> typeof heroIsCarried==='function' && heroIsCarried(id);
+  const nino=heroAlive('Nino')?'NINO':'', biba=heroAlive('Biba')?'BIBA':'';
+  const cap=(typeof vetCarryCount==='function')?vetCarryCount():6;              // matches who spawnVets fields
+  const vetNames=(carryoverVets||[]).slice(0,cap).map(vetName).filter(Boolean); // Title Case, as-is
+  const fallenNames=(typeof fallenVets!=='undefined'?fallenVets:[]).map(f=>f.name).filter(Boolean);
+  return {
+    nino, biba,
+    vets:        joinNames(capNames(vetNames,4)),
+    vetCount:    vetNames.length,
+    party:       joinNames(capNames([nino,biba].filter(Boolean).concat(vetNames),5)),
+    fallen:      joinNames(capNames(fallenNames,4)),
+    fallenCount: fallenNames.length,
+    // future memory variables drop in here as one more key
+  };
+}
+// fill {token}s and {?key}/{^key} blocks. Blocks resolve first, looped so nesting works;
+// unknown {tokens} left intact; whitespace left by removed blocks tidied (paragraph \n\n kept).
+function fillCrawl(text, vars){
+  if(typeof text!=='string' || text.indexOf('{')<0) return text;   // fast path: eps I–X untouched
+  vars=vars||{}; const truthy=(k)=> !!vars[k]; let prev;
+  do { prev=text;
+    text=text.replace(/\{\?(\w+)\}([\s\S]*?)\{\/\1\}/g,(m,k,b)=> truthy(k)?b:'')
+             .replace(/\{\^(\w+)\}([\s\S]*?)\{\/\1\}/g,(m,k,b)=> truthy(k)?'':b);
+  } while(text!==prev);
+  text=text.replace(/\{(\w+)\}/g,(m,k)=> (k in vars)?String(vars[k]):m);
+  return text.replace(/[ \t]{2,}/g,' ').replace(/[ \t]+\n/g,'\n').replace(/\n{3,}/g,'\n\n').trim();
+}
+
 // Look up a hero's visual sprite override from the map configs (the single source of truth:
 // heroes[].sprite). Lets us derive it anywhere — for carried heroes whose map no longer lists
 // them, and to back-fill saves written before the field existed (see save.js). Matches by
