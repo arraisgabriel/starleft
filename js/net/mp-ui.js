@@ -74,7 +74,7 @@
     UI.asHost=!!opts.asHost; UI.code=opts.code; UI.ready=false;
     ['startScreen','mapScreen','loadScreen','mpScreen'].forEach(hideSub);
     if($('mp-room-code')) $('mp-room-code').textContent = opts.code;
-    if($('mp-room-title')) $('mp-room-title').textContent = opts.asHost ? 'Your Co-op Room' : 'Joining Room';
+    if($('mp-room-title')) $('mp-room-title').textContent = opts.asHost ? 'Multiverse Nexus' : 'Joining Universe';
     if($('mp-host-ctrls')) $('mp-host-ctrls').style.display = opts.asHost ? '' : 'none';
     if($('mp-ready-row'))  $('mp-ready-row').style.display  = opts.asHost ? 'none' : '';
     if($('mp-share')) $('mp-share').style.display = (navigator.share ? '' : 'none');
