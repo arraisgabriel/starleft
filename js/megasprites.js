@@ -58,7 +58,7 @@ const CATSPEC = {
   megabuilding: { w:6, h:6, overhang:1.30, needPassable:true  },
   mountain:     { w:7, h:5, overhang:1.38, needPassable:false },
   volcano:      { w:6, h:6, overhang:1.32, needPassable:false },
-  ruin:         { w:6, h:5, overhang:1.30, needPassable:true  },
+  ruin:         { w:6, h:5, overhang:1.30, needPassable:false  },
 };
 const MEGA_EDGE=2, MEGA_KEEPOUT=4, MEGA_GAP=1;   // margins (tiles)
 
