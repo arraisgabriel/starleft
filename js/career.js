@@ -48,7 +48,7 @@ function careerTitle(lvl){
 // (re)bake maxHp from base + level, preserving current HP ratio (or full-heal on request)
 function applyVetHp(u, fullHeal){
   const base = DEF[u.type].hp, ratio = fullHeal ? 1 : (u.maxHp ? u.hp/u.maxHp : 1);
-  u.maxHp = Math.round(base * (1 + CAREER.hpPerStar*(u.stars||0)));
+  u.maxHp = Math.round(base * (1 + CAREER.hpPerStar*(u.stars||0)) * (u.hubHpMul||1));
   u.hp = Math.round(u.maxHp * ratio);
 }
 
@@ -139,7 +139,9 @@ function spawnVets(state){
   const c=state.cfg.player;
   carryoverVets.slice(0, vetCarryCount()).forEach((v,i)=>{
     const u=mkUnit(state, v.type, 'player', c.x-2+(i%4), c.y-3-((i/4)|0));
-    u.stars=v.stars; u.xp=v.xp; if(v.lore) u.lore=v.lore; applyVetHp(u, true);
+    u.stars=v.stars; u.xp=v.xp; if(v.lore) u.lore=v.lore;
+    if(typeof hubApplyUpgrades==='function') hubApplyUpgrades(u);
+    applyVetHp(u, true);
   });
 }
 
@@ -237,11 +239,12 @@ function _placeHero(state, c, pos, type, heroId, stars, xp, lore, dossier, sprit
   const u=mkUnit(state, type, 'player', c.x+1+(pos%3), c.y+5+((pos/3)|0));
   u.stars=Math.max(0, Math.min(CAREER.maxStars, stars||0));
   u.xp=(xp!=null)?xp:CAREER.xpFor(u.stars);
-  applyVetHp(u, true);                                         // bake leveled max-HP and full-heal
   u.hero=true; u.heroId=heroId;
   const sp = sprite || heroSpriteFor(heroId, type);            // fall back to config if the carryover predates `sprite`
   if(sp) u.spriteType=sp;                                      // render his bespoke recolored strips
   u.lore = lore || { seed:(u.id||0)+1, events:[], fixed: dossier || { name:heroId } };
+  if(typeof hubApplyUpgrades==='function') hubApplyUpgrades(u);
+  applyVetHp(u, true);
 }
 
 // deploy heroes for the map being entered: every survivor carried from prior maps, PLUS any hero

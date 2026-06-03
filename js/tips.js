@@ -14,7 +14,7 @@ const GAME_TIPS = [
   "<b>Recruiters 🧑‍🏫 don't fight — they heal.</b> Tuck one or two behind your army and the whole squad lasts roughly twice as long.",
   "<b>Food Truck 🚚:</b> its flame cone shreds tightly-packed enemies — brutal against swarms, but weak against a few tough units.",
   "<b>Auditor 📊:</b> auto-deploys into a long-range siege cannon when enemies are near — park it behind your line to out-range turrets and clusters. It can't fire point-blank, so screen it.",
-  "<b>Air rules:</b> only ranged units, turrets, and the Founder Mech can hit flyers — a pure-melee army can't touch a Drugztore Delivery Drone or Bomber. Always keep some anti-air.",
+  "<b>Air rules:</b> only Auditors 📊, Founder Mechs 🦄, and Buzzword Bombers 🛩️ can hit flyers — everything else needs cover.",
   "<b>Founder Mech 🦄:</b> a slow, pricey wrecking ball that hits ground AND air. One or two anchor a deathball — just don't expect them to react quickly.",
   "<b>Tech tree:</b> People Ops 🎯 trains infantry; build The Garage 🔧 for vehicles, then a Launch Pad 🚀 (needs a Garage) for flyers. Climb it as your Funding grows.",
   "<b>Defend chokes</b> with Legal Team ⚖️ turrets, and let your HQ 🏢 chip attackers with its rooftop shot — a couple of turrets buy time to rally a counter-attack.",

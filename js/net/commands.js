@@ -9,32 +9,49 @@
   const NET = (window.NET = window.NET || {});
 
   /* ---------------- client → host capture (host/solo run directly) ---------------- */
+  function hubClientBlocked(state){
+    if(state && state.hub && LOCAL_CTRL!=='p1'){
+      toast('Only the host can operate the H.U.B.');
+      return true;
+    }
+    return false;
+  }
   function netCommand(state, wx, wy, target){
+    if(hubClientBlocked(state)) return;
     if(netRole!=='client') return commandUnits(state, wx, wy, target);
-    const ids  = state.selection.filter(e=>!e.dead && e.kind==='unit'     && isMine(e)).map(e=>e.id);
+    const ids  = state.selection.filter(e=>!e.dead && !e.storedIn && e.kind==='unit'     && isMine(e)).map(e=>e.id);
     const bids = state.selection.filter(e=>!e.dead && e.kind==='building' && isMine(e)).map(e=>e.id);
     if(!ids.length && !bids.length) return;
     MP.send('mpcmd', { k:'command', from:LOCAL_CTRL, wx, wy, tid: target ? target.id : null, ids, bids });
   }
   function netPlace(state, type, tx, ty, builder){
+    if(hubClientBlocked(state)) return;
     if(netRole!=='client') return placeBuilding(state, type, tx, ty, builder);
     MP.send('mpcmd', { k:'place', from:LOCAL_CTRL, type, tx, ty, bid: builder ? builder.id : null });
   }
   function netStop(){
+    if(hubClientBlocked(G)) return;
     if(netRole!=='client') return stopSelection();
     const ids = G.selection.filter(e=>!e.dead && e.kind==='unit' && isMine(e)).map(e=>e.id);
     if(ids.length) MP.send('mpcmd', { k:'stop', from:LOCAL_CTRL, ids });
   }
   function netTrain(state, building, type){
+    if(hubClientBlocked(state)) return;
     if(netRole!=='client') return tryTrain(state, building, type);
     if(building && isMine(building)) MP.send('mpcmd', { k:'train', from:LOCAL_CTRL, bid:building.id, type });
   }
   function netCancelTrain(state, building, index){
+    if(hubClientBlocked(state)) return;
     if(netRole!=='client') return cancelTrain(state, building, index);
     if(building && isMine(building)) MP.send('mpcmd', { k:'cancel', from:LOCAL_CTRL, bid:building.id, index });
   }
+  function netReleaseStored(state, building, unitId){
+    if(hubClientBlocked(state)) return;
+    if(netRole!=='client') return releaseStoredUnit(state, building, unitId);
+    if(building && isMine(building)) MP.send('mpcmd', { k:'releaseStored', from:LOCAL_CTRL, bid:building.id, uid:unitId });
+  }
   window.netCommand=netCommand; window.netPlace=netPlace; window.netStop=netStop;
-  window.netTrain=netTrain; window.netCancelTrain=netCancelTrain;
+  window.netTrain=netTrain; window.netCancelTrain=netCancelTrain; window.netReleaseStored=netReleaseStored;
 
   /* ---------------- host: validate + replay a remote command ---------------- */
   function idIndex(state){ const m=new Map(); for(const e of state.entities) if(!e.dead) m.set(e.id,e); return m; }
@@ -56,10 +73,11 @@
     if(netRole!=='host' || !G) return;
     const ctrl = NET.peerCtrl[peerId];
     if(!ctrl || cmd.from!==ctrl) return;               // anti-spoof: a peer may only act as its own controller
+    if(G.hub && ctrl!=='p1') return;                    // HUB belongs to the host/P1 only
     const byId = idIndex(G);
 
     if(cmd.k==='command'){
-      const mine = (cmd.ids||[]).map(id=>byId.get(id)).filter(e=>e&&!e.dead&&e.owner==='player'&&(e.ctrl||'p1')===ctrl);
+      const mine = (cmd.ids||[]).map(id=>byId.get(id)).filter(e=>e&&!e.dead&&!e.storedIn&&e.owner==='player'&&(e.ctrl||'p1')===ctrl);
       const bmine= (cmd.bids||[]).map(id=>byId.get(id)).filter(e=>e&&!e.dead&&e.owner==='player'&&(e.ctrl||'p1')===ctrl);
       if(!mine.length && !bmine.length) return;
       const target = cmd.tid!=null ? (byId.get(cmd.tid)||null) : null;
@@ -83,6 +101,11 @@
     } else if(cmd.k==='cancel'){
       const b=byId.get(cmd.bid); if(!b||(b.ctrl||'p1')!==ctrl) return;
       quiet(()=> cancelTrain(G, b, cmd.index));
+    } else if(cmd.k==='releaseStored'){
+      const b=byId.get(cmd.bid), u=byId.get(cmd.uid);
+      if(!b||b.owner!=='player'||b.type!=='hq'||(b.ctrl||'p1')!==ctrl) return;
+      if(!u||u.owner!=='player'||u.storedIn!==b.id) return;
+      quiet(()=> releaseStoredUnit(G, b, cmd.uid));
     }
   };
 

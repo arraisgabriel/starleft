@@ -108,6 +108,26 @@ html,body{ overscroll-behavior:none; -webkit-touch-callout:none; }
 .cmd-btn.disabled { opacity:.4; cursor:not-allowed; }
 .cmd-btn .cost { font-size:10px; color:#ffd86b; }
 .cmd-btn .emoji { font-size:20px; }
+.mdc-panel{
+  flex:1 1 100%; min-width:0; display:flex; flex-direction:column; gap:6px;
+  padding:8px; border:1px solid #5c2630; border-left:3px solid #ff5a5a; border-radius:3px;
+  background:linear-gradient(135deg, rgba(44,14,18,.92), rgba(17,8,11,.86));
+  box-shadow:0 2px 8px rgba(0,0,0,.45), inset 0 0 16px rgba(255,60,60,.04);
+}
+.mdc-title{
+  color:#ffe1e4; font-size:11px; font-weight:800; letter-spacing:.7px; text-transform:uppercase;
+}
+.mdc-list{ display:flex; flex-direction:column; gap:5px; max-height:138px; overflow:auto; }
+.mdc-empty{ color:#9e7780; font-size:11px; font-style:italic; padding:4px 0; }
+.mdc-row{
+  appearance:none; -webkit-appearance:none; width:100%; border:1px solid #4e2028; border-radius:3px;
+  background:rgba(18,8,11,.72); color:#ffd9dd; cursor:pointer; display:grid;
+  grid-template-columns:minmax(0,1fr) auto; gap:2px 8px; align-items:center; padding:6px 7px; text-align:left;
+}
+.mdc-row:hover{ border-color:#ff7a7a; color:#fff; background:rgba(72,20,28,.82); }
+.mdc-unit-name{ min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:12px; font-weight:700; }
+.mdc-unit-meta{ min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:#b89aa0; font-size:10px; grid-column:1; }
+.mdc-remove{ color:#ff8c8c; font-size:15px; font-weight:900; grid-column:2; grid-row:1 / span 2; }
 
 /* ---------- Production queue (in the selected building's info panel) ---------- */
 #prod-queue { display:flex; flex-wrap:wrap; gap:6px; margin-top:8px; }
@@ -125,6 +145,11 @@ html,body{ overscroll-behavior:none; -webkit-touch-callout:none; }
 .pq-card .pq-x:hover { background:#c0392b; color:#fff; }
 .pq-card .pq-prog { position:absolute; left:0; right:0; bottom:0; height:3px; background:rgba(0,0,0,.45); }
 .pq-card .pq-prog>i { display:block; height:100%; width:0; background:#ff7676; }
+.pq-card.pq-stored{ cursor:pointer; padding:0; color:inherit; font:inherit; border-color:#2f7d68; border-left-color:#55d6a4;
+  background:linear-gradient(135deg, rgba(20,62,58,.92), rgba(10,24,24,.84)); }
+.pq-card.pq-stored:hover{ border-color:#78f0bf; box-shadow:0 0 12px rgba(85,214,164,.32), inset 0 0 14px rgba(85,214,164,.08); }
+.pq-card .pq-out{ position:absolute; right:2px; bottom:1px; color:#caffeb; font-size:13px;
+  line-height:1; text-shadow:0 1px 2px rgba(0,0,0,.8); pointer-events:none; }
 
 /* on-screen control cluster — hidden on desktop, shown on touch / narrow */
 /* single horizontal row that scrolls sideways if it overflows — never wraps to a 2nd line */

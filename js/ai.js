@@ -10,7 +10,7 @@ function enemyAI(state,dt){
   // enemy barracks auto-produce soldiers (free) up to a cap that grows over time
   // `guard` units (Episode X corridor/cell squads) are excluded: they don't count toward the
   // production cap and are never swept into a wave, so they hold their post instead of marching off.
-  const enemyUnits = state.entities.filter(e=>e.owner==='enemy'&&e.kind==='unit'&&!e.dead&&!e.guard);
+  const enemyUnits = state.entities.filter(e=>e.owner==='enemy'&&e.kind==='unit'&&!e.dead&&!e.storedIn&&!e.guard);
   const enemyBarracks = state.entities.filter(e=>e.owner==='enemy'&&e.type==='barracks'&&!e.dead&&!e.constructing);
   // smaller standing force early, ramps up to a fixed ceiling (so a massed
   // player army can eventually overwhelm them instead of being out-scaled forever)
@@ -84,11 +84,29 @@ function enemyAI(state,dt){
 // Fortify the enemy base most in need: pick the HQ with the fewest nearby
 // turrets (below the per-base cap) and raise one on a free tile facing the
 // player. Built unmanned (self-constructs). Works for any number of bases.
+function playerTargetAnchors(state){
+  const byCtrl={};
+  for(const e of state.entities){
+    if(e.dead||e.owner!=='player') continue;
+    if(e.kind==='unit' && e.storedIn) continue;
+    if(e.kind!=='unit' && e.kind!=='building') continue;
+    const ctrl=e.ctrl||'p1';
+    const pri=(e.kind==='building' && e.type==='hq') ? 3 : (e.kind==='building' ? 2 : 1);
+    if(!byCtrl[ctrl] || pri>byCtrl[ctrl].pri) byCtrl[ctrl]={ctrl, pri, entity:e};
+  }
+  return Object.keys(byCtrl).sort().map(k=>byCtrl[k]);
+}
+function nearestPlayerAnchor(state, x, y){
+  let best=null, bd=1e18;
+  for(const a of playerTargetAnchors(state)){
+    const e=a.entity, d=(e.x-x)*(e.x-x)+(e.y-y)*(e.y-y);
+    if(d<bd){ bd=d; best=a; }
+  }
+  return best;
+}
 function enemyFortify(state, perBaseTarget){
   const hqs = state.entities.filter(e=>e.owner==='enemy'&&e.type==='hq'&&!e.dead);
   if(!hqs.length) return;
-  const phq = state.entities.find(e=>e.owner==='player'&&e.type==='hq'&&!e.dead)
-           || state.entities.find(e=>e.owner==='player'&&e.kind==='building'&&!e.dead);
   let chosen=null, fewest=1e9;
   for(const hq of hqs){
     const near = state.entities.filter(e=>e.owner==='enemy'&&e.type==='turret'&&!e.dead && Math.abs(e.tx-hq.tx)<=8 && Math.abs(e.ty-hq.ty)<=8).length;
@@ -96,6 +114,8 @@ function enemyFortify(state, perBaseTarget){
   }
   if(!chosen) return;
   const cx=chosen.tx, cy=chosen.ty;
+  const pa = nearestPlayerAnchor(state, chosen.x, chosen.y);
+  const phq = pa && pa.entity;
   let best=null, bestScore=-1e9;
   for(let r=2;r<=6;r++) for(let y=-r;y<=r;y++) for(let x=-r;x<=r;x++){
     if(Math.max(Math.abs(x),Math.abs(y))!==r) continue;       // only the ring at radius r
@@ -115,10 +135,7 @@ function enemyFortify(state, perBaseTarget){
   if(best) mkBuilding(state,'turret','enemy',best.tx,best.ty,false);
 }
 function pickPlayerTarget(state){
-  let hq=state.entities.find(e=>e.owner==='player'&&e.type==='hq'&&!e.dead);
-  if(hq) return hq;
-  let b=state.entities.find(e=>e.owner==='player'&&e.kind==='building'&&!e.dead);
-  if(b) return b;
-  return state.entities.find(e=>e.owner==='player'&&e.kind==='unit'&&!e.dead);
+  const anchors=playerTargetAnchors(state);
+  if(!anchors.length) return null;
+  return anchors[(state.waveCount||0)%anchors.length].entity;
 }
-

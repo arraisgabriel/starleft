@@ -92,6 +92,7 @@
       ui('Peers');
     });
     MP.on('mpstart', (msg)=> beginClientMatch(msg.mapIndex|0, msg.mode));
+    MP.on('mphub', (msg)=> beginClientHub(msg));
     MP.on('mpbye', (msg)=>{ if(msg && msg.reason==='full'){ toast('Room is full'); mpLeave(); } else mpHostGone('left'); });
     MP.onLeave(()=> mpHostGone('left'));                  // Trystero peer-leave (clean close)
     NET.onHostLost    = ()=> mpHostGone('lost');          // watchdog: snapshots stopped (crash / network drop)
@@ -100,6 +101,13 @@
     NET.onFullApplied = ()=>{
       if(running) return;          // one-shot: only the FIRST full "drops you in" — never re-centre/re-toast later
       running = true;
+      if(G && G.hub){
+        if(typeof clampCam==='function') clampCam(G);
+        if(typeof refreshUI==='function') refreshUI();
+        ui('EnterGame');
+        toast('Viewing host H.U.B. — P1 controls upgrades and launch.');
+        return;
+      }
       // centre the joiner's camera on their own (p2) base
       const o = G._coopOrigins && G._coopOrigins.p2;
       if(o && typeof clampCam==='function'){ const z=G.zoom||1; G.camX=o.x*TILE-(innerWidth/z)/2; G.camY=o.y*TILE-(innerHeight/z)/2; clampCam(G); }
@@ -120,6 +128,19 @@
     if(NET.resetWatchdog) NET.resetWatchdog();        // start the host-liveness clock fresh for this match
     if(typeof clampCam==='function') clampCam(G);
     if(NET.flushPendingFull) NET.flushPendingFull();  // a full snapshot may have raced ahead of 'mpstart'
+    ui('Syncing');
+  }
+  function beginClientHub(msg){
+    S.started=true; S.mode=(msg&&msg.mode)||S.mode; S.mapIndex=(msg&&msg.mapIndex)|0;
+    netRole='client'; LOCAL_CTRL='p2'; pendingPlayers=2; mapIndex=S.mapIndex;
+    if(msg && msg.campaign && typeof deserializeHubCampaign==='function') deserializeHubCampaign(msg.campaign);
+    G = newHubMap();
+    running = false;
+    if(NET.resetWatchdog) NET.resetWatchdog();
+    if(typeof resetDialogs==='function') resetDialogs();
+    if(typeof syncHud==='function') syncHud();
+    if(typeof clampCam==='function') clampCam(G);
+    if(NET.flushPendingFull) NET.flushPendingFull();
     ui('Syncing');
   }
 
@@ -173,5 +194,12 @@
     }
     mpHostStart(S.mapIndex+1, 'campaign');
     return true;
+  };
+  window.mpHostEnterHub = function(){
+    if(S.role!=='host') return;
+    S.mapIndex = mapIndex|0;
+    NET.tick = 0; NET._sAcc = 0; NET._kAcc = 0;
+    MP.send('mphub', { mapIndex:S.mapIndex, mode:S.mode, campaign: typeof serializeHubCampaign==='function' ? serializeHubCampaign() : null });
+    if(S.peerId && NET.sendFull) NET.sendFull(S.peerId);
   };
 })();

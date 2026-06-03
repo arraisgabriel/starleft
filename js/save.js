@@ -8,6 +8,20 @@ const SAVE_PREFIX  = 'starleft_save_';
 const AUTO_KEY     = SAVE_PREFIX + 'auto';
 const MANUAL_CAP   = 8;             // newest 8 manual saves kept; oldest evicted
 
+function isSaveBlob(d){ return !!(d && typeof d==='object' && Array.isArray(d.entities)); }
+function saveVersionOk(d){ return d.v==null || d.v<=SAVE_VERSION; }
+function saveMapIndex(d){
+  const idx=d && Number.isFinite(+d.mapIndex) ? (+d.mapIndex|0) : 0;
+  return Math.max(0, Math.min(idx, MAPS.length-1));
+}
+function saveIsHubMap(d){
+  if(!d || typeof d!=='object') return false;
+  return !!(d.hubMap || d.hub || (d.cfg && d.cfg.hub) || (Array.isArray(d.entities) && d.entities.some(e=>e && e.hubPoi)));
+}
+function hubSaveCfg(){
+  return {name:'H.U.B. — Hurban Ultra Buildings', enemyName:'', objective:'Spend M3rit$, stage units at an MDC, then launch the next episode.', hub:true, player:{x:60,y:58}};
+}
+
 /* ---------- entity cross-reference (de)serialization ----------
    Within an entity's fields the only objects that carry a numeric `id` are
    references to OTHER entities (cmd.target, cmd.mine, cmd.building, autoTarget,
@@ -38,7 +52,7 @@ function serializeEntity(e){
 // _cmdSig/placing (transient UI), and the fields handled specially below.
 // feat[] is the per-cell topography mask — rebuilt from features[] on load (keeps saves small).
 // waterDepth: a renderer-only distance-to-shore field (js/water.js), rebuilt from tiles[] on load.
-const SKIP = {cfg:1, visible:1, _cmdSig:1, placing:1, sprint:1, entities:1, selection:1, groups:1, blocked:1, explored:1, feat:1, waterDepth:1};
+const SKIP = {cfg:1, visible:1, _cmdSig:1, placing:1, sprint:1, entities:1, selection:1, groups:1, blocked:1, explored:1, feat:1, waterDepth:1, hubPois:1};
 function serializeGame(){
   const s={};
   for(const k in G){ if(!SKIP[k]) s[k]=G[k]; }       // primitives + JSON-safe arrays (tiles/biome/megaSprites)
@@ -53,13 +67,18 @@ function serializeGame(){
   // metadata (top-level; not part of G)
   s.v=SAVE_VERSION; s.mapIndex=mapIndex; s.savedAt=Date.now();
   s.mapName=G.cfg.name; s.gameTime=G.time;
+  s.hubMap=!!G.hub;
+  if(typeof serializeHubCampaign==='function') s.campaign=serializeHubCampaign();
   return s;
 }
 function deserializeGame(s){
   const g={};
-  const META={v:1, mapIndex:1, savedAt:1, mapName:1, gameTime:1};
+  const META={v:1, mapIndex:1, savedAt:1, mapName:1, gameTime:1, hubMap:1, campaign:1};
+  const idx=saveMapIndex(s), isHub=saveIsHubMap(s);
   for(const k in s){ if(!SKIP[k] && !META[k]) g[k]=s[k]; }
-  g.cfg = scaleCfg(MAPS[s.mapIndex]);   // match the scaled cfg newMap() produces
+  if(typeof deserializeHubCampaign==='function') deserializeHubCampaign(s.campaign);
+  g.hub = isHub;
+  g.cfg = isHub ? hubSaveCfg() : scaleCfg(MAPS[idx]);   // match the scaled cfg newMap() produces
   // legacy saves (pre-co-op) carried flat gold/supply/supplyCap/gold_collected — fold them into the
   // p1 economy pool so they keep loading; recomputeSupply below recomputes supply/cap from entities.
   if(!g.eco){ g.eco = { p1: { gold:(s.gold||0), supply:0, supplyCap:0, gold_collected:(s.gold_collected||0) } }; }
@@ -76,6 +95,10 @@ function deserializeGame(s){
   g.entities = s.entities.map(e=>Object.assign({}, e));
   const byId = new Map(g.entities.map(e=>[e.id, e]));
   g.entities.forEach(e=>resolveRefs(e, byId));        // re-link cross-refs in place
+  if(g.hub){
+    g.hubPois={}; g.entities.forEach(e=>{ if(e.hubPoi) g.hubPois[e.hubPoi.id]=e; });
+    if(typeof hubRestorePoiVisuals==='function') hubRestorePoiVisuals(g);
+  }
   // funding nodes carry a 3x3 footprint; feat[] was rebuilt from features[] only, so
   // restamp each node's mask (blocked[] was serialized and is already correct).
   if(typeof markFundingNode==='function') g.entities.forEach(e=>{ if(e.type==='goldmine'&&!e.dead) markFundingNode(g, e); });
@@ -84,7 +107,7 @@ function deserializeGame(s){
   if(typeof heroSpriteFor==='function') g.entities.forEach(e=>{
     if(e.hero && !e.spriteType){ const sp=heroSpriteFor(e.heroId, e.type); if(sp) e.spriteType=sp; }
   });
-  g.selection = (s.selection||[]).map(id=>byId.get(id)).filter(Boolean);
+  g.selection = (s.selection||[]).map(id=>byId.get(id)).filter(e=>e && !e.dead && !e.storedIn);
   g.selection.forEach(e=>e.selected=true);
   g.groups={}; for(const k in (s.groups||{})) g.groups[k]=s.groups[k].map(id=>byId.get(id)).filter(Boolean);
   // rebuild per-unit control-group tags (Sets don't serialize) so the on-unit badge shows after load
@@ -105,8 +128,8 @@ function listSaves(){
     const key=localStorage.key(i);
     if(!key || key.indexOf(SAVE_PREFIX)!==0) continue;
     let d; try{ d=JSON.parse(localStorage.getItem(key)); }catch(_){ continue; }
-    if(!d || d.v==null) continue;
-    out.push({key, auto:key===AUTO_KEY, mapName:d.mapName, gameTime:d.gameTime, savedAt:d.savedAt||0, mapIndex:d.mapIndex});
+    if(!isSaveBlob(d) || !saveVersionOk(d)) continue;
+    out.push({key, auto:key===AUTO_KEY, mapName:d.mapName || (d.cfg&&d.cfg.name) || 'Quarter', gameTime:d.gameTime||d.time||0, savedAt:d.savedAt||0, mapIndex:saveMapIndex(d)});
   }
   out.sort((a,b)=> b.savedAt-a.savedAt);     // most recently saved first (autosave included in order)
   return out;
@@ -139,8 +162,10 @@ function loadGame(key){
   if(netRole!=='solo'){ toast('Loading is disabled in co-op'); return; }
   let d; try{ d=JSON.parse(localStorage.getItem(key)); }catch(_){ d=null; }
   if(!d){ toast('Save not found'); return; }
-  if(d.v!==SAVE_VERSION){ toast('Incompatible save'); return; }
-  G=deserializeGame(d); mapIndex=d.mapIndex|0;
+  if(!isSaveBlob(d)){ toast('Not a STARLEFT save'); return; }
+  if(!saveVersionOk(d)){ toast('Incompatible save'); return; }
+  if(typeof MUSIC!=='undefined') MUSIC.leaveMenu();
+  G=deserializeGame(d); mapIndex=saveMapIndex(d);
   ['startScreen','mapScreen','docScreen','crawlScreen','endScreen','loadScreen']
     .forEach(id=>{ const el=document.getElementById(id); if(el) el.style.display='none'; });
   if(typeof resetDialogs==='function') resetDialogs(); syncHud(); clampCam(G); computeFog(G); refreshUI(); running=true;
@@ -200,8 +225,8 @@ function importSaveFile(file){
   r.onerror=()=>toast('Could not read file');
   r.onload=()=>{
     let d=null; try{ d=JSON.parse(r.result); }catch(_){ toast('Not a valid save file'); return; }
-    if(!d || typeof d!=='object' || d.v==null || !Array.isArray(d.entities)){ toast('Not a STARLEFT save'); return; }
-    if(d.v!==SAVE_VERSION){ toast('Incompatible save version'); return; }
+    if(!isSaveBlob(d)){ toast('Not a STARLEFT save'); return; }
+    if(!saveVersionOk(d)){ toast('Incompatible save version'); return; }
     try{
       enforceCap();               // respect the 8-manual-slot FIFO cap (same as saveGame)
       d.savedAt=Date.now();       // re-stamp so the import lands at the top & survives the cap

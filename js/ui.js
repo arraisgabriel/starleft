@@ -11,7 +11,7 @@ const elDossierBtn=document.getElementById('sel-dossier');
 function refreshUI(){
   if(!G) return;
   const _eco=playerEco(G, LOCAL_CTRL);              // HUD shows THIS client's own pool
-  document.getElementById('gold').textContent = _eco.gold|0;
+  document.getElementById('gold').textContent = (G.hub && typeof CAMPAIGN!=='undefined') ? ('M3$ '+(CAMPAIGN.m3|0)) : (_eco.gold|0);
   document.getElementById('supply').textContent = _eco.supply+'/'+_eco.supplyCap;
   document.getElementById('mapname').textContent = G.cfg.name;
   document.getElementById('objective').textContent = G.cfg.objective;
@@ -53,6 +53,9 @@ function refreshUI(){
       if(e.type==='worker' && e.carrying>0) extra=`carrying ${e.carrying} 💰`;
     } else if(e.prodQueue&&e.prodQueue.length){
       extra=`hiring ${DEF[e.prodQueue[0]].name} (${e.prodQueue.length} queued)`;
+    } else if(e.type==='hq' && typeof hqStoredUnits==='function'){
+      const stored=hqStoredUnits(G,e).length;
+      if(stored) extra=`${stored} unit${stored===1?'':'s'} stored`;
     }
     if(d.flavor) extra+=(extra?'<br>':'')+`<span style="color:#9e7780;font-style:italic;">${d.flavor}</span>`;
     elDesc.innerHTML=extra;
@@ -78,28 +81,38 @@ function refreshUI(){
 // progress bar and each idle sprite refresh every call.
 function updateProdQueue(b){
   const wrap=document.getElementById('prod-queue'); if(!wrap) return;
-  if(!b || !b.prodQueue || !b.prodQueue.length){
+  const q=(b && b.prodQueue) ? b.prodQueue : [];
+  const stored=(b && b.type==='hq' && typeof hqStoredUnits==='function') ? hqStoredUnits(G,b) : [];
+  if(!b || (!q.length && !stored.length)){
     if(wrap._sig){ wrap.innerHTML=''; wrap._sig=''; }
     return;
   }
-  const sig=b.id+':'+b.prodQueue.join(',');
-  if(sig!==wrap._sig){ wrap._sig=sig; buildProdCards(wrap,b); }
-  const cards=wrap.children;
-  for(let i=0;i<cards.length;i++){
-    drawCardSprite(cards[i], b.prodQueue[i], b.owner);
-    const pi=cards[i].querySelector('.pq-prog>i');
-    if(pi) pi.style.width = (i===0 && b.prodTotal>0 ? Math.min(100,(b.prodTime/b.prodTotal*100))|0 : 0)+'%';
+  const sig=b.id+':q:'+q.join(',')+':s:'+stored.map(u=>u.id).join(',');
+  if(sig!==wrap._sig){ wrap._sig=sig; buildProdCards(wrap,b,stored); }
+  for(const card of wrap.children){
+    drawCardSprite(card, card._type, card._owner);
+    const pi=card.querySelector('.pq-prog>i');
+    if(pi) pi.style.width = (card._queueIndex===0 && b.prodTotal>0 ? Math.min(100,(b.prodTime/b.prodTotal*100))|0 : 0)+'%';
   }
 }
-function buildProdCards(wrap,b){
+function buildProdCards(wrap,b,stored){
   wrap.innerHTML='';
   b.prodQueue.forEach((type,i)=>{
     const card=document.createElement('div'); card.className='pq-card'; card.title='Cancel '+(DEF[type].name||type);
+    card._type=type; card._owner=b.owner; card._queueIndex=i;
     const cv=document.createElement('canvas'); cv.width=40; cv.height=40; cv.className='pq-spr'; card.appendChild(cv);
     if(i===0){ const pr=document.createElement('div'); pr.className='pq-prog'; pr.innerHTML='<i></i>'; card.appendChild(pr); }
     const x=document.createElement('button'); x.className='pq-x'; x.textContent='✕';
     x.onclick=(ev)=>{ ev.stopPropagation(); (typeof netCancelTrain==='function'?netCancelTrain:cancelTrain)(G, b, [...wrap.children].indexOf(card)); refreshUI(); };
     card.appendChild(x);
+    wrap.appendChild(card);
+  });
+  stored.forEach(u=>{
+    const card=document.createElement('button'); card.className='pq-card pq-stored'; card.title='Release '+(DEF[u.type].name||u.type);
+    card._type=u.type; card._owner=u.owner; card._queueIndex=-1;
+    const cv=document.createElement('canvas'); cv.width=40; cv.height=40; cv.className='pq-spr'; card.appendChild(cv);
+    const out=document.createElement('span'); out.className='pq-out'; out.textContent='↩'; card.appendChild(out);
+    card.onclick=(ev)=>{ ev.stopPropagation(); (typeof netReleaseStored==='function'?netReleaseStored:releaseStoredUnit)(G,b,u.id); };
     wrap.appendChild(card);
   });
 }
@@ -119,6 +132,7 @@ function drawCardSprite(card,type,owner){
 
 // Signature of which command buttons should be shown for the current selection.
 function cmdSig(sel){
+  if(G && G.hub) return 'hub:'+sel.map(e=>e.id+':'+(e.hubPoi?e.hubPoi.kind:'')+':'+(e.type||'')).join(',')+':'+(typeof CAMPAIGN!=='undefined'?CAMPAIGN.m3:0)+':'+((typeof CAMPAIGN!=='undefined'&&CAMPAIGN.dispatch&&CAMPAIGN.dispatch.staged)||[]).join('|');
   if(!sel.length) return 'empty';
   const owned=sel.filter(e=>e.owner==='player');
   if(!owned.length) return 'enemy';
@@ -135,6 +149,7 @@ function selectedBuilding(type){
 }
 function buildCommands(sel){
   elCmd.innerHTML='';
+  if(G && G.hub){ buildHubCommands(sel); return; }
   const owned=sel.filter(e=>e.owner==='player');
   if(!owned.length){ elCmd.classList.remove('has-cmds'); syncCmdLine(); return; }
   const hasFinished=t=>G.entities.some(e=>!e.dead&&e.owner==='player'&&e.type===t&&!e.constructing);
@@ -174,6 +189,64 @@ function buildCommands(sel){
     addCmd('🛑','Stop',null,stopSelection,'cmd-stop');
   syncCmdLine();
 }
+function buildHubCommands(sel){
+  if(typeof hubCanAct==='function' && !hubCanAct()){
+    elCmd.classList.toggle('has-cmds', false);
+    syncCmdLine();
+    return;
+  }
+  const owned=sel.filter(e=>e.owner==='player');
+  const poi=sel.find(e=>e.hubPoi);
+  const unit=owned.find(e=>e.kind==='unit');
+  if(poi && poi.hubPoi.kind==='condo'){
+    const c=CAMPAIGN.condos[poi.hubPoi.id], lvl=(c&&c.level)||0, cost=HUB.condoCosts[lvl];
+    addCmd('🏙️','Upgrade Condo',cost==null?null:cost,()=>hubUpgradeSelectedCondo());
+  }
+  if(poi && poi.hubPoi.kind==='mdc') buildHubMdcMenu(poi);
+  if(poi && poi.hubPoi.kind==='ultra') addCmd('📈','Speculate',HUB.gambleStake,()=>hubGamble());
+  if(unit){
+    const key=hubUnitKey(unit), up=(CAMPAIGN.upgrades[key]||{}), il=up.implantLevel||0;
+    addCmd('🧬','Implant',HUB.implantCosts[il]==null?null:HUB.implantCosts[il],()=>hubUpgradeSelectedUnit('implant'));
+    addCmd('🧥','Style',up.styleId?null:HUB.styleCost,()=>hubUpgradeSelectedUnit('style'));
+    addCmd('🎓','Academy',up.academyVisit===CAMPAIGN.visit?null:HUB.academyCost,()=>hubUpgradeSelectedUnit('academy'));
+  }
+  elCmd.classList.toggle('has-cmds', elCmd.children.length>0);
+  syncCmdLine();
+}
+function buildHubMdcMenu(poi){
+  const panel=document.createElement('div');
+  panel.className='mdc-panel';
+  const title=document.createElement('div');
+  title.className='mdc-title';
+  title.textContent=(poi&&poi.hubPoi&&poi.hubPoi.name)||'Mission Dispatch Center';
+  panel.appendChild(title);
+
+  const list=document.createElement('div');
+  list.className='mdc-list';
+  const units=(typeof hubEnlistedUnits==='function') ? hubEnlistedUnits(G) : [];
+  if(!units.length){
+    const empty=document.createElement('div');
+    empty.className='mdc-empty';
+    empty.textContent='No enlisted units';
+    list.appendChild(empty);
+  } else {
+    units.forEach(u=>{
+      const row=document.createElement('button');
+      row.className='mdc-row';
+      row.title='Remove from dispatch';
+      const name=(u.heroId || (u.lore&&typeof buildDossier==='function' ? buildDossier(u).full : (DEF[u.type]&&DEF[u.type].name)||u.type));
+      const nm=document.createElement('span'); nm.className='mdc-unit-name'; nm.textContent=name;
+      const meta=document.createElement('span'); meta.className='mdc-unit-meta'; meta.textContent='★ '+(u.stars||0)+' · '+((DEF[u.type]&&DEF[u.type].name)||u.type);
+      const rem=document.createElement('span'); rem.className='mdc-remove'; rem.textContent='×';
+      row.appendChild(nm); row.appendChild(meta); row.appendChild(rem);
+      row.onclick=ev=>{ ev.stopPropagation(); if(typeof hubReleaseFromMdc==='function') hubReleaseFromMdc(hubUnitKey(u)); };
+      list.appendChild(row);
+    });
+  }
+  panel.appendChild(list);
+  elCmd.appendChild(panel);
+  addCmd('🚀','DISPATCH',null,()=>hubDispatchNextEpisode());
+}
 // Stop = hold position: cancel orders/motion for every selected player unit.
 function stopSelection(){
   if(!G) return;
@@ -193,7 +266,7 @@ function syncCmdLine(){
 // Keep the affordability dimming fresh without destroying (and re-creating) buttons.
 function updateAffordability(){
   const kids=elCmd.children; if(!kids) return;
-  const _g=playerEco(G, LOCAL_CTRL).gold;
+  const _g=(G && G.hub && typeof CAMPAIGN!=='undefined') ? CAMPAIGN.m3 : playerEco(G, LOCAL_CTRL).gold;
   for(const b of kids){ if(b._cost!=null) b.classList.toggle('disabled', _g < b._cost); }
 }
 // HQ has cost 0 in DEF (starting), but expanding should cost something:
@@ -210,7 +283,8 @@ function tryPlaceFixed(type){
 function addCmd(emoji,label,cost,fn,extraClass){
   const b=document.createElement('div'); b.className='cmd-btn'+(extraClass?' '+extraClass:'');
   b._cost = cost;                              // used by updateAffordability()
-  if(cost!=null && playerEco(G, LOCAL_CTRL).gold<cost) b.classList.add('disabled');
+  const funds=(G && G.hub && typeof CAMPAIGN!=='undefined') ? CAMPAIGN.m3 : playerEco(G, LOCAL_CTRL).gold;
+  if(cost!=null && funds<cost) b.classList.add('disabled');
   b.innerHTML=`<span class="emoji">${emoji}</span><span>${label}</span>${cost!=null?`<span class="cost">${cost}🪙</span>`:''}`;
   b.onclick=()=>{ fn(); refreshUI(); };
   elCmd.appendChild(b);
@@ -238,10 +312,15 @@ function updateEventsBadge(){
     el.textContent = txt; el.style.display = disp;
   });
 }
-function toast(msg){
+function toast(msg,ms){
   const t=document.getElementById('toast'); t.textContent=msg; t.classList.remove('event'); t.classList.add('show');
-  clearTimeout(toastTimer); toastTimer=setTimeout(()=>t.classList.remove('show'),1800);
+  clearTimeout(toastTimer); toastTimer=null;
+  if(ms!==0) toastTimer=setTimeout(()=>t.classList.remove('show'),ms==null?1800:ms);
   logEvent(msg,false);
+}
+function clearToast(){
+  const t=document.getElementById('toast'); if(!t) return;
+  clearTimeout(toastTimer); toastTimer=null; t.classList.remove('show');
 }
 // richer, longer-lived toast for life-events & obituaries (multi-line; allows HTML).
 // Optional `say` is the unit's spoken reaction — logged for the Events panel (not the toast).
@@ -255,7 +334,10 @@ function eventToast(html,ms=9000,say){
    GAME FLOW
    ===================================================================== */
 // Show / hide a menu sub-screen (map selection, documentation)
-function showSub(id){ const el=document.getElementById(id); if(el) el.style.display='flex'; }
+function inPregameMenu(){ return !(G && running); }
+function showSub(id){ const el=document.getElementById(id); if(el) el.style.display='flex';
+  if(typeof MUSIC!=='undefined' && inPregameMenu()) MUSIC.enterMenu();
+}
 function hideSub(id){ const el=document.getElementById(id); if(el) el.style.display='none'; }
 
 // career v3: per-unit dossier modal + campaign roster/memorial
@@ -305,12 +387,14 @@ function docFooter(){ if(_docCampaign) startGame(0); else hideSub('docScreen'); 
 
 function startGame(idx){
   idx = idx|0;
+  if(typeof MUSIC!=='undefined') MUSIC.leaveMenu();
   ['startScreen','mapScreen','docScreen'].forEach(id=>{ const el=document.getElementById(id); if(el) el.style.display='none'; });
   // fresh campaign / map-select replay: clear carried units so a previous run's veterans or heroes
   // don't bleed into this one (heroes persist WITHIN a run, not across a brand-new start).
   if(typeof setCarryover==='function') setCarryover([]);
   if(typeof resetHeroes==='function') resetHeroes();
   if(typeof resetFallen==='function') resetFallen();   // {fallen} crawl var: empty memorial on a fresh start
+  if(typeof resetHubCampaign==='function') resetHubCampaign();
   mapIndex=idx; showCrawl(idx, ()=>{ loadMap(idx); });
 }
 // Build a "jump to any Quarter" row on the title screen from the MAPS list.
@@ -338,12 +422,15 @@ function startTipRotation(){
   setInterval(()=>{ const s=document.getElementById('startScreen'); if(s && s.style.display!=='none') pickTip(); }, 15000);
 }
 function loadMap(idx){
+  if(typeof MUSIC!=='undefined') MUSIC.leaveMenu();
+  if(typeof CAMPAIGN!=='undefined') CAMPAIGN.mode='combat';
   G=newMap(idx); if(typeof resetDialogs==='function') resetDialogs(); syncHud(); clampCam(G); refreshUI(); running=true;
   toast('Quarter '+(idx+1)+': '+G.cfg.name);
 }
 
 /* ---- Star-Wars-style intro crawl ---- */
 function showCrawl(idx, done){
+  if(typeof MUSIC!=='undefined') MUSIC.leaveMenu();
   running=false;
   const cfg=MAPS[idx], cr=cfg.crawl;
   const scr=document.getElementById('crawlScreen');
@@ -444,4 +531,3 @@ function onDefeat(){
     </div>`;
   document.getElementById('retryBtn').onclick=()=>{ es.style.display='none'; loadMap(mapIndex); };
 }
-

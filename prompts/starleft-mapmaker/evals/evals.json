@@ -1,0 +1,27 @@
+{
+  "skill_name": "starleft-mapmaker",
+  "notes": "STARLEFT is an RTS at the repo root (rts.html; maps live in js/config.js MAPS[]). These prompts exercise the three placement modes (extend, insert+renumber, loose/creative) and whether the result is narratively coherent with the campaign AND mechanically valid (passes validate_campaign.js + verify_geometry.js).",
+  "evals": [
+    {
+      "id": 0,
+      "name": "extend-episode-viii",
+      "prompt": "Add a new final episode to the STARLEFT campaign — Episode VIII, after THE CONGLOMERATE. The company has won everything, so now it has to fight the automated systems it built to run the empire. Make it the hardest, biggest map in the game.",
+      "expected_output": "A new MAPS[] entry appended at index 7: Roman 'VIII', crawl.episode 'EPISODE VIII', a new automated/AI-flavored faction in the corporate-menacing register, a crawl that follows from VII's ending and stays dark/un-triumphal, an objective whose base count matches the placed enemies, biome + difficulty at/above VII's level, unique seed (8), all coords on-map. Passes both validators.",
+      "files": []
+    },
+    {
+      "id": 1,
+      "name": "insert-and-renumber",
+      "prompt": "I want to insert a new mission between The Merger (III) and The Monopoly Endgame (IV): a chapter about a data-breach / privacy scandal where a regulator-style faction comes after us. Slot it in and renumber the rest of the campaign so the episodes stay sequential.",
+      "expected_output": "A new entry inserted at array index 3 with Roman 'IV'; the previously-IV..VII maps shift to V..VIII with their name Roman numerals AND crawl.episode labels updated; new faction fits the escalation; crawl bridges III's ending and the (now-V) Monopoly beat; unique seed; on-map coords; objective base-count matches enemies. validate_campaign.js shows sequential romans/episodes with 0 errors; verify_geometry.js passes.",
+      "files": []
+    },
+    {
+      "id": 2,
+      "name": "loose-creative-union",
+      "prompt": "make a swampy flooded map where we fight a faction of ex-employees who unionized against us",
+      "expected_output": "Engages story-first: proposes a coherent faction (unionized ex-employees) and placement on the arc, picks an appropriate existing biome for 'swampy/flooded' (flooded grassland recipe — and flags that a true swamp biome would need new art rather than inventing a biome kind in data), writes a dark satirical crawl + objective, lays out a valid map. Passes both validators.",
+      "files": []
+    }
+  ]
+}

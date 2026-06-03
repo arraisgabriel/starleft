@@ -45,10 +45,20 @@ window.NET = window.NET || {};
     // Race guard: 'mpfull' and 'mpstart' are separate Trystero actions with no cross-action ordering.
     // If the full snapshot arrives before the client has built its terrain (G null), stash and replay.
     if(!G){ NET._pendingFull = s; return; }
+    // HUB transition guard: a full HUB snapshot can beat the explicit 'mphub'
+    // action while the client still has the combat terrain loaded. Rebuild the
+    // host-owned HUB locally before overlaying host dynamic state.
+    if(s.hubMap && !G.hub && typeof newHubMap==='function'){
+      if(s.campaign && typeof deserializeHubCampaign==='function') deserializeHubCampaign(s.campaign);
+      G = newHubMap();
+      if(typeof syncHud==='function') syncHud();
+      if(typeof clampCam==='function') clampCam(G);
+    }
     // G already came from newMap(mapIndex) on the client, so terrain is correct. Overlay dynamic state:
     const SCALAR = ['eco','players','time','waveCount','graceTime','nextId','runSalt','over',
                     'enemySpawnTimer','enemyWaveTimer','enemyFortifyTimer','_recalibratedFor','_coopOrigins'];
     for(const k of SCALAR){ if(s[k]!==undefined) G[k]=s[k]; }
+    if(s.campaign && typeof deserializeHubCampaign==='function') deserializeHubCampaign(s.campaign);
     G.entities = s.entities.map(e=>Object.assign({}, e));
     const byId = new Map(G.entities.map(e=>[e.id,e]));
     G.entities.forEach(e=>resolveRefs(e, byId));            // re-link cmd.target / autoTarget / … (save.js)
@@ -86,12 +96,14 @@ window.NET = window.NET || {};
       if(e.sieged) o.sg=1;
       if(e.captive) o.cap=1;
       if(e.sprinting) o.spr=1;
+      if(e.storedIn) o.si=e.storedIn;
       if(e.cmd && e.cmd.target && !e.cmd.target.dead) o.tg=e.cmd.target.id;   // chase/attack render
     } else if(e.kind==='building'){
       o.tx=e.tx; o.ty=e.ty; o.w=e.w; o.h=e.h;
       if(e.constructing){ o.cn=1; o.bp=e.buildProg; o.bt=e.buildTime; }
       if(e.prodQueue && e.prodQueue.length){ o.pq=e.prodQueue.slice(); o.pt=e.prodTime; o.ptt=e.prodTotal; }
       if(e.abandoned) o.ab=1;
+      if(e.storedUnits && e.storedUnits.length) o.su=e.storedUnits.slice();
       if(e._everSeen) o.es=1;
       if(e.rally) o.rl={x:e.rally.x,y:e.rally.y};
       if(e.shootFx) o.sf=1;
@@ -114,21 +126,27 @@ window.NET = window.NET || {};
       if(o.ast!=null) e._actStamp=o.ast;                 // sync the strike time so the attack animation plays
       e.carrying=o.cr||0; e.stars=o.st||0; e.spriteType=o.sp||null;
       e.hero=!!o.h; e.sieged=!!o.sg; e.captive=!!o.cap; e.sprinting=!!o.spr;
+      if(o.si!=null) e.storedIn=o.si; else delete e.storedIn;
       e._tgtId = o.tg!=null ? o.tg : null;
     } else if(o.k==='building'){
       e.x=o.x; e.y=o.y;                          // buildings don't move → snap directly
       e.tx=o.tx; e.ty=o.ty; e.w=o.w; e.h=o.h; e.sight=d.sight; e.cd=e.cd||0;
       e.constructing=!!o.cn; e.buildProg=o.bp||0; e.buildTime=o.bt||d.build;
       e.prodQueue=o.pq||[]; e.prodTime=o.pt||0; e.prodTotal=o.ptt||0;
+      e.storedUnits=o.su||[];
       e.abandoned=!!o.ab; e._everSeen=!!o.es; e.rally=o.rl||null;
     }
   }
   NET.buildSnap = function(){
     const ents=[];
     for(const e of G.entities){ if(!e.dead) ents.push(packEnt(e)); }
-    return { t:NET.tick, ents, eco:G.eco, time:G.time, wave:G.waveCount, over:!!G.over };
+    const snap = { t:NET.tick, ents, eco:G.eco, time:G.time, wave:G.waveCount, over:!!G.over };
+    if(G.hub && typeof serializeHubCampaign==='function') snap.campaign=serializeHubCampaign();
+    return snap;
   };
   NET.applySnap = function(snap){
+    const hadCampaign = !!snap.campaign;
+    if(hadCampaign && typeof deserializeHubCampaign==='function') deserializeHubCampaign(snap.campaign);
     if(snap.eco) G.eco = snap.eco;
     // G.time is advanced locally every frame (clientTick) so time-driven sprite animations run at
     // render rate; only HARD-resync it if it has drifted far from the host (e.g. after a background gap).
@@ -145,8 +163,16 @@ window.NET = window.NET || {};
     for(const o of incoming.values()){ const e={selected:false}; unpackInto(e,o); G.entities.push(e); byId.set(e.id,e); }
     // resolve unit target refs so chase/attack rendering works (host sent target as an id)
     for(const e of G.entities){ if(e._tgtId!=null){ const t=byId.get(e._tgtId); e.cmd = t?{type:'attack',target:t}:null; e._tgtId=null; } }
+    const beforeSel=G.selection.length;
+    G.selection=G.selection.filter(e=>{
+      const keep=e && !e.dead && !e.storedIn;
+      if(!keep && e) e.selected=false;
+      return keep;
+    });
+    if(G.selection.length!==beforeSel && typeof refreshUI==='function') refreshUI();
     if(snap.over && !G.over){ G.over=true; if(typeof NET.onClientGameOver==='function') NET.onClientGameOver(); }
     if(typeof recomputeSupply==='function') recomputeSupply(G);   // keep the joiner's HUD supply honest
+    if(hadCampaign && typeof refreshUI==='function') refreshUI();
   };
 
   /* ---------------- chunked send/receive for the (larger) full snapshot ---------------- */

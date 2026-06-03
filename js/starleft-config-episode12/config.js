@@ -95,12 +95,6 @@ const DEF = {
               dmg:14, range:6.0, cd:0.7, flavor:'Fires cease-and-desist letters at anything that trespasses on your IP.' },
   outpost:  { name:'Satellite Office', icon:'📡', kind:'building', w:3,h:3, hp:650, cost:175, build:16, sight:5, supply:0, color:'#5a6b8a',
               deposit:true, trickle:2, flavor:'A scrappy forward branch — Interns drop Funding here instead of trekking back to HQ, and its rig slowly auto-extracts a little on its own. Cheaper and flimsier than a second HQ.' },
-  condo:    { name:'Unit Condo', icon:'🏙️', kind:'building', w:5,h:4, hp:1200, cost:0, build:1, sight:6, supply:0, color:'#4b6b8f',
-              flavor:'A vertical dormitory for employees who survived quarterly planning.' },
-  mdc:      { name:'Mission Dispatch Center', icon:'🛰️', kind:'building', w:3,h:3, hp:900, cost:0, build:1, sight:6, supply:0, color:'#5a6b8a',
-              flavor:'Walk veterans inside to stage them for the next quarterly disaster.' },
-  ultra:    { name:'ULTRA Headquarters', icon:'◆', kind:'building', w:8,h:8, hp:5000, cost:0, build:1, sight:8, supply:0, color:'#7a2cff',
-              flavor:'The company that fabricates life for everyone, everywhere.' },
   worker:   { name:'Intern',         icon:'🧑‍💻', kind:'unit', hp:60,  cost:50,  build:10, sight:5, supply:1, speed:2.6, dmg:4,  range:1.0, cd:1.0, r:9,
               flavor:'Mines Funding "for the exposure." Builds things. Equity will never vest.' },
   soldier:  { name:'Growth Cyborg',  icon:'🚀', kind:'unit', hp:140, cost:80,  build:13, sight:6, supply:1, speed:2.4, dmg:17, range:1.3, cd:0.9, r:10,
@@ -109,23 +103,23 @@ const DEF = {
               flavor:'Bills $400/hr to lob synergy buzzwords at the enemy from a safe distance.' },
 
   /* ---- People Ops (Barracks) tier ---- */
-  recruiter:{ name:'Recruiter', icon:'🧑‍🏫', kind:'unit', hp:80, cost:99, build:14, sight:6, supply:1, speed:2.5, dmg:0, range:4.0, cd:1.0, r:9, action:'heal',
+  recruiter:{ name:'Recruiter', icon:'🧑‍🏫', kind:'unit', hp:80, cost:75, build:14, sight:6, supply:1, speed:2.5, dmg:0, range:4.0, cd:1.0, r:9, action:'heal',
               heal:9, flavor:'Heals burnout. "We\'re like a family." Mends teammates instead of fighting.' },
   hustler:  { name:'Hustler', icon:'🛹', kind:'unit', hp:70, cost:70, build:11, sight:7, supply:1, speed:3.5, dmg:10, range:1.6, cd:0.7, r:9,
               splash:14, splashR:1.2, flavor:'Moves fast and breaks things. Cheap, fast, harasses your economy.' },
-  lobbyist: { name:'Lobbyist', icon:'🎩', kind:'unit', hp:70, cost:196, build:20, sight:9, supply:2, speed:2.2, dmg:36, range:7.5, cd:2.3, r:9,
+  lobbyist: { name:'Lobbyist', icon:'🎩', kind:'unit', hp:70, cost:140, build:20, sight:9, supply:2, speed:2.2, dmg:36, range:7.5, cd:2.3, r:9,
               flavor:'Buys senators wholesale. One devastating long-range shot, then a long reload.' },
   /* ---- The Garage (Factory) tier ---- */
   foodtruck:{ name:'Food Truck', icon:'🚚', kind:'unit', hp:110, cost:90, build:15, sight:6, supply:2, speed:3.6, dmg:11, range:3.0, cd:1.0, r:11, vehicle:true,
               splash:9, splashR:1.4, flavor:'Free cold brew & napalm. A flame cone shreds clustered enemies.' },
-  auditor:  { name:'Auditor', icon:'📊', kind:'unit', hp:200, cost:175, build:28, sight:8, supply:3, speed:1.8, dmg:18, range:5.0, cd:1.4, r:12, vehicle:true, antiAir:true,
+  auditor:  { name:'Auditor', icon:'📊', kind:'unit', hp:200, cost:175, build:28, sight:8, supply:3, speed:1.8, dmg:18, range:5.0, cd:1.4, r:12, vehicle:true,
               siege:{dmg:42,range:9,splashR:1.6,setup:1.2}, flavor:'Deploys spreadsheets into a long-range due-diligence cannon. Sieges when enemies are near.' },
   /* ---- Launch Pad (Starport) tier ---- */
-  founder:  { name:'Founder Mech', icon:'🦄', kind:'unit', hp:600, cost:599, build:45, sight:8, supply:6, speed:1.6, dmg:45, range:3.5, cd:1.5, r:16, vehicle:true,
+  founder:  { name:'Founder Mech', icon:'🦄', kind:'unit', hp:600, cost:400, build:45, sight:8, supply:6, speed:1.6, dmg:45, range:3.5, cd:1.5, r:16, vehicle:true,
               splash:20, splashR:1.3, antiAir:true, flavor:'A visionary in a 12-ft exosuit. Hits anything, ground or air.' },
   courier:  { name:'Drugztore Delivery Drone', icon:'🛸', kind:'unit', hp:120, cost:90, build:16, sight:7, supply:2, speed:3.0, dmg:0, range:4.0, cd:1.0, r:10, air:true, action:'heal',
               heal:7, flavor:'Same-day delivery of medkits and morale. Flies over everything.' },
-  bomber:   { name:'Buzzword Bomber', icon:'🛩️', kind:'unit', hp:480, cost:630, build:50, sight:9, supply:6, speed:1.7, dmg:26, range:6.0, cd:0.9, r:16, air:true, antiAir:true, facesLeft:true,
+  bomber:   { name:'Buzzword Bomber', icon:'🛩️', kind:'unit', hp:480, cost:450, build:50, sight:9, supply:6, speed:1.7, dmg:26, range:6.0, cd:0.9, r:16, air:true, facesLeft:true,
               flavor:'Capital airship. Rains cyan ordnance on the campus below.' },
 
   /* ---- production buildings ---- */

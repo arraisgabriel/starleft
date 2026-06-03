@@ -4,6 +4,7 @@ function update(state, dt){
   state.time+=dt;
   if(typeof updateSprint==='function') updateSprint(state, dt);   // decay the tap window / ramp accel
   recomputeSupply(state);
+  if(state.extractReady && typeof updateExtraction==='function') updateExtraction(state, dt);
 
   // ---- production for player & enemy buildings ----
   for(const b of state.entities){
@@ -40,7 +41,7 @@ function update(state, dt){
 
   // ---- units ----
   for(const u of state.entities){
-    if(u.dead||u.kind!=='unit') continue;
+    if(u.dead||u.storedIn||u.kind!=='unit') continue;
     u.cd-=dt;
     updateUnit(state,u,dt);
     vetRegen(u,state,dt);   // out-of-combat self-heal for high-level veterans
@@ -51,13 +52,15 @@ function update(state, dt){
   resolveStuck(state,dt);
 
   // ---- enemy AI ----
-  enemyAI(state,dt);
+  if(!state.hub && !(state.extractReady && netRole==='solo')) enemyAI(state,dt);
 
   // ---- reclaim abandoned outposts (a player unit walking up flips them) ----
-  reclaimOutposts(state);
+  if(!state.hub) reclaimOutposts(state);
 
   // ---- free captives once their guards are dead (Episode X: Biba + the intern) ----
-  freeCaptives(state);
+  if(!state.hub) freeCaptives(state);
+
+  if(state.hub && typeof updateHub==='function') updateHub(state, dt);
 
   // ---- fog of war ----
   computeFog(state);
@@ -95,7 +98,7 @@ function reclaimOutposts(state){
   for(const b of state.entities){
     if(b.dead || !b.abandoned) continue;
     const reach = Math.max(b.w,b.h)*TILE*0.5 + TILE*1.6;   // building radius + ~1.5 tiles
-    const taken = state.entities.some(u=> !u.dead && u.kind==='unit' && u.owner==='player' && dist(u,b) < reach);
+    const taken = state.entities.some(u=> !u.dead && !u.storedIn && u.kind==='unit' && u.owner==='player' && dist(u,b) < reach);
     if(taken){
       b.owner='player'; b.abandoned=false; b.constructing=false; b.hp=b.maxHp;
       any=true;
@@ -119,7 +122,7 @@ function freeCaptives(state){
   for(const u of state.entities){
     if(u.dead || !u.captive) continue;
     const R=(u.freeRadius||7)*TILE;
-    const stillGuarded = state.entities.some(e=> !e.dead && e.owner==='enemy' && e.kind==='unit' && dist(e,u)<R);
+    const stillGuarded = state.entities.some(e=> !e.dead && !e.storedIn && e.owner==='enemy' && e.kind==='unit' && dist(e,u)<R);
     if(stillGuarded) continue;
     u.captive=false; u.owner='player'; any=true;
     spawnRing(u.x,u.y,'#8effb0');
@@ -143,9 +146,19 @@ function freeCaptives(state){
    ===================================================================== */
 function checkWinLose(state){
   if(state.over) return;
+  if(state.hub) return;
+  if(state.extractReady) return;
   const enemyBuildings = state.entities.some(e=>e.owner==='enemy'&&e.kind==='building'&&!e.dead);
   const playerHas = state.entities.some(e=>e.owner==='player'&&!e.dead&&(e.kind==='building'||e.kind==='unit'));
-  if(!enemyBuildings){ state.over=true; onVictory(); return; }
+  const playerHq = state.entities.some(e=>e.owner==='player'&&e.type==='hq'&&!e.dead);
+  const canRecoverHq = state.entities.some(e=>e.owner==='player'&&e.type==='worker'&&!e.dead) || playerEco(state,'p1').gold>=350;
+  if(!enemyBuildings){
+    if(netRole==='solo' && typeof beginExtractionPhase==='function'){ beginExtractionPhase(state); return; }
+    if(netRole==='host' && typeof window!=='undefined' && window.MP_SESSION && MP_SESSION.mode==='campaign' && typeof enterHubFromCombat==='function'){
+      enterHubFromCombat(state); return;
+    }
+    state.over=true; onVictory(); return;
+  }
+  if(!playerHq && !canRecoverHq){ state.over=true; onDefeat(); return; }
   if(!playerHas){ state.over=true; onDefeat(); return; }
 }
-

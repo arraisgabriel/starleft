@@ -89,6 +89,7 @@
   window.mpBackToMenu = function(fromId){
     if(fromId) hideSub(fromId);
     showSub('startScreen');
+    if(typeof MUSIC!=='undefined') MUSIC.enterMenu();
     if(window.LNS && typeof LNS.relayout==='function') LNS.relayout();
   };
   window.mpUiLeftRoom = function(){ hideSub('mpRoomScreen'); window.mpBackToMenu(); };
@@ -112,7 +113,7 @@
   };
   window.mpUiStall       = function(){ toast('⚠ Connection to host unstable — reconnecting…'); };
   window.mpUiReconnected = function(){ toast('✅ Reconnected to host'); };
-  window.mpUiEnterGame = function(){ ['mpScreen','mpRoomScreen','startScreen','mapScreen','loadScreen'].forEach(hideSub); };
+  window.mpUiEnterGame = function(){ if(typeof MUSIC!=='undefined') MUSIC.leaveMenu(); ['mpScreen','mpRoomScreen','startScreen','mapScreen','loadScreen'].forEach(hideSub); };
   window.mpUiSyncing = function(){ setConn('Syncing battlefield…','wait'); const w=$('mp-wait'); if(w) w.textContent='Host started — syncing…'; };
   window.mpUiPeerDropped = function(){ toast('🔌 Co-founder dropped — you’re holding their base'); renderPeers(); };
   window.mpUiClientGameOver = function(){ running=false; toast('Match over'); };

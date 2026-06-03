@@ -1,0 +1,32 @@
+STARLEFT config.js patch report
+
+Change:
+- Added Episode XII as a new MAPS[] entry after Episode XI.
+- New level: XII — The Continuity Farm
+- Enemy: A&O
+- Biome: tech + ice
+- Objective: A&O holds SIX continuity campuses — liquidate all six and seize the transfer lattice.
+
+Validation:
+
+Map 11 "XII — The Continuity Farm" 201x163  build 1400.1ms
+   water 14.5%  rock 0.0%  tree 0.0%  | mtn:7.1% water:8.2% tech:54.4% ice:30.3%
+   ⚠ orphan biome tiles: 2 (cosmetic; some shipping maps have these too)
+   ⚠ build time 1400.1ms (slow, but builds once behind the crawl)
+
+✅ ALL GEOMETRY CHECKS PASS (2 cosmetic warnings)
+
+Balance:
+
+XII — The Continuity Farm   (carry cap 7)
+————————————————————————————————————————————————————————————————————————
+profile     VPI   field + econ =  player    enemy   ratio
+fresh        0    34.6 + 100 =  135.1    614.5    0.22
+typical   1217   264.2 + 100 =  364.7    678.0    0.54
+invested  1217   264.2 + 100 =  364.7    678.0    0.54
+————————————————————————————————————————————————————————————————————————
+GATE (hard): typical & invested ratio ≥ 0.14; carryover swing ≤ 2.51×  (derived from shipping maps)
+  • carryover swing 2.45× (shipping 1.3–1.8) — vetScaling grew the enemy 1.10× to absorb it
+
+✅ POWER GATE PASS
+

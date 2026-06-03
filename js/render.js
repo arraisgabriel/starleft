@@ -3,10 +3,15 @@
    FOG OF WAR
    ===================================================================== */
 function computeFog(state){
+  if(state.hub){
+    state.visible.fill(1);
+    state.explored.fill(1);
+    return;
+  }
   state.visible.fill(0);
   const W=state.W,H=state.H;
   for(const e of state.entities){
-    if(e.dead||e.owner!=='player') continue;
+    if(e.dead||e.storedIn||e.owner!=='player') continue;
     // You always see at least as far as you can shoot: reveal radius is the
     // larger of sight and attack range (the Auditor's siege range while set up),
     // so a unit/building can never fire into unrevealed fog.
@@ -117,6 +122,7 @@ function render(state){
 
   // ---- water/magma surface overlay: caustic shimmer + tide highlight + lava cracks/core (js/water.js) ----
   if(typeof drawWater==='function') drawWater(state, x0,y0,x1,y1);
+  if(state.hub && typeof drawHubOverlays==='function') drawHubOverlays(state, x0,y0,x1,y1);
 
   // ---- ambient particles: BACK pass (low mist) — behind the depth-sorted sprites ----
   if(typeof drawParticles==='function') drawParticles(state, x0,y0,x1,y1, 'back');
@@ -157,6 +163,7 @@ function render(state){
       }
       depth.push({y:(e.ty+e.h)*TILE, b:e, dim});        // ground line = footprint bottom edge
     } else if(e.kind==='unit'){
+      if(e.storedIn) continue;
       if(e.owner==='enemy' && !isVisiblePix(state,e.x,e.y)) continue;
       depth.push({y:e.y, u:e});
     }
@@ -169,13 +176,14 @@ function render(state){
     else if(d.g) drawGoldmine(state, d.g, ox,oy, d.dim);
     else drawUnit(state, d.u, ox,oy);
   }
+  if(state.extractFlight && typeof drawExtractionFlight==='function') drawExtractionFlight(state);
 
   // ---- ambient particles: FRONT pass (fireflies/embers/snow/dust/motes) — over the sprites ----
   if(typeof drawParticles==='function') drawParticles(state, x0,y0,x1,y1, 'front');
 
   // ---- shoot FX ----
   for(const e of state.entities){
-    if(e.dead) continue;
+    if(e.dead||e.storedIn) continue;
     if(e.shootFx && e.shootFx.t>0){
       ctx.strokeStyle = isRedSide(e.owner)? 'rgba(255,150,120,.85)':'rgba(150,220,255,.8)';
       ctx.lineWidth=2; ctx.beginPath(); ctx.moveTo(e.x+ox,e.y+oy); ctx.lineTo(e.shootFx.x+ox,e.shootFx.y+oy); ctx.stroke();
@@ -205,6 +213,10 @@ function render(state){
     const x=Math.min(gesture.sx,gesture.cx), y=Math.min(gesture.sy,gesture.cy);
     const w=Math.abs(gesture.cx-gesture.sx), h=Math.abs(gesture.cy-gesture.sy);
     ctx.fillRect(x,y,w,h); ctx.lineWidth=1.5; ctx.strokeRect(x,y,w,h);
+  }
+  if(state.hub && typeof hubCameraInWasteland==='function' && hubCameraInWasteland(state)){
+    ctx.fillStyle='rgba(120,20,24,0.16)';
+    ctx.fillRect(0,0,viewW(),cssH);
   }
   ctx.setTransform(1,0,0,1,0,0);
 
@@ -435,6 +447,50 @@ function drawFeature(state, f, ox, oy, dim){
   ctx.save();
   if(dim) ctx.globalAlpha*=0.5;                          // explored-but-not-visible
   drawFeatureSprite(f, dx, dy, dw, dh);
+  if(state.hub && f.slot==='rock' && typeof hubInWasteland==='function' && hubInWasteland(f.tx+N/2,f.ty+N/2)){
+    drawWastelandRockFog(state,f,dx,dy,dw,dh);
+  }
+  ctx.restore();
+}
+
+function wasteFogRgba(rgb,a){
+  return 'rgba('+rgb[0]+','+rgb[1]+','+rgb[2]+','+Math.max(0,Math.min(1,a)).toFixed(3)+')';
+}
+function drawWasteFogBlob(cx,cy,rx,ry,rot,rgb,a){
+  ctx.save();
+  ctx.translate(cx,cy); ctx.rotate(rot||0); ctx.scale(1,ry/rx);
+  const g=ctx.createRadialGradient(0,0,rx*0.03,0,0,rx);
+  g.addColorStop(0,wasteFogRgba([174,255,104],a));
+  g.addColorStop(0.36,wasteFogRgba(rgb,a*0.58));
+  g.addColorStop(0.72,wasteFogRgba([44,160,58],a*0.20));
+  g.addColorStop(1,wasteFogRgba([18,82,34],0));
+  ctx.fillStyle=g; ctx.beginPath(); ctx.arc(0,0,rx,0,Math.PI*2); ctx.fill();
+  ctx.restore();
+}
+function drawWastelandRockFog(state,f,dx,dy,dw,dh){
+  const t=state.time||0, seed=f.tx*17.37+f.ty*41.91+(f.v||0)*97.3;
+  ctx.save();
+  ctx.globalCompositeOperation='source-over';
+  for(let i=0;i<10;i++){
+    const hx=h01(seed+i*3.1), hy=h01(seed+i*5.7), hp=h01(seed+i*8.9);
+    const driftX=Math.sin(t*(0.34+hp*0.18)+hx*6.283)*dw*0.030;
+    const driftY=Math.cos(t*(0.42+hy*0.14)+hp*6.283)*dh*0.026;
+    const pulse=0.60+0.40*Math.sin(t*(0.76+hp*0.18)+hx*6.283);
+    const cx=dx+dw*(0.16+0.68*hx)+driftX;
+    const cy=dy+dh*(0.20+0.58*hy)+driftY;
+    const rx=dw*(0.18+0.12*h01(seed+i*11.2));
+    const ry=dh*(0.12+0.10*h01(seed+i*13.4));
+    drawWasteFogBlob(cx,cy,rx,ry,(hx-0.5)*0.8,[86,235,74],0.070*(0.72+0.28*pulse));
+  }
+  ctx.globalCompositeOperation='lighter';
+  const breath=0.55+0.45*Math.sin(t*0.9+seed);
+  drawWasteFogBlob(dx+dw*0.5,dy+dh*0.52,dw*(0.62+0.06*breath),dh*(0.40+0.05*breath),0,[92,255,82],0.115);
+  for(let i=0;i<7;i++){
+    const hx=h01(seed+i*19.1), hy=h01(seed+i*23.7);
+    const cx=dx+dw*(0.22+0.56*hx)+Math.sin(t*0.8+i)*dw*0.018;
+    const cy=dy+dh*(0.22+0.48*hy)+Math.cos(t*0.65+i)*dh*0.018;
+    drawWasteFogBlob(cx,cy,dw*(0.10+0.07*hx),dh*(0.07+0.05*hy),(hy-0.5)*0.7,[118,255,80],0.105);
+  }
   ctx.restore();
 }
 
@@ -506,6 +562,34 @@ function drawSparkle(x,y,r){
   ctx.closePath(); ctx.fill();
 }
 
+function buildingSpriteVisual(type, faction, owner){
+  if(faction && typeof BUILDING_ANIM!=='undefined'){
+    const e=BUILDING_ANIM[type], a=e&&e[faction];
+    if(a&&a.ready) return { img:a.img, fw:a.fw, fh:a.fh, frames:BUILDING_FRAMES };
+  }
+  return buildingSprite(type, owner);
+}
+function buildingNeonFrame(spriteId, fi){
+  if(typeof BUILDING_NEON_MAPS==='undefined' || !BUILDING_NEON_MAPS || !BUILDING_NEON_MAPS.sprites) return null;
+  const spr=BUILDING_NEON_MAPS.sprites[spriteId];
+  const fr=spr && spr.frames && spr.frames[fi];
+  return fr && fr.glows && fr.glows.length ? fr.glows : null;
+}
+function drawHubBuildingSpriteVisual(state,e,ox,oy){
+  const v=e.hubSpriteVisual, spr=v&&buildingSpriteVisual(v.type, v.faction, e.owner);
+  if(!v || !spr) return e.ty*TILE+oy;
+  const baseW=(v.w||e.w)*TILE, baseH=(v.h||e.h)*TILE;
+  const baseX=(e.tx+e.w/2)*TILE+ox-baseW/2, baseY=(e.ty+e.h)*TILE+oy-baseH;
+  const dw=baseW*(v.overhang||1.08), dh=dw*(spr.fh/spr.fw)*(v.heightScale||1);
+  const dx=baseX+(baseW-dw)/2, dy=baseY+baseH-dh+2;
+  const f=(v.fixedFrame!=null?Math.floor(v.fixedFrame):0), fi=((f%spr.frames)+spr.frames)%spr.frames;
+  const neon=buildingNeonFrame(v.neonId || (v.type+'_'+(v.faction||factionKey(e.owner))), fi);
+  if(typeof drawMegaNeonLayer==='function') drawMegaNeonLayer(state, v, neon, dx, dy, dw, dh, 'aura');
+  ctx.drawImage(spr.img, fi*spr.fw, 0, spr.fw, spr.fh, dx, dy, dw, dh);
+  if(typeof drawMegaNeonLayer==='function') drawMegaNeonLayer(state, v, neon, dx, dy, dw, dh, 'core');
+  return dy;
+}
+
 function drawBuilding(state,e,ox,oy,dim){
   const d=DEF[e.type];
   const px=e.tx*TILE+ox, py=e.ty*TILE+oy;
@@ -517,6 +601,17 @@ function drawBuilding(state,e,ox,oy,dim){
   if(e.abandoned) ctx.globalAlpha*=0.7;   // derelict: faded
   // selection ring (footprint)
   if(e.selected){ ctx.strokeStyle='#8effb0'; ctx.lineWidth=2; ctx.strokeRect(px-3,py-3,w+6,h+6); }
+  if(e.hubSpriteVisual){
+    const topY=drawHubBuildingSpriteVisual(state,e,ox,oy);
+    ctx.restore();
+    if(e.hp<e.maxHp || e.selected) barAt(px+6, topY-7, w-12, 5, e.hp/e.maxHp, hpColor(e.hp/e.maxHp));
+    return;
+  }
+  if(e.hubMegaVisual){
+    ctx.restore();
+    if(e.hp<e.maxHp || e.selected) barAt(px+6, py-7, w-12, 5, e.hp/e.maxHp, hpColor(e.hp/e.maxHp));
+    return;
+  }
 
   let topY=py;   // visual top of the structure (for the HP bar)
   if(spr){
@@ -769,7 +864,7 @@ function renderMinimap(state){
     mmx.fillStyle=c; mmx.fillRect(f.tx*sx, f.ty*sy, Math.ceil(sx*N), Math.ceil(sy*N));
   } }
   for(const e of state.entities){
-    if(e.dead) continue;
+    if(e.dead||e.storedIn) continue;
     if(e.type==='goldmine'){ const N=FEAT_SIZE, ftx=(e.ftx!=null)?e.ftx:(((e.x/TILE)|0)-(N>>1)), fty=(e.fty!=null)?e.fty:(((e.y/TILE)|0)-(N>>1)); const si=(fty+N-1)*state.W+(ftx+(N>>1)); if(state.explored[si]){ mmx.fillStyle='#b06bff'; mmx.fillRect(ftx*sx, fty*sy, Math.ceil(sx*N), Math.ceil(sy*N));} continue; }
     if(e.owner==='enemy' && !isVisiblePix(state,e.x,e.y) && !(e.kind==='building'&&e._everSeen)) continue;
     mmx.fillStyle = e.abandoned ? '#8effb0' : isRedSide(e.owner)?'#ff6b6b': (e.ctrl==='p2'?'#ff9d3c':'#7fd6ff');
@@ -797,4 +892,3 @@ function shade(hex,amt){
   r=Math.max(0,Math.min(255,r+amt)); g=Math.max(0,Math.min(255,g+amt)); b=Math.max(0,Math.min(255,b+amt));
   return '#'+[r,g,b].map(v=>v.toString(16).padStart(2,'0')).join('');
 }
-

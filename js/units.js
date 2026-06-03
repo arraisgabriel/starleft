@@ -82,12 +82,16 @@ function commandUnits(state, wx, wy, target){
   const _ac = (netRole==='solo') ? null : actingCtrl(state);
   const _mine = e => !_ac || (e.ctrl||'p1')===_ac;
   // If only buildings selected → set rally point
-  const units = sel.filter(e=>e.kind==='unit'&&e.owner==='player'&&_mine(e));
+  const units = sel.filter(e=>e.kind==='unit'&&e.owner==='player'&&!e.storedIn&&_mine(e));
   const buildings = sel.filter(e=>e.kind==='building'&&e.owner==='player'&&_mine(e));
   if(units.length===0 && buildings.length){
     buildings.forEach(b=>{ if(!b.constructing){ b.rally={x:wx,y:wy}; }});
     toast('Rally point set'); spawnRing(wx,wy,'#7fd6ff');
     return;
+  }
+
+  if(target && target.owner==='player' && target.type==='hq' && !target.constructing){
+    if(issueEnterHq(state, units, target)) return;
   }
 
   // abandoned outpost → walk the squad onto it to reclaim (don't attack it)
@@ -98,10 +102,22 @@ function commandUnits(state, wx, wy, target){
     return;
   }
   if(target && target.owner && target.owner!=='player'){
+    if(state.extractReady && target.owner==='player' && target.type==='hq' && typeof hubIssueExtract==='function'){
+      if(hubIssueExtract(state, units, target)) return;
+    }
+    if(state.hub && target.hubPoi && typeof hubCommandPoi==='function'){
+      if(hubCommandPoi(state, units, target)) return;
+    }
     // attack
     units.forEach(u=> attackTarget(state,u,target));
     spawnRing(target.x,target.y,'#ff6b6b');
     return;
+  }
+  if(state.extractReady && target && target.owner==='player' && target.type==='hq' && typeof hubIssueExtract==='function'){
+    if(hubIssueExtract(state, units, target)) return;
+  }
+  if(state.hub && target && target.hubPoi && typeof hubCommandPoi==='function'){
+    if(hubCommandPoi(state, units, target)) return;
   }
   // assign worker(s) to an unfinished friendly building (resume/assist construction)
   if(target && target.owner==='player' && target.kind==='building' && target.constructing){
@@ -149,6 +165,89 @@ function gatherFrom(state,u,mine){
   resetMotion(u);
   u.cmd={type:'gather',mine};
   u.state='gather';
+}
+
+function hqStoredUnits(state,hq){
+  if(!state||!hq) return [];
+  const ids=hq.storedUnits||[];
+  const live=ids.map(id=>state.entities.find(e=>e.id===id&&!e.dead&&e.storedIn===hq.id)).filter(Boolean);
+  if(live.length!==ids.length) hq.storedUnits=live.map(u=>u.id);
+  return live;
+}
+function hqExitTile(state,hq,seed){
+  for(let r=1;r<=6;r++){
+    const spots=[];
+    for(let y=-r;y<hq.h+r;y++) for(let x=-r;x<hq.w+r;x++){
+      const ring = x===-r || x===hq.w+r-1 || y===-r || y===hq.h+r-1;
+      if(!ring) continue;
+      const tx=hq.tx+x, ty=hq.ty+y;
+      if(tx<0||ty<0||tx>=state.W||ty>=state.H) continue;
+      if(state.blocked[ty*state.W+tx]) continue;
+      spots.push({tx,ty});
+    }
+    if(!spots.length) continue;
+    const start=Math.abs(seed||0)%spots.length;
+    for(let i=0;i<spots.length;i++){
+      const s=spots[(start+i)%spots.length], wx=s.tx*TILE+TILE/2, wy=s.ty*TILE+TILE/2;
+      const occupied=state.entities.some(e=>!e.dead&&!e.storedIn&&e.kind==='unit'&&Math.hypot(e.x-wx,e.y-wy)<(e.r||9)+12);
+      if(!occupied) return s;
+    }
+  }
+  return null;
+}
+function issueEnterHq(state, units, hq){
+  if(!state||!hq||hq.type!=='hq'||hq.owner!=='player'||hq.constructing) return false;
+  const movers=units.filter(u=>u.kind==='unit'&&u.owner==='player'&&!u.storedIn);
+  if(!movers.length) return false;
+  if(state.extractReady && typeof hubIssueExtract==='function') return hubIssueExtract(state,movers,hq);
+  movers.forEach(u=>{
+    resetMotion(u);
+    u.cmd={type:'enterhq', hq};
+    const spot=nearestFreeAdjTile(state,hq,u.x,u.y) || {x:hq.x,y:hq.y};
+    issueMoveKeepCmd(state,u,spot.x,spot.y);
+  });
+  spawnRing(hq.x,hq.y,'#8effb0');
+  toast(movers.length===1 ? 'Unit entering HQ.' : movers.length+' units entering HQ.');
+  return true;
+}
+function storeUnitInHq(state,u,hq){
+  if(!state||!u||!hq||hq.dead||hq.type!=='hq') return false;
+  if(u.type==='worker' && u.carrying>0){
+    const eco=playerEco(state, u.ctrl || hq.ctrl || 'p1');
+    eco.gold += u.carrying; eco.gold_collected += u.carrying;
+    u.carrying=0;
+  }
+  resetMotion(u);
+  u.cmd=null; u.state='idle'; u.vx=0; u.vy=0; u.sprinting=false;
+  u.storedIn=hq.id; u.x=hq.x; u.y=hq.y;
+  hq.storedUnits=(hq.storedUnits||[]).filter(id=>id!==u.id);
+  hq.storedUnits.push(u.id);
+  u.selected=false;
+  state.selection=state.selection.filter(e=>e!==u);
+  spawnRing(hq.x,hq.y,'#8effb0');
+  toast((DEF[u.type].name||'Unit')+' stored in HQ.');
+  refreshUI();
+  return true;
+}
+function releaseStoredUnit(state,hq,id){
+  if(!state||!hq||hq.dead) return false;
+  const u=hqStoredUnits(state,hq).find(x=>x.id===id);
+  if(!u) return false;
+  const spot=hqExitTile(state,hq,id);
+  if(!spot){ toast('No room outside HQ'); return false; }
+  hq.storedUnits=(hq.storedUnits||[]).filter(uid=>uid!==id);
+  delete u.storedIn;
+  u.x=spot.tx*TILE+TILE/2; u.y=spot.ty*TILE+TILE/2;
+  resetMotion(u);
+  u.cmd=null; u.state='idle'; u.selected=false;
+  spawnRing(u.x,u.y,'#7fd6ff');
+  toast((DEF[u.type].name||'Unit')+' exited HQ.');
+  refreshUI();
+  return true;
+}
+function releaseAllStoredUnits(state,hq){
+  if(!state||!hq||!hq.storedUnits) return;
+  hqStoredUnits(state,hq).slice().forEach(u=>releaseStoredUnit(state,hq,u.id));
 }
 
 /* =====================================================================
@@ -248,12 +347,12 @@ function placeBuilding(state, type, tx, ty, builder){
 /* =====================================================================
    UPDATE LOOP
    ===================================================================== */
-// can this attacker hit air units? ranged (>=2.5 tiles) or explicitly anti-air
-function canHitAir(e){ const d=DEF[e.type]||{}; return !!(d.antiAir || (d.range||0)>=2.5); }
+// Only explicitly flagged anti-air units can target flyers.
+function canHitAir(e){ const d=DEF[e.type]||{}; return !!d.antiAir; }
 function nearestEnemy(state, e, radius){
   let best=null,bd=radius*radius; const air=canHitAir(e);
   for(const o of state.entities){
-    if(o.dead||o.owner==null||o.owner===e.owner) continue;
+    if(o.dead||o.storedIn||o.owner==null||o.owner===e.owner) continue;
     if(o.owner!=='player'&&o.owner!=='enemy') continue;
     if(o.air && !air) continue;                 // melee/no-AA units ignore flyers
     const dx=o.x-e.x,dy=o.y-e.y,d=dx*dx+dy*dy;
@@ -266,6 +365,7 @@ function applyHit(state, attacker, target, dmg, splash, splashR){
   damage(state, target, dmg, attacker);
   if(splash){ const R=(splashR||1.3)*TILE;
     for(const o of state.entities){ if(o.dead||o===target||o.owner==null||o.owner===attacker.owner) continue;
+      if(o.storedIn) continue;
       if(o.owner!=='player'&&o.owner!=='enemy') continue;
       if(o.air && !target.air) continue;        // ground splash doesn't hit flyers and vice-versa
       if(!o.air && target.air) continue;
@@ -335,7 +435,7 @@ function updateUnit(state,u,dt){
   if(def.heal && !u.sprinting){
     if(!cmd || cmd.type==='amove' || cmd.type==='move' || u.state==='idle'){
       let best=null,bd=(u.sight*TILE)**2;
-      for(const o of state.entities){ if(o.dead||o.owner!==u.owner||o.kind!=='unit'||o===u)continue; if(o.hp>=o.maxHp)continue;
+      for(const o of state.entities){ if(o.dead||o.storedIn||o.owner!==u.owner||o.kind!=='unit'||o===u)continue; if(o.hp>=o.maxHp)continue;
         const dx=o.x-u.x,dy=o.y-u.y,dd=dx*dx+dy*dy; if(dd<bd){bd=dd;best=o;} }
       u._healTarget=best;
     }
@@ -376,7 +476,7 @@ function updateUnit(state,u,dt){
     // effective stats (Auditor gains range/dmg/splash while sieged)
     let aRange=u.range, aDmg=u.dmg, aSplash=def.splash||0, aSplashR=def.splashR||1.3;
     if(def.siege && u.sieged){ const sg=def.siege; aRange=sg.range; aDmg=sg.dmg; aSplash=Math.round(sg.dmg*0.6); aSplashR=sg.splashR; }
-    const _m = vetDmgMul(u)*(typeof vetBuff==='function'?vetBuff(u,state).dmgMul:1); aDmg = Math.round(aDmg*_m); aSplash = Math.round(aSplash*_m);  // career-rank + life-event damage bonus
+    const _m = vetDmgMul(u)*(u.hubDmgMul||1)*(typeof vetBuff==='function'?vetBuff(u,state).dmgMul:1); aDmg = Math.round(aDmg*_m); aSplash = Math.round(aSplash*_m);  // career-rank + HUB implant + life-event damage bonus
     const reach = aRange*TILE + entRadius(atk);
     const d=dist(u,atk);
     if(d<=reach){
@@ -470,6 +570,29 @@ function updateUnit(state,u,dt){
     if(followPath(state,u,dt)){ u.cmd=null; u.state='idle'; }
     return;
   }
+  if(cmd&&cmd.type==='extract'){
+    if(followPath(state,u,dt)){
+      const hq=cmd.hq;
+      u.cmd=null; u.state='idle';
+      if(hq && !hq.dead && typeof hubArriveExtract==='function') hubArriveExtract(state,u,hq);
+    }
+    return;
+  }
+  if(cmd&&cmd.type==='enterhq'){
+    const hq=cmd.hq;
+    if(!hq||hq.dead){ u.cmd=null; u.state='idle'; return; }
+    const arrived = followPath(state,u,dt) || dist(u,hq) < entRadius(hq)+18;
+    if(arrived) storeUnitInHq(state,u,hq);
+    return;
+  }
+  if(cmd&&cmd.type==='hubpoi'){
+    if(followPath(state,u,dt)){
+      const poi=cmd.poi;
+      u.cmd=null; u.state='idle';
+      if(poi && !poi.dead && typeof hubUnitArrivedPoi==='function') hubUnitArrivedPoi(state,u,poi);
+    }
+    return;
+  }
   u.state='idle';
 }
 
@@ -519,22 +642,68 @@ function followPath(state,u,dt){
   return false;
 }
 
+const SEP_STRENGTH = 0.68;
+const SEP_MAX_STEP = TILE*4.2;   // px/sec cap: settles crowds without jittering combat lines
+
+function sepFoot(u){
+  const h = (typeof unitDrawH==='function') ? unitDrawH(u) : ((u.r||10)*2);
+  const alt = u.air ? 16 : 0;
+  return {
+    x:u.x,
+    y:u.y - alt + h*0.3,
+    rx:Math.max((u.r||10)+6, h*0.31),
+    ry:Math.max((u.r||10)+3, h*0.18),
+  };
+}
+function sepMobility(u){
+  if(u.captive) return 0.25;
+  if(!u.cmd && !u.autoTarget) return 1.0;
+  const t=u.cmd&&u.cmd.type;
+  if(t==='move'||t==='amove'||t==='extract'||t==='enterhq'||t==='hubpoi') return 0.9;
+  return 0.45;
+}
+function sepPushAllowed(state,u,x,y){
+  if(u.air) return true;
+  const tx=Math.floor(x/TILE), ty=Math.floor(y/TILE);
+  return tx>=0&&ty>=0&&tx<state.W&&ty<state.H&&!state.blocked[ty*state.W+tx];
+}
+function applySeparationPush(state,u,dx,dy,dt){
+  const m=Math.hypot(dx,dy);
+  if(m<0.01) return;
+  const max=Math.max(0.5, SEP_MAX_STEP*dt);
+  if(m>max){ dx=dx/m*max; dy=dy/m*max; }
+  const nx=u.x+dx, ny=u.y+dy;
+  if(sepPushAllowed(state,u,nx,ny)){ u.x=nx; u.y=ny; return; }
+  if(Math.abs(dx)>0.01 && sepPushAllowed(state,u,u.x+dx,u.y)){ u.x+=dx; return; }
+  if(Math.abs(dy)>0.01 && sepPushAllowed(state,u,u.x,u.y+dy)){ u.y+=dy; }
+}
+
 function separation(state,dt){
-  const list=state.entities.filter(e=>e.kind==='unit'&&!e.dead);
-  for(let i=0;i<list.length;i++){
-    const a=list[i];
-    for(let j=i+1;j<list.length;j++){
-      const b=list[j];
-      const dx=b.x-a.x, dy=b.y-a.y; const d2=dx*dx+dy*dy;
-      const min=(a.r+b.r);
-      if(d2< min*min && d2>0.01){
-        const d=Math.sqrt(d2); const overlap=(min-d)/2;
-        const ux=dx/d, uy=dy/d;
-        a.x-=ux*overlap*0.5; a.y-=uy*overlap*0.5;
-        b.x+=ux*overlap*0.5; b.y+=uy*overlap*0.5;
+  const list=state.entities.filter(e=>e.kind==='unit'&&!e.dead&&!e.storedIn);
+  const sep=list.map((u,i)=>({ u, i, f:sepFoot(u), m:sepMobility(u), sx:0, sy:0 }));
+  for(let i=0;i<sep.length;i++){
+    const a=sep[i];
+    for(let j=i+1;j<sep.length;j++){
+      const b=sep[j];
+      let dx=b.f.x-a.f.x, dy=b.f.y-a.f.y;
+      let d=Math.hypot(dx,dy);
+      if(d<0.01){
+        const seed=(a.u.id||a.i+1)*12.9898 + (b.u.id||b.i+1)*78.233;
+        dx=Math.cos(seed); dy=Math.sin(seed); d=1;
       }
+      const ux=dx/d, uy=dy/d;
+      const rx=(a.f.rx+b.f.rx)*0.92, ry=(a.f.ry+b.f.ry)*1.02;
+      const boundary=1/Math.sqrt((ux*ux)/(rx*rx) + (uy*uy)/(ry*ry));
+      const overlap=boundary-d;
+      if(overlap<=0) continue;
+      const push=overlap*SEP_STRENGTH;
+      const total=a.m+b.m || 1;
+      const am=push*(a.m/total), bm=push*(b.m/total);
+      a.sx-=ux*am; a.sy-=uy*am;
+      b.sx+=ux*bm; b.sy+=uy*bm;
     }
   }
+  for(const p of sep) applySeparationPush(state,p.u,p.sx,p.sy,dt);
   // keep units out of blocked tiles (flyers are exempt — they ignore terrain)
   for(const a of list){
     if(a.air) continue;
@@ -598,7 +767,7 @@ function handleStuck(state, u){
   // find the best yieldable, same-side blocker roughly in front of the stuck unit
   let blocker=null, best=-1;
   for(const o of state.entities){
-    if(o===u || o.dead || o.kind!=='unit' || o.owner!==u.owner) continue;
+    if(o===u || o.dead || o.storedIn || o.kind!=='unit' || o.owner!==u.owner) continue;
     const dx=o.x-u.x, dy=o.y-u.y; const dist=Math.hypot(dx,dy);
     if(dist > u.r+o.r+10) continue;
     const fwd = dist>0.01 ? (dx*fx+dy*fy)/dist : 1;   // 1 = directly ahead
@@ -621,7 +790,7 @@ function handleStuck(state, u){
 }
 function resolveStuck(state, dt){
   for(const u of state.entities){
-    if(u.dead || u.kind!=='unit') continue;
+    if(u.dead || u.storedIn || u.kind!=='unit') continue;
     const moving = (u.path && u.pathIdx<u.path.length) || !!u.dest;
     if(!moving){ u._stuckT=0; u._lastTargD=undefined; continue; }
     const tp=currentTargetPoint(u); if(!tp){ u._stuckT=0; continue; }
@@ -641,7 +810,7 @@ function callToArms(state, foe, side, from){
   if(!foe||foe.dead) return;
   const R=7*TILE, r2=R*R, cx=from.x, cy=from.y;
   for(const o of state.entities){
-    if(o.dead||o.kind!=='unit'||o.owner!==side||o===from) continue;
+    if(o.dead||o.storedIn||o.kind!=='unit'||o.owner!==side||o===from) continue;
     if(o.sprinting) continue;                                               // sprinting allies stay on the run
     if(o.type==='worker' || !(DEF[o.type].dmg>0)) continue;                 // combat units only
     if(o.cmd && (o.cmd.type==='move'||o.cmd.type==='gather'||o.cmd.type==='build')) continue; // respect explicit orders
@@ -653,7 +822,7 @@ function callToArms(state, foe, side, from){
 }
 
 function damage(state, t, amt, src){
-  if(t.dead) return;
+  if(t.dead||t.storedIn) return;
   t.hp-=amt;
   t.hitFx=0.12;
   t._lastHit=state.time;   // pauses veteran self-heal (vetRegen) while in/near combat
@@ -671,7 +840,8 @@ function damage(state, t, amt, src){
 }
 
 function killEntity(state,e){
+  if(typeof hubRecordKill==='function') hubRecordKill(state,e);
+  if(e.kind==='building' && e.type==='hq') releaseAllStoredUnits(state,e);
   e.dead=true;
   if(e.kind==='building') markBuilding(state,e,false);
 }
-

@@ -427,12 +427,7 @@ function newMap(idx){
   spawnHeroes(state); // named campaign heroes declared on the map (e.g. Nino on Episode VIII)
   if(cfg.startBarracks) mkBuilding(state,'barracks','player', cfg.player.x-3, cfg.player.y, true);
 
-  // ---- co-op: duplicate the player base for each extra human, so a 2-player map starts balanced ----
-  // Runs 0× in single-player (state.players===1). Placed BEFORE the gold-reachability relocation pass
-  // (so any node p2 shadows gets nudged) and BEFORE _vpi (so p2's starters fold into the difficulty).
-  for(let p=2;p<=(state.players||1);p++) addCoopPlayer(state, 'p'+p);
-
-  // dynamic difficulty: measure carried career power NOW (player units are placed, enemies aren't),
+  // dynamic difficulty: measure P1's carried career power NOW (player units are placed, enemies aren't),
   // so each enemy base can muster proportionate extra defenders (balance.js). 0 (fresh) → no bonus.
   state._vpi = (typeof computePlayerVPI==='function') ? computePlayerVPI(state) : 0;
 
@@ -471,6 +466,11 @@ function newMap(idx){
       if(cap.sprite) u.spriteType=cap.sprite; }   // show her real sprite even while caged
     for(let y=-5;y<=6;y++)for(let x=-5;x<=6;x++){ if(inB(cap.x+x,cap.y+y)) state.explored[(cap.y+y)*W+(cap.x+x)]=1; }
   });
+
+  // ---- co-op: add extra human starts after enemy bases/units exist ----
+  // P2 is placed from the actual spawned map state, so its start can be kept safe
+  // and distance-matched against the real enemy HQs rather than config anchors.
+  for(let p=2;p<=(state.players||1);p++) addCoopPlayer(state, 'p'+p);
 
   // Buildings are bigger now, so a base/start can land on a gold node that config
   // tucked snugly against it (covered nodes are unminable + unreachable). Nudge any
@@ -513,14 +513,8 @@ function newMap(idx){
 }
 
 /* ---------- co-op: 2nd player base ---------- */
-// Spawn a full base (HQ + workers + soldiers + optional barracks) for an extra human `slot` ('p2'…),
-// auto-deriving a fair, mutually-reachable start so no per-map cfg.player2 has to be hand-authored.
-// Reuses the same reachability flood + nearest-open BFS that newMap() uses to keep gold nodes reachable.
-function addCoopPlayer(state, slot){
-  const W=state.W, H=state.H, blocked=state.blocked, cfg=state.cfg;
-  const p1={x:cfg.player.x, y:cfg.player.y};
-
-  // tiles reachable (open) from p1's muster — proves the two bases can path to each other
+function coopReachFromP1(state){
+  const W=state.W, H=state.H, blocked=state.blocked, cfg=state.cfg, p1=cfg.player;
   const reach=new Uint8Array(W*H);
   { let sx=p1.x, sy=p1.y+4;
     if(blocked[sy*W+sx]){ for(let r=1;r<10;r++){ let done=false;
@@ -531,30 +525,120 @@ function addCoopPlayer(state, slot){
       for(const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1]]){ const nx=x+dx,ny=y+dy;
         if(nx<0||ny<0||nx>=W||ny>=H) continue; const j=ny*W+nx; if(!reach[j]&&!blocked[j]){ reach[j]=1; q.push(j); } } }
   }
-
-  const bases=(cfg.enemies||(cfg.enemy?[cfg.enemy]:[]));
-  const farFromEnemy=(x,y)=>{ for(const b of bases){ if(Math.hypot(x-b.x,y-b.y)<10) return false; } return true; };
-
-  // candidate seeds: reflection across map centre first, a widening ring around it, then near p1
-  const seeds=[ {x:W-1-p1.x, y:H-1-p1.y} ];
-  for(let r=4;r<=12;r+=4) for(const [dx,dy] of [[r,0],[-r,0],[0,r],[0,-r],[r,r],[-r,-r],[r,-r],[-r,r]])
-    seeds.push({x:W-1-p1.x+dx, y:H-1-p1.y+dy});
-  seeds.push({x:p1.x+8,y:p1.y}, {x:p1.x,y:p1.y+8});
-
-  let origin=null;
-  for(const s of seeds){
-    const sx=Math.max(2,Math.min(W-8,s.x|0)), sy=Math.max(2,Math.min(H-8,s.y|0));
-    // BFS from the seed (crossing walls) to the nearest p1-reachable open tile — exactly the
-    // gold-node relocation trick in newMap(), guaranteeing the chosen origin is on open, pathable floor
-    const seen=new Uint8Array(W*H), q=[sy*W+sx]; seen[sy*W+sx]=1; let found=-1;
-    for(let h=0;h<q.length&&found<0;h++){ const k=q[h]; if(reach[k]){ found=k; break; }
-      const x=k%W, y=(k/W)|0;
-      for(const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1]]){ const nx=x+dx,ny=y+dy;
-        if(nx<0||ny<0||nx>=W||ny>=H) continue; const j=ny*W+nx; if(!seen[j]){ seen[j]=1; q.push(j); } } }
-    if(found>=0){ const ox=found%W, oy=(found/W)|0;
-      if(ox>=2&&oy>=2&&ox<W-7&&oy<H-7&&farFromEnemy(ox,oy)){ origin={x:ox,y:oy}; break; } }
+  return reach;
+}
+function coopCampusCells(state, origin){
+  const cfg=state.cfg, cells=[], pad=[];
+  const addRect=(tx,ty,w,h)=>{ for(let y=0;y<h;y++)for(let x=0;x<w;x++) cells.push({x:tx+x,y:ty+y}); };
+  addRect(origin.x, origin.y, DEF.hq.w, DEF.hq.h);
+  if(cfg.startBarracks) addRect(origin.x-3, origin.y, DEF.barracks.w, DEF.barracks.h);
+  const nW=cfg.startWorkers!=null?cfg.startWorkers:4, nS=cfg.startSoldiers!=null?cfg.startSoldiers:2;
+  for(let i=0;i<nW;i++) cells.push({x:origin.x+(i%3), y:origin.y+4+((i/3)|0)});
+  for(let i=0;i<nS;i++) cells.push({x:origin.x-1+(i%5), y:origin.y-2-((i/5)|0)});
+  for(let y=-6;y<=6;y++)for(let x=-6;x<=6;x++) pad.push({x:origin.x+x,y:origin.y+y});
+  return {cells,pad};
+}
+function coopEntityFootprint(e){
+  if(e.kind==='building') return {x0:e.tx,y0:e.ty,x1:e.tx+e.w-1,y1:e.ty+e.h-1};
+  if(e.type==='goldmine'){
+    const N=FEAT_SIZE, tx=(e.ftx!=null)?e.ftx:(((e.x/TILE)|0)-(N>>1)), ty=(e.fty!=null)?e.fty:(((e.y/TILE)|0)-(N>>1));
+    return {x0:tx,y0:ty,x1:tx+N-1,y1:ty+N-1};
   }
-  if(!origin) origin={x:Math.max(2,Math.min(W-8,p1.x+6)), y:Math.max(2,Math.min(H-8,p1.y))};  // safe last resort
+  if(e.kind==='unit'){
+    const tx=(e.x/TILE)|0, ty=(e.y/TILE)|0;
+    return {x0:tx,y0:ty,x1:tx,y1:ty};
+  }
+  return null;
+}
+function coopPointInRect(p,r){ return p.x>=r.x0&&p.x<=r.x1&&p.y>=r.y0&&p.y<=r.y1; }
+function coopTileDistToRect(x,y,r){
+  const dx=x<r.x0 ? r.x0-x : (x>r.x1 ? x-r.x1 : 0);
+  const dy=y<r.y0 ? r.y0-y : (y>r.y1 ? y-r.y1 : 0);
+  return Math.hypot(dx,dy);
+}
+function coopEnemyProfileFrom(x,y,hqs){
+  return hqs.map(h=>Math.hypot(x-(h.x/TILE), y-(h.y/TILE))).sort((a,b)=>a-b);
+}
+function coopProfileError(a,b){
+  let err=0, n=Math.max(a.length,b.length);
+  for(let i=0;i<n;i++) err+=Math.abs((a[i]||a[a.length-1]||0)-(b[i]||b[b.length-1]||0));
+  return err;
+}
+function coopCampusValid(state, origin, reach){
+  const W=state.W, H=state.H, c=coopCampusCells(state, origin);
+  let touchesReach=false;
+  for(const p of c.pad){
+    if(p.x<0||p.y<0||p.x>=W||p.y>=H) return false;
+    if(reach[p.y*W+p.x]) touchesReach=true;
+  }
+  if(!touchesReach) return false;
+  for(const p of c.cells){
+    if(p.x<0||p.y<0||p.x>=W||p.y>=H) return false;
+  }
+  const occupied=[];
+  for(const e of state.entities){
+    if(e.dead||e.storedIn) continue;
+    if(e.type==='goldmine') continue;   // relocated after starts settle if a base shadows it
+    const r=coopEntityFootprint(e); if(r) occupied.push({e,r});
+  }
+  for(const o of occupied) for(const p of c.cells){ if(coopPointInRect(p,o.r)) return false; }
+  for(const o of occupied){
+    const friendlyPlayer = o.e.owner==='player';
+    if(friendlyPlayer) continue;
+    for(const p of c.pad){ if(coopPointInRect(p,o.r)) return false; }
+  }
+  return true;
+}
+
+// Spawn a full base (HQ + workers + soldiers + optional barracks) for an extra human `slot` ('p2'…).
+// The origin is chosen after enemy entities exist, then distance-matched to P1's enemy-HQ profile.
+function addCoopPlayer(state, slot){
+  const W=state.W, H=state.H, cfg=state.cfg, p1={x:cfg.player.x, y:cfg.player.y};
+  const reach=coopReachFromP1(state);
+  const enemyHqs=state.entities.filter(e=>e.owner==='enemy'&&e.type==='hq'&&!e.dead);
+  const enemyBuildings=state.entities.filter(e=>e.owner==='enemy'&&e.kind==='building'&&!e.dead).map(coopEntityFootprint).filter(Boolean);
+  const enemyUnits=state.entities.filter(e=>e.owner==='enemy'&&e.kind==='unit'&&!e.dead&&!e.storedIn);
+  const p1cx=p1.x+DEF.hq.w/2, p1cy=p1.y+DEF.hq.h/2;
+  const p1Profile=coopEnemyProfileFrom(p1cx,p1cy,enemyHqs), p1Nearest=p1Profile[0]||0;
+  const reflected={x:W-1-p1.x, y:H-1-p1.y};
+  const candidates=[];
+  for(let k=0;k<reach.length;k++){
+    const x=k%W, y=(k/W)|0, origin={x,y};
+    if(!coopCampusValid(state, origin, reach)) continue;
+    const cx=x+DEF.hq.w/2, cy=y+DEF.hq.h/2;
+    const profile=coopEnemyProfileFrom(cx,cy,enemyHqs);
+    const buildingMin=enemyBuildings.reduce((m,r)=>Math.min(m,coopTileDistToRect(cx,cy,r)),1e9);
+    const unitMin=enemyUnits.reduce((m,u)=>Math.min(m,Math.hypot(cx-u.x/TILE,cy-u.y/TILE)),1e9);
+    const nearest=profile[0]||1e9;
+    candidates.push({
+      origin, nearest, buildingMin, unitMin,
+      safe:buildingMin>=18 && unitMin>=12,
+      fair:nearest>=p1Nearest+0.25,
+      err:coopProfileError(profile,p1Profile),
+      reflected:Math.hypot(x-reflected.x,y-reflected.y),
+      p1sep:Math.hypot(x-p1.x,y-p1.y),
+    });
+  }
+  candidates.sort((a,b)=>{
+    const ta=(a.safe&&a.fair)?0:(a.fair?1:2), tb=(b.safe&&b.fair)?0:(b.fair?1:2);
+    if(ta!==tb) return ta-tb;
+    if(ta<2){
+      if(Math.abs(a.err-b.err)>0.01) return a.err-b.err;
+      const ad=Math.abs(a.nearest-p1Nearest), bd=Math.abs(b.nearest-p1Nearest);
+      if(Math.abs(ad-bd)>0.01) return ad-bd;
+      if(Math.abs(a.unitMin-b.unitMin)>0.01) return b.unitMin-a.unitMin;
+      if(Math.abs(a.buildingMin-b.buildingMin)>0.01) return b.buildingMin-a.buildingMin;
+    } else {
+      const ac=Math.max(0,p1Nearest-a.nearest), bc=Math.max(0,p1Nearest-b.nearest);
+      if(Math.abs(ac-bc)>0.01) return ac-bc;
+      if(Math.abs(a.buildingMin-b.buildingMin)>0.01) return b.buildingMin-a.buildingMin;
+      if(Math.abs(a.err-b.err)>0.01) return a.err-b.err;
+    }
+    if(Math.abs(a.reflected-b.reflected)>0.01) return a.reflected-b.reflected;
+    if(Math.abs(a.p1sep-b.p1sep)>0.01) return b.p1sep-a.p1sep;
+    return (a.origin.y-b.origin.y)||(a.origin.x-b.origin.x);
+  });
+  const origin = candidates.length ? candidates[0].origin : {x:Math.max(6,Math.min(W-7,p1.x+8)), y:Math.max(6,Math.min(H-7,p1.y))};
 
   coopClearArea(state, origin.x, origin.y, 6);                 // open a build pad
 
@@ -589,6 +673,7 @@ function coopClearArea(state, px, py, rad){
     if(state.feat) state.feat[j]=0;                 // drop any walk-under feature base on the pad
     state.blocked[j]=baseBlocked(state, j);         // refresh passability from the cleared terrain
   }
+  for(const e of state.entities){ if(e.kind==='building'&&!e.dead) markBuilding(state,e,true); }
 }
 
 /* ---------- procedural-terrain helpers ---------- */
@@ -745,4 +830,3 @@ function recomputeSupply(state){
     if(e.kind==='unit'){ eco.supply += (DEF[e.type].supply||0); }
   }
 }
-

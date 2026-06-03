@@ -78,6 +78,12 @@ function dispatchTap(e, opts){
   const friendlyFinished = ent && ent.owner==='player' && isMine(ent) &&
         (ent.kind==='unit' || (ent.kind==='building' && !ent.constructing));
   const canCommand = G.selection.some(s=>!s.dead && s.owner==='player' && (s.kind==='unit'||s.kind==='building'));
+  const hasUnitCommand = G.selection.some(s=>!s.dead && !s.storedIn && s.owner==='player' && s.kind==='unit');
+  const isFriendlyHq = ent && ent.owner==='player' && isMine(ent) && ent.type==='hq' && !ent.constructing;
+
+  if(isFriendlyHq && hasUnitCommand){
+    netCommand(G, w.x, w.y, ent); return;
+  }
 
   // tapping your own finished unit/building reselects it (never move-onto-friendly)
   if(friendlyFinished){
@@ -107,7 +113,7 @@ function dispatchTap(e, opts){
 function boxSelectRect(x0,y0,x1,y1, additive){
   const a=screenToWorld(G, Math.min(x0,x1), Math.min(y0,y1));
   const b=screenToWorld(G, Math.max(x0,x1), Math.max(y0,y1));
-  const inBox=G.entities.filter(en=>!en.dead&&en.kind==='unit'&&en.owner==='player'&&isMine(en)&&en.x>=a.x&&en.x<=b.x&&en.y>=a.y&&en.y<=b.y);
+  const inBox=G.entities.filter(en=>!en.dead&&!en.storedIn&&en.kind==='unit'&&en.owner==='player'&&isMine(en)&&en.x>=a.x&&en.x<=b.x&&en.y>=a.y&&en.y<=b.y);
   if(additive && G.selection.length){
     inBox.forEach(u=>{ if(!u.selected){ u.selected=true; G.selection.push(u); } });
     refreshUI(); return;
@@ -126,7 +132,7 @@ function boxSelectRect(x0,y0,x1,y1, additive){
 function selectAllArmy(){
   if(!G) return;
   clearSelection();
-  const army=G.entities.filter(e=>!e.dead && e.kind==='unit' && e.owner==='player' && isMine(e));
+  const army=G.entities.filter(e=>!e.dead && !e.storedIn && e.kind==='unit' && e.owner==='player' && isMine(e));
   army.forEach(u=>u.selected=true); G.selection=army;
   refreshUI();
 }
@@ -160,6 +166,7 @@ function pickEntity(state,wx,wy){
   for(const e of state.entities){
     if(e.dead) continue;
     if(e.kind==='unit'){
+      if(e.storedIn) continue;
       if(e.owner==='enemy' && !isVisiblePix(state,e.x,e.y)) continue;
       // hit-test the whole VISIBLE sprite box (head→feet), not the small collision r
       const hb=unitHitBox(e);
@@ -195,7 +202,7 @@ function clearSelection(){ G.selection.forEach(s=>s.selected=false); G.selection
 /* ---------- Control groups (Ctrl/Cmd + 0-9 assign, 0-9 recall) ---------- */
 function assignGroup(g){
   if(!G) return;
-  const members = G.selection.filter(s=>!s.dead && s.owner==='player' && isMine(s));
+  const members = G.selection.filter(s=>!s.dead && !s.storedIn && s.owner==='player' && isMine(s));
   const mset = new Set(members);
   // a unit belongs to at most ONE group — pull these members out of every other group first,
   // so re-assigning to a new slot moves them rather than duplicating their membership.
@@ -209,8 +216,9 @@ function assignGroup(g){
 }
 function recallGroup(g){
   if(!G) return;
-  const members = (G.groups[g]||[]).filter(s=>!s.dead && s.owner==='player' && isMine(s));
-  G.groups[g] = members;                  // prune any that died
+  const alive = (G.groups[g]||[]).filter(s=>!s.dead && s.owner==='player' && isMine(s));
+  G.groups[g] = alive;                    // prune any that died
+  const members = alive.filter(s=>!s.storedIn);
   if(!members.length) return;
   clearSelection();
   members.forEach(s=>s.selected=true);
@@ -256,4 +264,3 @@ function updateCamera(state,dt){
   } else { edgeTopHold=0; }
   state.camX+=dx; state.camY+=dy; clampCam(state);
 }
-

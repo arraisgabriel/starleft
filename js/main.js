@@ -231,11 +231,43 @@ function wireTouchControls(){
     el.addEventListener('pointercancel', cancel);
   });
 }
+function wireBootGate(){
+  const gate=document.getElementById('bootGate');
+  const btn=document.getElementById('btn-simulate');
+  if(!gate||!btn) return;
+  const soundBtn=document.getElementById('btn-boot-sound');
+  const syncSoundBtn=()=>{
+    if(!soundBtn || typeof MUSIC==='undefined') return;
+    const on=MUSIC.isEnabled();
+    soundBtn.classList.toggle('is-muted', !on);
+    soundBtn.textContent = '♪';
+    soundBtn.setAttribute('aria-label', on ? 'Disable music' : 'Enable music');
+    soundBtn.title = on ? 'Disable music' : 'Enable music';
+  };
+  gate.style.display='flex';
+  syncSoundBtn();
+  if(soundBtn){
+    soundBtn.addEventListener('click', ev=>{
+      ev.preventDefault();
+      ev.stopPropagation();
+      if(typeof MUSIC!=='undefined') MUSIC.toggle();
+      syncSoundBtn();
+    });
+  }
+  btn.addEventListener('click', ()=>{
+    gate.classList.add('hide');
+    setTimeout(()=>{ gate.style.display='none'; }, 360);
+    if(typeof MUSIC!=='undefined') MUSIC.startNow();
+    if(typeof LNS!=='undefined' && LNS.relayout) LNS.relayout();
+  }, { once:true });
+}
 wireTouchControls();
 
 buildMapSelect();
 startTipRotation();   // random rotating Field Tip in the menu panel
 LNS.init();           // Live News Stream — menu + in-game RSS headline ticker
+if(typeof MUSIC!=='undefined') MUSIC.init();   // main theme after 2s, then menu loop while in menu overlays
+wireBootGate();
 if(typeof mpCheckInviteHash==='function') mpCheckInviteHash();   // #mp=CODE invite link → auto-join co-op
 /* =====================================================================
    MAIN LOOP
