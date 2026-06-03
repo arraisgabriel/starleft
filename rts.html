@@ -23,7 +23,7 @@
   <div id="topbar">
     <div class="stat" title="Venture Funding — spend it on Interns, hires and buildings"><span class="ico gold"></span>💰 <span id="gold">0</span> <span class="lbl">Funding</span></div>
     <div class="stat" title="Headcount vs capacity — build more Open-Plan HQs to hire more"><span class="ico sup"></span>👥 <span id="supply">0/0</span> <span class="lbl">Headcount</span></div>
-    <div class="lbl">Quarter <span id="mapname">—</span></div>
+    <div class="lbl">Episode <span id="mapname">—</span></div>
     <div id="objective">Disrupt the competition.</div>
     <div id="top-menu">
       <button class="tc-btn" id="btn-topmenu" title="Menu" aria-haspopup="true" aria-expanded="false">☰ Menu<span id="topmenu-badge" class="tc-badge" style="display:none;">0</span></button>
@@ -34,7 +34,14 @@
         <button class="tc-btn" id="btn-voice" title="Toggle unit &amp; narrator voices">🔊 Voices</button>
         <button class="tc-btn" id="btn-save" title="Save game (⌘/Ctrl+S)">Save</button>
         <button class="tc-btn" id="btn-fs" title="Toggle fullscreen">Fullscreen</button>
+        <button class="tc-btn" id="btn-netq" title="Toggle connection quality panel">Network Signal</button>
       </div>
+    </div>
+    <!-- Multiplayer connection quality -->
+    <div id="netq-panel" style="display:none;" title="Multiplayer connection quality">
+      <span class="netq-label">Network</span>
+      <span id="netq-quality">Solo</span>
+      <span id="netq-rtt">—</span>
     </div>
     <!-- Live News Stream — thin ticker flush under the top bar (toggled by 📡 News) -->
     <div id="lns-ingame" style="display:none;"><div class="lns-tag">LIVE</div><div class="lns-host"></div></div>
@@ -160,7 +167,12 @@
           <span class="mpr-eyebrow">CO-OP NETWORK</span>
           <h2 id="mp-room-title">War Room</h2>
         </div>
-        <div class="mp-conn wait" id="mp-conn"><span class="dot"></span><span id="mp-conn-txt">Connecting…</span><span id="mp-rtt" class="mp-rtt"></span></div>
+        <div class="mp-conn wait" id="mp-conn">
+          <span class="dot"></span>
+          <span id="mp-conn-txt">Connecting…</span>
+          <span id="mp-rtt" class="mp-rtt"></span>       
+          <span id="mp-quality" class="mp-quality">Quality: —</span>
+        </div>
         <button class="mpr-leave" onclick="mpLeaveRoomClick()"><span class="ic">◀</span> Leave Room</button>
       </header>
 

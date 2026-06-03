@@ -40,3 +40,137 @@
       else { try{ MP.send('mprtt', { t:m.t, echo:true }, peerId); }catch(_){} } });
   });
 })();
+
+// -----------------------------------------------------------------------------
+// Multiplayer connection quality UI
+// Local-only display derived from the existing RTT probe.
+// Does not affect simulation, saves, commands, or snapshots.
+// -----------------------------------------------------------------------------
+(function(){
+  function $(id){ return document.getElementById(id); }
+
+  function mpQualityFromRtt(ms){
+    if(ms == null || !isFinite(ms)){
+      return {
+        key: 'unknown',
+        label: '—',
+        detail: 'No peer RTT yet'
+      };
+    }
+
+    if(ms < 100){
+      return {
+        key: 'good',
+        label: 'Good',
+        detail: 'Low-latency board channel'
+      };
+    }
+
+    if(ms < 180){
+      return {
+        key: 'okay',
+        label: 'Okay',
+        detail: 'Playable co-op latency'
+      };
+    }
+
+    if(ms < 280){
+      return {
+        key: 'laggy',
+        label: 'Laggy',
+        detail: 'Orders may feel delayed'
+      };
+    }
+
+    return {
+      key: 'bad',
+      label: 'Bad',
+      detail: 'Expect late orders and corrections'
+    };
+  }
+
+  function setQualityClass(el, quality){
+    if(!el) return;
+    el.classList.remove('unknown', 'good', 'okay', 'laggy', 'bad');
+    el.classList.add(quality.key);
+  }
+
+  function updateLobbyQuality(ms){
+    const el = $('mp-quality');
+    if(!el) return;
+
+    const quality = mpQualityFromRtt(ms);
+    el.textContent = 'Quality: ' + quality.label;
+    el.title = quality.detail;
+    setQualityClass(el, quality);
+  }
+
+  function updateInGameQuality(ms){
+    const panel = $('netq-panel');
+    const qualityEl = $('netq-quality');
+    const rttEl = $('netq-rtt');
+
+    if(!panel || !qualityEl || !rttEl) return;
+
+    const quality = mpQualityFromRtt(ms);
+
+    qualityEl.textContent = quality.label;
+    qualityEl.title = quality.detail;
+
+    if(ms == null || !isFinite(ms)){
+      rttEl.textContent = '—';
+    } else {
+      rttEl.textContent = Math.round(ms) + ' ms';
+    }
+
+    setQualityClass(panel, quality);
+  }
+
+  function updateQuality(ms){
+    window.MP_LAST_RTT = ms;
+    window.MP_NET_QUALITY = mpQualityFromRtt(ms);
+
+    updateLobbyQuality(ms);
+    updateInGameQuality(ms);
+  }
+
+  // Keep the original RTT chip behavior, then add quality updates.
+  if(typeof window.mpUiSetRtt === 'function' && !window.__mpUiSetRttBase){
+    window.__mpUiSetRttBase = window.mpUiSetRtt;
+  }
+
+  window.mpUiSetRtt = function(ms){
+    if(typeof window.__mpUiSetRttBase === 'function'){
+      window.__mpUiSetRttBase(ms);
+    } else {
+      const el = $('mp-rtt');
+      if(el){
+        el.textContent = (ms == null || !isFinite(ms)) ? '' : Math.round(ms) + ' ms';
+      }
+    }
+
+    updateQuality(ms);
+  };
+
+  window.mpQualityFromRtt = mpQualityFromRtt;
+
+  window.mpToggleNetQuality = function(force){
+    const panel = $('netq-panel');
+    if(!panel) return;
+
+    const show = (typeof force === 'boolean')
+      ? force
+      : panel.style.display === 'none';
+
+    panel.style.display = show ? 'flex' : 'none';
+
+    try{
+      localStorage.setItem('starleft_show_net_quality', show ? '1' : '0');
+    }catch(_){}
+
+    updateQuality(window.MP_LAST_RTT);
+  };
+
+  // Initial paint, useful before the first RTT probe lands.
+  updateQuality(window.MP_LAST_RTT);
+})();

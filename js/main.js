@@ -200,7 +200,11 @@ function wireTouchControls(){
   on('btn-roster', ()=>{ if(typeof showRoster==='function') showRoster(); });
   on('btn-events', ()=>{ if(typeof showEvents==='function') showEvents(); });
   on('btn-voice', ()=>{ if(typeof VOICE!=='undefined'){ VOICE.toggle(); syncVoiceBtn(); } });
+  on('btn-netq', ()=>{ if(typeof mpToggleNetQuality==='function') mpToggleNetQuality(); });
   syncVoiceBtn();   // reflect the persisted on/off state on the button label
+  if(typeof mpToggleNetQuality==='function') {
+    mpToggleNetQuality(localStorage.getItem('starleft_show_net_quality')==='1');
+  }
   // unified top-right menu: one button toggles a dropdown of News/Roster/Events/Save/Fullscreen
   (function wireTopMenu(){
     const wrap=document.getElementById('top-menu');

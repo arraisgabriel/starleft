@@ -153,6 +153,57 @@
   background:linear-gradient(90deg, transparent, #ff5a5a, transparent); border-radius:2px; }
 .mp-presence { border-top:1px solid rgba(111,54,68,.45); padding-top:14px; margin-top:4px; }
 
+/* mp network signal quality */
+.mp-quality{
+  margin-left:8px;
+  font-size:12px;
+  opacity:.9;
+  white-space:nowrap;
+}
+.mp-quality.good,
+#netq-panel.good{
+  color:#8ff0b0;
+}
+.mp-quality.okay,
+#netq-panel.okay{
+  color:#ffd86b;
+}
+.mp-quality.laggy,
+#netq-panel.laggy{
+  color:#ffad66;
+}
+.mp-quality.bad,
+#netq-panel.bad{
+  color:#ff7b8a;
+}
+#netq-panel{
+  position:absolute;
+  right:12px;
+  top:44px;
+  z-index:6;
+  display:flex;
+  gap:8px;
+  align-items:center;
+  padding:6px 10px;
+  border:1px solid rgba(255,255,255,.18);
+  border-radius:999px;
+  background:rgba(8,10,18,.82);
+  box-shadow:0 6px 20px rgba(0,0,0,.25);
+  font-size:12px;
+  backdrop-filter:blur(6px);
+}
+#netq-panel .netq-label{
+  opacity:.72;
+  text-transform:uppercase;
+  letter-spacing:.08em;
+}
+#netq-quality{
+  font-weight:700;
+}
+#netq-rtt{
+  opacity:.82;
+}
+
 /* =====================================================================
    ROOM SCREEN — full-bleed "operations console" (revamped layout).
    Sectioned framed panels spread across the desktop, separate bottom
