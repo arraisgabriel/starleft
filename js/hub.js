@@ -28,6 +28,27 @@ const HUB = {
     frames:{mdc_nw:0, mdc_ne:2, mdc_sw:4, mdc_ultra:0},
     w:5, h:5, overhang:1.08, heightScale:1 },
   wasteMega:{ w:11, h:9, overhang:1.45, spots:[{tx:80,ty:71},{tx:111,ty:70},{tx:101,ty:91},{tx:72,ty:92,variant:4,frame:7}] },
+  rivers:[
+    { id:'north', width:2.1, points:[
+      {x:-3,y:24},{x:14,y:21},{x:31,y:18},{x:46,y:27},{x:64,y:30},{x:83,y:22},{x:104,y:18},{x:127,y:17}
+    ]},
+    { id:'south', width:2.3, points:[
+      {x:6,y:105},{x:18,y:92},{x:21,y:83},{x:22,y:75},{x:36,y:68},{x:51,y:63},{x:64,y:60},{x:78,y:56},{x:94,y:51},{x:127,y:52}
+    ]},
+    { id:'west_tributary', width:1.5, points:[
+      {x:-3,y:51},{x:15,y:50},{x:31,y:55},{x:45,y:52},{x:47,y:45},{x:50,y:38},{x:56,y:33},{x:64,y:30}
+    ]},
+  ],
+  bridges:[
+    {id:'condo_nw_bridge', x:14, y:21, w:5, h:7},
+    {id:'mdc_nw_bridge', x:33, y:19, w:5, h:8},
+    {id:'tributary_bridge', x:50, y:38, w:6, h:6},
+    {id:'condo_ne_bridge', x:103, y:20, w:5, h:7},
+    {id:'southwest_bridge', x:22, y:82, w:8, h:5},
+    {id:'southwest_bend_bridge', x:38, y:68, w:7, h:5},
+    {id:'downtown_bridge', x:63, y:59, w:5, h:7},
+    {id:'east_crossing_bridge', x:94, y:51, w:5, h:7},
+  ],
 };
 
 let CAMPAIGN = hubDefaultCampaign();
@@ -247,9 +268,16 @@ function hubCarvePath(tiles,biome,W,H,points,width,fn){
     }
   }
 }
-function hubCarveRiver(tiles,biome,W,H,points,width){
+function hubCarveRiver(tiles,biome,W,H,points,width,riverMask){
   hubCarvePath(tiles,biome,W,H,points,width,(x,y,w)=>{
-    hubStampDisk(tiles,biome,W,H,x,y,w,T_WATER,B_WATER,(tx,ty)=>!hubInWasteland(tx,ty));
+    const R=Math.ceil(w);
+    for(let yy=-R;yy<=R;yy++) for(let xx=-R;xx<=R;xx++){
+      if(xx*xx+yy*yy>w*w) continue;
+      const tx=Math.round(x+xx), ty=Math.round(y+yy);
+      if(tx<0||ty<0||tx>=W||ty>=H || hubInWasteland(tx,ty)) continue;
+      hubSetCell(tiles,biome,W,H,tx,ty,T_WATER,B_WATER);
+      if(riverMask) riverMask[ty*W+tx]=1;
+    }
   });
 }
 function hubCarveRoad(tiles,biome,W,H,points,width){
@@ -262,8 +290,32 @@ function hubCarveRoad(tiles,biome,W,H,points,width){
     }
   });
 }
+function hubRestoreRivers(tiles,biome,W,H,riverMask){
+  if(!riverMask) return;
+  for(let i=0;i<W*H;i++){
+    if(!riverMask[i]) continue;
+    tiles[i]=T_WATER; biome[i]=B_WATER;
+  }
+}
+function hubStampBridgeDeck(tiles,biome,W,H,bridge){
+  const w=Math.max(3,bridge.w|0), h=Math.max(3,bridge.h|0);
+  const x0=Math.round(bridge.x - w/2), y0=Math.round(bridge.y - h/2);
+  const rx=w/2, ry=h/2;
+  for(let y=0;y<h;y++) for(let x=0;x<w;x++){
+    const tx=x0+x, ty=y0+y;
+    if(tx<0||ty<0||tx>=W||ty>=H) continue;
+    const dx=Math.abs((x+0.5)-rx), dy=Math.abs((y+0.5)-ry);
+    const edgeX=Math.max(0, dx-(rx-1.1)), edgeY=Math.max(0, dy-(ry-1.1));
+    if(edgeX*edgeX + edgeY*edgeY > 1.65) continue;
+    hubSetCell(tiles,biome,W,H,tx,ty,T_DIRT,B_TECH);
+  }
+}
+function hubStampBridges(tiles,biome,W,H){
+  for(const bridge of HUB.bridges) hubStampBridgeDeck(tiles,biome,W,H,bridge);
+}
 function hubBuildTerrain(W,H,rng){
   const tiles=new Array(W*H), variant=new Array(W*H), biome=new Array(W*H);
+  const riverMask=new Uint8Array(W*H);
   const grassNoise=makeNoise2D(4242 + CAMPAIGN.visit*31);
   const wasteNoise=makeNoise2D(9001 + CAMPAIGN.visit*37);
 
@@ -288,17 +340,9 @@ function hubBuildTerrain(W,H,rng){
     if(grit>0.88 || (biome[i]===B_VOLCANIC && scorch>0.70 && variant[i]>0.35)) tiles[i]=T_ROCK;
   }
 
-  // Rivers: broad enough to survive water cleanup visually, then later roads
-  // deliberately bridge them at HUB travel corridors.
-  hubCarveRiver(tiles,biome,W,H,[
-    {x:-2,y:24},{x:14,y:21},{x:31,y:18},{x:46,y:27},{x:64,y:30},{x:83,y:24},{x:104,y:20},{x:W+2,y:18}
-  ],2.1);
-  hubCarveRiver(tiles,biome,W,H,[
-    {x:6,y:H+2},{x:18,y:91},{x:30,y:76},{x:45,y:66},{x:61,y:60},{x:75,y:56},{x:91,y:51},{x:W+2,y:52}
-  ],2.3);
-  hubCarveRiver(tiles,biome,W,H,[
-    {x:4,y:51},{x:20,y:49},{x:34,y:55},{x:47,y:52},{x:58,y:45}
-  ],1.5);
+  // Rivers either enter/leave the map edge or join another river. A river mask
+  // lets POI pads clean their entrances without permanently chopping streams.
+  for(const river of HUB.rivers) hubCarveRiver(tiles,biome,W,H,river.points,river.width,riverMask);
   addBeach(tiles,W,H);
 
   // Grassland topography: coherent groves and a few rock outcrops, not per-tile confetti.
@@ -338,6 +382,9 @@ function hubBuildTerrain(W,H,rng){
     hubStampRect(tiles,biome,W,H,p.x-pad,p.y-pad,d.w+pad*2,d.h+pad*2,T_DIRT,b);
     hubStampRect(tiles,biome,W,H,p.x-1,p.y-1,d.w+2,d.h+2,T_GRASS,b);
   }
+  hubRestoreRivers(tiles,biome,W,H,riverMask);
+  addBeach(tiles,W,H);
+  hubStampBridges(tiles,biome,W,H);
 
   return {tiles,variant,biome};
 }
