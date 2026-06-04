@@ -16,6 +16,20 @@ let RTC = { iceServers: [
 
 let joinRoom = null, selfId = null, loadErr = null;
 
+// Phase 2b: track each peer's data channels so MP.bufferedAmount() can read SCTP send-queue depth for
+// snapshot backpressure (Trystero hides its channels). Patch the prototype once, fully guarded.
+try{
+  if(typeof RTCPeerConnection!=='undefined' && !RTCPeerConnection.prototype.__sl_dcPatched){
+    const _cdc = RTCPeerConnection.prototype.createDataChannel;
+    RTCPeerConnection.prototype.createDataChannel = function(){
+      const dc = _cdc.apply(this, arguments);
+      try{ (this.__sl_dcs || (this.__sl_dcs = [])).push(dc); }catch(_){}
+      return dc;
+    };
+    RTCPeerConnection.prototype.__sl_dcPatched = true;
+  }
+}catch(_){}
+
 // Vendored bundle first (offline-capable); esm.sh as a last-resort runtime fallback.
 async function loadTrystero(){
   try { const m = await import('../vendor/trystero-nostr.min.js'); joinRoom = m.joinRoom; selfId = m.selfId; return true; }
@@ -37,7 +51,7 @@ function finishReady(){
     const off = () => () => {};
     window.MP = { unavailable:true, _err:String(loadErr), isReady:()=>false, inRoom:false,
       enter(){}, hostRoom(){}, joinRoom(){}, leaveRoom(){}, peers(){return[];},
-      onPeer:off, onLeave:off, send(){}, on:off, addVoice(){}, removeVoice(){}, onVoice:off,
+      onPeer:off, onLeave:off, send(){}, on:off, bufferedAmount(){return 0;}, addVoice(){}, removeVoice(){}, onVoice:off,
       setRelay(){}, presence:{ join(){}, leave(){}, send(){}, on:off } };
     finishReady();
     return;
@@ -74,6 +88,10 @@ function finishReady(){
       room.onPeerJoin(id => peerCbs.join.forEach(fn => { try{ fn(id); }catch(_){} }));
       room.onPeerLeave(id => peerCbs.leave.forEach(fn => { try{ fn(id); }catch(_){} }));
       room.onPeerStream((stream, id) => peerCbs.stream.forEach(fn => { try{ fn(stream, id); }catch(_){} }));
+      // Register the Trystero action for every listener bound BEFORE the room existed (e.g. lobby chat/emote,
+      // wired at page load via whenMP). Without this their receiver is never created, so the peer only starts
+      // RECEIVING that tag after it first SENDS on it — which is why client chat didn't reach the host.
+      for (const tag in listeners) { try { ensureAction(tag); } catch(_){} }
       return code;
     },
     hostRoom(code){ return this.enter(code); },
@@ -81,6 +99,17 @@ function finishReady(){
     leaveRoom(){ if (room){ try{ room.leave(); }catch(_){} } room=null;
       for (const k in actions) delete actions[k]; for (const k in listeners) delete listeners[k]; },
     peers(){ try { return room ? Object.keys(room.getPeers()) : []; } catch(_){ return []; } },
+
+    // Phase 2b: max SCTP send-queue depth across peer data channels (0 if unobservable) — drives snapshot backpressure.
+    bufferedAmount(){
+      try{
+        if(!room || !room.getPeers) return 0;
+        const peers = room.getPeers(); let max = 0;
+        for(const id in peers){ const pc = peers[id], dcs = pc && pc.__sl_dcs; if(!dcs) continue;
+          for(const dc of dcs){ const b = (dc && dc.bufferedAmount) || 0; if(b > max) max = b; } }
+        return max;
+      }catch(_){ return 0; }
+    },
 
     onPeer(fn){ peerCbs.join.add(fn);  return () => peerCbs.join.delete(fn); },
     onLeave(fn){ peerCbs.leave.add(fn); return () => peerCbs.leave.delete(fn); },

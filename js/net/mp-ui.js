@@ -81,6 +81,7 @@
     if($('mp-qr-box')){ $('mp-qr-box').style.display='none'; $('mp-qr-box').innerHTML=''; }
     populateMapPick(); window.mpUiSetMode(UI.mode); renderPeers(); setConn('Connecting…','wait');
     if(typeof mpStartRtt==='function') mpStartRtt();
+    if(typeof mpUiBindChat==='function') mpUiBindChat();   // (re)bind chat/emote/ready now the room exists — covers re-opening a lobby after a leave
     showSub('mpRoomScreen');
   };
   // Return to the main menu and re-tune the LNS news ticker. The menu's #lns-menu stripe lives
@@ -175,10 +176,15 @@
     row.innerHTML='<b></b><span></span>'; row.querySelector('b').textContent=from+': '; row.querySelector('span').textContent=text;
     log.appendChild(row); log.scrollTop=log.scrollHeight;
     if(getComputedStyle(document.getElementById('mpRoomScreen')).display==='none') toast('💬 '+from+': '+text); }
+  // Idempotent: unsubscribe any previous bindings first, so this can be (re)called both at MP-ready AND
+  // whenever a lobby opens (a room change wipes the facade's listeners) without duplicating handlers.
+  let _chatUnsub = [];
   window.mpUiBindChat = function(){
-    MP.on('mpchat',(m)=>appendChat(m.from||'Ally', m.text||''));
-    MP.on('mpemote',(m)=>{ const map={gg:'GG',help:'HELP!',attack:'PUSH 🚀',defend:'HOLD 🛡',thanks:'TY 🙏'}; appendChat(m.from||'Ally', map[m.e]||m.e); });
-    MP.on('mpready',(m)=>{ const s=S(); s._joinerReady=!!m.ready; renderPeers(); });
+    if(!(window.MP) || MP.unavailable) return;
+    _chatUnsub.forEach(u=>{ try{ u&&u(); }catch(_){} }); _chatUnsub.length=0;
+    _chatUnsub.push(MP.on('mpchat',(m)=>appendChat(m.from||'Ally', m.text||'')));
+    _chatUnsub.push(MP.on('mpemote',(m)=>{ const map={gg:'GG',help:'HELP!',attack:'PUSH 🚀',defend:'HOLD 🛡',thanks:'TY 🙏'}; appendChat(m.from||'Ally', map[m.e]||m.e); }));
+    _chatUnsub.push(MP.on('mpready',(m)=>{ const s=S(); s._joinerReady=!!m.ready; renderPeers(); }));
   };
 
   /* ---------- voice button handlers (delegate to COMMS in voice-chat.js) ---------- */

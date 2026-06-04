@@ -110,6 +110,66 @@ function clampCam(state){
   state.camY = (vh>=wH) ? (wH-vh)/2 : Math.max(-40, Math.min(wH-vh+40, state.camY));
 }
 
+/* ---- Laser shot FX (Star-Wars / cyberpunk glowing bolt) ----
+   A hot-white-cored, colored-halo BOLT that travels from the unit's gun muzzle to the
+   target, trailing a fading beam, with a muzzle flash and an impact spark. Plain canvas
+   2D: additive 'lighter' compositing + layered strokes for the beam (white-hot core →
+   colored halo) + a cached radial glow sprite for the muzzle/head/impact bursts (no
+   per-frame gradient allocation). Player RED, enemy BLUE; width scales with unit size.
+   Muzzle start comes from muzzleWorld()/buildingMuzzle(); endpoint is the shot's
+   shootFx.x/y; flight progress p = 1 - shootFx.t/SHOOTFX_LIFE. */
+const _laserGlowCache = {};
+function _laserGlow(red){
+  const key = red?'r':'b'; let c=_laserGlowCache[key]; if(c) return c;
+  const s=64; c=document.createElement('canvas'); c.width=c.height=s;
+  const x=c.getContext('2d'), g=x.createRadialGradient(s/2,s/2,0, s/2,s/2,s/2);
+  g.addColorStop(0, 'rgba(255,255,255,1)');
+  if(red){ g.addColorStop(0.22,'rgba(255,228,212,0.95)'); g.addColorStop(0.5,'rgba(255,80,60,0.55)'); g.addColorStop(1,'rgba(255,60,45,0)'); }
+  else   { g.addColorStop(0.22,'rgba(220,240,255,0.95)'); g.addColorStop(0.5,'rgba(90,175,255,0.55)'); g.addColorStop(1,'rgba(70,160,255,0)'); }
+  x.fillStyle=g; x.fillRect(0,0,s,s); _laserGlowCache[key]=c; return c;
+}
+function _laserBlob(sprite, cx, cy, radius, alpha){
+  if(alpha<=0.01 || radius<=0.3) return;
+  ctx.globalAlpha=Math.min(1,alpha);
+  ctx.drawImage(sprite, cx-radius, cy-radius, radius*2, radius*2);
+}
+// x0,y0 = muzzle; x1,y1 = target; red = side; w = base beam width; p = 0..1 flight; charge = heavy (sieged) variant
+function drawLaserBolt(x0,y0,x1,y1, red, w, p, charge){
+  const glow=_laserGlow(red);
+  const outer = red ? '255,70,55' : '80,170,255';
+  const core  = red ? '255,232,218' : '220,242,255';
+  const ep = p*p*(3-2*p);                              // smoothstep ease for the travelling head
+  const hx=x0+(x1-x0)*ep, hy=y0+(y1-y0)*ep;            // bolt head
+  const tp=Math.max(0, ep-0.34);                       // trail tail trails ~34% of the beam behind the head
+  const lx=x0+(x1-x0)*tp, ly=y0+(y1-y0)*tp;
+  const env=Math.max(0, Math.min(1,p/0.10) * Math.min(1,(1-p)/0.28));   // beam/trail intensity envelope (fade in fast, out near impact)
+  const W=w*(charge?1.5:1);
+
+  ctx.save();
+  ctx.globalCompositeOperation='lighter';
+  ctx.lineCap='round'; ctx.lineJoin='round';
+  // beam trail (tail → head): layered additive strokes, white-hot core
+  if(env>0.02){
+    const layers=[
+      [W*3.4, 'rgba('+outer+','+(0.14*env).toFixed(3)+')'],
+      [W*1.9, 'rgba('+outer+','+(0.30*env).toFixed(3)+')'],
+      [W*1.0, 'rgba('+core +','+(0.55*env).toFixed(3)+')'],
+      [Math.max(1,W*0.45), 'rgba(255,255,255,'+(0.92*env).toFixed(3)+')'],
+    ];
+    for(let i=0;i<layers.length;i++){ ctx.strokeStyle=layers[i][1]; ctx.lineWidth=layers[i][0];
+      ctx.beginPath(); ctx.moveTo(lx,ly); ctx.lineTo(hx,hy); ctx.stroke(); }
+  }
+  // bolt head pop
+  _laserBlob(glow, hx,hy, W*(charge?2.6:2.0)*Math.max(0.45,env), env*1.1);
+  // muzzle flash — brightest at p=0, gone by ~0.42
+  const mf=Math.max(0,(0.42-p)/0.42);
+  _laserBlob(glow, x0,y0, W*(charge?4.2:3.0)*(0.6+0.4*mf), mf);
+  // impact spark — ramps in as the bolt reaches the target
+  const im=Math.max(0,(p-0.74)/0.26);
+  _laserBlob(glow, x1,y1, W*(charge?3.4:2.6)*(0.5+0.5*im), im);
+  ctx.restore();
+}
+
 function render(state){
   const z=state.zoom||1, vx=state.camX, vy=state.camY;
 
@@ -200,14 +260,19 @@ function render(state){
   // ---- ambient particles: FRONT pass (fireflies/embers/snow/dust/motes) — over the sprites ----
   if(typeof drawParticles==='function') drawParticles(state, x0,y0,x1,y1, 'front');
 
-  // ---- shoot FX ----
+  // ---- laser shot FX: glowing bolts from each shooter's gun muzzle to its target ----
   for(const e of state.entities){
     if(e.dead||e.storedIn) continue;
-    if(e.shootFx && e.shootFx.t>0){
-      ctx.strokeStyle = isRedSide(e.owner)? 'rgba(255,150,120,.85)':'rgba(150,220,255,.8)';
-      ctx.lineWidth=2; ctx.beginPath(); ctx.moveTo(e.x+ox,e.y+oy); ctx.lineTo(e.shootFx.x+ox,e.shootFx.y+oy); ctx.stroke();
-      e.shootFx.t-=1/60;
-    }
+    const sf=e.shootFx;
+    if(!(sf && sf.t>0)) continue;
+    // hide beams from enemy units we can't currently see (matches the enemy-unit fog cull)
+    if(e.owner==='enemy' && e.kind==='unit' && !isVisiblePix(state,e.x,e.y)){ sf.t-=1/60; continue; }
+    const start = e.kind==='building' ? buildingMuzzle(e) : muzzleWorld(e);
+    const charge = (e.type==='auditor' && e.sieged);
+    const w = 2.2 * (e.kind==='building' ? 1.35 : unitDrawH(e)/64) * muzzleW(e);   // big mechs read larger
+    const p = Math.min(1, Math.max(0, 1 - sf.t/SHOOTFX_LIFE));
+    drawLaserBolt(start.x+ox, start.y+oy, sf.x+ox, sf.y+oy, isRedSide(e.owner), w, p, charge);
+    sf.t-=1/60;
   }
 
   // ---- fog overlay ----
@@ -770,7 +835,7 @@ function drawUnit(state,u,ox,oy){
   const mvx = u.x-lax, mvy = u.y-lay, md = Math.hypot(mvx,mvy);
   u._ax=u.x; u._ay=u.y;
   u._walkDist = (u._walkDist||0)+md;
-  if(md>0.25){ u._still=0; if(Math.abs(mvx)>0.15) u._face = mvx<0?-1:1; }
+  if(md>0.25){ u._still=0; if(Math.abs(mvx)>0.15 && !u._actState) u._face = mvx<0?-1:1; }   // combat (_actState) → trust the authoritative facing (host/sim), don't flip from interpolated drift
   else u._still=(u._still||0)+1;
   const moving = u._netMoving || (u._still||0) < 6;   // debounce so brief stalls don't flicker to idle; _netMoving = host-authoritative locomotion (co-op client) so eased sub-threshold motion still animates
 

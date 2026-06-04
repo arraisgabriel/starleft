@@ -23,7 +23,7 @@ function update(state, dt){
     if(bd.dmg){
       b.cd-=dt;
       const tgt=nearestEnemy(state,b, bd.range*TILE);
-      if(tgt && b.cd<=0){ damage(state,tgt,bd.dmg, b); b.cd=bd.cd; b.shootFx={x:tgt.x,y:tgt.y,t:0.12}; }
+      if(tgt && b.cd<=0){ damage(state,tgt,bd.dmg, b); b.cd=bd.cd; b.shootFx={x:tgt.x,y:tgt.y,t:SHOOTFX_LIFE}; }
     }
     // passive auto-extraction (Satellite Office trickles Funding for the player)
     if(bd.trickle && b.owner==='player'){ const eco=playerEco(state, b.ctrl); eco.gold += bd.trickle*dt; eco.gold_collected += bd.trickle*dt; }

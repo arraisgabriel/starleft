@@ -488,7 +488,7 @@ function updateUnit(state,u,dt){
         gainXp(u, atk.hp<=0, state);   // career points for the shot / killing blow
         u.cd = def.cd;
         u._actStamp = state.time;   // timestamps the strike so the swing/shot frame lands on it
-        if(aRange>2) u.shootFx={x:atk.x,y:atk.y,t:0.1};
+        if(aRange>2) u.shootFx={x:atk.x,y:atk.y,t:SHOOTFX_LIFE};
       }
     } else if(def.siege && u.sieged){
       // rooted while sieged — hold fire until the target re-enters range

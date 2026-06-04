@@ -206,3 +206,31 @@ function blitFrame(u, px, py, anim, S, fi){
   ctx.restore();
   return dh;
 }
+
+/* ---- Laser muzzle anchoring (render-only) ----
+   World point of a unit's gun barrel, derived from the precalculated normalized muzzle
+   in MUZZLE[type] (js/muzzle_data.js). Mirrors blitFrame EXACTLY so the point tracks the
+   drawn sprite pixel-for-pixel: the frame box is x∈[-dw/2,+dw/2], y∈[-0.7h,+0.3h] around
+   (u.x, u.y-alt), with the same horizontal flip. Because (mx,my) is normalized and dw/dh
+   scale with unitDrawH, big mechs automatically get a muzzle further out — and the beam
+   width scales the same way. Falls back to a forward/upper default when unauthored. */
+function muzzleWorld(u){
+  const sType = u.spriteType || u.type;
+  const m = (typeof MUZZLE!=='undefined' && MUZZLE[sType]) || MUZZLE_FALLBACK;
+  const anim = actionAnim(sType,'attack',u.owner) || unitWalk(sType,u.owner);
+  const vh = unitDrawH(u), dh = vh, dw = vh*(anim ? anim.fw/anim.fh : 1), alt = u.air?16:0;
+  let lx = ((m.mx!=null?m.mx:0.7) - 0.5)*dw;
+  const ly = ((m.my!=null?m.my:0.42) - 0.7)*dh;
+  const facesLeft = !!(DEF[u.type] && DEF[u.type].facesLeft);
+  if(((u._face||1)<0) !== facesLeft) lx = -lx;     // same mirror as blitFrame
+  return { x:u.x + lx, y:(u.y-alt) + ly };
+}
+// World point of a building's rooftop gun — normalized within the tile FOOTPRINT (no flip).
+function buildingMuzzle(b){
+  const m = (typeof MUZZLE!=='undefined' && MUZZLE[b.type]) || null;
+  const x0 = b.tx*TILE, y0 = b.ty*TILE, w = b.w*TILE, h = b.h*TILE;
+  const bx = m && m.bx!=null ? m.bx : 0.5, by = m && m.by!=null ? m.by : 0.15;
+  return { x:x0 + w*bx, y:y0 + h*by };
+}
+// Beam-width multiplier for an emitter (big units → heavier ray).
+function muzzleW(e){ const m = (typeof MUZZLE!=='undefined' && MUZZLE[e.spriteType||e.type]); return (m && m.w) || 1; }

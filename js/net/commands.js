@@ -19,36 +19,44 @@
   function netCommand(state, wx, wy, target){
     if(hubClientBlocked(state)) return;
     if(netRole!=='client') return commandUnits(state, wx, wy, target);
-    const ids  = state.selection.filter(e=>!e.dead && !e.storedIn && e.kind==='unit'     && isMine(e)).map(e=>e.id);
+    const myUnits = state.selection.filter(e=>!e.dead && !e.storedIn && e.kind==='unit' && isMine(e));
+    const ids  = myUnits.map(e=>e.id);
     const bids = state.selection.filter(e=>!e.dead && e.kind==='building' && isMine(e)).map(e=>e.id);
     if(!ids.length && !bids.length) return;
-    MP.send('mpcmd', { k:'command', from:LOCAL_CTRL, wx, wy, tid: target ? target.id : null, ids, bids });
+    const seq = NET._cmdSeq = (NET._cmdSeq||0)+1;
+    MP.send('mpcmd', { k:'command', from:LOCAL_CTRL, wx, wy, tid: target ? target.id : null, ids, bids, seq });
+    // Phase 3: predict a plain MOVE (no target) on our own units so they respond instantly; the host stays
+    // authoritative and the next acked snapshot reconciles (blends back) — see NET.clientTick / applySnap.
+    if(NET.PREDICT && !target){
+      const at = (typeof performance!=='undefined' && performance.now) ? performance.now() : Date.now();
+      for(const e of myUnits){ e._pred=true; e._predSeq=seq; e._predTo={x:wx,y:wy}; e._predAt=at; e.state='move'; e._netMoving=true; }
+    }
   }
   function netPlace(state, type, tx, ty, builder){
     if(hubClientBlocked(state)) return;
     if(netRole!=='client') return placeBuilding(state, type, tx, ty, builder);
-    MP.send('mpcmd', { k:'place', from:LOCAL_CTRL, type, tx, ty, bid: builder ? builder.id : null });
+    MP.send('mpcmd', { k:'place', from:LOCAL_CTRL, type, tx, ty, bid: builder ? builder.id : null, seq:(NET._cmdSeq=(NET._cmdSeq||0)+1) });
   }
   function netStop(){
     if(hubClientBlocked(G)) return;
     if(netRole!=='client') return stopSelection();
     const ids = G.selection.filter(e=>!e.dead && e.kind==='unit' && isMine(e)).map(e=>e.id);
-    if(ids.length) MP.send('mpcmd', { k:'stop', from:LOCAL_CTRL, ids });
+    if(ids.length) MP.send('mpcmd', { k:'stop', from:LOCAL_CTRL, ids, seq:(NET._cmdSeq=(NET._cmdSeq||0)+1) });
   }
   function netTrain(state, building, type){
     if(hubClientBlocked(state)) return;
     if(netRole!=='client') return tryTrain(state, building, type);
-    if(building && isMine(building)) MP.send('mpcmd', { k:'train', from:LOCAL_CTRL, bid:building.id, type });
+    if(building && isMine(building)) MP.send('mpcmd', { k:'train', from:LOCAL_CTRL, bid:building.id, type, seq:(NET._cmdSeq=(NET._cmdSeq||0)+1) });
   }
   function netCancelTrain(state, building, index){
     if(hubClientBlocked(state)) return;
     if(netRole!=='client') return cancelTrain(state, building, index);
-    if(building && isMine(building)) MP.send('mpcmd', { k:'cancel', from:LOCAL_CTRL, bid:building.id, index });
+    if(building && isMine(building)) MP.send('mpcmd', { k:'cancel', from:LOCAL_CTRL, bid:building.id, index, seq:(NET._cmdSeq=(NET._cmdSeq||0)+1) });
   }
   function netReleaseStored(state, building, unitId){
     if(hubClientBlocked(state)) return;
     if(netRole!=='client') return releaseStoredUnit(state, building, unitId);
-    if(building && isMine(building)) MP.send('mpcmd', { k:'releaseStored', from:LOCAL_CTRL, bid:building.id, uid:unitId });
+    if(building && isMine(building)) MP.send('mpcmd', { k:'releaseStored', from:LOCAL_CTRL, bid:building.id, uid:unitId, seq:(NET._cmdSeq=(NET._cmdSeq||0)+1) });
   }
   window.netCommand=netCommand; window.netPlace=netPlace; window.netStop=netStop;
   window.netTrain=netTrain; window.netCancelTrain=netCancelTrain; window.netReleaseStored=netReleaseStored;
@@ -71,6 +79,7 @@
 
   NET.applyRemoteCmd = function(cmd, peerId){
     if(netRole!=='host' || !G) return;
+    if(cmd && cmd.seq!=null) NET._cmdAck = Math.max(NET._cmdAck||0, cmd.seq);   // Phase 3: ack every received command (applied or rejected) so the client can reconcile its prediction
     const ctrl = NET.peerCtrl[peerId];
     if(!ctrl || cmd.from!==ctrl) return;               // anti-spoof: a peer may only act as its own controller
     if(G.hub && ctrl!=='p1') return;                    // HUB belongs to the host/P1 only

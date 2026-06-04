@@ -15,6 +15,13 @@ const GAME_MONO_FONT = '"Glitch Goblin", "Courier New", monospace';
 let dpr = window.devicePixelRatio || 1;
 const ZOOM_MIN = 0.35, ZOOM_MAX = 2.0;
 
+/* ---- Laser shot FX lifetime (seconds) ----
+   How long a fired shot's `shootFx` transient lives. Set at every spawn site
+   (units.js, core.js) AND the co-op client rebuild (net/sync.js) so host & client
+   agree, and used by render.js drawLaserBolt to derive the bolt's flight progress
+   (p = 1 - shootFx.t / SHOOTFX_LIFE). Cosmetic only — never simulated or saved. */
+const SHOOTFX_LIFE = 0.14;
+
 /* ---- The Sprint: keep-tapping a spot makes the selected squad RUN there,
    accelerating a little and ignoring incoming fire (they don't fight back)
    until the player stops tapping. See js/sprint.js. ---- */

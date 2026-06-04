@@ -416,6 +416,68 @@ function drawWasteMegaSmoke(state,m,dx,dy,dw,dh,layer){
   ctx.restore();
 }
 
+// Dense white "summit fog sea" for HUB mountain megasprites: a cool-white cloud that
+// clings to and rises over the peak. Two passes like drawWasteMegaSmoke — a faint
+// additive halo BEHIND the peak (adds depth and bleeds between neighbours so the chain
+// reads as one continuous sea) and dense source-over puffs IN FRONT over the summit.
+// Density scales with footprint width (big) so the giant centrepiece (mega_30, w=19)
+// gets a thick sea while the 7-wide chain peaks get a lighter band. Deterministic per
+// instance via m.seed; motion freezes under prefers-reduced-motion. Cool off-white
+// (not pure #fff) so it reads as moonlit fog, not a glare, against the dark sky.
+function drawMountainFog(state,m,dx,dy,dw,dh,layer){
+  const rm=megaReducedMotion(), t=rm?0:(state.time||0), seed=m.seed||0;
+  const big=Math.max(0,Math.min(1,((m.w||7)-7)/12));            // 0 chain peak → 1 giant
+  const wind=Math.sin(t*0.08+seed*6.283)*dw*0.05;              // shared sway → bank moves as one
+  ctx.save();
+  if(layer==='back'){
+    ctx.globalCompositeOperation='lighter';                     // subtle additive halo
+    const n=Math.round(4+big*5);
+    for(let i=0;i<n;i++){
+      const h0=megaHash01(seed,i+5), h1=megaHash01(seed,i+15), h2=megaHash01(seed,i+25);
+      const cx=dx+dw*(0.5+(h0-0.5)*0.95)+wind;
+      const cy=dy+dh*(0.10+h1*(0.10+big*0.10))+Math.sin(t*(0.25+0.1*h2)+h2*6.283)*dh*0.02;
+      const rx=dw*(0.22+0.16*h1)*(1+big*0.5), ry=rx*0.55;
+      const a=(0.06+0.06*big)*(0.7+0.3*Math.sin(t*(0.4+0.1*i)+h0*6.283));
+      megaFillEllipseGlow(cx,cy,rx,ry,0,[210,228,246],a,a*0.4);
+    }
+    ctx.restore();
+    return;
+  }
+  // FRONT: dense cloud sea over the summit — 1–2 wide flat "sea surface" slabs + puffs.
+  ctx.globalCompositeOperation='source-over';
+  const slabs=1+(big>0.4?1:0);
+  for(let s=0;s<slabs;s++){
+    const hs=megaHash01(seed,s+40);
+    const cx=dx+dw*0.5+wind*0.6, cy=dy+dh*(0.13+s*0.05)+Math.sin(t*0.3+hs*6.283)*dh*0.012;
+    const rx=dw*(0.55+0.12*big), ry=dh*(0.06+0.03*big), a=0.20+0.16*big;
+    ctx.save();
+    ctx.translate(cx,cy); ctx.scale(1,ry/rx);
+    const g=ctx.createRadialGradient(0,0,rx*0.05,0,0,rx);
+    g.addColorStop(0, megaRgba([238,245,252],a));
+    g.addColorStop(0.5, megaRgba([218,231,244],a*0.5));
+    g.addColorStop(1, megaRgba([200,216,234],0));
+    ctx.fillStyle=g; ctx.beginPath(); ctx.arc(0,0,rx,0,Math.PI*2); ctx.fill();
+    ctx.restore();
+  }
+  const n=Math.round(7+big*9);
+  for(let i=0;i<n;i++){
+    const h0=megaHash01(seed,i+1), h1=megaHash01(seed,i+11), h2=megaHash01(seed,i+23);
+    const cx=dx+dw*(0.5+(h0-0.5)*0.9)+wind+Math.sin(t*(0.12+0.05*h1)+h0*6.283)*dw*0.03;
+    const cy=dy+dh*(0.08+h1*(0.14+big*0.10))+Math.sin(t*(0.5+0.15*h2)+h2*6.283)*dh*0.02;
+    const rx=dw*(0.16+0.12*h2)*(1+big*0.35), ry=rx*0.6;
+    const a=(0.30+0.18*big)*(0.7+0.3*Math.sin(t*(0.6+0.1*i)+h0*6.283));
+    ctx.save();
+    ctx.translate(cx,cy); ctx.rotate((h0-0.5)*0.3); ctx.scale(1,ry/rx);
+    const g=ctx.createRadialGradient(0,0,rx*0.05,0,0,rx);
+    g.addColorStop(0, megaRgba([238,245,252],a));
+    g.addColorStop(0.5, megaRgba([214,228,242],a*0.5));
+    g.addColorStop(1, megaRgba([198,214,232],0));
+    ctx.fillStyle=g; ctx.beginPath(); ctx.arc(0,0,rx,0,Math.PI*2); ctx.fill();
+    ctx.restore();
+  }
+  ctx.restore();
+}
+
 // Draw ONE landmark, bottom-anchored, aspect-preserved, overhanging upward like a
 // building; fog-gated on the centre tile (skip if unexplored, dim if explored-but-
 // not-visible); animated frame pick from state.time at a per-category fps, desynced
@@ -436,12 +498,15 @@ function drawOneMega(state, m, ox, oy, x0, y0, x1, y1){
     const dw=w*(m.overhang||1.3), dh=dw*(spr.fh/spr.fw)*(m.heightScale||1);
     const dx=px+(w-dw)/2, dy=py+h-dh+2;
     const neon=(state.hub || m.neon) ? megaNeonFrame(m,fi) : null;
+    const fog=state.hub && m.cat==='mountain';                 // dense summit fog on hub peaks
     let img=spr.img;
     if(m.cat==='ruin') img=(m.biome===B_ICE?spr.snow : m.biome===B_DESERT?spr.sand : null) || spr.img;
     if(m.hubWaste) drawWasteMegaSmoke(state,m,dx,dy,dw,dh,'back');
+    if(fog) drawMountainFog(state,m,dx,dy,dw,dh,'back');         // halo behind the peak
     drawMegaNeonLayer(state,m,neon,dx,dy,dw,dh,'aura');
     ctx.drawImage(img, fi*spr.fw, 0, spr.fw, spr.fh, dx, dy, dw, dh);
     drawMegaNeonLayer(state,m,neon,dx,dy,dw,dh,'core');
+    if(fog) drawMountainFog(state,m,dx,dy,dw,dh,'front');        // dense cloud over the summit
     if(m.hubWaste) drawWasteMegaSmoke(state,m,dx,dy,dw,dh,'front');
   } else {
     ctx.fillStyle='rgba(16,18,24,.92)';                                  // fallback mass so the obstacle reads
