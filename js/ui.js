@@ -22,7 +22,11 @@ function refreshUI(){
   if(typeof onSelectionRefresh==='function') onSelectionRefresh(sel);
 
   // ---- info text (cheap text updates — safe to refresh every call) ----
-  if(!sel.length){
+  // While placing a building, preview what it does (and who it hires) so the
+  // player can decide before dropping it — takes over the panel from selection.
+  if(G.placing){
+    showPlacingInfo(G.placing);
+  } else if(!sel.length){
     elTitle.textContent='Nothing selected';
     elStats.textContent=''; if(elDossierBtn) elDossierBtn.style.display='none';
     elDesc.innerHTML='<b>Tap</b> a unit to select; tap an enemy/mine/ground to attack, gather or move. <b>Drag</b> to pan, <b>pinch</b> (or wheel / +−) to zoom.<br><b>Units box-select:</b> Shift+drag or the <b>Select box</b> button. Select a <b>Worker</b> then a build button, then tap a spot. <b>Shift+1-9</b> set / <b>1-9</b> recall control group.';
@@ -74,9 +78,30 @@ function refreshUI(){
   // show the Cancel button only while placing a building (touch replacement for Esc)
   const cb=document.getElementById('btn-cancel');
   if(cb) cb.style.display = G.placing ? '' : 'none';
+  // reveal the placement preview's description on mobile (where .desc is normally hidden)
+  const si=document.getElementById('selinfo'); if(si) si.classList.toggle('placing', !!G.placing);
 
   // production-queue cards live in the selected building's info panel
   updateProdQueue((sel.length===1 && sel[0].kind==='building' && (sel[0].owner==='player' || (G.hub && sel[0].hubPoi))) ? sel[0] : null);
+}
+
+// Preview a building in the info panel while the player is choosing where to
+// drop it (G.placing). Reuses the building's flavor as the "what it does" blurb
+// and lists the roster it can hire (BUILD_HIRES) so the player knows what the
+// building is for before committing the Funding.
+function showPlacingInfo(p){
+  const d=p.def, t=p.type;
+  elTitle.textContent=(d.icon?d.icon+' ':'')+d.name;
+  if(elDossierBtn) elDossierBtn.style.display='none';
+  elStats.innerHTML=`<span class="st">💰 ${d.cost}</span><span class="st">❤ ${d.hp}</span><span class="st">🏗 ${d.build}s</span>`;
+  let html = d.flavor ? `<span style="color:#9e7780;font-style:italic;">${d.flavor}</span>` : '';
+  const hires=(typeof BUILD_HIRES!=='undefined' && BUILD_HIRES[t]) || null;
+  if(hires){
+    const names=hires.map(u=>DEF[u]&&DEF[u].name).filter(Boolean).join(', ');
+    if(names) html+=(html?'<br>':'')+`<b>Hires:</b> ${names}`;
+  }
+  html+=(html?'<br>':'')+`<span style="color:#7fa8c8;">Tap a spot to build · Esc to cancel</span>`;
+  elDesc.innerHTML=html;
 }
 
 // Build / refresh the queue cards for a selected player building (or clear them).

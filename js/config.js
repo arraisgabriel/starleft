@@ -137,6 +137,16 @@ const DEF = {
               flavor:'Starport. Assembles Drugztore Delivery Drones and Buzzword Bombers. Requires a Garage.' },
 };
 
+/* Which units each production building can hire — single source for the build
+   menu's placement preview (info panel) so the player sees the roster before
+   committing Funding. Keys mirror the train buttons in ui.js buildCommands. */
+const BUILD_HIRES = {
+  hq:        ['worker'],
+  barracks:  ['soldier','ranger','recruiter','hustler','lobbyist'],
+  garage:    ['foodtruck','auditor','founder'],
+  launchpad: ['courier','bomber'],
+};
+
 /* =====================================================================
    MAP DEFINITIONS  (two maps, played in sequence)
    ===================================================================== */

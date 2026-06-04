@@ -217,6 +217,8 @@ html,body{ overscroll-behavior:none; -webkit-touch-callout:none; }
   #selinfo h3{ font-size:13px; margin-bottom:0; }
   #selinfo .stats{ gap:8px; font-size:11px; margin:1px 0 2px; }   /* stays visible on mobile */
   #selinfo .desc{ display:none; }
+  /* while placing a building, the description IS the point — show it on mobile */
+  #selinfo.placing .desc{ display:block; }
   #commands{ width:auto; border-left:none; padding:6px;
     flex-wrap:nowrap; overflow-x:auto; -webkit-overflow-scrolling:touch; align-content:center; }
   .cmd-btn{ flex:0 0 auto; width:auto; min-width:62px; height:48px; min-height:48px;
@@ -232,6 +234,7 @@ html,body{ overscroll-behavior:none; -webkit-touch-callout:none; }
 /* ---- Phones in landscape: claw back vertical space ---- */
 @media (orientation:landscape) and (max-height:480px){
   #selinfo{ display:none; }
+  #selinfo.placing{ display:block; }   /* but keep the building preview while placing */
   .cmd-btn{ height:44px; min-height:44px; }
   #touch-controls{ padding:3px 6px; }
 }
