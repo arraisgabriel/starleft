@@ -7,6 +7,8 @@ const cv = document.getElementById('cv');
 const ctx = cv.getContext('2d');
 const mm = document.getElementById('minimap');
 const mmx = mm.getContext('2d');
+const GAME_FONT = '"Glitch Goblin", "Segoe UI", Tahoma, sans-serif';
+const GAME_MONO_FONT = '"Glitch Goblin", "Courier New", monospace';
 
 /* ---- Display scaling (high-DPI / retina) + map zoom range ----
    dpr is refreshed by resize(); ZOOM_* bound pinch / wheel / button zoom. */

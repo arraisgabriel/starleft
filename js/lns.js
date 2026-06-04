@@ -2,7 +2,7 @@
    Pulls several public RSS feeds in the browser and scrolls deduped,
    recency-sorted world headlines across two tickers:
      • main menu — a full-width "lower third" stripe
-     • in-game   — a thin stripe under the top bar, toggled by the 📡 News button
+     • in-game   — a thin stripe above the bottom HUD, toggled by the News button
 
    The feeds are CORS-blocked for our origin, so every request is routed through a
    chain of public CORS proxies (the first that works is reused first). Each source
@@ -312,7 +312,7 @@ var LNS = (function(){
     const btn = document.getElementById('btn-news'); if(btn) btn.classList.toggle('armed', on);
     try{ localStorage.setItem(PREF_KEY, on ? '1' : '0'); }catch(_){ }
     if(on) buildTicker(ig.querySelector('.lns-host'), SPEED_INGAME);
-    // mirror the band into the renderer's VIEW_TOP and re-clamp the camera
+    // mirror the band into the renderer's bottom HUD reservation and re-clamp the camera
     if(typeof syncHud==='function'){ syncHud(); if(typeof G!=='undefined' && G && typeof clampCam==='function') clampCam(G); }
   }
   function toggleIngame(){ setIngame(!ingameVisible()); }
@@ -337,7 +337,10 @@ var LNS = (function(){
     document.addEventListener('visibilitychange', ()=>{
       if(!document.hidden && Date.now()-lastFetchAt > 60000) refresh();
     });
-    let rt; addEventListener('resize', ()=>{ clearTimeout(rt); rt=setTimeout(renderAll, 250); }); // re-tune marquee width
+    let rt; addEventListener('resize', ()=>{ clearTimeout(rt); rt=setTimeout(()=>{
+      if(typeof syncHud==='function'){ syncHud(); if(typeof G!=='undefined' && G && typeof clampCam==='function') clampCam(G); }
+      renderAll();
+    }, 250); }); // re-tune marquee width after responsive HUD changes
   }
 
   return { init, toggleIngame, refresh, relayout: renderAll, ultraEvent };

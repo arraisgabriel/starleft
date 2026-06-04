@@ -12,6 +12,10 @@ addEventListener('orientationchange', ()=>resize());
    --------------------------------------------------------------------- */
 function gestureBegin(e){
   if(!G||G.over) return;
+  if(typeof isGamePaused==='function' && isGamePaused()){
+    e.preventDefault();
+    return;
+  }
   if(e.pointerType==='mouse') lastPointerWasMouse=true; else lastPointerWasMouse=false;
   // ignore presses on the HUD bands (CSS px)
   if(e.clientY<VIEW_TOP || e.clientY>cssH-VIEW_BOT) return;
@@ -48,6 +52,7 @@ function gestureBegin(e){
 
 function gestureMove(e){
   if(!G) return;
+  if(typeof isGamePaused==='function' && isGamePaused()) return;
   const p=pointers.get(e.pointerId); if(p){ p.sx=e.clientX; p.sy=e.clientY; }
 
   // keep mouse/world fresh for edge-scroll + placement ghost
@@ -80,6 +85,11 @@ function gestureMove(e){
 
 function gestureEnd(e){
   if(!G){ pointers.delete(e.pointerId); return; }
+  if(typeof isGamePaused==='function' && isGamePaused()){
+    pointers.delete(e.pointerId);
+    gesture.mode='none'; gesture.id=null; gesture.moved=false;
+    return;
+  }
   const wasPinch=gesture.mode==='pinch';
   pointers.delete(e.pointerId);
   if(wasPinch){ if(pointers.size<2){ gesture.mode='none'; gesture.id=null; } return; }
@@ -107,11 +117,20 @@ cv.addEventListener('pointerleave', e=>{ if(e.pointerType==='mouse') mouse.onCan
 // wheel zoom (desktop), anchored at the cursor
 cv.addEventListener('wheel', e=>{
   if(!G||G.over) return;
+  if(typeof isGamePaused==='function' && isGamePaused()){
+    e.preventDefault();
+    return;
+  }
   e.preventDefault();
   zoomAt(G, e.clientX, e.clientY, e.deltaY<0 ? 1.1 : 1/1.1);
 }, {passive:false});
 
 addEventListener('keydown', e=>{
+  if(typeof isGamePaused==='function' && isGamePaused()){
+    if((e.key==='s'||e.key==='S') && (e.metaKey||e.ctrlKey)) e.preventDefault();
+    else if(!e.metaKey && !e.ctrlKey && !e.altKey) e.preventDefault();
+    return;
+  }
   // only track UNMODIFIED keys for camera panning — a modified key (e.g. ⌘/Ctrl+S) is a shortcut,
   // and on macOS its keyup never fires while ⌘ is held, which would leave 's' stuck panning down.
   if(!e.metaKey && !e.ctrlKey && !e.altKey) keys[e.key.toLowerCase()]=true;
@@ -145,6 +164,10 @@ addEventListener('blur', ()=>{ for(const k in keys) keys[k]=false; });
 mm.addEventListener('pointerdown', e=>{
   if(!G) return;
   e.preventDefault();
+  if(typeof isGamePaused==='function' && isGamePaused()){
+    e.stopPropagation();
+    return;
+  }
   const rect=mm.getBoundingClientRect();
   const mx=(e.clientX-rect.left)/rect.width, my=(e.clientY-rect.top)/rect.height;
   const z=G.zoom||1, vw=viewW()/z, vh=viewH()/z;
@@ -185,17 +208,37 @@ function syncFsButtons(){
   const top=document.getElementById('btn-fs'); if(top) top.innerHTML = on?'Windowed':'Fullscreen';
   const menu=document.getElementById('btn-fs-menu'); if(menu) menu.innerHTML = on?'⛶ Exit Fullscreen':'⛶ Fullscreen';
 }
+function syncPauseBtn(){
+  const b=document.getElementById('btn-pause'); if(!b) return;
+  const paused=!!(G && !G.over && !running);
+  b.innerHTML=paused ? (netRole==='client' ? 'Paused' : 'Resume') : 'Pause';
+  b.title=netRole==='client'
+    ? (paused?'Paused by host':'Only the host can pause co-op')
+    : (paused?'Resume game':'Pause game');
+  b.classList.toggle('armed', paused);
+}
+function togglePause(){
+  if(!G || G.over) return;
+  if(netRole==='client'){ toast('Only the host can pause co-op'); return; }
+  running=!running;
+  if(!running && typeof resetInputState==='function') resetInputState();
+  if(netRole==='host' && typeof mpHostSetPaused==='function') mpHostSetPaused(!running);
+  syncPauseBtn();
+  refreshUI();
+  toast(running?'Game resumed':'Game paused');
+}
 document.addEventListener('fullscreenchange', syncFsButtons);
 document.addEventListener('webkitfullscreenchange', syncFsButtons);
 function wireTouchControls(){
   const on=(id,fn)=>{ const el=document.getElementById(id); if(el) el.addEventListener('click', fn); };
+  on('btn-pause', togglePause);
   on('btn-fs', toggleFullscreen);
   on('btn-fs-menu', toggleFullscreen);
-  on('btn-stop', ()=>{ if(G){ (typeof netStop==='function'?netStop:stopSelection)(); refreshUI(); } });
-  on('btn-box', ()=>{ armBoxSelect=!armBoxSelect; updateBoxBtn(); toast(armBoxSelect?'Box select: drag to select':'Box select off'); });
-  on('btn-army', ()=>{ selectAllArmy(); });
-  on('btn-clear', ()=>{ if(G && G.selection.length){ clearSelection(); refreshUI(); } });   // Esc equivalent: drop the current selection
-  on('btn-cancel', ()=>{ if(G&&G.placing){ G.placing=null; refreshUI(); } });
+  on('btn-stop', ()=>{ if(typeof isGamePaused==='function' && isGamePaused()) return; if(G){ (typeof netStop==='function'?netStop:stopSelection)(); refreshUI(); } });
+  on('btn-box', ()=>{ if(typeof isGamePaused==='function' && isGamePaused()) return; armBoxSelect=!armBoxSelect; updateBoxBtn(); toast(armBoxSelect?'Box select: drag to select':'Box select off'); });
+  on('btn-army', ()=>{ if(typeof isGamePaused==='function' && isGamePaused()) return; selectAllArmy(); });
+  on('btn-clear', ()=>{ if(typeof isGamePaused==='function' && isGamePaused()) return; if(G && G.selection.length){ clearSelection(); refreshUI(); } });   // Esc equivalent: drop the current selection
+  on('btn-cancel', ()=>{ if(typeof isGamePaused==='function' && isGamePaused()) return; if(G&&G.placing){ G.placing=null; refreshUI(); } });
   on('btn-save', ()=>{ saveGame(); });
   on('btn-load', ()=>{
     const panel=document.getElementById('topmenu-panel'), btn=document.getElementById('btn-topmenu');
@@ -208,6 +251,7 @@ function wireTouchControls(){
   on('btn-voice', ()=>{ if(typeof VOICE!=='undefined'){ VOICE.toggle(); syncVoiceBtn(); } });
   on('btn-netq', ()=>{ if(typeof mpToggleNetQuality==='function') mpToggleNetQuality(); });
   syncVoiceBtn();   // reflect the persisted on/off state on the button label
+  syncPauseBtn();
   if(typeof mpToggleNetQuality==='function') {
     mpToggleNetQuality(localStorage.getItem('starleft_show_net_quality')==='1');
   }
@@ -273,6 +317,12 @@ buildMapSelect();
 startTipRotation();   // random rotating Field Tip in the menu panel
 LNS.init();           // Live News Stream — menu + in-game RSS headline ticker
 if(typeof MUSIC!=='undefined') MUSIC.init();   // main theme after 2s, then menu loop while in menu overlays
+if(document.fonts && document.fonts.ready){
+  document.fonts.ready.then(()=>{
+    if(typeof syncHud==='function'){ syncHud(); if(G && typeof clampCam==='function') clampCam(G); }
+    if(typeof LNS!=='undefined' && LNS.relayout) LNS.relayout();
+  }).catch(()=>{});
+}
 wireBootGate();
 if(typeof mpCheckInviteHash==='function') mpCheckInviteHash();   // #mp=CODE invite link → auto-join co-op
 /* =====================================================================

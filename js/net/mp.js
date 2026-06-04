@@ -75,6 +75,12 @@
   window.mpHostCreate = mpHostCreate;
   window.mpHostStart = mpHostStart;
 
+  window.mpHostSetPaused = function(paused){
+    if(S.role!=='host' || !S.peerId) return false;
+    try{ MP.send('mppause', { paused:!!paused }, S.peerId); }catch(_){}
+    return true;
+  };
+
   /* ---------------- JOIN ---------------- */
   function mpJoin(code){
     if(!mpAvailable()){ toast('Multiplayer unavailable on this network'); return; }
@@ -93,6 +99,7 @@
     });
     MP.on('mpstart', (msg)=> beginClientMatch(msg.mapIndex|0, msg.mode));
     MP.on('mphub', (msg)=> beginClientHub(msg));
+    MP.on('mppause', (msg)=> applyHostPause(!!(msg && msg.paused)));
     MP.on('mpbye', (msg)=>{ if(msg && msg.reason==='full'){ toast('Room is full'); mpLeave(); } else mpHostGone('left'); });
     MP.onLeave(()=> mpHostGone('left'));                  // Trystero peer-leave (clean close)
     NET.onHostLost    = ()=> mpHostGone('lost');          // watchdog: snapshots stopped (crash / network drop)
@@ -142,6 +149,16 @@
     if(typeof clampCam==='function') clampCam(G);
     if(NET.flushPendingFull) NET.flushPendingFull();
     ui('Syncing');
+  }
+
+  function applyHostPause(paused){
+    if(S.role!=='client' || !G || G.over) return;
+    running = !paused;
+    if(paused && typeof resetInputState==='function') resetInputState();
+    if(!paused && NET.resetWatchdog) NET.resetWatchdog();
+    if(typeof syncPauseBtn==='function') syncPauseBtn();
+    if(typeof refreshUI==='function') refreshUI();
+    toast(paused ? 'Host paused the match' : 'Host resumed the match');
   }
 
   /* ---------------- leave / drop ---------------- */

@@ -74,10 +74,11 @@ function resize(){
 // viewport always matches the (responsive) DOM.
 function syncHud(){
   const tb=document.getElementById('topbar'), bp=document.getElementById('bottom');
-  if(tb) VIEW_TOP = tb.offsetHeight;
-  const news=document.getElementById('lns-ingame');   // live-news ticker reserves a band under the topbar when shown
-  if(news && news.offsetHeight) VIEW_TOP += news.offsetHeight;
-  if(bp) VIEW_BOT = bp.offsetHeight;
+  if(tb) VIEW_TOP = Math.ceil(tb.getBoundingClientRect().height || tb.offsetHeight || 0);
+  if(bp) VIEW_BOT = Math.ceil(bp.getBoundingClientRect().height || bp.offsetHeight || 0);
+  if(document.documentElement) document.documentElement.style.setProperty('--hud-bottom-h', VIEW_BOT+'px');
+  const news=document.getElementById('lns-ingame');   // live-news ticker reserves a band above the bottom HUD when shown
+  if(news && news.offsetHeight) VIEW_BOT += news.offsetHeight;
   cssH = cv.getBoundingClientRect().height || innerHeight;
 }
 // CSS-pixel viewport size (independent of devicePixelRatio).
@@ -219,9 +220,78 @@ function render(state){
     ctx.fillStyle='rgba(120,20,24,0.16)';
     ctx.fillRect(0,0,viewW(),cssH);
   }
+  if(typeof isGamePaused==='function' && isGamePaused()) drawPausedOverlay();
   ctx.setTransform(1,0,0,1,0,0);
 
   renderMinimap(state);   // separate canvas — unaffected by the #cv transform
+}
+
+function drawPausedOverlay(){
+  const w=viewW(), h=viewH(), y0=VIEW_TOP;
+  ctx.fillStyle='rgba(34, 0, 8, 0.58)';
+  ctx.fillRect(0,y0,w,h);
+  ctx.fillStyle='rgba(120, 0, 18, 0.18)';
+  ctx.fillRect(0,y0,w,h);
+
+  const now=(typeof performance!=='undefined' && performance.now) ? performance.now() : Date.now();
+  
+  // Broken-bulb flicker: mostly steady, rarely sputters in uneven bursts.
+  // Render-only effect. Do not use Math.random here, so gameplay determinism is untouched.
+  const t = Math.floor(now / 90);
+  const burstSeed = Math.floor(now / 2600);
+  const inRareBurst = ((burstSeed * 1103515245 + 12345) >>> 0) % 7 === 0;
+  let blink = 1;
+
+  if (inRareBurst) {
+    const phase = t % 29;
+
+    if (
+      phase === 1 ||
+      phase === 2 ||
+      phase === 6 ||
+      phase === 11 ||
+      phase === 12 ||
+      phase === 19
+    ) {
+      blink = 0.16;
+    } else if (
+      phase === 3 ||
+      phase === 7 ||
+      phase === 20
+    ) {
+      blink = 0.48;
+    }
+  }
+  
+  const size=Math.max(34, Math.min(86, Math.round(w*0.055)));
+  const text='PAUSED';
+  const spacing=Math.max(5, Math.round(size*0.18));
+  ctx.save();
+  ctx.textAlign='center';
+  ctx.textBaseline='middle';
+  ctx.font='700 '+size+'px '+GAME_MONO_FONT;
+  const chars=[...text];
+  const widths=chars.map(ch=>ctx.measureText(ch).width);
+  const total=widths.reduce((a,b)=>a+b,0)+spacing*(chars.length-1);
+  let x=(w-total)/2, cy=y0+h/2;
+  ctx.globalAlpha=blink;
+  ctx.shadowColor='rgba(255, 40, 56, 0.95)';
+  ctx.shadowBlur=18;
+  ctx.fillStyle='rgba(255,255,255,0.96)';
+  for(let i=0;i<chars.length;i++){
+    const cw=widths[i];
+    ctx.fillText(chars[i], x+cw/2, cy);
+    x+=cw+spacing;
+  }
+  ctx.globalAlpha=0.75*blink;
+  ctx.shadowBlur=0;
+  ctx.strokeStyle='rgba(255, 82, 82, 0.9)';
+  ctx.lineWidth=1.2;
+  ctx.beginPath();
+  ctx.moveTo(w*0.35, cy+size*0.74);
+  ctx.lineTo(w*0.65, cy+size*0.74);
+  ctx.stroke();
+  ctx.restore();
 }
 
 // Blit an atlas cell with a per-tile orientation derived from `variant`, to break
@@ -553,7 +623,7 @@ function drawGoldmine(state,e,ox,oy,dim){
   ctx.restore();
 
   // remaining-funding label below the base
-  ctx.fillStyle='#e9d2ff'; ctx.font='11px sans-serif'; ctx.textAlign='center';
+  ctx.fillStyle='#e9d2ff'; ctx.font='11px '+GAME_FONT; ctx.textAlign='center';
   ctx.fillText(e.amount|0, cx, groundY+13);
   ctx.restore();
 }
@@ -636,7 +706,7 @@ function drawBuilding(state,e,ox,oy,dim){
     ctx.fillStyle=grad; roundRect(px+3,py+3,w-6,h-6,6); ctx.fill();
     ctx.strokeStyle=shade(col,-50); ctx.lineWidth=2; ctx.stroke();
     ctx.fillStyle='rgba(255,255,255,.85)'; ctx.textAlign='center'; ctx.textBaseline='middle';
-    ctx.font=(w*0.42|0)+'px sans-serif'; ctx.fillText(d.icon||'🏢', px+w/2, py+h/2+1);
+    ctx.font=(w*0.42|0)+'px '+GAME_FONT; ctx.fillText(d.icon||'🏢', px+w/2, py+h/2+1);
     ctx.fillStyle = isRedSide(e.owner)?'#ff8a8a':(e.ctrl==='p2'?'#ffb84d':'#7fd6ff'); ctx.fillRect(px+w/2-3, py+2, 6, 9);
   }
   // derelict: desaturating grey wash + a pulsing reclaim beacon over the roof
@@ -645,7 +715,7 @@ function drawBuilding(state,e,ox,oy,dim){
     const pulse=0.55+0.45*Math.abs(Math.sin(state.time*2.2));
     ctx.globalAlpha=pulse;
     ctx.textAlign='center'; ctx.textBaseline='middle';
-    ctx.font='bold 12px sans-serif';
+    ctx.font='bold 12px '+GAME_FONT;
     ctx.fillStyle='#0a0a0a'; ctx.fillText('⚑ RECLAIM', px+w/2+1, topY-12+1);
     ctx.fillStyle='#8effb0'; ctx.fillText('⚑ RECLAIM', px+w/2, topY-12);
   }
@@ -774,7 +844,7 @@ function drawUnit(state,u,ox,oy){
     const g=Math.min(...[...u._groups].map(Number)); const bx=px+vh*0.30, by=py-alt+vh*0.24;
     ctx.fillStyle='rgba(10,16,26,.85)'; ctx.strokeStyle='#7fd6ff'; ctx.lineWidth=1;
     ctx.beginPath(); ctx.arc(bx, by, 6.5, 0, 6.28); ctx.fill(); ctx.stroke();
-    ctx.fillStyle='#cfe9ff'; ctx.font='bold 9px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillStyle='#cfe9ff'; ctx.font='bold 9px '+GAME_FONT; ctx.textAlign='center'; ctx.textBaseline='middle';
     ctx.fillText(g, bx, by+0.5);
   }
   // co-op controller pip — small dot at the foot so you can tell p1/p2 units apart (sprite-agnostic)

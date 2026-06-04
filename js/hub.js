@@ -219,6 +219,7 @@ function enterHubFromCombat(state){
   mapIndex = Math.max(0, Math.min(CAMPAIGN.nextMapIndex, MAPS.length-1));
   if(typeof resetDialogs==='function') resetDialogs();
   syncHud(); clampCam(G); computeFog(G); refreshUI(); running=true;
+  if(typeof syncPauseBtn==='function') syncPauseBtn();
   if(netRole==='host' && typeof mpHostEnterHub==='function') mpHostEnterHub();
   toast('Arrived at the H.U.B. — M3$ +'+reward.total);
 }
@@ -395,7 +396,7 @@ function newHubMap(){
   const W=HUB.W, H=HUB.H, rng=makeRng(424242 + CAMPAIGN.visit*17);
   const terrain=hubBuildTerrain(W,H,rng), tiles=terrain.tiles, variant=terrain.variant, biome=terrain.biome;
   const start=HUB.player || {x:60,y:58};
-  const state={ cfg:{name:'H.U.B. — Hurban Ultra Buildings', enemyName:'', objective:'Spend m3rit$, send units to a red M.D.C., then launch the next mission.', hub:true, player:{x:start.x,y:start.y}},
+  const state={ cfg:{name:'H.U.B. — Hurban Ultra Buildings', enemyName:'', objective:'Spend m3rit$ in upgrades, send units to a red M.D.C., then launch the next mission there.', hub:true, player:{x:start.x,y:start.y}},
     W,H,tiles,variant,biome,megaSprites:[],features:[],feat:new Uint8Array(W*H),blocked:new Uint8Array(W*H),
     explored:new Uint8Array(W*H),visible:new Uint8Array(W*H),entities:[],eco:{p1:{gold:0,supply:0,supplyCap:0,gold_collected:0}},
     players:1,nextId:1,runSalt:424242+CAMPAIGN.visit,zoom:initialZoom(W,H),camX:start.x*TILE-innerWidth/2,camY:start.y*TILE-innerHeight/2,

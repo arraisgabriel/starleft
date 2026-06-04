@@ -35,13 +35,13 @@
   border-radius:5px; color:#ffe6ea; padding:11px 13px; font-size:14px; outline:none; transition:border-color .14s, box-shadow .14s; }
 .mp-id-row input:focus, .mp-join input:focus, .mp-chat-in input:focus, .mp-relay-in input:focus {
   border-left-color:#ff9a9a; box-shadow:0 0 0 1px rgba(255,90,90,.18), inset 0 0 18px rgba(255,60,60,.05); }
-.mp-selfid { color:#8c6570; font-size:12px; font-family:ui-monospace,Menlo,monospace; letter-spacing:.5px; white-space:nowrap; }
+.mp-selfid { color:#8c6570; font-size:12px; font-family:inherit; letter-spacing:.5px; white-space:nowrap; }
 
 /* ---- create + join cluster: input grows, Join is a fixed companion, both 56px and aligned ---- */
 .mp-actions { display:flex; flex-direction:column; gap:12px; margin:2px 0 6px; }
 .mp-join { display:flex; gap:10px; align-items:stretch; }
 .mp-join input { min-height:56px; text-transform:uppercase; letter-spacing:2.5px;
-  font-family:ui-monospace,Menlo,monospace; font-size:13px;
+  font-family:inherit; font-size:13px;
   clip-path:polygon(0 0, calc(100% - 12px) 0, 100% 12px, 100% 100%, 0 100%); }
 .mp-join input::placeholder { color:#9a6b78; letter-spacing:2.5px; }
 .mp-join #mp-joinbtn { flex:0 0 128px; width:128px; min-height:56px; }
@@ -96,7 +96,7 @@
 /* invite block */
 .mp-invite { background:rgba(20,8,12,.6); border:1px solid #4f2530; border-radius:8px; padding:12px; margin:6px 0 12px; }
 .mp-code { color:#c8aeb4; font-size:13px; margin-bottom:8px; }
-.mp-code b { color:#ffd86b; font-family:monospace; font-size:16px; letter-spacing:1px; }
+.mp-code b { color:#ffd86b; font-family:inherit; font-size:16px; letter-spacing:1px; }
 .mp-invite-btns { display:flex; gap:8px; flex-wrap:wrap; }
 .mp-qr { margin-top:10px; text-align:center; background:#fff; padding:8px; border-radius:6px; display:inline-block; }
 .mp-qr img { display:block; }
@@ -107,7 +107,7 @@
 .mp-conn .dot { width:9px; height:9px; border-radius:50%; background:#8c6570; }
 .mp-conn.ok   { color:#bfeccb; border-color:#2f6f44; } .mp-conn.ok .dot   { background:#5fe08a; box-shadow:0 0 8px #5fe08a; }
 .mp-conn.wait { color:#ffe0b0; border-color:#86603b; } .mp-conn.wait .dot { background:#ffb84d; animation:mp-pulse 1s infinite; }
-.mp-rtt { color:#8c6570; font-size:12px; font-family:monospace; }
+.mp-rtt { color:#8c6570; font-size:12px; font-family:inherit; }
 @keyframes mp-pulse { 0%,100%{ opacity:.4; } 50%{ opacity:1; } }
 
 /* host controls */
@@ -144,7 +144,7 @@
   background:rgba(18,7,10,.55); border:1px solid #4f2530; border-left:3px solid #c47a1f; border-radius:5px; }
 .mp-net-note:empty { display:none; }
 .mp-net-note b { color:#ffd0a0; }
-.mp-net-note code { font-family:ui-monospace,Menlo,monospace; font-size:11px; color:#ffd86b;
+.mp-net-note code { font-family:inherit; font-size:11px; color:#ffd86b;
   background:rgba(255,216,107,.08); padding:1px 5px; border-radius:3px; }
 
 /* heading accent bar + a hairline divider before the friends list, for rhythm */
@@ -263,7 +263,7 @@
 .mpr-access-grid { display:grid; grid-template-columns:1.1fr 1fr; gap:18px; align-items:center; }
 .mpr-code-block { display:flex; flex-direction:column; gap:5px; }
 .mpr-code-label { font-size:10.5px; letter-spacing:3px; color:var(--muted); text-transform:uppercase; }
-.mpr-code { font-family:ui-monospace,Menlo,monospace; font-size:clamp(22px,2.6vw,34px); font-weight:700;
+.mpr-code { font-family:inherit; font-size:clamp(22px,2.6vw,34px); font-weight:700;
   letter-spacing:2px; color:#ffe7a0; text-shadow:0 0 16px rgba(255,180,70,.25); line-height:1.05;
   word-break:break-word; }
 .mpr-code-hint { font-size:11.5px; color:var(--muted); line-height:1.5; margin-top:3px; }

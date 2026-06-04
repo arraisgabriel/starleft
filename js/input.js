@@ -17,6 +17,10 @@ let armBoxSelect=false;         // armed by the on-screen "Select box" button (t
 let lastPointerWasMouse=true;   // gates desktop-only edge-scroll
 const MOVE_THRESH=5;            // px before a press counts as a drag (not a tap)
 
+function isGamePaused(){
+  return !!(G && !G.over && !running);
+}
+
 // screen (CSS px) -> world, generalised for zoom. devicePixelRatio cancels out
 // because pointer events already report CSS pixels. At zoom=1 this matches the
 // original `sx+camX / sy-VIEW_TOP+camY`.
@@ -32,6 +36,7 @@ function isAdditive(e){ return !!(e.shiftKey || e.metaKey); }
 // Select the entity at world point w (or aggregate it when additive). Used for the
 // ⌘/Shift+tap path and for plain inspection taps (enemy/neutral with no army selected).
 function clickSelectAt(state, w, e){
+  if(isGamePaused()) return;
   const ent=pickEntity(state,w.x,w.y);
   if(isAdditive(e) && state.selection.length){
     if(ent && ent.kind==='unit' && ent.owner==='player' && isMine(ent)){
@@ -49,6 +54,7 @@ function clickSelectAt(state, w, e){
 // commandUnits (which would otherwise walk the army onto a friendly unit you meant
 // to reselect, via its move fall-through).
 function dispatchTap(e, opts){
+  if(isGamePaused()) return;
   opts=opts||{};
   const w=screenToWorld(G, e.clientX, e.clientY);
 
@@ -111,6 +117,7 @@ function dispatchTap(e, opts){
 // Box select from a screen-space rectangle (corners in CSS px). Replaces the old
 // drag.* box; corners convert through screenToWorld so it is zoom/DPR-correct.
 function boxSelectRect(x0,y0,x1,y1, additive){
+  if(isGamePaused()) return;
   const a=screenToWorld(G, Math.min(x0,x1), Math.min(y0,y1));
   const b=screenToWorld(G, Math.max(x0,x1), Math.max(y0,y1));
   const inBox=G.entities.filter(en=>!en.dead&&!en.storedIn&&en.kind==='unit'&&en.owner==='player'&&isMine(en)&&en.x>=a.x&&en.x<=b.x&&en.y>=a.y&&en.y<=b.y);
@@ -130,7 +137,7 @@ function boxSelectRect(x0,y0,x1,y1, additive){
 
 // Select every living player unit — the touch-friendly "grab the army" button.
 function selectAllArmy(){
-  if(!G) return;
+  if(!G || isGamePaused()) return;
   clearSelection();
   const army=G.entities.filter(e=>!e.dead && !e.storedIn && e.kind==='unit' && e.owner==='player' && isMine(e));
   army.forEach(u=>u.selected=true); G.selection=army;
@@ -210,7 +217,7 @@ function resetInputState(){
 
 /* ---------- Control groups (Ctrl/Cmd + 0-9 assign, 0-9 recall) ---------- */
 function assignGroup(g){
-  if(!G) return;
+  if(!G || isGamePaused()) return;
   const members = G.selection.filter(s=>!s.dead && !s.storedIn && s.owner==='player' && isMine(s));
   const mset = new Set(members);
   // a unit belongs to at most ONE group — pull these members out of every other group first,
@@ -224,7 +231,7 @@ function assignGroup(g){
                        : ('Control group '+g+' cleared'));
 }
 function recallGroup(g){
-  if(!G) return;
+  if(!G || isGamePaused()) return;
   const alive = (G.groups[g]||[]).filter(s=>!s.dead && s.owner==='player' && isMine(s));
   G.groups[g] = alive;                    // prune any that died
   const members = alive.filter(s=>!s.storedIn);
@@ -248,6 +255,7 @@ function centerOnSelection(){
 
 // edge + key scroll
 function updateCamera(state,dt){
+  if(isGamePaused()){ edgeTopHold=0; return; }
   const spd=620*dt;
   let dx=0,dy=0;
   if(keys['a']||keys['arrowleft']) dx-=spd;

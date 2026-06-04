@@ -106,7 +106,7 @@ function buildProdCards(wrap,b,stored){
     const cv=document.createElement('canvas'); cv.width=40; cv.height=40; cv.className='pq-spr'; card.appendChild(cv);
     if(i===0){ const pr=document.createElement('div'); pr.className='pq-prog'; pr.innerHTML='<i></i>'; card.appendChild(pr); }
     const x=document.createElement('button'); x.className='pq-x'; x.textContent='✕';
-    x.onclick=(ev)=>{ ev.stopPropagation(); (typeof netCancelTrain==='function'?netCancelTrain:cancelTrain)(G, b, [...wrap.children].indexOf(card)); refreshUI(); };
+    x.onclick=(ev)=>{ ev.stopPropagation(); if(typeof isGamePaused==='function' && isGamePaused()) return; (typeof netCancelTrain==='function'?netCancelTrain:cancelTrain)(G, b, [...wrap.children].indexOf(card)); refreshUI(); };
     card.appendChild(x);
     wrap.appendChild(card);
   });
@@ -117,6 +117,7 @@ function buildProdCards(wrap,b,stored){
     const out=document.createElement('span'); out.className='pq-out'; out.textContent='↩'; card.appendChild(out);
     card.onclick=(ev)=>{
       ev.stopPropagation();
+      if(typeof isGamePaused==='function' && isGamePaused()) return;
       if(G.hub && b.hubPoi && b.hubPoi.kind==='mdc' && typeof hubReleaseFromMdc==='function') hubReleaseFromMdc(hubUnitKey(u));
       else (typeof netReleaseStored==='function'?netReleaseStored:releaseStoredUnit)(G,b,u.id);
     };
@@ -132,7 +133,7 @@ function drawCardSprite(card,type,owner){
     const fr=anim.frames[0], fw=fr[2], fh=fr[3], s=Math.min(cv.width/fw, cv.height/fh)*0.96, dw=fw*s, dh=fh*s;
     c.drawImage(anim.img, fr[0],fr[1],fw,fh, (cv.width-dw)/2, (cv.height-dh)/2, dw, dh);
   } else {
-    c.font='22px sans-serif'; c.textAlign='center'; c.textBaseline='middle';
+    c.font='22px '+GAME_FONT; c.textAlign='center'; c.textBaseline='middle';
     c.fillText((DEF[type]&&DEF[type].icon)||'•', cv.width/2, cv.height/2+1);
   }
 }
@@ -231,7 +232,8 @@ function stopSelection(){
 // The touch-controls Stop button (#btn-stop) is only clickable when a player unit is selected.
 function updateStopBtn(){
   const sb=document.getElementById('btn-stop'); if(!sb) return;
-  sb.disabled = !(G && G.selection.some(e=>!e.dead && e.kind==='unit' && e.owner==='player'));
+  sb.disabled = !!(typeof isGamePaused==='function' && isGamePaused()) ||
+    !(G && G.selection.some(e=>!e.dead && e.kind==='unit' && e.owner==='player'));
 }
 // The command line changes height when it collapses (non-builder unit) or appears
 // (intern/building), so re-sync the Stop button and the HUD heights for the viewport.
@@ -262,7 +264,7 @@ function addCmd(emoji,label,cost,fn,extraClass){
   const funds=(G && G.hub && typeof CAMPAIGN!=='undefined') ? CAMPAIGN.m3 : playerEco(G, LOCAL_CTRL).gold;
   if(cost!=null && funds<cost) b.classList.add('disabled');
   b.innerHTML=`<span class="emoji">${emoji}</span><span>${label}</span>${cost!=null?`<span class="cost">${cost}🪙</span>`:''}`;
-  b.onclick=()=>{ fn(); refreshUI(); };
+  b.onclick=()=>{ if(typeof isGamePaused==='function' && isGamePaused()) return; fn(); refreshUI(); };
   elCmd.appendChild(b);
 }
 
@@ -319,8 +321,10 @@ function hideSub(id){ const el=document.getElementById(id); if(el) el.style.disp
 // career v3: per-unit dossier modal + campaign roster/memorial
 function showDossier(u){
   if(!u || !u.lore || typeof dossierHTML!=='function') return;
+  const keepRunning = !!(G && running && !G.over);
   document.getElementById('dossierBody').innerHTML = dossierHTML(u);
   showSub('dossierScreen');
+  if(keepRunning) running=true;
 }
 function showRoster(){
   const b=document.getElementById('rosterBody'); if(!b || typeof rosterHTML!=='function') return;
@@ -401,6 +405,7 @@ function loadMap(idx){
   if(typeof MUSIC!=='undefined') MUSIC.leaveMenu();
   if(typeof CAMPAIGN!=='undefined') CAMPAIGN.mode='combat';
   G=newMap(idx); if(typeof resetDialogs==='function') resetDialogs(); syncHud(); clampCam(G); refreshUI(); running=true;
+  if(typeof syncPauseBtn==='function') syncPauseBtn();
   toast('Quarter '+(idx+1)+': '+G.cfg.name);
 }
 
@@ -440,6 +445,7 @@ function showCrawl(idx, done){
 
 function onVictory(){
   running=false;
+  if(typeof syncPauseBtn==='function') syncPauseBtn();
   const es=document.getElementById('endScreen');
   const beaten=G.cfg.enemyName||'the competition';
   if(mapIndex < MAPS.length-1){
@@ -497,6 +503,7 @@ function buildCarryChooser(listEl, countEl, vets, cap, nextBtn, proceed){
 
 function onDefeat(){
   running=false;
+  if(typeof syncPauseBtn==='function') syncPauseBtn();
   const es=document.getElementById('endScreen');
   es.className='overlay lose'; es.style.display='flex';
   es.innerHTML=`<div class="big">💸</div><h1>OUT OF RUNWAY</h1>

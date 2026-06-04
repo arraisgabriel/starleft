@@ -19,8 +19,8 @@ function saveIsHubMap(d){
   return !!(d.hubMap || d.hub || (d.cfg && d.cfg.hub) || (Array.isArray(d.entities) && d.entities.some(e=>e && e.hubPoi)));
 }
 function hubSaveCfg(){
-  const p=(typeof HUB!=='undefined' && HUB.player) ? HUB.player : {x:60,y:58};
-  return {name:'H.U.B. — Hurban Ultra Buildings', enemyName:'', objective:'Spend M3rit$, stage units at an M.D.C., then launch the next episode.', hub:true, player:{x:p.x,y:p.y}};
+  const p=(typeof HUB!=='undefined' && HUB.player) ? HUB.player : {x:60,y:58}; 
+  return {name:'H.U.B. — Hurban Ultra Buildings', enemyName:'', objective:'Spend m3rit$ in upgrades, send units to a red M.D.C., then launch the next mission there.', hub:true, player:{x:p.x,y:p.y}};
 }
 function finitePositive(v, fallback){
   v=+v; return Number.isFinite(v) && v>0 ? (v|0) : fallback;
@@ -204,6 +204,7 @@ function loadGame(key){
     .forEach(id=>{ const el=document.getElementById(id); if(el) el.style.display='none'; });
   if(typeof resetInputState==='function') resetInputState();
   if(typeof resetDialogs==='function') resetDialogs(); syncHud(); clampCam(G); computeFog(G); refreshUI(); running=true;
+  if(typeof syncPauseBtn==='function') syncPauseBtn();
   toast('Loaded: '+(d.mapName||'game'));
 }
 

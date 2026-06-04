@@ -147,7 +147,7 @@ function _drawBox(d){
 
   const fs = 11*s, padX = 6*s, padY = 4*s, lh = 13*s, tail = 6*s, rad = 4*s;
   ctx.save();
-  ctx.font = fs+'px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
+  ctx.font = fs+'px '+GAME_FONT; ctx.textAlign='center'; ctx.textBaseline='middle';
   let tw = 0; for(const ln of d.lines) tw = Math.max(tw, ctx.measureText(ln).width);
   const w = tw + padX*2, h = d.lines.length*lh + padY*2;
   const x = cx - w/2, y = anchorY - h;
