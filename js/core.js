@@ -79,6 +79,7 @@ function update(state, dt){
   for(const e of state.entities){
     if(e.dead) continue;
     if(e.hp<=0 && e.type!=='goldmine'){
+      if(e.owner==='player' && e.kind==='unit' && typeof LNS!=='undefined' && LNS.ultraEvent) LNS.ultraEvent('unitDeath', { unit:e, map:state.cfg&&state.cfg.name });
       if(e.owner==='player' && e.kind==='unit' && e.lore && typeof recordFallen==='function') recordFallen(e);  // memorial + obituary
       killEntity(state,e); changed=true;
     }

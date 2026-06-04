@@ -69,6 +69,7 @@ function gainXp(u, killed, state){
     if(last && typeof eventToast==='function'){
       const d=buildDossier(u);
       eventToast(u.lore.events.length<=1 ? `📖 <b>${d.full}</b> of ${d.home}: ${last.text}` : `📖 <b>${d.first}</b>: ${last.text}`, 8800, last.say);
+      if(typeof LNS!=='undefined' && LNS.ultraEvent) LNS.ultraEvent('heroLifeEvent', { unit:u, event:last });
     }
     // in-world dialog: the unit speaks its freshest life-event in a box above its head (+ voice clip)
     if(last && last.say && typeof sayLoreEvent==='function') sayLoreEvent(u, last.say, last.tone, last.sayIdx);

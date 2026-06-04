@@ -19,7 +19,21 @@ function saveIsHubMap(d){
   return !!(d.hubMap || d.hub || (d.cfg && d.cfg.hub) || (Array.isArray(d.entities) && d.entities.some(e=>e && e.hubPoi)));
 }
 function hubSaveCfg(){
-  return {name:'H.U.B. — Hurban Ultra Buildings', enemyName:'', objective:'Spend M3rit$, stage units at an MDC, then launch the next episode.', hub:true, player:{x:60,y:58}};
+  const p=(typeof HUB!=='undefined' && HUB.player) ? HUB.player : {x:60,y:58};
+  return {name:'H.U.B. — Hurban Ultra Buildings', enemyName:'', objective:'Spend M3rit$, stage units at an M.D.C., then launch the next episode.', hub:true, player:{x:p.x,y:p.y}};
+}
+function finitePositive(v, fallback){
+  v=+v; return Number.isFinite(v) && v>0 ? (v|0) : fallback;
+}
+function legacyArray(src, n, fill){
+  const out = Array.isArray(src) ? src.slice(0,n) : [];
+  while(out.length<n) out.push(fill);
+  return out;
+}
+function legacyU8(src, n){
+  const out = new Uint8Array(n);
+  if(src && typeof src.length==='number') out.set(Uint8Array.from(src).slice(0,n));
+  return out;
 }
 
 /* ---------- entity cross-reference (de)serialization ----------
@@ -79,22 +93,36 @@ function deserializeGame(s){
   if(typeof deserializeHubCampaign==='function') deserializeHubCampaign(s.campaign);
   g.hub = isHub;
   g.cfg = isHub ? hubSaveCfg() : scaleCfg(MAPS[idx]);   // match the scaled cfg newMap() produces
+  g.W = finitePositive(g.W, g.cfg.w || (typeof HUB!=='undefined' ? HUB.W : 96));
+  g.H = finitePositive(g.H, g.cfg.h || (typeof HUB!=='undefined' ? HUB.H : 80));
+  const cells = g.W*g.H, hadBlocked=!!(s.blocked && typeof s.blocked.length==='number');
+  g.tiles = legacyArray(g.tiles, cells, T_GRASS);
+  g.biome = legacyArray(g.biome, cells, B_GRASS);
+  g.variant = legacyArray(g.variant, cells, 0.5);
+  g.features = Array.isArray(g.features) ? g.features : [];
+  g.megaSprites = Array.isArray(g.megaSprites) ? g.megaSprites : [];
   // legacy saves (pre-co-op) carried flat gold/supply/supplyCap/gold_collected — fold them into the
   // p1 economy pool so they keep loading; recomputeSupply below recomputes supply/cap from entities.
-  if(!g.eco){ g.eco = { p1: { gold:(s.gold||0), supply:0, supplyCap:0, gold_collected:(s.gold_collected||0) } }; }
+  if(!g.eco || !g.eco.p1){
+    const flat = g.eco && typeof g.eco==='object' ? g.eco : s;
+    g.eco = { p1: { gold:(flat.gold||0), supply:0, supplyCap:0, gold_collected:(flat.gold_collected||0) } };
+  }
   if(g.players==null) g.players = 1;
-  g.blocked  = Uint8Array.from(s.blocked);   // already carries feature-base blockers
-  g.explored = Uint8Array.from(s.explored);
-  g.visible  = new Uint8Array(g.W*g.H);
+  g.blocked  = legacyU8(s.blocked, cells);   // modern saves already carry feature/building blockers
+  g.explored = legacyU8(s.explored, cells);
+  g.visible  = new Uint8Array(cells);
   // rebuild the topography feature mask from features[] (not serialized): bottom rows block, upper walk-under
-  g.feat = new Uint8Array(g.W*g.H);
-  if(g.features){ const N=FEAT_SIZE; for(const f of g.features){ for(let y=0;y<N;y++)for(let x=0;x<N;x++){
-    const cx=f.tx+x, cy=f.ty+y; if(cx>=0&&cy>=0&&cx<g.W&&cy<g.H) g.feat[cy*g.W+cx]=(y>=FEAT_BLOCK_FROM)?2:1; } } }
+  g.feat = new Uint8Array(cells);
+  if(g.features){ for(const f of g.features){ const fw=Math.max(1,(f.w||FEAT_SIZE)|0), fh=Math.max(1,(f.h||FEAT_SIZE)|0), blockFrom=(fh===FEAT_SIZE)?FEAT_BLOCK_FROM:Math.max(0, fh-(fh>>1));
+    for(let y=0;y<fh;y++)for(let x=0;x<fw;x++){
+      const cx=f.tx+x, cy=f.ty+y; if(cx>=0&&cy>=0&&cx<g.W&&cy<g.H) g.feat[cy*g.W+cx]=(y>=blockFrom)?2:1; } } }
+  if(!hadBlocked && typeof baseBlocked==='function') for(let i=0;i<cells;i++) g.blocked[i]=baseBlocked(g,i);
   // rebuild the renderer's distance-to-shore depth field + tide buffers from the restored tiles (js/water.js)
   if(typeof buildWaterDepth==='function') buildWaterDepth(g);
   g.entities = s.entities.map(e=>Object.assign({}, e));
   const byId = new Map(g.entities.map(e=>[e.id, e]));
   g.entities.forEach(e=>resolveRefs(e, byId));        // re-link cross-refs in place
+  if(!hadBlocked && typeof markBuilding==='function') g.entities.forEach(e=>{ if(e && !e.dead && e.kind==='building') markBuilding(g,e,true); });
   if(g.hub){
     g.hubPois={}; g.entities.forEach(e=>{ if(e.hubPoi) g.hubPois[e.hubPoi.id]=e; });
     if(typeof hubRestorePoiVisuals==='function') hubRestorePoiVisuals(g);
@@ -165,9 +193,16 @@ function loadGame(key){
   if(!isSaveBlob(d)){ toast('Not a STARLEFT save'); return; }
   if(!saveVersionOk(d)){ toast('Incompatible save'); return; }
   if(typeof MUSIC!=='undefined') MUSIC.leaveMenu();
-  G=deserializeGame(d); mapIndex=saveMapIndex(d);
+  try{
+    G=deserializeGame(d); mapIndex=saveMapIndex(d);
+  }catch(err){
+    console.error('Load failed', err, d);
+    toast('Load failed: save data is incomplete');
+    return;
+  }
   ['startScreen','mapScreen','docScreen','crawlScreen','endScreen','loadScreen']
     .forEach(id=>{ const el=document.getElementById(id); if(el) el.style.display='none'; });
+  if(typeof resetInputState==='function') resetInputState();
   if(typeof resetDialogs==='function') resetDialogs(); syncHud(); clampCam(G); computeFog(G); refreshUI(); running=true;
   toast('Loaded: '+(d.mapName||'game'));
 }

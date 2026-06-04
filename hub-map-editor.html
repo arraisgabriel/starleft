@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>STARLEFT HUB Map Editor</title>
+  <link rel="icon" href="favicon.ico">
+  <link rel="stylesheet" href="css/hub-map-editor.css">
+</head>
+<body>
+  <main class="hme-shell">
+    <header class="hme-topbar">
+      <div class="hme-brand">
+        <strong>STARLEFT</strong>
+        <span>HUB Map Editor</span>
+      </div>
+      <nav class="hme-tools" aria-label="Editor tools">
+        <button class="hme-tool is-active" data-tool="select" title="Select and move">Select</button>
+        <button class="hme-tool" data-tool="topography" title="Place topography">Topo</button>
+        <button class="hme-tool" data-tool="mega" title="Place megasprites">Mega</button>
+        <button class="hme-tool" data-tool="building" title="Place buildings">Build</button>
+        <button class="hme-tool" data-tool="poi" title="Place HUB POIs">POI</button>
+        <button class="hme-tool" data-tool="erase" title="Erase placement">Erase</button>
+      </nav>
+      <div class="hme-actions">
+        <button id="gridToggle" class="hme-btn" type="button">Grid</button>
+        <button id="importBtn" class="hme-btn" type="button">Import</button>
+        <button id="exportBtn" class="hme-btn" type="button">Export</button>
+        <button id="copyBtn" class="hme-btn" type="button">Copy</button>
+        <button id="replaceBtn" class="hme-btn hme-primary" type="button">Replace JS</button>
+        <input id="importFile" type="file" accept=".json,.js,application/json,text/javascript" hidden>
+      </div>
+    </header>
+
+    <section class="hme-workspace">
+      <aside class="hme-panel hme-left">
+        <section>
+          <h2>Palette</h2>
+          <label>Megasprite
+            <select id="megaCat"></select>
+          </label>
+          <label>Variant
+            <input id="megaVariant" type="number" min="0" max="5" step="1" value="0">
+          </label>
+          <label>Building
+            <select id="buildingType"></select>
+          </label>
+          <label>Topography
+            <select id="topoSlot"></select>
+          </label>
+          <label>Biome
+            <select id="biomePick"></select>
+          </label>
+        </section>
+        <section>
+          <h2>Placement Size</h2>
+          <div class="hme-grid2">
+            <label>W
+              <input id="newW" type="number" min="1" max="64" step="1" value="3">
+            </label>
+            <label>H
+              <input id="newH" type="number" min="1" max="64" step="1" value="3">
+            </label>
+            <label>Over
+              <input id="newOverhang" type="number" min="0.25" max="5" step="0.01" value="1.08">
+            </label>
+            <label>Scale
+              <input id="newHeightScale" type="number" min="0.25" max="5" step="0.01" value="1">
+            </label>
+          </div>
+        </section>
+        <section>
+          <h2>Map</h2>
+          <div class="hme-grid2">
+            <label>W
+              <input id="mapW" type="number" min="16" max="256" step="1">
+            </label>
+            <label>H
+              <input id="mapH" type="number" min="16" max="256" step="1">
+            </label>
+          </div>
+          <button id="normalizeBtn" class="hme-wide" type="button">Normalize Data</button>
+        </section>
+      </aside>
+
+      <section class="hme-stage">
+        <canvas id="cv"></canvas>
+        <canvas id="minimap" width="154" height="124" aria-hidden="true"></canvas>
+        <div id="statusLine" class="hme-status">Ready</div>
+      </section>
+
+      <aside class="hme-panel hme-right">
+        <section>
+          <h2>Selection</h2>
+          <div id="selectionSummary" class="hme-muted">Nothing selected</div>
+          <div id="propertyEditor" class="hme-props"></div>
+          <div class="hme-row">
+            <button id="duplicateBtn" type="button">Duplicate</button>
+            <button id="deleteBtn" type="button">Delete</button>
+          </div>
+        </section>
+        <section>
+          <h2>Validation</h2>
+          <div id="validationList" class="hme-validation"></div>
+        </section>
+      </aside>
+    </section>
+  </main>
+
+  <script src="js/config.js"></script>
+  <script src="js/assets.js"></script>
+  <script src="js/state.js"></script>
+  <script src="js/mega_neon_maps.js"></script>
+  <script src="js/building_neon_maps.js"></script>
+  <script src="js/megasprites.js"></script>
+  <script src="js/map.js"></script>
+  <script src="js/hub_map_schema.js"></script>
+  <script src="js/hub_map_data.js"></script>
+  <script src="js/hub.js"></script>
+  <script src="js/units.js"></script>
+  <script src="js/render.js"></script>
+  <script src="js/water.js"></script>
+  <script src="js/hub-map-editor.js"></script>
+</body>
+</html>

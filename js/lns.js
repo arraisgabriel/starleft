@@ -44,10 +44,12 @@ var LNS = (function(){
   const CACHE_TTL     = 5*60*1000;            // serve cache instantly if younger than this
   const PREF_KEY      = 'starleft.lns.ingame';// in-game ticker on/off (persisted)
   const MAX_ITEMS     = 60;                   // headline cap (keeps DOM + marquee small)
+  const MAX_ULTRA_EVENTS = 30;                // session-only gameplay ULTRA headlines
   const SPEED_MENU    = 90;                   // marquee speed, px/sec
   const SPEED_INGAME  = 70;
 
-  let items    = [];                          // [{title, link, ts, source}], deduped + sorted
+  let realItems = [];                         // RSS [{title, link, ts, source}], deduped + sorted
+  let ultraEvents = [];                       // session-only [{title, ts, source}], newest first
   let loading  = true;
   let fetching = false;
   let lastFetchAt   = 0;
@@ -129,7 +131,7 @@ var LNS = (function(){
       const settled = await Promise.allSettled(FEEDS.map(fetchFeed));
       const merged = [];
       settled.forEach(r=>{ if(r.status==='fulfilled' && r.value.length) merged.push.apply(merged, r.value); });
-      if(merged.length){ items = dedupeSort(merged); loading = false; saveCache(); }
+      if(merged.length){ realItems = dedupeSort(merged); loading = false; saveCache(); }
     } finally { fetching = false; scheduleRebuild(); }
   }
   function dedupeSort(list){
@@ -144,13 +146,89 @@ var LNS = (function(){
     return out;
   }
 
+  /* ===================================================================
+     ULTRA NEWS — local game source, mixed into RSS at 2 real : 1 ULTRA
+     =================================================================== */
+  function ultraData(){ return (typeof ULTRA_NEWS!=='undefined' && ULTRA_NEWS) ? ULTRA_NEWS : null; }
+  function ultraSource(){ const d=ultraData(); return (d&&d.source)||'ULTRA NEWS'; }
+  function stripHtml(s){
+    return String(s||'').replace(/<[^>]+>/g,' ').replace(/\s+/g,' ').replace(/&amp;/g,'&').trim();
+  }
+  function unitDisplayName(u){
+    if(!u) return 'A unit';
+    try{
+      if(u.lore && typeof buildDossier==='function') return buildDossier(u).full;
+    }catch(_){}
+    return u.heroId || (DEF[u.type]&&DEF[u.type].name) || u.type || 'A unit';
+  }
+  function expandTemplate(tpl, data){
+    data=data||{};
+    return String(tpl||'').replace(/\{(\w+)\}/g, (_,k)=> stripHtml(data[k] || ''));
+  }
+  function ultraItem(title, ts){
+    return { title:stripHtml(title), link:'', ts:ts||Date.now(), source:ultraSource(), ultra:true };
+  }
+  function pushUltra(title){
+    if(!title) return;
+    ultraEvents.unshift(ultraItem(title));
+    const seen=new Set();
+    ultraEvents=ultraEvents.filter(it=>{
+      const k=it.title.toLowerCase(); if(seen.has(k)) return false; seen.add(k); return true;
+    }).slice(0, MAX_ULTRA_EVENTS);
+    scheduleRebuild();
+  }
+  function chooseTemplate(kind, salt){
+    const d=ultraData(), list=d&&d.templates&&d.templates[kind];
+    if(!list||!list.length) return '';
+    return list[Math.abs(salt||0)%list.length];
+  }
+  function ultraEvent(kind, payload){
+    const d=ultraData(); if(!d) return;
+    payload=payload||{};
+    if(kind==='unitDeath'){
+      const u=payload.unit||payload.u||null, name=payload.name||unitDisplayName(u);
+      const tpl=chooseTemplate('unitDeath', (u&&u.id)||Date.now());
+      pushUltra(expandTemplate(tpl, { name, unit:(DEF[u&&u.type]&&DEF[u.type].name)||payload.unitType||'unit', map:payload.map||((typeof G!=='undefined'&&G&&G.cfg&&G.cfg.name)||'the map') }));
+    } else if(kind==='heroLifeEvent'){
+      const u=payload.unit||payload.u||null, name=payload.name||unitDisplayName(u);
+      const tpl=chooseTemplate('heroLifeEvent', ((u&&u.id)||0)+((u&&u.stars)||0));
+      pushUltra(expandTemplate(tpl, { name, unit:(DEF[u&&u.type]&&DEF[u.type].name)||payload.unitType||'unit' }));
+    } else if(kind==='episodeReached'){
+      const idx=payload.idx|0;
+      if(idx<=0) return;
+      const ep=d.episodes && d.episodes[idx-1];
+      if(ep) pushUltra(ep);
+    }
+  }
+  function ultraItems(need){
+    const d=ultraData(); if(!d) return [];
+    const out=ultraEvents.slice();
+    const tips=(d.tips||[]).filter(Boolean);
+    if(tips.length){
+      const start=Math.floor(Date.now()/90000)%tips.length;
+      for(let i=0; out.length<need; i++) out.push(ultraItem(tips[(start+i)%tips.length], 0));
+    }
+    return out.slice(0, need);
+  }
+  function mixedItems(){
+    const real=realItems.slice(0, MAX_ITEMS), ultra=ultraItems(MAX_ITEMS);
+    if(!real.length) return ultra.slice(0, MAX_ITEMS);
+    if(!ultra.length) return real;
+    const out=[]; let u=0;
+    for(let i=0;i<real.length && out.length<MAX_ITEMS;i++){
+      out.push(real[i]);
+      if((i+1)%2===0 && out.length<MAX_ITEMS) out.push(ultra[u++ % ultra.length]);
+    }
+    return out.slice(0, MAX_ITEMS);
+  }
+
   /* ---- localStorage cache (instant first paint, fewer network hits) ---- */
-  function saveCache(){ try{ localStorage.setItem(CACHE_KEY, JSON.stringify({ t:Date.now(), items })); }catch(_){ } }
+  function saveCache(){ try{ localStorage.setItem(CACHE_KEY, JSON.stringify({ t:Date.now(), items:realItems })); }catch(_){ } }
   function loadCache(){
     try{
       const d = JSON.parse(localStorage.getItem(CACHE_KEY)||'null');
       if(!d || !Array.isArray(d.items) || !d.items.length) return false;
-      items = d.items.slice(0, MAX_ITEMS); loading = false;
+      realItems = d.items.slice(0, MAX_ITEMS); loading = false;
       return (Date.now()-(d.t||0)) < CACHE_TTL;   // true → still fresh
     }catch(_){ return false; }
   }
@@ -160,10 +238,11 @@ var LNS = (function(){
      =================================================================== */
   function esc(s){ return String(s).replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
 
-  function innerHTML(){
-    if(loading && !items.length) return '<span class="lns-loading">Loading ...</span>';
-    if(!items.length)            return '<span class="lns-loading">Live feed unavailable — retrying…</span>';
-    return items.map(it=>{
+  function innerHTML(showItems){
+    const renderItems=showItems||mixedItems();
+    if(loading && !realItems.length && !renderItems.length) return '<span class="lns-loading">Loading ...</span>';
+    if(!renderItems.length)            return '<span class="lns-loading">Live feed unavailable — retrying…</span>';
+    return renderItems.map(it=>{
       const body = `<span class="lns-src">${esc(it.source)}</span><span class="lns-headline">${esc(it.title)}</span>`;
       const item = it.link
         ? `<a class="lns-item" href="${esc(it.link)}" target="_blank" rel="noopener noreferrer">${body}</a>`
@@ -193,8 +272,9 @@ var LNS = (function(){
   }
   function buildTicker(hostEl, speed){
     if(!hostEl) return;
-    const html = innerHTML();
-    if(!items.length){            // Loading / unavailable → static, no scroll
+    const showItems=mixedItems();
+    const html = innerHTML(showItems);
+    if(!showItems.length){        // Loading / unavailable → static, no scroll
       hostEl.innerHTML = `<div class="lns-viewport"><div class="lns-static">${html}</div></div>`;
       return;
     }
@@ -260,5 +340,5 @@ var LNS = (function(){
     let rt; addEventListener('resize', ()=>{ clearTimeout(rt); rt=setTimeout(renderAll, 250); }); // re-tune marquee width
   }
 
-  return { init, toggleIngame, refresh, relayout: renderAll };
+  return { init, toggleIngame, refresh, relayout: renderAll, ultraEvent };
 })();

@@ -198,6 +198,15 @@ function pickEntity(state,wx,wy){
 }
 
 function clearSelection(){ G.selection.forEach(s=>s.selected=false); G.selection=[]; }
+function resetInputState(){
+  for(const k in keys) keys[k]=false;
+  pointers.clear();
+  gesture.mode='none'; gesture.id=null; gesture.moved=false;
+  mouse.onCanvas=false;
+  edgeTopHold=0;
+  armBoxSelect=false;
+  if(typeof updateBoxBtn==='function') updateBoxBtn();
+}
 
 /* ---------- Control groups (Ctrl/Cmd + 0-9 assign, 0-9 recall) ---------- */
 function assignGroup(g){
@@ -250,7 +259,8 @@ function updateCamera(state,dt){
   // and every modal overlay sit ON TOP of the canvas, so when the pointer is over any of them
   // mouse.onCanvas is false — this stops the view drifting up while a menu modal is open and
   // also keeps the top-right menu easy to reach.
-  if(lastPointerWasMouse && mouse.onCanvas){
+  const canvasUnderMouse = mouse.onCanvas && document.elementFromPoint(mouse.sx, mouse.sy)===cv;
+  if(lastPointerWasMouse && canvasUnderMouse){
     const m=18, vw=viewW(), vh=cv.height/dpr;
     if(mouse.sx<m) dx-=spd;
     if(mouse.sx>vw-m) dx+=spd;

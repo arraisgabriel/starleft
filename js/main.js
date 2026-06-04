@@ -197,6 +197,12 @@ function wireTouchControls(){
   on('btn-clear', ()=>{ if(G && G.selection.length){ clearSelection(); refreshUI(); } });   // Esc equivalent: drop the current selection
   on('btn-cancel', ()=>{ if(G&&G.placing){ G.placing=null; refreshUI(); } });
   on('btn-save', ()=>{ saveGame(); });
+  on('btn-load', ()=>{
+    const panel=document.getElementById('topmenu-panel'), btn=document.getElementById('btn-topmenu');
+    if(panel) panel.style.display='none';
+    if(btn){ btn.classList.remove('open'); btn.setAttribute('aria-expanded','false'); }
+    if(typeof openLoadMenu==='function') openLoadMenu();
+  });
   on('btn-roster', ()=>{ if(typeof showRoster==='function') showRoster(); });
   on('btn-events', ()=>{ if(typeof showEvents==='function') showEvents(); });
   on('btn-voice', ()=>{ if(typeof VOICE!=='undefined'){ VOICE.toggle(); syncVoiceBtn(); } });

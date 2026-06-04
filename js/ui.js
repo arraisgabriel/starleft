@@ -56,6 +56,9 @@ function refreshUI(){
     } else if(e.type==='hq' && typeof hqStoredUnits==='function'){
       const stored=hqStoredUnits(G,e).length;
       if(stored) extra=`${stored} unit${stored===1?'':'s'} stored`;
+    } else if(G.hub && e.hubPoi && e.hubPoi.kind==='mdc' && typeof hqStoredUnits==='function'){
+      const stored=hqStoredUnits(G,e).length;
+      if(stored) extra=`${stored} unit${stored===1?'':'s'} staged`;
     }
     if(d.flavor) extra+=(extra?'<br>':'')+`<span style="color:#9e7780;font-style:italic;">${d.flavor}</span>`;
     elDesc.innerHTML=extra;
@@ -73,7 +76,7 @@ function refreshUI(){
   if(cb) cb.style.display = G.placing ? '' : 'none';
 
   // production-queue cards live in the selected building's info panel
-  updateProdQueue((sel.length===1 && sel[0].kind==='building' && sel[0].owner==='player') ? sel[0] : null);
+  updateProdQueue((sel.length===1 && sel[0].kind==='building' && (sel[0].owner==='player' || (G.hub && sel[0].hubPoi))) ? sel[0] : null);
 }
 
 // Build / refresh the queue cards for a selected player building (or clear them).
@@ -82,7 +85,7 @@ function refreshUI(){
 function updateProdQueue(b){
   const wrap=document.getElementById('prod-queue'); if(!wrap) return;
   const q=(b && b.prodQueue) ? b.prodQueue : [];
-  const stored=(b && b.type==='hq' && typeof hqStoredUnits==='function') ? hqStoredUnits(G,b) : [];
+  const stored=(b && typeof hqStoredUnits==='function' && (b.type==='hq' || (G.hub && b.hubPoi && b.hubPoi.kind==='mdc'))) ? hqStoredUnits(G,b) : [];
   if(!b || (!q.length && !stored.length)){
     if(wrap._sig){ wrap.innerHTML=''; wrap._sig=''; }
     return;
@@ -97,7 +100,7 @@ function updateProdQueue(b){
 }
 function buildProdCards(wrap,b,stored){
   wrap.innerHTML='';
-  b.prodQueue.forEach((type,i)=>{
+  (b.prodQueue||[]).forEach((type,i)=>{
     const card=document.createElement('div'); card.className='pq-card'; card.title='Cancel '+(DEF[type].name||type);
     card._type=type; card._owner=b.owner; card._queueIndex=i;
     const cv=document.createElement('canvas'); cv.width=40; cv.height=40; cv.className='pq-spr'; card.appendChild(cv);
@@ -112,7 +115,11 @@ function buildProdCards(wrap,b,stored){
     card._type=u.type; card._owner=u.owner; card._queueIndex=-1;
     const cv=document.createElement('canvas'); cv.width=40; cv.height=40; cv.className='pq-spr'; card.appendChild(cv);
     const out=document.createElement('span'); out.className='pq-out'; out.textContent='↩'; card.appendChild(out);
-    card.onclick=(ev)=>{ ev.stopPropagation(); (typeof netReleaseStored==='function'?netReleaseStored:releaseStoredUnit)(G,b,u.id); };
+    card.onclick=(ev)=>{
+      ev.stopPropagation();
+      if(G.hub && b.hubPoi && b.hubPoi.kind==='mdc' && typeof hubReleaseFromMdc==='function') hubReleaseFromMdc(hubUnitKey(u));
+      else (typeof netReleaseStored==='function'?netReleaseStored:releaseStoredUnit)(G,b,u.id);
+    };
     wrap.appendChild(card);
   });
 }
@@ -214,37 +221,6 @@ function buildHubCommands(sel){
   syncCmdLine();
 }
 function buildHubMdcMenu(poi){
-  const panel=document.createElement('div');
-  panel.className='mdc-panel';
-  const title=document.createElement('div');
-  title.className='mdc-title';
-  title.textContent=(poi&&poi.hubPoi&&poi.hubPoi.name)||'Mission Dispatch Center';
-  panel.appendChild(title);
-
-  const list=document.createElement('div');
-  list.className='mdc-list';
-  const units=(typeof hubEnlistedUnits==='function') ? hubEnlistedUnits(G) : [];
-  if(!units.length){
-    const empty=document.createElement('div');
-    empty.className='mdc-empty';
-    empty.textContent='No enlisted units';
-    list.appendChild(empty);
-  } else {
-    units.forEach(u=>{
-      const row=document.createElement('button');
-      row.className='mdc-row';
-      row.title='Remove from dispatch';
-      const name=(u.heroId || (u.lore&&typeof buildDossier==='function' ? buildDossier(u).full : (DEF[u.type]&&DEF[u.type].name)||u.type));
-      const nm=document.createElement('span'); nm.className='mdc-unit-name'; nm.textContent=name;
-      const meta=document.createElement('span'); meta.className='mdc-unit-meta'; meta.textContent='★ '+(u.stars||0)+' · '+((DEF[u.type]&&DEF[u.type].name)||u.type);
-      const rem=document.createElement('span'); rem.className='mdc-remove'; rem.textContent='×';
-      row.appendChild(nm); row.appendChild(meta); row.appendChild(rem);
-      row.onclick=ev=>{ ev.stopPropagation(); if(typeof hubReleaseFromMdc==='function') hubReleaseFromMdc(hubUnitKey(u)); };
-      list.appendChild(row);
-    });
-  }
-  panel.appendChild(list);
-  elCmd.appendChild(panel);
   addCmd('🚀','DISPATCH',null,()=>hubDispatchNextEpisode());
 }
 // Stop = hold position: cancel orders/motion for every selected player unit.
@@ -431,6 +407,7 @@ function loadMap(idx){
 /* ---- Star-Wars-style intro crawl ---- */
 function showCrawl(idx, done){
   if(typeof MUSIC!=='undefined') MUSIC.leaveMenu();
+  if(idx>0 && typeof LNS!=='undefined' && LNS.ultraEvent) LNS.ultraEvent('episodeReached', { idx });
   running=false;
   const cfg=MAPS[idx], cr=cfg.crawl;
   const scr=document.getElementById('crawlScreen');

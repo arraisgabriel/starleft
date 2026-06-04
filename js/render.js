@@ -135,11 +135,12 @@ function render(state){
   // FEAT_SIZE walk-under topography features: cull to view + gate on explored BEFORE the sort
   // (a crammed map can have hundreds). Ground line = footprint bottom edge (ty+N)*TILE, so a
   // unit in a passable TOP row (smaller y) sorts first and is occluded → walks under the canopy.
-  if(state.features){ const N=FEAT_SIZE; for(const f of state.features){
-    if(f.tx+N<=x0 || f.tx>=x1 || f.ty+N<=y0 || f.ty>=y1) continue;     // AABB cull
-    const si=(f.ty+N-1)*state.W + (f.tx+(N>>1));                       // one bottom-row sample cell (shared w/ minimap/fog)
+  if(state.features){ for(const f of state.features){ const fw=Math.max(1,(f.w||FEAT_SIZE)|0), fh=Math.max(1,(f.h||FEAT_SIZE)|0);
+    if(f.tx+fw<=x0 || f.tx>=x1 || f.ty+fh<=y0 || f.ty>=y1) continue;   // AABB cull
+    const sx=Math.max(0, Math.min(state.W-1, f.tx+(fw>>1))), sy=Math.max(0, Math.min(state.H-1, f.ty+fh-1));
+    const si=sy*state.W + sx;                                          // one bottom-row sample cell (shared w/ minimap/fog)
     if(!state.explored[si]) continue;                                 // hidden until explored
-    depth.push({y:(f.ty+N)*TILE, f, dim:state.visible[si]!==1});      // neutral scenery: dim when not visible
+    depth.push({y:(f.ty+fh)*TILE, f, dim:state.visible[si]!==1});      // neutral scenery: dim when not visible
   } }
   // funding nodes ("funding rock"): a 3x3 walk-under footprint like a topo feature —
   // depth-sorted on the footprint ground line so Interns mining at the base draw in
@@ -440,14 +441,15 @@ function drawTreeTile(b,v,px,py){
 // Phase 1 reuses the existing OPAQUE atlas cell scaled 2x2 (top row reads as a mound);
 // Phase 2 swaps in a transparent feature atlas inside drawFeatureSprite — no change here.
 function drawFeature(state, f, ox, oy, dim){
-  const N=FEAT_SIZE, px=f.tx*TILE+ox, py=f.ty*TILE+oy, w=N*TILE;
-  const overhang=1.08;                                   // slight upward growth, like buildings/megas
-  const dw=w*overhang, dh=dw;                            // square atlas cells
-  const dx=px+(w-dw)/2, dy=(f.ty+N)*TILE+oy - dh + 2;    // centered, bottom-anchored on the ground line
+  const fw=Math.max(1,(f.w||FEAT_SIZE)|0), fh=Math.max(1,(f.h||FEAT_SIZE)|0);
+  const px=f.tx*TILE+ox, baseW=fw*TILE, baseH=fh*TILE;
+  const overhang=f.overhang||1.08;                       // slight upward growth, like buildings/megas
+  const dw=baseW*overhang, dh=baseH*overhang*(f.heightScale||1);
+  const dx=px+(baseW-dw)/2, dy=(f.ty+fh)*TILE+oy - dh + 2; // centered, bottom-anchored on the ground line
   ctx.save();
   if(dim) ctx.globalAlpha*=0.5;                          // explored-but-not-visible
   drawFeatureSprite(f, dx, dy, dw, dh);
-  if(state.hub && f.slot==='rock' && typeof hubInWasteland==='function' && hubInWasteland(f.tx+N/2,f.ty+N/2)){
+  if(state.hub && f.slot==='rock' && typeof hubInWasteland==='function' && hubInWasteland(f.tx+fw/2,f.ty+fh/2)){
     drawWastelandRockFog(state,f,dx,dy,dw,dh);
   }
   ctx.restore();
@@ -854,14 +856,15 @@ function renderMinimap(state){
   }
   // topography features: their footprint cells are now plain floor, so re-dot them
   // (same colors the T_TREE/T_ROCK tiles used) over the feature's FEAT_SIZE block.
-  if(state.features){ const N=FEAT_SIZE; for(const f of state.features){
-    const si=(f.ty+N-1)*state.W + (f.tx+(N>>1));
+  if(state.features){ for(const f of state.features){ const fw=Math.max(1,(f.w||FEAT_SIZE)|0), fh=Math.max(1,(f.h||FEAT_SIZE)|0);
+    const sx0=Math.max(0, Math.min(state.W-1, f.tx+(fw>>1))), sy0=Math.max(0, Math.min(state.H-1, f.ty+fh-1));
+    const si=sy0*state.W + sx0;
     if(!state.explored[si]) continue;
     const b=state.biome[si];
     let c = f.slot==='rock' ? (b===B_VOLCANIC?'#3a241c': b===B_ICE?'#3a4854':'#3a3d44')
                             : (b===B_DESERT?'#2e4a2a': b===B_VOLCANIC?'#1c1411':'#16241a');
     if(!state.visible[si]) c=shade(c,-30);
-    mmx.fillStyle=c; mmx.fillRect(f.tx*sx, f.ty*sy, Math.ceil(sx*N), Math.ceil(sy*N));
+    mmx.fillStyle=c; mmx.fillRect(f.tx*sx, f.ty*sy, Math.ceil(sx*fw), Math.ceil(sy*fh));
   } }
   for(const e of state.entities){
     if(e.dead||e.storedIn) continue;
