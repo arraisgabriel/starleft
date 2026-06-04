@@ -1,0 +1,59 @@
+{
+  "skill_name": "starleft-unit-forge",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "ok i want to add a new unit to starleft — a cheap fast harasser that the player builds early to poke the enemy economy. it should chuck little sticky bombs. figure out the stats and get it into the game.",
+      "expected_output": "Runs the full pipeline: confirms the concept/niche, drafts a low-cost low-supply fast DEF entry (barracks tier), runs balance-check.js and lands inside the harasser envelope (cheap+fast but fragile, not dominant), composes the gen_units.mjs UNITS entry, generates+slices sprites with a review loop, wires DEF/BUILD_HIRES/ui.js/assets.js (and optionally ai.js), and verifies with verify-wiring.js. Since it's a thrown short-range weapon, decides whether range>2 (muzzle) or melee.",
+      "files": [],
+      "assertions": [
+        { "text": "Suggests barracks as the producer/prerequisite (cheap infantry tier)", "criteria": "The proposed producer building is barracks, justified by low cost/supply." },
+        { "text": "Runs balance-check.js on the drafted stats", "criteria": "The transcript shows balance-check.js invoked with the draft and the unit landing inside the tier envelope (or iterated until it does)." },
+        { "text": "Adds a DEF entry and a matching BUILD_HIRES + ui.js train button", "criteria": "js/config.js DEF gains the type, BUILD_HIRES.barracks includes it, and ui.js buildCommands adds a gated train button." },
+        { "text": "Registers sprite tables in assets.js", "criteria": "UNIT_WALK, UNIT_ACTION, and UNIT_SPRITE_H all gain the new type." }
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "create a hero for the campaign — her name is Vex, an ex-A&O cryptographer who defected. visually she should read like a hacker with a signature acid-green hood (not the usual cyan). she fights at range. give her a backstory and drop her into one of the later maps.",
+      "expected_output": "Takes the HERO branch: reuses a ranged base unit's gameplay type with a spriteType visual override, uses the HERO_STYLE/HERO_AVOID override in gen_units.mjs so the acid-green signature survives the cyan-only rule, writes a bespoke slice_<hero>.py that skips the enemy recolor, authors a dossier (first/home/family/trauma/dream/crime) in the world's dark satirical tone, and places her in a MAPS[idx].heroes[] entry (NOT in BUILD_HIRES — heroes aren't produced). Calibrates a muzzle since she's ranged.",
+      "files": [],
+      "assertions": [
+        { "text": "Treats it as a hero (no production wiring)", "criteria": "Does NOT add the hero to BUILD_HIRES or a ui.js train button; places her via MAPS heroes[]." },
+        { "text": "Uses a hero palette override for the non-cyan signature", "criteria": "Applies HERO_STYLE/HERO_AVOID (or equivalent) so acid-green survives, and a slice that skips the enemy recolor." },
+        { "text": "Authors a dossier with the canonical fields", "criteria": "The heroes[] entry includes a dossier object with name/type/sprite/level and dossier fields (home, family, trauma, dream, crime...)." }
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "design a heavy late-game vehicle for starleft: a railgun tank that outranges turrets and hits like a truck. it should clearly be an expensive investment unit.",
+      "expected_output": "Drafts a garage-tier high-cost, high-supply, slow, long-range unit; runs balance-check.js and tunes so it has a real weakness (slow + expensive + high supply) rather than dominating; flags the carryover-runaway check; suggests garage as the producer; generates a tracked-vehicle sprite (drive cycle + a charging cyan cannon firing frame); wires everything; and — because it's ranged — registers it in the muzzle calibrator and calibrates MUZZLE so the railgun beam leaves the barrel.",
+      "files": [],
+      "assertions": [
+        { "text": "Suggests garage (vehicle/expensive tier)", "criteria": "Producer is garage, justified by cost/supply/vehicle role." },
+        { "text": "Calibrates the muzzle for the ranged weapon", "criteria": "Adds a MUZZLE entry and registers the type in muzzle-calibrator.js; Phase 6 is executed because range>2." },
+        { "text": "Checks for carryover/balance runaway", "criteria": "balance-check.js (and/or simulate_balance.js) is used and the cv/carryover flags are addressed, not ignored." }
+      ]
+    },
+    {
+      "id": 4,
+      "prompt": "add a barracks trooper with 60 cost, 320 hp, 45 damage and a 0.6s cooldown. ship it.",
+      "expected_output": "Does NOT blindly ship it. Runs balance-check.js, which flags the unit as DOMINANT / OVERPOWERED-for-cost / a carryover-runaway risk (a cheap super-soldier), and pushes back with a concrete rebalance (raise cost, cut hp/dmg, or move it to a higher tier with matching supply) before wiring. Treats balance as a gate to clear, not a formality.",
+      "files": [],
+      "assertions": [
+        { "text": "Flags the unit as overpowered/dominant", "criteria": "balance-check.js output is surfaced and the unit is identified as breaking the tier envelope / carryover ceiling." },
+        { "text": "Proposes a concrete rebalance before wiring", "criteria": "Suggests specific stat/cost/supply changes (or a tier move) rather than wiring the broken numbers as given." }
+      ]
+    },
+    {
+      "id": 5,
+      "prompt": "i added a new unit's sprites already (assets/units/sniperdrone/ has walk + attack) but the laser shoots from its feet instead of the gun. fix it.",
+      "expected_output": "Recognizes this as the muzzle-calibration step: registers sniperdrone in muzzle-calibrator.js (UNITS + seed + UNIT_SPRITE_H + FACES_LEFT if needed), opens muzzle-calibrator.html, guides clicking the barrel tip on the firing frame to get normalized (mx,my), tunes width w, and writes the MUZZLE['sniperdrone'] entry into js/muzzle_data.js. Verifies the bolt now leaves the muzzle in-game.",
+      "files": [],
+      "assertions": [
+        { "text": "Identifies the missing MUZZLE entry as the cause", "criteria": "Attributes the feet-origin to a missing/incorrect MUZZLE entry (fallback) and targets js/muzzle_data.js." },
+        { "text": "Uses the calibrator workflow", "criteria": "Registers the type in muzzle-calibrator.js and uses the calibrator (not guessed coordinates) to author mx/my/w." }
+      ]
+    }
+  ]
+}
