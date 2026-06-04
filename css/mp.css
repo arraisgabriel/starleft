@@ -331,3 +331,24 @@
   .mpr-code { font-size:23px; letter-spacing:1px; }
   .mpr-chat .mp-chat-log { height:84px; }
 }
+
+/* ── MP DEBUG log overlay (js/net/mp-debug.js) — black, monospace, level-coloured; lobby + in-game ── */
+#mp-dbg-panel { position:fixed; left:50%; transform:translateX(-50%); bottom:14px; z-index:9000;
+  width:min(720px,94vw); height:min(45vh,420px); display:none; flex-direction:column;
+  background:#06070a; border:1px solid #3a1f27; border-radius:8px; overflow:hidden;
+  box-shadow:0 10px 36px rgba(0,0,0,.6); font-family:ui-monospace,"SF Mono","Cascadia Code","Courier New",monospace; }
+#mp-dbg-panel::before { content:''; position:absolute; left:0; right:0; top:0; height:2px;
+  background:linear-gradient(90deg, var(--edge-lit,#c0303a), rgba(255,90,90,.05) 60%, transparent); }
+.mp-dbg-head { display:flex; align-items:center; gap:10px; flex:none;
+  padding:8px 10px; border-bottom:1px solid #241319; background:rgba(255,255,255,.02); }
+.mp-dbg-title { color:var(--amber,#ffb84d); font:700 12px/1 ui-monospace,monospace; letter-spacing:2.4px; }
+.mp-dbg-actions { margin-left:auto; display:flex; gap:6px; }
+.mp-dbg-actions .tc-btn { padding:3px 9px; font-size:12px; }
+.mp-dbg-log { flex:1 1 auto; overflow:auto; padding:8px 10px; font-size:12px; line-height:1.45;
+  color:#9fb0c0; background:#06070a; word-break:break-word; }
+.mp-dbg-row { white-space:pre-wrap; }
+.mp-dbg-t { color:#566270; } .mp-dbg-r { color:#7fb7f0; }
+.mp-dbg-info { color:#9fb0c0; } .mp-dbg-ok { color:#5fe08a; } .mp-dbg-warn { color:#ffb84d; }
+.mp-dbg-err { color:#ff7d72; font-weight:600; }
+.mpr-dbg-btn.on { background:rgba(255,125,114,.16); border-color:#7a3b3b; color:#ffd0cb; }
+@media (max-width:640px){ #mp-dbg-panel { width:96vw; height:52vh; bottom:8px; } }

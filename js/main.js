@@ -336,7 +336,9 @@ function loop(now){
   const dt=Math.min(0.05,(now-last)/1000); last=now;
   if(G){
     if(running && !G.over){
-      if(netRole==='solo'){
+      if(window.USE_ROLLBACK && NET.rbSession){
+        NET.rbStepLoop(dt);                                        // rollback co-op: fixed-tick session drives the sim on every peer
+      } else if(netRole==='solo'){
         update(G,dt);                                              // single-player: rAF drives the sim
         autoTick+=dt; if(autoTick>60){ autoTick=0; autosaveGame(); }
       } else if(netRole==='host'){

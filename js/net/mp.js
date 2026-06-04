@@ -38,9 +38,11 @@
     S.me=profile(); S.role='host'; S.code=code; S.mode=mode||'skirmish'; S.started=false; S.peerId=null; S.joiner=null;
     NET.peerCtrl={}; NET.ctrlPeer={};
     MP.enter(code);
+    NET.mpLog && NET.mpLog('ok','room created '+code+' (host '+String(MP.selfId||'?').slice(0,6)+'…) — waiting for ally');
     NET.bindHostReceivers();                       // 'mpcmd'
     MP.on('mphello', (msg, peerId)=>{               // joiner announced its profile
       S.joiner = msg.profile; S.peerId = peerId;
+      NET.mpLog && NET.mpLog('info','ally identified: '+((msg.profile&&msg.profile.handle)||'?'));
       if(typeof rememberFriend==='function' && msg.profile) rememberFriend(msg.profile.id, msg.profile.handle);
       ui('Peers');
     });
@@ -49,21 +51,24 @@
       // if it returns inside the host grace window; otherwise they were adopted into p1).
       if(S.started && G){
         if(S._hostGraceTimer){ clearTimer('_hostGraceTimer'); S._peerGrace=false; }
-        else if(S.peerId && S.peerId!==peerId && NET.ctrlPeer['p2']){ MP.send('mpbye',{reason:'full'},peerId); return; }
+        else if(S.peerId && S.peerId!==peerId && NET.ctrlPeer['p2']){ NET.mpLog && NET.mpLog('warn','rejected extra peer '+String(peerId).slice(0,6)+'… (match full)'); MP.send('mpbye',{reason:'full'},peerId); return; }
         S.peerId=peerId; NET.peerCtrl[peerId]='p2'; NET.ctrlPeer['p2']=peerId;
+        NET.mpLog && NET.mpLog('ok','ally reconnected '+String(peerId).slice(0,6)+'… → p2 (resyncing)');
         MP.send('mphello', { profile:S.me, youCtrl:'p2', mode:S.mode, mapIndex:S.mapIndex }, peerId);
         if(NET.sendFull) NET.sendFull(peerId);                  // resync the rejoined client to current state
         ui('Peers'); toast('Ally reconnected');
         return;
       }
       // lobby (pre-match)
-      if(S.peerId && S.peerId!==peerId && NET.ctrlPeer['p2']){ MP.send('mpbye',{reason:'full'},peerId); return; }  // 2-player cap
+      if(S.peerId && S.peerId!==peerId && NET.ctrlPeer['p2']){ NET.mpLog && NET.mpLog('warn','rejected extra peer '+String(peerId).slice(0,6)+'… (room full, 2-player cap)'); MP.send('mpbye',{reason:'full'},peerId); return; }  // 2-player cap
       S.peerId=peerId; NET.peerCtrl[peerId]='p2'; NET.ctrlPeer['p2']=peerId;
+      NET.mpLog && NET.mpLog('ok','peer connected '+String(peerId).slice(0,6)+'… → p2');
       MP.send('mphello', { profile:S.me, youCtrl:'p2', mode:S.mode, mapIndex:S.mapIndex }, peerId);
       ui('Peers');
     });
     MP.onLeave((peerId)=>{
       if(peerId!==S.peerId) return;
+      NET.mpLog && NET.mpLog('warn','peer left '+String(peerId).slice(0,6)+'…');
       onPeerDropHost();
     });
     ui('OpenRoom', { code, asHost:true });
@@ -84,8 +89,22 @@
     if(typeof clampCam==='function') clampCam(G);
     if(typeof refreshUI==='function') refreshUI();
     running = true;
+    if(window.USE_ROLLBACK){
+      // symmetric rollback: build the session over Trystero, create the rollback room, broadcast 'rbstart' so
+      // the joiner joins it (the library StateSyncs our authoritative G into the guest). No host clock / no snapshots.
+      NET.mpLog && NET.mpLog('info','USE_ROLLBACK on — starting rollback co-op (host), map '+S.mapIndex);
+      const ctrlMap = {}; if(MP.selfId) ctrlMap[MP.selfId]='p1'; if(S.peerId) ctrlMap[S.peerId]='p2';
+      whenRB(()=> NET.rbStartHost(G, ctrlMap).then((info)=>{
+        MP.send('rbstart', { mapIndex:S.mapIndex, mode:S.mode, rbRoomId:info.rbRoomId, hostPeerId:info.hostPeerId }, S.peerId);
+        NET.mpLog && NET.mpLog('info','rbstart → guest (room '+info.rbRoomId+')');
+      }).catch((e)=>{ NET.mpLog && NET.mpLog('err','rollback host start failed: '+((e&&e.message)||e)); console.error('[rb] host start failed', e); }));
+      ui('EnterGame');
+      toast('Rollback co-op started — Quarter '+(S.mapIndex+1));
+      return;
+    }
     if(typeof startHostClock==='function') startHostClock();   // keep the host simulating + broadcasting off-focus
     // tell the joiner to build the same map, then ship the authoritative dynamic state
+    NET.mpLog && NET.mpLog('info','starting host-authoritative co-op — map '+S.mapIndex+', sending mpstart + full snapshot');
     MP.send('mpstart', { mapIndex:S.mapIndex, mode:S.mode });
     NET.tick = 0; NET._sAcc = 0; NET._kAcc = 0;
     NET._baseline = new Map(); NET._lastEcoStr = null; NET._sinceSend = 0;   // reset Phase 4 delta baseline / eco signature for the new map
@@ -110,6 +129,7 @@
     MP.on('mphello', (msg, peerId)=>{                 // host welcomed us
       S.host = msg.profile; S.peerId = peerId; LOCAL_CTRL = msg.youCtrl || 'p2';
       S.mode = msg.mode || S.mode; S.mapIndex = msg.mapIndex|0;
+      NET.mpLog && NET.mpLog('ok','host welcomed us → you are '+LOCAL_CTRL+' (host '+String(peerId).slice(0,6)+'…)');
       clearTimer('_joinTimer');
       if(S._reconnecting){ S._reconnecting=false; clearTimer('_reconnTimer'); }   // host re-acknowledged us mid-reconnect
       if(typeof rememberFriend==='function' && msg.profile) rememberFriend(msg.profile.id, msg.profile.handle);
@@ -117,9 +137,10 @@
       ui('Peers');
     });
     MP.on('mpstart', (msg)=> beginClientMatch(msg.mapIndex|0, msg.mode));
+    MP.on('rbstart', (msg)=> beginClientRollback(msg));   // rollback co-op join
     MP.on('mphub', (msg)=> beginClientHub(msg));
     MP.on('mppause', (msg)=> applyHostPause(!!(msg && msg.paused)));
-    MP.on('mpbye', (msg)=>{ if(msg && msg.reason==='full'){ toast('Room is full'); mpLeave(); } else mpHostGone('left'); });   // clean BYE → terminal
+    MP.on('mpbye', (msg)=>{ if(msg && msg.reason==='full'){ NET.mpLog && NET.mpLog('err','room is full — host rejected us'); toast('Room is full'); mpLeave(); } else { NET.mpLog && NET.mpLog('err','host left (clean BYE) — match ended'); mpHostGone('left'); } });   // clean BYE → terminal
   }
 
   function mpJoin(code){
@@ -127,6 +148,7 @@
     S.me=profile(); S.role='client'; S.code=code; S.started=false; S._gone=false;
     clearAllTimers();
     MP.enter(code);
+    NET.mpLog && NET.mpLog('info','joining room '+code+'… (awaiting host hello)');
     // re-focusing a long-backgrounded tab shouldn't instantly read as "host lost" — give the watchdog grace
     S._visGrace = ()=>{ if(document.visibilityState==='visible' && NET.touchWatchdog) NET.touchWatchdog(); };
     document.addEventListener('visibilitychange', S._visGrace);
@@ -134,7 +156,7 @@
     MP.onLeave(()=> onHostDrop('left'));                  // Trystero peer-leave → transient? reconnect. Registered once; survives re-enter.
     NET.onHostLost    = ()=> onHostDrop('lost');          // watchdog: snapshots stopped → transient? reconnect
     NET.onStall       = ()=> ui('Stall');                 // brief gap → "reconnecting" hint
-    NET.onReconnected = ()=> ui('Reconnected');
+    NET.onReconnected = ()=>{ NET.mpLog && NET.mpLog('ok','reconnected to host'); ui('Reconnected'); };
     NET.onFullApplied = ()=>{
       clearTimer('_syncTimer');
       if(running) return;          // one-shot: only the FIRST full "drops you in" — never re-centre/re-toast later
@@ -155,7 +177,7 @@
     };
     NET.onClientGameOver = ()=> ui('ClientGameOver');
     // no 'mphello' for a while → we never reached the host (bad code / NAT). Surface it, don't spin forever.
-    S._joinTimer = setTimeout(()=>{ if(!S.peerId && !S._gone){ toast('Couldn’t reach host — check the code, or paste a TURN relay'); ui('JoinTimeout', { code }); } }, JOIN_TIMEOUT);
+    S._joinTimer = setTimeout(()=>{ if(!S.peerId && !S._gone){ NET.mpLog && NET.mpLog('err','join timed out — never reached host '+code+' (bad code / NAT; try a TURN relay)'); toast('Couldn’t reach host — check the code, or paste a TURN relay'); ui('JoinTimeout', { code }); } }, JOIN_TIMEOUT);
     ui('OpenRoom', { code, asHost:false });
   }
   window.mpJoin = mpJoin;
@@ -164,6 +186,7 @@
   // window to re-establish ICE before declaring the host gone. A clean BYE bypasses this (→ mpHostGone).
   function onHostDrop(reason){
     if(S.role!=='client' || S._gone || S._reconnecting) return;
+    NET.mpLog && NET.mpLog('warn','host link dropped ('+reason+') — reconnecting…');
     S._reconnecting = true; S._reconnTries = 0;
     running = false;                                     // freeze the world while we retry
     ui('Stall');                                         // reuse the "reconnecting…" hint
@@ -172,6 +195,7 @@
       if(S._gone || !S._reconnecting) return;
       if(_ms() >= deadline || S._reconnTries >= RECONNECT_MAX){ S._reconnecting=false; mpHostGone(reason); return; }
       S._reconnTries++;
+      NET.mpLog && NET.mpLog('warn','reconnect attempt '+S._reconnTries+'/'+RECONNECT_MAX+'…');
       try{ MP.enter(S.code); wireClientHandlers(); if(NET.resetWatchdog) NET.resetWatchdog(); }catch(_){}
       S._reconnTimer = setTimeout(step, Math.max(2000, RECONNECT_WINDOW/RECONNECT_MAX));
     };
@@ -181,10 +205,33 @@
 
   function armSyncWatchdog(){
     clearTimer('_syncTimer');                          // surface a stuck "Syncing" (lost full) instead of spinning; reconnect re-requests it
-    S._syncTimer = setTimeout(()=>{ if(!running && !S._gone){ ui('SyncTimeout'); onHostDrop('lost'); } }, SYNC_TIMEOUT);
+    S._syncTimer = setTimeout(()=>{ if(!running && !S._gone){ NET.mpLog && NET.mpLog('err','sync timed out — host snapshot never arrived'); ui('SyncTimeout'); onHostDrop('lost'); } }, SYNC_TIMEOUT);
+  }
+
+  // Rollback co-op join: build terrain locally, then join the host's rollback room — the library StateSyncs
+  // the host's authoritative dynamic state into our Game (no host snapshots; we then simulate symmetrically).
+  function beginClientRollback(msg){
+    NET.mpLog && NET.mpLog('info','rbstart received (map '+(msg.mapIndex|0)+', host '+String(msg.hostPeerId).slice(0,6)+'…)');
+    S.started=true; S.mode=msg.mode||S.mode; S.mapIndex=msg.mapIndex|0;
+    netRole='client'; LOCAL_CTRL='p2'; pendingPlayers=2; mapIndex=S.mapIndex;
+    G = newMap(S.mapIndex);                            // deterministic terrain; StateSync overlays dynamic state
+    running = false;
+    if(typeof resetDialogs==='function') resetDialogs();
+    if(typeof syncHud==='function') syncHud();
+    if(typeof clampCam==='function') clampCam(G);
+    ui('Syncing');
+    const ctrlMap = {}; if(msg.hostPeerId) ctrlMap[msg.hostPeerId]='p1'; if(MP.selfId) ctrlMap[MP.selfId]='p2';
+    whenRB(()=> NET.rbStartJoin(G, ctrlMap, msg.rbRoomId, msg.hostPeerId).then(()=>{
+      running = true;
+      const o = G._coopOrigins && G._coopOrigins.p2;
+      if(o && typeof clampCam==='function'){ const z=G.zoom||1; G.camX=o.x*TILE-(innerWidth/z)/2; G.camY=o.y*TILE-(innerHeight/z)/2; clampCam(G); }
+      if(typeof refreshUI==='function') refreshUI();
+      ui('EnterGame'); toast('Dropped into rollback co-op — your base is marked in amber');
+    }).catch((e)=>{ NET.mpLog && NET.mpLog('err','rollback join failed: '+((e&&e.message)||e)); console.error('[rb] join failed', e); }));
   }
 
   function beginClientMatch(idx, mode){
+    NET.mpLog && NET.mpLog('info','mpstart received (map '+idx+') — building map, awaiting host snapshot');
     S.started=true; S.mode=mode||S.mode; S.mapIndex=idx;
     netRole='client'; pendingPlayers=2; mapIndex=idx;
     G = newMap(idx);                                 // regenerate identical terrain + pads (deterministic)
@@ -242,6 +289,7 @@
   function mpHostGone(reason){
     if(S.role!=='client' || S._gone) return;
     S._gone = true;
+    NET.mpLog && NET.mpLog('err','host connection gone ('+reason+')');
     clearAllTimers();                                        // stop any reconnect/join/sync timers — this is terminal
     running = false;                                         // freeze the world view immediately
     if(typeof mpStopRtt==='function') mpStopRtt();
@@ -254,8 +302,9 @@
   // client keeps them; if the window expires, adopt them into p1 and continue solo-co-op.
   function onPeerDropHost(){
     if(S._peerGrace) return;
-    if(!(S.started && G)){ handlePeerDrop(); return; }       // pre-match lobby drop → just clear
+    if(!(S.started && G)){ NET.mpLog && NET.mpLog('warn','ally left the lobby'); handlePeerDrop(); return; }       // pre-match lobby drop → just clear
     S._peerGrace = true;
+    NET.mpLog && NET.mpLog('warn','ally disconnected mid-match — holding their units for reconnect');
     ui('PeerDropped');                                       // "ally disconnected — waiting to reconnect…"
     toast('Ally disconnected — holding their units…');
     clearTimer('_hostGraceTimer');
@@ -264,6 +313,7 @@
 
   function handlePeerDrop(){
     // host keeps playing solo-co-op; adopt the orphaned ally's units so the map stays winnable
+    if(S.started && G) NET.mpLog && NET.mpLog('warn','reconnect window expired — adopting ally units into p1 (solo co-op)');
     if(G){ for(const e of G.entities){ if(e.owner==='player' && e.ctrl==='p2') e.ctrl='p1'; }
       // fold p2's funding into p1 so nothing is stranded
       if(G.eco && G.eco.p2){ G.eco.p1.gold += G.eco.p2.gold||0; G.eco.p2.gold=0; if(typeof recomputeSupply==='function') recomputeSupply(G); }

@@ -24,13 +24,13 @@ function actingCtrl(state){ return (state&&state._cmdCtrl) || LOCAL_CTRL; }
 
 function makeRng(seed){ let s = seed*9301+49297; return ()=>{ s=(s*9301+49297)%233280; return s/233280; }; }
 
-// Seeded GAMEPLAY rng (determinism experiment / future lockstep). All sim randomness (enemyAI) routes
-// through simRandom() so a match is reproducible from its seed — see js/net/determinism.js. Separate stream
-// from makeRng (terrain) and from lore's dossier rng; NOT used for cosmetic randomness. Math.imul keeps the
-// LCG integer-deterministic across engines (transcendentals elsewhere remain the cross-engine risk).
-let _simRngS = 1;
-function seedSim(seed){ _simRngS = ((seed>>>0) || 1); }
-function simRandom(){ _simRngS = (Math.imul(_simRngS, 1664525) + 1013904223) >>> 0; return _simRngS / 4294967296; }
+// Seeded GAMEPLAY rng. All sim randomness (enemyAI) routes through simRandom(state) so a match is reproducible
+// from its seed AND the RNG cursor lives IN the game state (state._simRngS) — so rollback save/restore rewinds
+// it together with everything else (js/net/rollback-game.js), and the determinism harness can compare it
+// (js/net/determinism.js). Separate stream from makeRng (terrain) and lore's dossier rng; NOT cosmetic.
+// Math.imul keeps the LCG integer-deterministic across engines (transcendentals elsewhere are the FP risk).
+function seedSim(state, seed){ state._simRngS = ((seed>>>0) || 1); }
+function simRandom(state){ state._simRngS = (Math.imul((state._simRngS>>>0) || 1, 1664525) + 1013904223) >>> 0; return state._simRngS / 4294967296; }
 
 /* Deterministic 2D value-noise + fBm, seeded so the whole field is reproducible.
    Used by map.js for COHERENT geography (elevation/moisture/temperature fields):

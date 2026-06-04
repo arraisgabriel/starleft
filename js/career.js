@@ -61,7 +61,7 @@ function gainXp(u, killed, state){
   while(s < CAREER.maxStars && u.xp >= CAREER.xpFor(s+1)) s++;
   if(s === old) return;
   u.stars = s; applyVetHp(u, false);
-  toast('★ Promotion! '+careerTitle(s)+' '+DEF[u.type].name);
+  if(!window._rbReplaying) toast('★ Promotion! '+careerTitle(s)+' '+DEF[u.type].name);   // stat changes are serialized; the toast is cosmetic → skip during rollback re-sim
   // career v3: dossier is born at level 2, then a backstory-connected life-event at each new level
   if(typeof rollLifeEvent==='function'){
     let last=null;

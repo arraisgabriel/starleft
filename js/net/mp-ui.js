@@ -152,7 +152,7 @@
   window.mpToggleReady = function(){ UI.ready=!UI.ready; const b=$('mp-ready'); if(b) b.classList.toggle('on',UI.ready);
     try{ MP.send('mpready',{ready:UI.ready}); }catch(_){} };
   window.mpLeaveRoomClick = function(){ if(typeof mpLeave==='function') mpLeave(); };
-  window.mpAddRelay = function(){ const u=(($('mp-relay-url')||{}).value||'').trim(); if(u && window.MP && MP.setRelay){ MP.setRelay(u); toast('Relay added — reconnect to use it'); } };
+  window.mpAddRelay = function(){ const u=(($('mp-relay-url')||{}).value||'').trim(); if(u && window.MP && MP.setRelay){ MP.setRelay(u); window.NET && window.NET.mpLog && window.NET.mpLog('info','TURN relay added — reconnect to use it'); toast('Relay added — reconnect to use it'); } };
 
   /* ---------- invite sharing ---------- */
   window.mpCopyInvite = function(){ const link=mpInviteLink(UI.code);

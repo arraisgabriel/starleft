@@ -128,11 +128,20 @@
 
   function updateQuality(ms){
     window.MP_LAST_RTT = ms;
-    window.MP_NET_QUALITY = mpQualityFromRtt(ms);
+    const q = mpQualityFromRtt(ms);
+    window.MP_NET_QUALITY = q;
+
+    // log only on a quality-tier *change* (never per probe) so the panel isn't spammed every RTT sample
+    if(q && q.key && q.key !== _lastQualityKey){
+      const lvl = (q.key==='poor' || q.key==='bad') ? 'warn' : 'info';
+      if(window.NET && window.NET.mpLog && _lastQualityKey!==undefined) window.NET.mpLog(lvl, 'link quality: '+q.label+(ms!=null&&isFinite(ms)?' ('+Math.round(ms)+'ms RTT)':''));
+      _lastQualityKey = q.key;
+    }
 
     updateLobbyQuality(ms);
     updateInGameQuality(ms);
   }
+  let _lastQualityKey;
 
   // Keep the original RTT chip behavior, then add quality updates.
   if(typeof window.mpUiSetRtt === 'function' && !window.__mpUiSetRttBase){

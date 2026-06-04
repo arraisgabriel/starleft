@@ -46,6 +46,7 @@
     const lns = window.LNS, lnsUE = lns && lns.ultraEvent; if(lns) lns.ultraEvent=function(){};
     try{ fn(); } finally { for(const k of stubs) g[k]=save[k]; if(lns) lns.ultraEvent=lnsUE; }
   }
+  NET._quiet = quiet;   // reused by the rollback round-trip self-test (js/net/rollback-game.js)
 
   // STAGE 0 — intra-engine determinism. Run the same map+seed twice; the per-tick hashes must match exactly.
   // Best run from the MAIN MENU (before starting a match) so it doesn't disturb a live game.
@@ -54,8 +55,7 @@
     if(typeof newMap!=='function' || typeof update!=='function'){ console.error('[det] newMap/update unavailable — load a game first'); return false; }
     const run = ()=>{
       const g = newMap(idx);
-      g.runSalt = seed; delete g._simSeeded;        // force identical gameplay-RNG seed across runs
-      if(typeof seedSim==='function') seedSim(seed);
+      g.runSalt = seed; delete g._simSeeded;        // identical RNG seed across runs (enemyAI seeds simRandom from runSalt → G._simRngS)
       const hashes = [];
       quiet(()=>{ for(let i=0;i<ticks;i++){ update(g, 1/60); hashes.push(NET.simHash(g)); } });
       return hashes;
@@ -88,7 +88,6 @@
     let sig = 2166136261>>>0;
     try{
       const g = newMap(idx); g.runSalt = seed; delete g._simSeeded;
-      if(typeof seedSim==='function') seedSim(seed);
       quiet(()=>{ for(let i=0;i<ticks;i++){ update(g, 1/60); sig = (Math.imul(sig ^ NET.simHash(g), 16777619))>>>0; } });
     }catch(err){ console.error('[det] threw during replay:', err); return 0; }
     console.log('%c[det] cross-browser signature 0x'+(sig>>>0).toString(16),'color:#6cf;font-weight:bold',

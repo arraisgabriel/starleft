@@ -6,7 +6,7 @@ function enemyAI(state,dt){
   // Route gameplay randomness through the seeded sim RNG so a match is reproducible from its seed (per-match,
   // keyed on runSalt) — prerequisite for the rollback determinism experiment (js/net/determinism.js). The
   // determinism harness overrides runSalt to force an identical seed across runs. Cosmetic/lore rng is separate.
-  if(typeof seedSim==='function' && state._simSeeded!==state.runSalt){ seedSim(state.runSalt||1); state._simSeeded=state.runSalt; }
+  if(typeof seedSim==='function' && state._simSeeded!==state.runSalt){ seedSim(state, state.runSalt||1); state._simSeeded=state.runSalt; }
   const aggr = state.cfg.aggression || (state.cfg.enemy && state.cfg.enemy.aggression) || 1;
   const grace = state.time < state.graceTime;   // early-game peace: enemy builds up but won't attack yet
   if(!grace && !state._graceWarned){ state._graceWarned=true;
@@ -39,15 +39,15 @@ function enemyAI(state,dt){
     // slow trickle during grace, slower replacement afterwards (so a player
     // assault that kills units faster than they respawn can break the base)
     state.enemySpawnTimer = grace? 18 : Math.max(5, (12/aggr)/pf);   // faster reinforcement with more players
-    if(enemyGarages.length && !grace && simRandom()<0.25){
+    if(enemyGarages.length && !grace && simRandom(state)<0.25){
       // a vehicle rolls out of the rival's garage
-      const b=enemyGarages[(simRandom()*enemyGarages.length)|0];
-      spawnTrained(state,b, simRandom()<0.3?'auditor':'foodtruck');
+      const b=enemyGarages[(simRandom(state)*enemyGarages.length)|0];
+      spawnTrained(state,b, simRandom(state)<0.3?'auditor':'foodtruck');
     } else if(enemyBarracks.length){
       // varied infantry: mostly Growth Cyborgs/Consultants, plus Hustlers, Lobbyists, and the odd Recruiter
-      const b=enemyBarracks[(simRandom()*enemyBarracks.length)|0];
+      const b=enemyBarracks[(simRandom(state)*enemyBarracks.length)|0];
       const pool=['soldier','soldier','soldier','ranger','ranger','hustler','lobbyist','recruiter'];
-      spawnTrained(state,b, pool[(simRandom()*pool.length)|0]);
+      spawnTrained(state,b, pool[(simRandom(state)*pool.length)|0]);
     }
   }
 
@@ -133,7 +133,7 @@ function enemyFortify(state, perBaseTarget){
     let score = -r*0.5;
     if(phq){ const a1=Math.atan2(phq.y-chosen.y,phq.x-chosen.x), a2=Math.atan2(wy-chosen.y,wx-chosen.x);
       score += Math.cos(a1-a2)*2.0; }
-    score += (simRandom()-0.5)*0.5;
+    score += (simRandom(state)-0.5)*0.5;
     if(score>bestScore){ bestScore=score; best={tx,ty}; }
   }
   if(best) mkBuilding(state,'turret','enemy',best.tx,best.ty,false);

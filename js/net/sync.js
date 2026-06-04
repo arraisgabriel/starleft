@@ -264,6 +264,7 @@ window.NET = window.NET || {};
   NET.sendFull = function(toPeer){
     const str = JSON.stringify(NET.serializeForNet());
     const CH = 12*1024, id = ++chunkSeq, n = Math.ceil(str.length/CH);
+    NET.mpLog && NET.mpLog('info','sending full snapshot → '+(toPeer?String(toPeer).slice(0,6)+'…':'all')+' ('+Math.round(str.length/1024)+'KB, '+n+' chunks)');
     for(let i=0;i<n;i++) MP.send('mpfull', { id, i, n, d: str.slice(i*CH,(i+1)*CH) }, toPeer);
   };
   NET._recvFull = function(p){
@@ -272,8 +273,8 @@ window.NET = window.NET || {};
     const b = NET._chunk[p.id] || (NET._chunk[p.id] = { n:p.n, got:0, parts:[], t0:now });
     if(b.parts[p.i]===undefined){ b.parts[p.i]=p.d; b.got++; }
     if(b.got>=b.n){ delete NET._chunk[p.id];
-      try { NET.applyFullSnapshot(JSON.parse(b.parts.join(''))); if(typeof NET.onFullApplied==='function') NET.onFullApplied(); }
-      catch(err){ console.warn('[mp] full snapshot parse failed', err); }
+      try { NET.applyFullSnapshot(JSON.parse(b.parts.join(''))); NET.mpLog && NET.mpLog('ok','full snapshot applied — synced to host'); if(typeof NET.onFullApplied==='function') NET.onFullApplied(); }
+      catch(err){ NET.mpLog && NET.mpLog('err','full snapshot parse failed: '+((err&&err.message)||err)); console.warn('[mp] full snapshot parse failed', err); }
     }
   };
 
@@ -340,8 +341,8 @@ window.NET = window.NET || {};
     if(netRole==='client' && running && !NET._hostGone && NET.lastRecvAt){
       const gap = _now() - NET.lastRecvAt;
       const stallMs = Math.max(NET.STALL_MS, (window.MP_LAST_RTT||0)*3);   // ~3× RTT floor (laggy ≠ gone)
-      if(gap > NET.LOST_MS){ NET._hostGone = true; if(typeof NET.onHostLost==='function') NET.onHostLost(); }
-      else if(gap > stallMs && !NET._stalled){ NET._stalled = true; if(typeof NET.onStall==='function') NET.onStall(); }
+      if(gap > NET.LOST_MS){ NET._hostGone = true; NET.mpLog && NET.mpLog('err','watchdog: no host snapshot for '+Math.round(gap)+'ms — host lost'); if(typeof NET.onHostLost==='function') NET.onHostLost(); }
+      else if(gap > stallMs && !NET._stalled){ NET._stalled = true; NET.mpLog && NET.mpLog('warn','watchdog: snapshot gap '+Math.round(gap)+'ms — connection unstable'); if(typeof NET.onStall==='function') NET.onStall(); }
     }
   };
 

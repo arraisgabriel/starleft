@@ -165,10 +165,12 @@ function vetBuff(u, state){
 
 /* ---- memorial (module-global; survives newMap like carryoverVets) ---- */
 let fallenVets = [];
+let _fallenIds = new Set();   // rollback-safe: memorialize each fallen unit at most once, even if a re-sim re-kills it
 // wipe the memorial for a brand-new campaign (called from startGame, alongside the carry resets)
-function resetFallen(){ fallenVets.length = 0; }
+function resetFallen(){ fallenVets.length = 0; _fallenIds.clear(); }
 function recordFallen(u){
   if(!u.lore) return;
+  if(u.id!=null){ if(_fallenIds.has(u.id)) return; _fallenIds.add(u.id); }   // dedup across rollback re-simulations (the dead unit leaves G.entities, so the guard can't live on it)
   const d = buildDossier(u);
   fallenVets.push({ name:d.full, type:u.type, lvl:u.stars||0, dream:d.dream, home:d.home,
                     map:(typeof G!=='undefined'&&G&&G.cfg)?G.cfg.name:'', dreamDone:!!u.dreamDone });

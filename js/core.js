@@ -79,7 +79,7 @@ function update(state, dt){
   for(const e of state.entities){
     if(e.dead) continue;
     if(e.hp<=0 && e.type!=='goldmine'){
-      if(e.owner==='player' && e.kind==='unit' && typeof LNS!=='undefined' && LNS.ultraEvent) LNS.ultraEvent('unitDeath', { unit:e, map:state.cfg&&state.cfg.name });
+      if(e.owner==='player' && e.kind==='unit' && !window._rbReplaying && typeof LNS!=='undefined' && LNS.ultraEvent) LNS.ultraEvent('unitDeath', { unit:e, map:state.cfg&&state.cfg.name });   // cosmetic news — skip during rollback re-sim
       if(e.owner==='player' && e.kind==='unit' && e.lore && typeof recordFallen==='function') recordFallen(e);  // memorial + obituary
       killEntity(state,e); changed=true;
     }
@@ -161,8 +161,8 @@ function checkWinLose(state){
     if(netRole==='host' && typeof window!=='undefined' && window.MP_SESSION && MP_SESSION.mode==='campaign' && typeof enterHubFromCombat==='function'){
       enterHubFromCombat(state); return;
     }
-    state.over=true; onVictory(); return;
+    state.over=true; state._outcome='win'; if(!window.USE_ROLLBACK) onVictory(); return;   // rollback: `over`/`_outcome` are serialized predicate; the loop fires the screen on the confirmed tick
   }
-  if(!playerHq && !canRecoverHq){ state.over=true; onDefeat(); return; }
-  if(!playerHas){ state.over=true; onDefeat(); return; }
+  if(!playerHq && !canRecoverHq){ state.over=true; state._outcome='lose'; if(!window.USE_ROLLBACK) onDefeat(); return; }
+  if(!playerHas){ state.over=true; state._outcome='lose'; if(!window.USE_ROLLBACK) onDefeat(); return; }
 }

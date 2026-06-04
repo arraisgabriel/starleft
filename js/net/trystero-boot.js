@@ -47,6 +47,7 @@ function finishReady(){
 
 (async () => {
   if (!(await loadTrystero())) {
+    try{ window.NET && window.NET.mpLog && window.NET.mpLog('err','Trystero failed to load — multiplayer unavailable ('+String(loadErr)+')'); }catch(_){}
     // Graceful unavailable stub — every method is a harmless no-op; the lobby disables itself.
     const off = () => () => {};
     window.MP = { unavailable:true, _err:String(loadErr), isReady:()=>false, inRoom:false,

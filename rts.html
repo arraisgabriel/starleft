@@ -37,6 +37,7 @@
         <button class="tc-btn" id="btn-load" title="Load game">Load</button>
         <button class="tc-btn" id="btn-fs" title="Toggle fullscreen">Fullscreen</button>
         <button class="tc-btn" id="btn-netq" title="Toggle connection quality panel">Network Signal</button>
+        <button class="tc-btn" id="btn-mpdebug" onclick="mpUiToggleDebug()" title="Multiplayer debug log">🐞 MP Debug</button>
       </div>
     </div>
     <!-- Multiplayer connection quality -->
@@ -49,6 +50,20 @@
 
   <!-- Live News Stream — thin ticker anchored above the bottom HUD (toggled by News) -->
   <div id="lns-ingame" style="display:none;"><div class="lns-tag">LIVE</div><div class="lns-host"></div></div>
+
+  <!-- MP DEBUG log overlay — toggled by the lobby 🐞 button + the in-game top menu. Top-level (not inside the
+       lobby overlay) so it stays usable during a match, where rollback desyncs surface. Styles in css/mp.css. -->
+  <div id="mp-dbg-panel" style="display:none;" aria-label="Multiplayer debug log">
+    <div class="mp-dbg-head">
+      <span class="mp-dbg-title">▌ MP DEBUG</span>
+      <span class="mp-dbg-actions">
+        <button class="tc-btn" onclick="mpDbgCopy()" title="Copy the whole log to report it">⧉ Copy</button>
+        <button class="tc-btn" onclick="NET.mpDbgClear()" title="Clear the log">Clear</button>
+        <button class="tc-btn" onclick="mpUiToggleDebug(false)" title="Close">✕</button>
+      </span>
+    </div>
+    <div id="mp-dbg-log" class="mp-dbg-log"></div>
+  </div>
 
   <div id="bottom">
     <div id="minimap-wrap">
@@ -183,6 +198,7 @@
           <span id="mp-rtt" class="mp-rtt"></span>       
           <span id="mp-quality" class="mp-quality">Quality: —</span>
         </div>
+        <button class="tc-btn mpr-dbg-btn" id="mp-dbg-toggle" onclick="mpUiToggleDebug()" title="Show the multiplayer debug log">🐞 Debug</button>
         <button class="mpr-leave" onclick="mpLeaveRoomClick()"><span class="ic">◀</span> Leave Room</button>
       </header>
 
@@ -191,10 +207,10 @@
         <div class="mpr-col mpr-col-main">
           <!-- Room access / sharing -->
           <section class="mpr-panel mpr-access">
-            <div class="mpr-h"><span class="mpr-h-tick"></span>Room Access</div>
+            <div class="mpr-h"><span class="mpr-h-tick"></span>Universe Access</div>
             <div class="mpr-access-grid">
               <div class="mpr-code-block">
-                <div class="mpr-code-label">ROOM CODE</div>
+                <div class="mpr-code-label">Universe CODE</div>
                 <div class="mpr-code" id="mp-room-code">—</div>
                 <div class="mpr-code-hint">Hand this to a co-founder — or send them the invite link.</div>
               </div>
@@ -384,6 +400,8 @@
 <!-- ── multiplayer (classic; define functions only — must load before main.js) ── -->
 <script src="js/profile.js"></script>
 <script src="js/net/mp-ready.js"></script>
+<script src="js/net/rb-ready.js"></script>
+<script src="js/net/mp-debug.js"></script>
 <script src="js/net/sync.js"></script>
 <script src="js/net/host-clock.js"></script>
 <script src="js/net/commands.js"></script>
@@ -394,7 +412,12 @@
 <script src="js/net/features.js"></script>
 <script src="js/main.js"></script>
 <script src="js/net/determinism.js"></script><!-- rollback determinism experiment: NET.determinismTest() (Stage 0), NET.simHash() -->
-<!-- the project's ONLY ES module — deferred, runs after all classic scripts; publishes window.MP -->
+<script src="js/net/rollback-game.js"></script><!-- rollback Game adapter: NET.makeStarleftGame(), NET.rbRoundTripTest(), NET.rbLocalTest() -->
+<script src="js/net/rollback-input.js"></script><!-- rollback input model: codec + rbApplyInputs + predict-empty + NET.rbLocalCmdTest() -->
+<script src="js/net/rollback-transport.js"></script><!-- rollback TransportAdapter over window.MP (Trystero): NET.makeTrysteroTransport() -->
+<script src="js/net/rollback-session.js"></script><!-- rollback live lifecycle + fixed-tick driver (behind window.USE_ROLLBACK) -->
+<!-- ES modules — deferred, run after all classic scripts. trystero-boot publishes window.MP; rollback-boot publishes window.RB -->
 <script type="module" src="js/net/trystero-boot.js"></script>
+<script type="module" src="js/net/rollback-boot.js"></script>
 </body>
 </html>

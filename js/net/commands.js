@@ -18,6 +18,12 @@
   }
   function netCommand(state, wx, wy, target){
     if(hubClientBlocked(state)) return;
+    if(window.USE_ROLLBACK){   // rollback: queue the command for our next tick; the session applies it on every peer (incl. us → instant)
+      const mine = state.selection.filter(e=>!e.dead && !e.storedIn && e.kind==='unit' && isMine(e)).map(e=>e.id);
+      const bmine = state.selection.filter(e=>!e.dead && e.kind==='building' && isMine(e)).map(e=>e.id);
+      if(mine.length || bmine.length) NET.rbEnqueue({ k:'command', wx, wy, tid: target ? target.id : null, ids:mine, bids:bmine });
+      return;
+    }
     if(netRole!=='client') return commandUnits(state, wx, wy, target);
     const myUnits = state.selection.filter(e=>!e.dead && !e.storedIn && e.kind==='unit' && isMine(e));
     const ids  = myUnits.map(e=>e.id);
@@ -34,27 +40,32 @@
   }
   function netPlace(state, type, tx, ty, builder){
     if(hubClientBlocked(state)) return;
+    if(window.USE_ROLLBACK){ NET.rbEnqueue({ k:'place', type, tx, ty, bid: builder ? builder.id : null }); return; }
     if(netRole!=='client') return placeBuilding(state, type, tx, ty, builder);
     MP.send('mpcmd', { k:'place', from:LOCAL_CTRL, type, tx, ty, bid: builder ? builder.id : null, seq:(NET._cmdSeq=(NET._cmdSeq||0)+1) });
   }
   function netStop(){
     if(hubClientBlocked(G)) return;
+    const stopIds = G.selection.filter(e=>!e.dead && e.kind==='unit' && isMine(e)).map(e=>e.id);
+    if(window.USE_ROLLBACK){ if(stopIds.length) NET.rbEnqueue({ k:'stop', ids:stopIds }); return; }
     if(netRole!=='client') return stopSelection();
-    const ids = G.selection.filter(e=>!e.dead && e.kind==='unit' && isMine(e)).map(e=>e.id);
-    if(ids.length) MP.send('mpcmd', { k:'stop', from:LOCAL_CTRL, ids, seq:(NET._cmdSeq=(NET._cmdSeq||0)+1) });
+    if(stopIds.length) MP.send('mpcmd', { k:'stop', from:LOCAL_CTRL, ids:stopIds, seq:(NET._cmdSeq=(NET._cmdSeq||0)+1) });
   }
   function netTrain(state, building, type){
     if(hubClientBlocked(state)) return;
+    if(window.USE_ROLLBACK){ if(building && isMine(building)) NET.rbEnqueue({ k:'train', bid:building.id, type }); return; }
     if(netRole!=='client') return tryTrain(state, building, type);
     if(building && isMine(building)) MP.send('mpcmd', { k:'train', from:LOCAL_CTRL, bid:building.id, type, seq:(NET._cmdSeq=(NET._cmdSeq||0)+1) });
   }
   function netCancelTrain(state, building, index){
     if(hubClientBlocked(state)) return;
+    if(window.USE_ROLLBACK){ if(building && isMine(building)) NET.rbEnqueue({ k:'cancel', bid:building.id, index }); return; }
     if(netRole!=='client') return cancelTrain(state, building, index);
     if(building && isMine(building)) MP.send('mpcmd', { k:'cancel', from:LOCAL_CTRL, bid:building.id, index, seq:(NET._cmdSeq=(NET._cmdSeq||0)+1) });
   }
   function netReleaseStored(state, building, unitId){
     if(hubClientBlocked(state)) return;
+    if(window.USE_ROLLBACK){ if(building && isMine(building)) NET.rbEnqueue({ k:'releaseStored', bid:building.id, uid:unitId }); return; }
     if(netRole!=='client') return releaseStoredUnit(state, building, unitId);
     if(building && isMine(building)) MP.send('mpcmd', { k:'releaseStored', from:LOCAL_CTRL, bid:building.id, uid:unitId, seq:(NET._cmdSeq=(NET._cmdSeq||0)+1) });
   }
