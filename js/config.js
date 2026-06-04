@@ -97,7 +97,7 @@ const DEF = {
               deposit:true, trickle:2, flavor:'A scrappy forward branch — Interns drop Funding here instead of trekking back to HQ, and its rig slowly auto-extracts a little on its own. Cheaper and flimsier than a second HQ.' },
   condo:    { name:'Unit Condo', icon:'🏙️', kind:'building', w:5,h:4, hp:1200, cost:0, build:1, sight:6, supply:0, color:'#4b6b8f',
               flavor:'A vertical dormitory for employees who survived quarterly planning.' },
-  mdc:      { name:'Mission Dispatch Center', icon:'🛰️', kind:'building', w:3,h:3, hp:900, cost:0, build:1, sight:6, supply:0, color:'#5a6b8a',
+  mdc:      { name:'Mission Dispatch Center M.D.C.', icon:'🛰️', kind:'building', w:3,h:3, hp:900, cost:0, build:1, sight:6, supply:0, color:'#5a6b8a',
               flavor:'Walk veterans inside to stage them for the next quarterly disaster.' },
   ultra:    { name:'ULTRA Headquarters', icon:'◆', kind:'building', w:8,h:8, hp:5000, cost:0, build:1, sight:8, supply:0, color:'#7a2cff',
               flavor:'The company that fabricates life for everyone, everywhere.' },
