@@ -84,6 +84,7 @@ window.NET = window.NET || {};
                 x:Math.round(e.x*10)/10, y:Math.round(e.y*10)/10, hp:Math.round(e.hp), mh:e.maxHp };
     if(e.kind==='unit'){
       if(e.state) o.s=e.state;
+      if(e.state==='move'||e.state==='gather') o.mv=1;   // authoritative "locomoting" hint so the client keeps the walk cycle running through the position-ease
       if(e._actState) o.as=e._actState;
       if(e._actState==='attack' && e._actStamp!=null) o.ast=Math.round(e._actStamp*1000)/1000;  // strike time → drives the attack windup frame
       if(e._face) o.f=e._face;
@@ -106,11 +107,12 @@ window.NET = window.NET || {};
       if(e.storedUnits && e.storedUnits.length) o.su=e.storedUnits.slice();
       if(e._everSeen) o.es=1;
       if(e.rally) o.rl={x:e.rally.x,y:e.rally.y};
-      if(e.shootFx) o.sf=1;
+      if(e.shootFx){ o.sf=1; o.sfx=Math.round(e.shootFx.x*10)/10; o.sfy=Math.round(e.shootFx.y*10)/10; }  // muzzle-flash flag + shot endpoint (client rebuilds the transient to draw the shot line)
     }
     return o;
   }
-  function unpackInto(e, o){
+  function unpackInto(e, o, snapTime){
+    if(snapTime==null) snapTime = (typeof G!=='undefined' && G && G.time) || 0;
     if(o.gm){ e.type='goldmine'; e.owner=null; e.x=o.x; e.y=o.y; e.amount=o.amt; e.amount0=o.a0;
               e.ftx=o.ftx; e.fty=o.fty; e.r=o.r; e.dead=false; return; }
     const d=DEF[o.t]||{};
@@ -123,7 +125,12 @@ window.NET = window.NET || {};
       // static stats come from DEF — the client never simulates, it only renders/picks
       e.r=d.r; e.sight=d.sight; e.air=!!o.air; e.speed=d.speed; e.range=d.range; e.dmg=d.dmg;
       e.state=o.s||'idle'; e._actState=o.as||null; e._face=o.f||e._face||1; e.dir=o.d||0;
-      if(o.ast!=null) e._actStamp=o.ast;                 // sync the strike time so the attack animation plays
+      e._netMoving=!!o.mv;                               // host-authoritative locomotion flag (see render moving-check)
+      // _actStamp is the HOST's state.time at the strike; rebase it into the client's OWN clock so the
+      // attack-windup frame (render: t = state.time - _actStamp) stays correct despite client/host G.time
+      // drift. Guard on _lastAst so the same swing isn't re-based every snapshot — only on a fresh strike.
+      if(o.ast!=null){ if(o.ast!==e._lastAst){ e._actStamp=(G.time||0)-(snapTime-o.ast); e._lastAst=o.ast; } }
+      else e._lastAst=null;
       e.carrying=o.cr||0; e.stars=o.st||0; e.spriteType=o.sp||null;
       e.hero=!!o.h; e.sieged=!!o.sg; e.captive=!!o.cap; e.sprinting=!!o.spr;
       if(o.si!=null) e.storedIn=o.si; else delete e.storedIn;
@@ -135,6 +142,9 @@ window.NET = window.NET || {};
       e.prodQueue=o.pq||[]; e.prodTime=o.pt||0; e.prodTotal=o.ptt||0;
       e.storedUnits=o.su||[];
       e.abandoned=!!o.ab; e._everSeen=!!o.es; e.rally=o.rl||null;
+      // turret/HQ muzzle-flash: host packs o.sf=1 (+ shot endpoint o.sfx/o.sfy). Rebuild the transient so
+      // the shoot-FX render pass can draw the shot line on the client (render decays .t locally at 1/60).
+      if(o.sf) e.shootFx = (e.shootFx && e.shootFx.t>0) ? e.shootFx : { x:(o.sfx!=null?o.sfx:e.x), y:(o.sfy!=null?o.sfy:e.y), t:0.1 };
     }
   }
   NET.buildSnap = function(){
@@ -157,10 +167,10 @@ window.NET = window.NET || {};
     const byId = new Map();
     for(let i=G.entities.length-1;i>=0;i--){
       const e=G.entities[i], o=incoming.get(e.id);
-      if(o){ unpackInto(e,o); byId.set(e.id,e); incoming.delete(e.id); }
+      if(o){ unpackInto(e,o,snap.time); byId.set(e.id,e); incoming.delete(e.id); }
       else { G.entities.splice(i,1); }                 // gone on the host → remove on the client
     }
-    for(const o of incoming.values()){ const e={selected:false}; unpackInto(e,o); G.entities.push(e); byId.set(e.id,e); }
+    for(const o of incoming.values()){ const e={selected:false}; unpackInto(e,o,snap.time); G.entities.push(e); byId.set(e.id,e); }
     // resolve unit target refs so chase/attack rendering works (host sent target as an id)
     for(const e of G.entities){ if(e._tgtId!=null){ const t=byId.get(e._tgtId); e.cmd = t?{type:'attack',target:t}:null; e._tgtId=null; } }
     const beforeSel=G.selection.length;

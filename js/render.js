@@ -81,6 +81,23 @@ function syncHud(){
   if(news && news.offsetHeight) VIEW_BOT += news.offsetHeight;
   cssH = cv.getBoundingClientRect().height || innerHeight;
 }
+// Keep VIEW_TOP/VIEW_BOT and --hud-bottom-h in lock-step with the HUD bars' REAL
+// heights. The discrete syncHud() callers (resize, load, command-line sync, LNS
+// toggle) miss height changes from production-queue cards, selection content,
+// late custom-font reflow, command-button wrapping, and media-query breakpoints —
+// any of which leaves --hud-bottom-h stale so the fixed LNS stripe drifts onto the
+// bottom HUD. A ResizeObserver re-syncs AFTER every layout pass, whatever caused it.
+// No feedback loop: syncHud() only writes --hud-bottom-h (moves #lns-ingame's
+// position, not its size) and reads cv — it never resizes an observed element.
+function initHudObservers(){
+  if(typeof ResizeObserver!=='function') return;
+  let pending=false;
+  const ro=new ResizeObserver(()=>{
+    if(pending) return; pending=true;   // coalesce simultaneous bar changes into one rAF pass
+    requestAnimationFrame(()=>{ pending=false; syncHud(); if(G && typeof clampCam==='function') clampCam(G); });
+  });
+  ['bottom','topbar','lns-ingame'].forEach(id=>{ const el=document.getElementById(id); if(el) ro.observe(el); });
+}
 // CSS-pixel viewport size (independent of devicePixelRatio).
 function viewW(){ return cv.width/dpr; }
 function viewH(){ return cv.height/dpr - VIEW_TOP - VIEW_BOT; }
@@ -755,7 +772,7 @@ function drawUnit(state,u,ox,oy){
   u._walkDist = (u._walkDist||0)+md;
   if(md>0.25){ u._still=0; if(Math.abs(mvx)>0.15) u._face = mvx<0?-1:1; }
   else u._still=(u._still||0)+1;
-  const moving = (u._still||0) < 6;   // debounce so brief stalls don't flicker to idle
+  const moving = u._netMoving || (u._still||0) < 6;   // debounce so brief stalls don't flicker to idle; _netMoving = host-authoritative locomotion (co-op client) so eased sub-threshold motion still animates
 
   ctx.save();
   // selection ring — a ground ellipse under the sprite's FEET, scaled to the sprite (no shadow)

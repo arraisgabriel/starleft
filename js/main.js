@@ -1,5 +1,6 @@
 /* main.js — bootstrap, loaded LAST. The ONLY file with top-level executing code: canvas sizing, event-listener registration, buildMapSelect(), and the requestAnimationFrame loop. */
 addEventListener('resize',resize); resize();
+if(typeof initHudObservers==='function') initHudObservers();   // keep LNS stripe anchored flush above the bottom HUD as its height changes
 addEventListener('orientationchange', ()=>resize());
 
 /* ---------------------------------------------------------------------
