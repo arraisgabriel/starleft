@@ -27,7 +27,9 @@ const ULTRA_NEWS = {
     'B.I.G. PAPA: Pull wounded veterans out. A rescued unit is not mercy; it is depreciation avoidance.',
     'B.I.G. PAPA: Production queue cards can be canceled for Funding. Even unborn hires may be optimized out of existence.',
     'B.I.G. PAPA: If you keep dying, stop attacking and fix the economy. Heroism is what undercapitalized players call insolvency.',
-    'B.I.G. PAPA: Lazy Interns sometimes quiet-quit mid-task. Reissue the order; consent was never in the sprint plan.'
+    'B.I.G. PAPA: Lazy Interns sometimes quiet-quit mid-task. Reissue the order; consent was never in the sprint plan.',
+    'B.I.G. PAPA: Stash units inside the HQ to hide them, then release them when it is convenient. Vanishing the instant risk arrives was once a leadership perk; now it scales to all staff.',
+    'B.I.G. PAPA: A cleared map releases no one until a unit enters the HQ and a Buzzword Bomber lifts the survivors out. Victory does not count until someone boards the aircraft and the headcount reconciles.'
   ],
   episodes: [
     'B.I.G. PAPA: Episode I closes with an MVP proving that zero revenue can still purchase violence if the deck is sufficiently red.',

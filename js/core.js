@@ -152,7 +152,10 @@ function checkWinLose(state){
   const enemyBuildings = state.entities.some(e=>e.owner==='enemy'&&e.kind==='building'&&!e.dead);
   const playerHas = state.entities.some(e=>e.owner==='player'&&!e.dead&&(e.kind==='building'||e.kind==='unit'));
   const playerHq = state.entities.some(e=>e.owner==='player'&&e.type==='hq'&&!e.dead);
-  const canRecoverHq = state.entities.some(e=>e.owner==='player'&&e.type==='worker'&&!e.dead) || playerEco(state,'p1').gold>=350;
+  // Only an intern can build a new HQ — and only inside an HQ can you extract/leave the map.
+  // So recovery requires a living, free intern; banked gold alone cannot rebuild without one,
+  // and an intern trapped inside a just-destroyed HQ (no room to spill out) doesn't count.
+  const canRecoverHq = state.entities.some(e=>e.owner==='player'&&e.type==='worker'&&!e.dead&&!e.storedIn);
   if(!enemyBuildings){
     if(netRole==='solo' && typeof beginExtractionPhase==='function'){ beginExtractionPhase(state); return; }
     if(netRole==='host' && typeof window!=='undefined' && window.MP_SESSION && MP_SESSION.mode==='campaign' && typeof enterHubFromCombat==='function'){

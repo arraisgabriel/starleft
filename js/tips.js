@@ -25,4 +25,6 @@ const GAME_TIPS = [
   "<b>Production queue:</b> select a building to see its hire line — each card is a queued unit. Tap the ✕ to cancel one and get the Funding back.",
   "<b>Keep dying on a map?</b> Stop attacking and fix the economy first: more Interns, a Satellite Office, then a bigger <i>mixed</i> army with a healer. Out-produce the rival, then push as one group and regroup between fights.",
   "<b>Lazy Interns 🧑‍💻:</b> they're unpaid and it shows — every so often an Intern just <i>quiet-quits</i> mid-task, ghosting a build before it starts or downing tools halfway through mining. It's a feature, not a bug (honest). Re-issue the order — tap the site or crystal again — to nudge them back to work, and keep an eye on idle Interns.",
+  "<b>Take cover in your HQ 🏢:</b> select units and right-click your own Open-Plan HQ to tuck them safely <i>inside</i> — hidden and out of harm's way. To bring them back, select the HQ and tap the ↩ Release button on each stored unit. Great for sheltering wounded veterans or hiding a reserve.",
+  "<b>Finished a map? Board the HQ. 🛩️</b> Clearing the objective doesn't whisk you home — to extract back to the H.U.B. you must command a surviving unit <i>into</i> your Open-Plan HQ 🏢 (right-click it). A Buzzword Bomber then flies in to lift the team out, so always keep an HQ standing and at least one unit alive.",
 ];
