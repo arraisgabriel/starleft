@@ -443,6 +443,18 @@ function trainingPanelTick(){
   }
   trainPanelRaf=requestAnimationFrame(trainingPanelTick);
 }
+// Display name for a trainee SNAPSHOT (staged/session): a named hero shows its heroId; a regular
+// career unit shows its dossier full name (built from its saved lore seed); fall back to the type.
+function trainUnitName(s){
+  if(!s) return '';
+  if(s.heroId) return s.heroId;
+  try { if(typeof buildDossier==='function' && s.lore){ const d=buildDossier({type:s.type, lore:s.lore}); if(d&&d.full) return d.full; } } catch(e){}
+  return (DEF[s.type]&&DEF[s.type].name)||s.type;
+}
+// "<Type> <b>Name</b>" — the unit's type, then its name in bold (same for heroes).
+function trainTypeName(s){
+  return ((DEF[s.type]&&DEF[s.type].name)||s.type)+' <b>'+trainUnitName(s)+'</b>';
+}
 function buildTrainingPanel(){
   const body=document.getElementById('trainingBody'); if(!body) return;
   trainPanelSig=trainPanelSignature();
@@ -466,7 +478,7 @@ function buildTrainingPanel(){
       const cv=document.createElement('canvas'); cv.width=200; cv.height=200; cv.className='train-spr';
       cv.dataset.type=s.type; cv.dataset.sprite=s.spriteType||''; card.appendChild(cv);
       const cap=document.createElement('div'); cap.className='train-cap';
-      cap.innerHTML='<b>'+((DEF[s.type]&&DEF[s.type].name)||s.type)+'</b><br>'+(typeof careerTitle==='function'?careerTitle(s.stars||0):'')+' · Lv '+(s.stars||0);
+      cap.innerHTML=trainTypeName(s)+'<br>'+(typeof careerTitle==='function'?careerTitle(s.stars||0):'')+' · Lv '+(s.stars||0);
       card.appendChild(cap);
       card.onclick=()=>toggleTrainSel(s.key);
       row.appendChild(card);
@@ -498,7 +510,7 @@ function buildTrainingPanel(){
       const cv=document.createElement('canvas'); cv.width=200; cv.height=200; cv.className='train-spr';
       cv.dataset.type=who.type; cv.dataset.sprite=who.spriteType||''; slot.appendChild(cv);
       const lab=document.createElement('div'); lab.className='train-cap';
-      lab.innerHTML='<b>'+(who===ses.a?'Mentor':'Junior')+'</b><br>Lv '+(who.stars||0)+' → <b>Lv '+ses.target+'</b>';
+      lab.innerHTML='<b>'+(who===ses.a?'Mentor':'Junior')+'</b><br>'+trainTypeName(who)+'<br>Lv '+(who.stars||0)+' → <b>Lv '+ses.target+'</b>';
       slot.appendChild(lab); pair.appendChild(slot);
     });
     card.appendChild(pair);

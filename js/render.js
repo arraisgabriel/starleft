@@ -828,39 +828,49 @@ function drawBuilding(state,e,ox,oy,dim){
 function ctrlColor(ctrl){ return ctrl==='p2' ? '#ff9d3c' : '#7fd6ff'; }
 
 // H.U.B.-only: draw the locked trainees inside the Training Grounds. They're storedIn (so the main
-// depth pass skips them). ALL trainees stand on the firing line BEFORE the counter, spread evenly
-// across the lanes (never cramped). Only their pose changes with training state:
-//   • IDLE (awaiting a session)  → idle animation, facing LEFT (away from the range).
-//   • IN A SESSION (training)    → SHOOTING animation looping, facing RIGHT toward the targets.
-// Positions are by stable slot order, re-spaced smoothly as trainees come and go. Same world-space
-// ctx + (ox,oy) convention as drawUnit; drawn back-row-first so the near row overlaps correctly.
+// depth pass skips them). Their spot + pose depend on STATE:
+//   • IDLE (awaiting a session) → wait in the LOBBY (lower-left open floor), facing LEFT, idle anim.
+//   • IN A SESSION (training)   → stand two-abreast in their own shooting LANE (mentor+junior), facing
+//     RIGHT, looping the shooting animation at the downrange targets.
+// First placement snaps; later target changes glide. Drawn back-to-front (y-sort) for correct overlap.
 function drawHubTrainees(state, ox, oy){
   if(typeof hubTrainees!=='function' || typeof hubFindTrainingGrounds!=='function') return;
   const fac=hubFindTrainingGrounds(state); if(!fac) return;
   const T=(typeof CAMPAIGN!=='undefined' && CAMPAIGN.training) || {staged:[], sessions:[]};
-  const shootKeys=new Set();
-  for(const s of (T.sessions||[])){ if(s.a) shootKeys.add(s.a.key); if(s.b) shootKeys.add(s.b.key); }
-  const list=hubTrainees(state).slice().sort((a,b)=>((a.trainSlot|0)-(b.trainSlot|0))||((a.id|0)-(b.id|0)));
-  const N=list.length, draw=[];
-  for(let i=0;i<N;i++){
-    const u=list[i], sType=u.spriteType||u.type;
-    const shoot=(typeof hubUnitKey==='function') && shootKeys.has(hubUnitKey(u));
-    const t=hubTrainFiringPos(fac, i, N);
-    if(!u._trainPlaced){ u.x=t.x; u.y=t.y; u._trainPlaced=true; }              // first frame → snap in
-    else { u.x+=(t.x-u.x)*0.25; u.y+=(t.y-u.y)*0.25; }                         // smooth re-spacing
-    u._face = shoot ? 1 : -1;                                                   // shoot→face range(right); idle→left
+  // per-key target: each session → a lane (a=mentor side 0, b=junior side 1); each staged → a lobby slot
+  const target=new Map();
+  (T.sessions||[]).forEach((ses,i)=>{
+    if(ses.a){ const p=hubTrainLanePos(fac,i,0); target.set(ses.a.key,{x:p.x,y:p.y,shoot:true}); }
+    if(ses.b){ const p=hubTrainLanePos(fac,i,1); target.set(ses.b.key,{x:p.x,y:p.y,shoot:true}); }
+  });
+  const staged=T.staged||[];
+  staged.forEach((s,j)=>{ if(s){ const p=hubTrainLobbyPos(fac,j,staged.length); target.set(s.key,{x:p.x,y:p.y,shoot:false}); } });
+  const TRAINEE_SCALE=0.9;                                                      // nearly full size — almost matches roaming units
+  const draw=[];
+  for(const u of hubTrainees(state)){
+    const sType=u.spriteType||u.type, vh=unitDrawH(u)*TRAINEE_SCALE;
+    const t=(typeof hubUnitKey==='function') ? target.get(hubUnitKey(u)) : null;
+    if(t){
+      // FOOT-ANCHOR: hubTrain*Pos returns the floor point where the feet should land, but blitFrame
+      // draws the sprite with its feet at py+0.3h — so offset the body up by 0.3h (per unit size, so
+      // a big Founder doesn't clip the wall) to seat the feet exactly on the painted floor.
+      const tx=t.x, ty=t.y - 0.30*vh;
+      if(!u._trainPlaced){ u.x=tx; u.y=ty; u._trainPlaced=true; }              // first frame → snap in
+      else { u.x+=(tx-u.x)*0.2; u.y+=(ty-u.y)*0.2; }                           // glide on state change
+      u._face = t.shoot ? 1 : -1;                                             // shoot→face range(right); idle→left
+    }
     let anim=null, fi=0;
-    if(shoot){ anim=(typeof actionAnim==='function' && actionAnim(sType,'attack',u.owner)) || (typeof unitWalk==='function'?unitWalk(sType,u.owner):null);
+    if(t && t.shoot){ anim=(typeof actionAnim==='function' && actionAnim(sType,'attack',u.owner)) || (typeof unitWalk==='function'?unitWalk(sType,u.owner):null);
       if(anim) fi=((state.time*6 + (u.id||0)*0.7)|0)%anim.frames.length; }      // shooting loop
     else { anim=(typeof unitWalk==='function')?unitWalk(sType,u.owner):null;
       if(anim) fi=((state.time*1.8 + (u.id||0)*0.5)|0)%anim.frames.length; }    // gentle idle
-    draw.push({u, anim, fi});
+    draw.push({u, anim, fi, vh});
   }
   draw.sort((a,b)=>a.u.y-b.u.y);                                                // depth: farther (lower y) first
   for(const it of draw){
-    const u=it.u, px=u.x+ox, py=u.y+oy, vh=unitDrawH(u);
-    if(it.anim) blitFrame(u, px, py, it.anim, vh, it.fi);
-    else { ctx.fillStyle=isRedSide(u.owner)?'#c0392b':'#3b7fd0'; ctx.beginPath(); ctx.arc(px, py-vh*0.3, vh*0.2, 0, 6.28); ctx.fill(); }
+    const u=it.u, px=u.x+ox, py=u.y+oy;
+    if(it.anim) blitFrame(u, px, py, it.anim, it.vh, it.fi);
+    else { ctx.fillStyle=isRedSide(u.owner)?'#c0392b':'#3b7fd0'; ctx.beginPath(); ctx.arc(px, py-it.vh*0.3, it.vh*0.2, 0, 6.28); ctx.fill(); }
   }
 }
 

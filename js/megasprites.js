@@ -255,6 +255,24 @@ function megaBreath(t, phase){
   const p=((t/MEGA_NEON_PERIOD + (phase||0))%1+1)%1;
   return (1-Math.cos(p*Math.PI*2))*0.5;
 }
+// Scarce neon flicker: a glow that stays fully lit MOST of the time and only
+// occasionally stutters — the "barely-working red neon" look the H.U.B. Training
+// Grounds asks for (slow, intense, scarcely flickering). `depth` (0..1) sets how
+// far it dips. OPT-IN per glow via g.flicker; every other neon leaves it unset and
+// renders steady exactly as before. Per-glow phase staggers the lamps so they never
+// flicker in lockstep; motion freezes under prefers-reduced-motion.
+const NEON_FLICKER_PERIOD = 6.5;    // seconds between a glow's flicker events (slow → scarce)
+const NEON_FLICKER_WINDOW = 0.12;   // fraction of the cycle spent stuttering (brief)
+function megaNeonFlicker(t, phase, depth){
+  if(megaReducedMotion()) return 1;
+  const d=Math.max(0, Math.min(1, depth>0 ? depth : 0.5));
+  const p=((t/NEON_FLICKER_PERIOD + (phase||0))%1+1)%1;
+  if(p < 1-NEON_FLICKER_WINDOW) return 1;                       // steady, fully lit
+  const w=(p-(1-NEON_FLICKER_WINDOW))/NEON_FLICKER_WINDOW;      // 0..1 across the stutter
+  const env=Math.sin(w*Math.PI);                                // ease in/out, no pop
+  const blink=Math.abs(Math.sin(w*Math.PI*4.5));                // a few fast on/off blips
+  return 1 - d*env*(1-blink);
+}
 function megaRoundRectPath(x,y,w,h,r){
   r=Math.max(0,Math.min(r,Math.abs(w)/2,Math.abs(h)/2));
   ctx.beginPath();
@@ -334,7 +352,8 @@ function drawMegaNeonLayer(state, m, glows, dx, dy, dw, dh, layer){
   for(const g of glows){
     const cx=dx+g.x*dw, cy=dy+g.y*dh, rx=Math.max(1,g.rx*dw), ry=Math.max(1,g.ry*dh);
     const rot=g.rot||0, color=g.color||[180,120,255], breath=megaBreath(t, (g.phase||0)+seed*0.37);
-    const base=(g.alpha==null?1:g.alpha)*(g.pulse==null?1:g.pulse);
+    let base=(g.alpha==null?1:g.alpha)*(g.pulse==null?1:g.pulse);
+    if(g.flicker) base *= megaNeonFlicker(t, (g.phase||0)+seed*0.37, g.flicker);
     if(layer==='aura'){
       if(g.kind==='ring'){
         const pulse=0.7+0.3*breath, aura=base*(0.46+0.22*breath);

@@ -908,24 +908,40 @@ function hubTrainCount(){
   return (t.staged||[]).length + (t.sessions||[]).length*2;
 }
 // Map a normalised point on the facility SPRITE (un,vn in 0..1, left→right / top→bottom) to a world
-// position. The sprite is bottom-anchored over the footprint with a ~1.1-tile top inset (see
-// drawHubBuildingSpriteVisual: heightScale 0.82 → ~21 tiles tall on the 22-tall footprint).
+// position. Mirrors drawHubBuildingSpriteVisual's draw rect EXACTLY (overhang / heightScale / sprite
+// aspect) so trainee spots track the painted art regardless of how the sprite is scaled.
 function hubTrainSpritePos(fac, un, vn){
-  return { x:(fac.tx + un*fac.w)*TILE, y:(fac.ty + 1.1 + vn*(fac.h-1.1))*TILE };
+  const v = (fac && fac.hubSpriteVisual) || {};
+  const baseW=(v.w||fac.w)*TILE, baseH=(v.h||fac.h)*TILE;
+  let aspect = 0.735;                                          // training_enemy.png fh/fw fallback
+  if(typeof buildingSpriteVisual==='function'){
+    const spr = buildingSpriteVisual(v.type||'training', v.faction, fac.owner);
+    if(spr && spr.fw) aspect = spr.fh/spr.fw;
+  }
+  const dw = baseW*(v.overhang||1.08), dh = dw*aspect*(v.heightScale||1);
+  const baseX = (fac.tx+fac.w/2)*TILE - baseW/2, baseY = (fac.ty+fac.h)*TILE - baseH;
+  const dx = baseX + (baseW-dw)/2, dy = baseY + baseH - dh + 2;
+  return { x: dx + un*dw, y: dy + vn*dh };
 }
-// Firing-line spot BEFORE the counter, spread across the lanes. `idx` of `total` live trainees is
-// distributed left→right along the counter's near edge (a second row appears past 6) so they never
-// cram together. Trainees stand here whether idle or shooting — only their facing/animation changes.
-function hubTrainFiringPos(fac, idx, total){
-  const perRow=6, rows = total>perRow ? 2 : 1;
-  const r0 = Math.ceil(total/rows);                 // count in the front row
-  const row = idx < r0 ? 0 : 1, inRow = row===0 ? r0 : (total-r0), col = row===0 ? idx : idx-r0;
-  const t = inRow<=1 ? 0.5 : col/(inRow-1);         // 0..1 across the lanes
-  // Seat units on the lane NEAR-ENDS (the firing line), which run DOWN-RIGHT in the iso sprite
-  // (lane 0 upper-left → lane 5 lower-right) — so each trainee stands in a lane, not across them.
-  let u = 0.32 + t*0.27, v = 0.44 + t*0.17;
-  if(row){ u -= 0.03; v += 0.045; }                 // 2nd rank: one step back toward the viewer, same lanes
-  return hubTrainSpritePos(fac, u, v);
+// Firing position for a TRAINING pair. The iso lanes run lower-left→upper-right, so on the sprite a
+// lane is a line of near-constant s=u+v and "downrange" is d=u-v (calibrated to training_enemy.png:
+// 6 lane centres at s≈0.749+lane*0.099). Units stand near the firing end (small d) and shoot to the
+// right; the two soldiers (side 0=mentor / 1=junior) are offset ALONG s so they're abreast in-lane.
+function hubTrainLanePos(fac, lane, side){
+  const s = 0.749 + Math.min(5, Math.max(0, lane))*0.099;     // lane centre (u+v)
+  const dFire = 0.08;                                          // downrange firing depth (u-v); near end
+  const sl = s + (side ? 0.022 : -0.022);                     // abreast across the lane
+  return hubTrainSpritePos(fac, (sl+dFire)/2, (sl-dFire)/2);
+}
+// Idle/waiting position in the LOBBY — the open floor band BETWEEN the two parallel iso lines the
+// sprite defines: the shooting counter (front edge of the lane platform, d=u-v≈-0.14) and the front
+// wall top (d≈-0.5). Units sit in that band so they never float onto a wall. The grid runs ALONG the
+// band (s=u+v) with two ranks across it (d), kept off both edges with margin for the idle sway.
+function hubTrainLobbyPos(fac, idx, total){
+  const col=idx%6, row=(idx/6)|0;
+  const s  = 0.88 + col*0.085;            // 0.88..1.30 — full lobby width, incl. the down-right floor
+  const dd = -0.26 - row*0.12;            // two ranks, between counter (-0.14) and front wall (-0.55)
+  return hubTrainSpritePos(fac, (s+dd)/2, (s-dd)/2);
 }
 // Lock a live unit inside the facility (storedIn, like an M.D.C. garrison). Its exact lane/waiting
 // position + animation are resolved every frame by drawHubTrainees from CAMPAIGN.training state;
@@ -956,8 +972,11 @@ function hubTrainStage(state, u, poi){
   const fac=poi || hubFindTrainingGrounds(state);
   if(!fac||!fac.hubPoi||fac.hubPoi.kind!=='training') return;
   const bail=(msg)=>{ resetMotion(u); u.cmd=null; u.state='idle'; toast(msg); refreshUI(); };
-  if(typeof isCombatVet==='function' && !isCombatVet(u)) return bail((DEF[u.type].name||'That unit')+' has no career — only combat veterans train here.');
-  if(u.hero) return bail((u.heroId||'That hero')+' is one of a kind — heroes cannot be cloned.');
+  // Heroes are full trainees here: a named hero always carries a career (a fixed dossier + a set
+  // level), so the combat-vet gate — a proxy for "has a career / can level" — shouldn't exclude one
+  // even when its base type isn't a combat vet (e.g. a healer hero). They enter, are commanded, and
+  // mentor/junior like any other unit, governed by the same-type + level-gap rules in the validator.
+  if(typeof isCombatVet==='function' && !isCombatVet(u) && !u.hero) return bail((DEF[u.type].name||'That unit')+' has no career — only combat veterans train here.');
   if(hubTrainCount() >= HUB.trainPairCap*2) return bail('Training Grounds full ('+(HUB.trainPairCap*2)+' trainees).');
   const slot=hubTrainNextSlot();
   if(slot<0) return bail('No free training lane.');
