@@ -156,10 +156,10 @@ window.HUB_MAP_DATA = {
       "h": 22,
       "visual": {
         "type": "training",
-        "faction": "player",
+        "faction": "enemy",
         "fixedFrame": 0,
         "overhang": 1,
-        "heightScale": 0.82
+        "heightScale": 1.08
       }
     }
   ],

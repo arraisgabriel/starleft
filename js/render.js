@@ -722,7 +722,7 @@ function drawSparkle(x,y,r){
 function buildingSpriteVisual(type, faction, owner){
   if(faction && typeof BUILDING_ANIM!=='undefined'){
     const e=BUILDING_ANIM[type], a=e&&e[faction];
-    if(a&&a.ready) return { img:a.img, fw:a.fw, fh:a.fh, frames:BUILDING_FRAMES };
+    if(a&&a.ready) return { img:a.img, fw:a.fw, fh:a.fh, frames:(BUILDING_FRAME_COUNT[type]||BUILDING_FRAMES) };
   }
   return buildingSprite(type, owner);
 }

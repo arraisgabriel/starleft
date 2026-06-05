@@ -102,9 +102,6 @@ function commandUnits(state, wx, wy, target){
     return;
   }
   if(target && target.owner && target.owner!=='player'){
-    if(state.extractReady && target.owner==='player' && target.type==='hq' && typeof hubIssueExtract==='function'){
-      if(hubIssueExtract(state, units, target)) return;
-    }
     if(state.hub && target.hubPoi && typeof hubCommandPoi==='function'){
       if(hubCommandPoi(state, units, target)) return;
     }
@@ -112,9 +109,6 @@ function commandUnits(state, wx, wy, target){
     units.forEach(u=> attackTarget(state,u,target));
     spawnRing(target.x,target.y,'#ff6b6b');
     return;
-  }
-  if(state.extractReady && target && target.owner==='player' && target.type==='hq' && typeof hubIssueExtract==='function'){
-    if(hubIssueExtract(state, units, target)) return;
   }
   if(state.hub && target && target.hubPoi && typeof hubCommandPoi==='function'){
     if(hubCommandPoi(state, units, target)) return;
@@ -199,7 +193,7 @@ function issueEnterHq(state, units, hq){
   if(!state||!hq||hq.type!=='hq'||hq.owner!=='player'||hq.constructing) return false;
   const movers=units.filter(u=>u.kind==='unit'&&u.owner==='player'&&!u.storedIn);
   if(!movers.length) return false;
-  if(state.extractReady && typeof hubIssueExtract==='function') return hubIssueExtract(state,movers,hq);
+  // Post-victory units garrison normally; extraction is launched explicitly via the HQ button.
   movers.forEach(u=>{
     resetMotion(u);
     u.cmd={type:'enterhq', hq};
@@ -568,14 +562,6 @@ function updateUnit(state,u,dt){
   // ---- plain move / amove ----
   if(cmd&&(cmd.type==='move'||cmd.type==='amove')){
     if(followPath(state,u,dt)){ u.cmd=null; u.state='idle'; }
-    return;
-  }
-  if(cmd&&cmd.type==='extract'){
-    if(followPath(state,u,dt)){
-      const hq=cmd.hq;
-      u.cmd=null; u.state='idle';
-      if(hq && !hq.dead && typeof hubArriveExtract==='function') hubArriveExtract(state,u,hq);
-    }
     return;
   }
   if(cmd&&cmd.type==='enterhq'){

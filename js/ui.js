@@ -171,9 +171,14 @@ function cmdSig(sel){
   if(!owned.length) return 'enemy';
   const has=t=>owned.some(e=>e.type===t&&!e.constructing);
   const hasG=G.entities.some(e=>!e.dead&&e.owner==='player'&&e.type==='garage'&&!e.constructing); // gates Launch Pad button
+  // Extraction button: rebuild when the phase opens or the selected HQ's garrison count changes (gates clickable).
+  const xr=G.extractReady?1:0;
+  const selHq=owned.find(e=>e.type==='hq'&&!e.constructing);
+  const xs=(xr && selHq && typeof hqStoredUnits==='function') ? hqStoredUnits(G,selHq).length : 0;
   return 'h'+(has('hq')?1:0)+'b'+(has('barracks')?1:0)+'g'+(has('garage')?1:0)+'l'+(has('launchpad')?1:0)
        +'w'+(owned.some(e=>e.type==='worker')?1:0)+'G'+(hasG?1:0)
-       +'u'+(owned.some(e=>e.kind==='unit')?1:0);
+       +'u'+(owned.some(e=>e.kind==='unit')?1:0)
+       +'x'+xr+'X'+xs;
 }
 // Resolve a live, selected, finished building of a given type at click time
 // (handlers must not capture stale entity refs, since buttons now persist).
@@ -187,8 +192,15 @@ function buildCommands(sel){
   if(!owned.length){ elCmd.classList.remove('has-cmds'); syncCmdLine(); return; }
   const hasFinished=t=>G.entities.some(e=>!e.dead&&e.owner==='player'&&e.type===t&&!e.constructing);
   const train=(bType,uType)=>{ const b=selectedBuilding(bType); if(b) (typeof netTrain==='function'?netTrain:tryTrain)(G,b,uType); };
-  if(owned.some(e=>e.type==='hq'&&!e.constructing))
+  if(owned.some(e=>e.type==='hq'&&!e.constructing)){
     addCmd(DEF.worker.icon,'Hire Intern',DEF.worker.cost,()=>train('hq','worker'));
+    // Post-victory extraction: appears once the mission is won, clickable only when a unit is garrisoned.
+    if(G.extractReady){
+      const hq=selectedBuilding('hq');
+      const ready = !!hq && typeof hqStoredUnits==='function' && hqStoredUnits(G,hq).length>0;
+      addCmd('🚁','Extraction',null,()=>tryStartExtraction(), ready?'':'disabled');
+    }
+  }
   if(owned.some(e=>e.type==='barracks'&&!e.constructing)){
     addCmd(DEF.soldier.icon,'Growth Cyborg',DEF.soldier.cost,()=>train('barracks','soldier'));
     addCmd(DEF.ranger.icon,'Consultant',DEF.ranger.cost,()=>train('barracks','ranger'));

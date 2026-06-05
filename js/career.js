@@ -158,8 +158,12 @@ function spawnVets(state){
 // snapshot the heroes ALIVE at victory so they redeploy next map; dead heroes drop out and never
 // return. Accumulated level/xp/dossier (u.lore, incl. service record) travel with them.
 function captureHeroes(state){
-  carryoverHeroes = state.entities
-    .filter(e=>!e.dead && e.owner==='player' && e.hero)
+  // In the solo player-controlled extraction, heroes obey the same rule as everyone: only carry over
+  // if garrisoned in an HQ and Lv2+. Every other caller (co-op victory, the victory chooser, hub
+  // dispatch with a synthetic {entities} state) keeps the legacy "all surviving heroes carry" behavior.
+  const requireGarrison = !!(state && state.extractReady && netRole==='solo');
+  carryoverHeroes = (state.entities||[])
+    .filter(e=>!e.dead && e.owner==='player' && e.hero && (!requireGarrison || (e.storedIn && (e.stars||0)>=2)))
     .map(e=>({ heroId:e.heroId, type:e.type, sprite:e.spriteType, stars:e.stars, xp:e.xp, lore:e.lore }));
 }
 // clear the hero carryover (a brand-new campaign / map-select replay starts heroless)

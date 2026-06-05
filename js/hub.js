@@ -111,10 +111,18 @@ function hubSnapUnit(u){
 }
 function hubBuildRosterFromCombat(state){
   const seen=new Set(), out=[];
+  // Solo player-controlled extraction: only Lv2+ units garrisoned inside an HQ carry over.
+  // Co-op / other paths have no garrison step, so they keep the legacy "all but plain interns" rule.
+  const requireGarrison = !!(state.extractReady && netRole==='solo');
   for(const u of state.entities){
     if(u.dead || u.owner!=='player' || u.kind!=='unit') continue;
     if(netRole!=='solo' && (u.ctrl||'p1')!==hubOwnerCtrl()) continue;
-    if(u.type==='worker' && !(u.lore || u.hero)) continue; // ordinary interns do not move into the HUB roster
+    if(requireGarrison){
+      if(!u.storedIn) continue;        // only units garrisoned inside an HQ are extracted
+      if((u.stars||0) < 2) continue;   // only Level 2+ veterans carry over to the H.U.B.
+    } else if(u.type==='worker' && !(u.lore || u.hero)){
+      continue;                        // legacy path: ordinary interns do not move into the HUB roster
+    }
     const key=hubUnitKey(u); if(seen.has(key)) continue;
     seen.add(key); out.push(hubSnapUnit(u));
   }
@@ -150,23 +158,11 @@ function beginExtractionPhase(state){
   CAMPAIGN.nextMapIndex=Math.min(mapIndex+1, MAPS.length-1);
   state.extractReady=true;
   state.extractStarted=false;
-  state.objective='Episode complete. Command any unit into an Open-Plan HQ to extract to the H.U.B.';
+  state.objective='Episode complete. Garrison your survivors inside an Open-Plan HQ (only Lv2+ are extracted), then press Extraction.';
   state.cfg.objective=state.objective;
   for(const e of state.entities){ if(e.owner==='enemy' && e.kind==='unit') e.dead=true; }
-  toast('Episode complete — send a unit into your HQ for extraction.', 0);
+  toast('Episode complete — garrison units in your HQ, then launch Extraction.', 0);
   refreshUI();
-}
-function hubIssueExtract(state, units, hq){
-  if(!state || !state.extractReady || !hq || hq.type!=='hq') return false;
-  units.filter(u=>u.kind==='unit'&&u.owner==='player'&&!u.storedIn).forEach(u=>{
-    resetMotion(u);
-    u.cmd={type:'extract', hq};
-    const spot=nearestFreeAdjTile(state,hq,u.x,u.y) || {x:hq.x,y:hq.y};
-    issueMoveKeepCmd(state,u,spot.x,spot.y);
-  });
-  spawnRing(hq.x,hq.y,'#ffd24a');
-  toast('Episode complete — extraction begins when a unit reaches your HQ.', 0);
-  return true;
 }
 function hubBuildingRoofPoint(b){
   const px=b.tx*TILE, py=b.ty*TILE, w=b.w*TILE, h=b.h*TILE;
@@ -180,15 +176,10 @@ function hubBuildingRoofPoint(b){
   }
   return { x:b.x, y:py+TILE*0.35 };
 }
-function hubArriveExtract(state, u, hq){
-  if(u && hq && !u.storedIn){
-    resetMotion(u);
-    u.cmd=null; u.state='idle'; u.vx=0; u.vy=0; u.sprinting=false;
-    u.storedIn=hq.id; u.x=hq.x; u.y=hq.y; u.selected=false;
-    state.selection=state.selection.filter(e=>e!==u);
-    refreshUI();
-  }
-  if(state.extractStarted) return;
+// Launch the Buzzword Bomber cinematic over `hq`. The flight (updateExtraction) carries the
+// player to the H.U.B. when it finishes. Guarded so it can only fire once.
+function hubStartExtractFlight(state, hq){
+  if(!state || !hq || hq.dead || state.extractStarted) return;
   state.extractStarted=true;
   if(typeof clearToast==='function') clearToast();
   const z=state.zoom||1, sx=state.camX-3*TILE, sy=state.camY+viewH()/z+2*TILE;
@@ -196,6 +187,45 @@ function hubArriveExtract(state, u, hq){
   state.extractFlight={ phase:'in', t:0, x:sx, y:sy, hqX:roof.x, hqY:roof.y,
     exitX: hq.x < state.W*TILE/2 ? -4*TILE : state.W*TILE+4*TILE, exitY:hq.y-TILE*5 };
   toast('Buzzword Bomber inbound.');
+}
+// Player veterans (Lv2+) still in the field — NOT garrisoned in any HQ. These are lost on extraction.
+function strandedVets(state){
+  return (state.entities||[]).filter(u =>
+    u && !u.dead && u.owner==='player' && u.kind==='unit' &&
+    !u.storedIn && (u.stars||0) >= 2);
+}
+// HQ "Extraction" button action: validate, warn about stranded veterans, then launch the bomber.
+function tryStartExtraction(){
+  const state=G;
+  if(!state || !state.extractReady || netRole!=='solo') return;
+  const hq=(typeof selectedBuilding==='function') ? selectedBuilding('hq') : null;
+  if(!hq){ toast('Select your HQ to launch extraction.'); return; }
+  if(typeof hqStoredUnits!=='function' || hqStoredUnits(state,hq).length===0){
+    toast('Garrison at least one unit inside the HQ first.'); return;   // guards the disabled-button click
+  }
+  const stranded=strandedVets(state);
+  if(stranded.length){ showExtractConfirm(state, hq, stranded.length); return; }
+  hubStartExtractFlight(state, hq);
+}
+// Pause + confirm modal shown when Lv2+ veterans would be left behind.
+function showExtractConfirm(state, hq, n){
+  const el=document.getElementById('extractConfirm');
+  if(!el){ hubStartExtractFlight(state, hq); return; }   // no modal element → fail open
+  running=false;
+  if(typeof resetInputState==='function') resetInputState();
+  if(typeof syncPauseBtn==='function') syncPauseBtn();
+  el.className='overlay';
+  el.innerHTML=`<div class="big">🚁</div><h1>LEAVE THEM BEHIND?</h1>
+    <h2>${n} veteran${n===1?'':'s'} still outside the HQ</h2>
+    <p>Only Level&nbsp;2+ units <b>inside</b> an Open-Plan HQ extract to the H.U.B.
+       ${n} eligible veteran${n===1?' is':'s are'} still in the field and will be lost forever.</p>
+    <button class="btn" id="extractGo">▶ Extract anyway</button>
+    <button class="btn" id="extractCancel">◀ Keep fighting</button>`;
+  el.style.display='flex';
+  const close=()=>{ el.style.display='none'; el.innerHTML=''; };
+  const resume=()=>{ running=true; if(typeof syncPauseBtn==='function') syncPauseBtn(); };
+  document.getElementById('extractGo').onclick=()=>{ close(); resume(); hubStartExtractFlight(state, hq); };
+  document.getElementById('extractCancel').onclick=()=>{ close(); resume(); refreshUI(); };
 }
 function updateExtraction(state, dt){
   const f=state.extractFlight; if(!f) return;

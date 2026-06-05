@@ -99,10 +99,14 @@ function waterSpriteFor(biome, slot, frame){
    assets/buildings/<type>_<player|enemy>.png. (Mirrors loadWalk / loadMega.) */
 const BUILDING_FRAMES = 9;
 const BUILDING_FPS = 0.9;               // slow ambient neon-flicker playback
+// Per-type frame-count override: most buildings are 9-frame neon-flicker strips, but the Training
+// Grounds is ONE static high-res still (no animation) — see _dev/gen/gen_training.mjs.
+const BUILDING_FRAME_COUNT = { training:1 };
 const BUILDING_TYPES = ['hq','barracks','turret','garage','launchpad','outpost','training'];
 function loadBuildingStrip(type, faction){
   const a = { img:new Image(), ready:false, fw:0, fh:0 };
-  a.img.onload  = ()=>{ a.fw = a.img.naturalWidth/BUILDING_FRAMES; a.fh = a.img.naturalHeight; a.ready = true; };
+  const nf = BUILDING_FRAME_COUNT[type] || BUILDING_FRAMES;
+  a.img.onload  = ()=>{ a.fw = a.img.naturalWidth/nf; a.fh = a.img.naturalHeight; a.ready = true; };
   a.img.onerror = ()=>{ a.ready=false; };
   a.img.src = buildingSheet(type, faction);
   return a;
@@ -122,7 +126,7 @@ function loadImg(src){ const i=new Image(); i.src=src; return i; }
 // returns {img, fw, fh, frames} for an entity's building strip (faction-keyed), or null
 function buildingSprite(type,owner){
   const e=BUILDING_ANIM[type]; const a=e&&e[factionKey(owner)];
-  return (a&&a.ready) ? { img:a.img, fw:a.fw, fh:a.fh, frames:BUILDING_FRAMES } : null;
+  return (a&&a.ready) ? { img:a.img, fw:a.fw, fh:a.fh, frames:(BUILDING_FRAME_COUNT[type]||BUILDING_FRAMES) } : null;
 }
 
 // Funding resource crystal — optional generated sprite; null until present (then drawGoldmine blits it under the animated glow/shine).
