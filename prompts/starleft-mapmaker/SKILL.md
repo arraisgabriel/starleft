@@ -30,12 +30,13 @@ coordinates — the layout serves the narrative, so the narrative has to be agre
 
 ## Before you start: load the world
 
-Two reference files hold everything you need so you don't re-derive the world from scratch. Read
-them at the start of any mapmaking task:
+Read these at the start of any mapmaking task so you don't re-derive the world from scratch:
 
-- **`references/world-bible.md`** — the setting, tone, the seven-episode moral-descent arc, how
-  enemy factions escalate, the satirical unit/building roster, the career/veteran/dossier system,
-  the place-name and jargon glossary. This is what keeps a new map *coherent* with the campaign.
+- **`docs/world-bible.md`** — the **official, canonical world bible** (it lives in the repo, shared by
+  every skill — not inside this one). The setting, tone, the twelve-episode moral-descent arc (incl.
+  the post-VII A&O / GRAAL immortality arc), how enemy factions escalate, the satirical unit/building
+  roster, the H.U.B. meta-layer, the career/veteran/dossier/memorial system, the place-name and jargon
+  glossary. This is what keeps a new map *coherent* with the campaign.
 - **`references/map-schema.md`** — every field of a map config object, with valid ranges and
   defaults, the biome cookbook (which terrain recipe expresses which mood), the difficulty
   escalation table, feature-placement guidance, and a full worked example.

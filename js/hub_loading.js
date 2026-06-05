@@ -32,10 +32,12 @@ const HUB_PANO_TOWER = { bx:0.37, by:0.52, w:0.21, heightScale:1.14 };
 // neon variation, at the hub's megabuilding loop speed.
 const HUB_TOWER_FRAMES = [2, 3, 4];
 
-// Buzzword Bomber flight path, NORMALIZED image coords. Upper-right skyline → left corner,
-// almost straight (slight downward drift), flying a touch lower than the sky so it grazes
-// the skyline. Just off-image at both ends so it enters/exits cleanly across the duration.
-const HUB_PANO_BOMBER = { sx:1.10, sy:0.24, ex:-0.10, ey:0.19, sizeFrac:0.143 };
+// Buzzword Bomber: altitude band (fraction of screen height) + size. The HORIZONTAL flight is
+// computed in hubPanoBomberPos() from the VISIBLE image span — it spawns at the right edge of
+// whatever is on-screen and crosses to just past the left edge over HUB_LOAD_DURATION. So on a
+// narrow viewport it traverses a shorter visible width in the same 20s (i.e. flies slower), is
+// visible the whole time, and never waits off-screen.
+const HUB_PANO_BOMBER = { sy:0.24, ey:0.19, sizeFrac:0.143 };
 
 // Engine thrusters on the bomber's back (right side, since the sprite faces left), in
 // FRAME-normalized coords (0..1) measured off walk_enemy.png frame 0. Red neon glows are
@@ -47,15 +49,20 @@ const HUB_BOMBER_THRUSTERS = [
   { u:0.77, v:0.68, r:0.052, ph:3.1 },   // lower rear nozzle
 ];
 
-// Fit the panorama to 100% screen HEIGHT, preserve aspect, center horizontally (black
-// letterbox sides on desktop; on portrait/mobile the image overflows and the centered
-// slice shows the middle third). Sets the canvas transform to CSS px and returns the map.
-function hubPanoFit(){
-  ctx.setTransform(dpr,0,0,dpr,0,0);
+// Pure geometry of the letterboxed panorama (no canvas state): 100% screen HEIGHT, aspect
+// preserved, centered horizontally (black letterbox sides on desktop; on portrait/mobile the
+// image overflows and the centered slice shows the middle third). Shared by the draw pass and
+// the viewport-aware bomber trajectory.
+function hubPanoMetrics(){
   const vw=innerWidth, vh=innerHeight;
   const iw=HUB_PANO_IMG.naturalWidth||1448, ih=HUB_PANO_IMG.naturalHeight||1086;
   const scale=vh/ih, dw=iw*scale, dh=vh;
   return { ox:(vw-dw)/2, oy:0, dw, dh, scale, vw, vh };
+}
+// Same geometry, but also set the canvas transform to CSS px for the draw pass.
+function hubPanoFit(){
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+  return hubPanoMetrics();
 }
 
 // One twinkling neon dot (additive), in screen space. `tw` is the 0..1 breath value.
@@ -101,21 +108,37 @@ function drawHubPanoTower(state, fit){
   if(neon && typeof drawMegaNeonLayer==='function') drawMegaNeonLayer(state,m,neon,dx,dy,dw,dh,'core');
 }
 
-// The BIG Buzzword Bomber crossing the skyline. Position is driven by f.t (0→13s) so it
-// reaches the far side exactly when the scene ends. Reuses the unit sprite + blitFrame.
+// Viewport-aware bomber position. The visible image span on screen is [left,right] =
+// intersection of the image rect and the screen; the bomber spawns with its nose at the RIGHT
+// edge of that span (p=0) and crosses to just past the LEFT edge (p=1) over HUB_LOAD_DURATION.
+// So the 20s always covers exactly the on-screen traversal — slower on a narrow viewport (less
+// width in the same time), visible from the first frame, and out of view at p=1. Returns {px,py,S}.
+function hubPanoBomberPos(state, m, anim){
+  const B=HUB_PANO_BOMBER, f=state.extractFlight;
+  const p=Math.min(1, Math.max(0, (f?f.t:0)/HUB_LOAD_DURATION));
+  const t=state.time||0;
+  const left=Math.max(0, m.ox), right=Math.min(m.vw, m.ox+m.dw);   // visible image span on screen
+  const visW=Math.max(1, right-left);
+  const S=Math.round(m.vh * B.sizeFrac);
+  const spriteW=(anim && anim.ready) ? S*(anim.fw/anim.fh) : S*1.4;
+  const halfW=spriteW/2;
+  const px=(right+halfW) - (visW+spriteW)*p;                       // nose at right edge → tail past left edge
+  const ny=B.sy + (B.ey-B.sy)*p + 0.012*Math.sin(t*1.6);          // gentle bob; altitude is screen-height-relative
+  const py=m.oy + ny*m.dh;
+  return { px, py, S };
+}
+
+// The BIG Buzzword Bomber crossing the visible skyline. Position is viewport-aware (see
+// hubPanoBomberPos) and driven by f.t (0→HUB_LOAD_DURATION). Reuses the unit sprite + blitFrame.
 function drawHubPanoBomber(state, fit){
   const f=state.extractFlight; if(!f) return;
-  const B=HUB_PANO_BOMBER;
-  const p=Math.min(1, Math.max(0, f.t/HUB_LOAD_DURATION));
   const t=state.time||0;
-  const nx=B.sx + (B.ex-B.sx)*p;
-  const ny=B.sy + (B.ey-B.sy)*p + 0.012*Math.sin(t*1.6);   // gentle bob → reads as real flight
-  const px=fit.ox + nx*fit.dw, py=fit.oy + ny*fit.dh;
-  const S=Math.round(fit.vh * B.sizeFrac);
   const anim=(typeof unitWalk==='function') ? unitWalk('bomber','player') : null;
+  const pos=hubPanoBomberPos(state, fit, anim);
+  const px=pos.px, py=pos.py, S=pos.S;
   // Framed-movie clip: the bomber is only ever drawn over the panorama image, never over the
-  // black letterbox borders. So its nose emerges from the right border as it flies in and it
-  // slips gradually into the left border as it crosses out.
+  // black letterbox borders. So its nose emerges from the right edge as it flies in and it
+  // slips gradually off the left edge as it crosses out.
   ctx.save();
   ctx.beginPath(); ctx.rect(fit.ox, fit.oy, fit.dw, fit.dh); ctx.clip();
   if(anim && anim.ready){
@@ -258,14 +281,15 @@ function drawHubPanoDrones(state, fit){
 // Entry point — called from render.js when extractFlight.phase==='panorama'. Draws the
 // whole scene full-screen in CSS px (caller has already cleared the backing store), then
 // resets the transform to identity for anything that runs after.
-function drawHubLoadingScene(state){
+function drawHubLoadingScene(state, opts){
   const fit=hubPanoFit();
   ctx.fillStyle='#000';
   ctx.fillRect(0,0,fit.vw,fit.vh);
   if(HUB_PANO_READY) ctx.drawImage(HUB_PANO_IMG, fit.ox, fit.oy, fit.dw, fit.dh);
   drawHubPanoNeon(state, fit);
+  if(opts && typeof opts.midDraw==='function') opts.midDraw(fit);   // BEHIND-the-tower layer (e.g. the distant horizon nukes)
   drawHubPanoTower(state, fit);
   drawHubPanoDrones(state, fit);
-  drawHubPanoBomber(state, fit);
+  if(!(opts && opts.noBomber)) drawHubPanoBomber(state, fit);   // Ep VII flash intro reuses this scene without the bomber
   ctx.setTransform(1,0,0,1,0,0);
 }

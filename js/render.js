@@ -64,7 +64,10 @@ function h01(n){ const s=Math.sin(n*12.9898)*43758.5453; return s - Math.floor(s
 function fidgetAction(sType){ const t=UNIT_ACTION[sType]; return t ? Object.keys(t)[0] : null; }
 
 function resize(){
-  dpr = window.devicePixelRatio || 1;
+  // QUAL.dprCap caps the backing-store resolution only when the adaptive controller has degraded under
+  // sustained load (Infinity/native at full quality → identical to before). See js/quality.js.
+  const _cap = (typeof QUAL!=='undefined' && QUAL.dprCap) ? QUAL.dprCap : Infinity;
+  dpr = Math.min(_cap, window.devicePixelRatio || 1);
   cv.width  = Math.round(innerWidth*dpr);  cv.height = Math.round(innerHeight*dpr);
   cv.style.width = innerWidth+'px';         cv.style.height = innerHeight+'px';
   syncHud();
@@ -174,13 +177,17 @@ function render(state){
   const z=state.zoom||1, vx=state.camX, vy=state.camY;
 
   // ---- phase 1: clear whole backing store in identity/device space ----
+  if(PERF.on) PERF.mark('clear');
   ctx.setTransform(1,0,0,1,0,0);
   ctx.fillStyle='#05080d'; ctx.fillRect(0,0,cv.width,cv.height);
+  if(PERF.on) PERF.lap('clear');
 
   // ---- HUB panorama loading scene (solo extraction cinematic): full-screen, replaces the
   //      world + HUD. The DOM HUD is hidden by body.scene-hubload while this phase plays. ----
   if(state.extractFlight && state.extractFlight.phase==='panorama' && typeof drawHubLoadingScene==='function'){
+    if(PERF.on) PERF.mark('panorama');
     drawHubLoadingScene(state);
+    if(PERF.on) PERF.lap('panorama');
     return;
   }
 
@@ -200,21 +207,32 @@ function render(state){
   const y1=Math.min(state.H, ((vy+viewH()/z)/TILE|0)+1);
 
   // ---- terrain ----
-  for(let ty=y0;ty<y1;ty++)for(let tx=x0;tx<x1;tx++){
-    if(!state.explored[ty*state.W+tx]) continue;
-    drawTile(state,tx,ty, tx*TILE+ox, ty*TILE+oy);
+  if(PERF.on) PERF.mark('terrain');
+  if(PERF.opts.terrainChunks && ATLAS_READY){
+    renderTerrainChunks(state, z, x0,y0,x1,y1);
+  } else {
+    for(let ty=y0;ty<y1;ty++)for(let tx=x0;tx<x1;tx++){
+      if(!state.explored[ty*state.W+tx]) continue;
+      drawTile(state,tx,ty, tx*TILE+ox, ty*TILE+oy);
+    }
   }
+  if(PERF.on) PERF.lap('terrain');
 
   // ---- water/magma surface overlay: caustic shimmer + tide highlight + lava cracks/core (js/water.js) ----
+  if(PERF.on) PERF.mark('water');
   if(typeof drawWater==='function') drawWater(state, x0,y0,x1,y1);
   if(state.hub && typeof drawHubOverlays==='function') drawHubOverlays(state, x0,y0,x1,y1);
+  if(PERF.on) PERF.lap('water');
 
   // ---- ambient particles: BACK pass (low mist) — behind the depth-sorted sprites ----
+  if(PERF.on) PERF.mark('partBack');
   if(typeof drawParticles==='function') drawParticles(state, x0,y0,x1,y1, 'back');
+  if(PERF.on) PERF.lap('partBack');
 
   // ---- buildings + mega sprites + units: ALL depth-sorted by ground-line Y so a unit
   //      BEHIND a tall building/landmark is occluded by it (drawn first) and a unit in
   //      FRONT draws over it. Sprite transparency makes the occlusion pixel-correct. ----
+  if(PERF.on) PERF.mark('depthBuild');
   const depth=[];
   if(state.megaSprites) for(const m of state.megaSprites) depth.push({y:megaSortY(m), m});
   // FEAT_SIZE walk-under topography features: cull to view + gate on explored BEFORE the sort
@@ -254,7 +272,9 @@ function render(state){
       depth.push({y:e.y, u:e});
     }
   }
+  if(PERF.on){ PERF.lap('depthBuild'); PERF.mark('depthSort'); }
   depth.sort((a,b)=>a.y-b.y);
+  if(PERF.on){ PERF.lap('depthSort'); PERF.mark('depthDraw'); }
   for(const d of depth){
     if(d.b) drawBuilding(state, d.b, ox,oy, d.dim);
     else if(d.m) drawOneMega(state, d.m, ox,oy, x0,y0,x1,y1);
@@ -262,17 +282,20 @@ function render(state){
     else if(d.g) drawGoldmine(state, d.g, ox,oy, d.dim);
     else drawUnit(state, d.u, ox,oy);
   }
+  if(PERF.on) PERF.lap('depthDraw');
   // Training Grounds: trainees are storedIn (skipped by the depth loop) — draw them live, on
   // top of the facility, standing on their shooting-range lanes.
   if(state.hub && typeof drawHubTrainees==='function') drawHubTrainees(state, ox, oy);
   if(state.extractFlight && typeof drawExtractionFlight==='function') drawExtractionFlight(state);
 
   // ---- ambient particles: FRONT pass (fireflies/embers/snow/dust/motes) — over the sprites ----
+  if(PERF.on) PERF.mark('partFront');
   if(typeof drawParticles==='function') drawParticles(state, x0,y0,x1,y1, 'front');
 
   // ---- HUB decorative drones: a dedicated pass AFTER the depth sort so they fly on top of
   //      every building (even the tallest HQ), drawn small + high. Cosmetic, module-local. ----
   if(state.hub && typeof drawHubDrones==='function') drawHubDrones(state);
+  if(PERF.on){ PERF.lap('partFront'); PERF.mark('laser'); }
 
   // ---- laser shot FX: glowing bolts from each shooter's gun muzzle to its target ----
   for(const e of state.entities){
@@ -290,7 +313,9 @@ function render(state){
   }
 
   // ---- fog overlay ----
+  if(PERF.on){ PERF.lap('laser'); PERF.mark('fog'); }
   drawFog(state,ox,oy,x0,y0,x1,y1);
+  if(PERF.on){ PERF.lap('fog'); PERF.mark('overlays'); }
 
   // ---- placement ghost ----
   if(state.placing){ drawPlacement(state,ox,oy); }
@@ -317,9 +342,14 @@ function render(state){
     ctx.fillRect(0,0,viewW(),cssH);
   }
   if(typeof isGamePaused==='function' && isGamePaused()) drawPausedOverlay();
+  // Episode VII "flash": full-screen nuke cinematic over the (shaken, dying) world. Manages its own
+  // device-space transform; the DOM HUD is hidden by body.scene-flash while this phase plays.
+  if(state.extractFlight && state.extractFlight.phase==='nuke' && typeof drawNukeFinale==='function') drawNukeFinale(state);
   ctx.setTransform(1,0,0,1,0,0);
+  if(PERF.on){ PERF.lap('overlays'); PERF.mark('minimap'); }
 
   renderMinimap(state);   // separate canvas — unaffected by the #cv transform
+  if(PERF.on) PERF.lap('minimap');
 }
 
 function drawPausedOverlay(){
@@ -394,17 +424,78 @@ function drawPausedOverlay(){
 // the visible repetition of a single tile across a field. `full` (floor) uses all
 // 8 symmetries (4 rotations × mirror — valid since floors are seamless+flat); a
 // feature (rock/tree) only mirrors horizontally so it keeps its "up".
-function blitTileOriented(r, px, py, v, full){
+// Oriented atlas-tile blit into an ARBITRARY context g (the main ctx for live drawing, or a chunk's ctx
+// for the terrain cache bake). Identical geometry either way, so the cache reproduces the live output.
+function _blitOrientedTo(g, r, px, py, v, full){
   const S = TILE+1;
   if(!full){                                  // feature: optional horizontal mirror only
-    if(v<0.5){ ctx.drawImage(ATLAS_IMG, r[0],r[1],r[2],r[3], px,py, S,S); return; }
-    ctx.save(); ctx.translate(px+S/2, py+S/2); ctx.scale(-1,1);
-    ctx.drawImage(ATLAS_IMG, r[0],r[1],r[2],r[3], -S/2,-S/2, S,S); ctx.restore(); return;
+    if(v<0.5){ g.drawImage(ATLAS_IMG, r[0],r[1],r[2],r[3], px,py, S,S); return; }
+    g.save(); g.translate(px+S/2, py+S/2); g.scale(-1,1);
+    g.drawImage(ATLAS_IMG, r[0],r[1],r[2],r[3], -S/2,-S/2, S,S); g.restore(); return;
   }
   const o=(v*4)|0;                            // 0..3 quarter-turns
-  ctx.save(); ctx.translate(px+TILE/2, py+TILE/2); ctx.rotate(o*1.5708);
-  if(((v*8)|0)&1) ctx.scale(-1,1);            // half also mirror → 8 orientations
-  ctx.drawImage(ATLAS_IMG, r[0],r[1],r[2],r[3], -S/2,-S/2, S,S); ctx.restore();
+  g.save(); g.translate(px+TILE/2, py+TILE/2); g.rotate(o*1.5708);
+  if(((v*8)|0)&1) g.scale(-1,1);              // half also mirror → 8 orientations
+  g.drawImage(ATLAS_IMG, r[0],r[1],r[2],r[3], -S/2,-S/2, S,S); g.restore();
+}
+function blitTileOriented(r, px, py, v, full){ _blitOrientedTo(ctx, r, px, py, v, full); }
+
+/* ===== terrain chunk cache (PERF.opts.terrainChunks) ============================================
+   Bakes the STATIC atlas terrain (floor/rock/tree) of a TC_SIZE×TC_SIZE-tile chunk into an offscreen
+   canvas at the CURRENT device resolution (zoom×dpr). Each frame we then blit ~O(visible chunks) images
+   instead of re-drawing ~O(visible tiles) atlas cells — the win for big maps fully zoomed out. The bake
+   uses the SAME one-pass atlas→device scaling as the live path, so chunk content matches; only a fractional
+   camera offset adds a sub-pixel resample at blit time (measured small). Water + procedural-fallback tiles
+   animate, so they're recorded as "live" and drawn on top under the world transform. Whole-cache invalidate
+   on zoom/dpr/map change; per-chunk re-bake when its explored-tile count changes (fog reveal). Atlas-only. */
+const TC_SIZE = 8;
+let _tcCache = new Map();           // "cx,cy" -> {cnv, live:[[tx,ty],…], cnt}
+let _tcFor = null, _tcZoom = 0, _tcDpr = 0;
+function _tcExploredCount(state, ccx, ccy){
+  const W=state.W, H=state.H, ex=state.explored;
+  const tx0=ccx*TC_SIZE, ty0=ccy*TC_SIZE, tx1=Math.min(W,tx0+TC_SIZE), ty1=Math.min(H,ty0+TC_SIZE);
+  let n=0; for(let ty=ty0;ty<ty1;ty++){ const row=ty*W; for(let tx=tx0;tx<tx1;tx++) if(ex[row+tx]) n++; }
+  return n;
+}
+function _tcBake(state, ccx, ccy, z, cnt){
+  const sc=z*dpr, S=TILE+1;
+  const dev=Math.max(1, Math.ceil((TC_SIZE*TILE+1)*sc));   // +1 tile-overscan so chunk edges abut like live tiles
+  const cnv=document.createElement('canvas'); cnv.width=dev; cnv.height=dev;
+  const g=cnv.getContext('2d'); g.scale(sc,sc);            // draw in world units → device resolution (one-pass, matches live)
+  const live=[], W=state.W,H=state.H;
+  const tx0=ccx*TC_SIZE, ty0=ccy*TC_SIZE, tx1=Math.min(W,tx0+TC_SIZE), ty1=Math.min(H,ty0+TC_SIZE);
+  for(let ty=ty0;ty<ty1;ty++) for(let tx=tx0;tx<tx1;tx++){
+    const i=ty*W+tx; if(!state.explored[i]) continue;
+    const t=state.tiles[i];
+    if(t===T_WATER){ live.push([tx,ty]); continue; }        // animated water → live overlay
+    const b=state.biome[i], v=state.variant[i];
+    const slot=t===T_ROCK?'rock':t===T_TREE?'tree':'floor';
+    const r=spriteFor(b,slot);
+    if(!r){ live.push([tx,ty]); continue; }                 // procedural fallback (atlas missing / volcanic anim) → live
+    _blitOrientedTo(g, r, (tx-tx0)*TILE, (ty-ty0)*TILE, v, slot==='floor');
+  }
+  return { cnv, live, cnt };
+}
+function renderTerrainChunks(state, z, x0,y0,x1,y1){
+  if(_tcFor!==state || _tcZoom!==z || _tcDpr!==dpr){ _tcCache.clear(); _tcFor=state; _tcZoom=z; _tcDpr=dpr; }
+  if(_tcCache.size>320) _tcCache.clear();                  // bound memory on big maps (re-bakes only visible chunks next frame)
+  const cx0=Math.floor(x0/TC_SIZE), cy0=Math.floor(y0/TC_SIZE), cx1=Math.floor((x1-1)/TC_SIZE), cy1=Math.floor((y1-1)/TC_SIZE);
+  const live=[];
+  ctx.save(); ctx.setTransform(dpr,0,0,dpr,0,0);            // blit chunks 1:1 in CSS space (only POSITION is camera-fractional)
+  for(let cy=cy0;cy<=cy1;cy++) for(let cx=cx0;cx<=cx1;cx++){
+    if(cx<0||cy<0) continue;
+    const cnt=_tcExploredCount(state,cx,cy); if(!cnt) continue;
+    const key=cx+','+cy; let ch=_tcCache.get(key);
+    if(!ch || ch.cnt!==cnt){ ch=_tcBake(state,cx,cy,z,cnt); _tcCache.set(key,ch); }
+    const cssX=(cx*TC_SIZE*TILE-state.camX)*z, cssY=VIEW_TOP+(cy*TC_SIZE*TILE-state.camY)*z;
+    ctx.drawImage(ch.cnv, cssX, cssY, ch.cnv.width/dpr, ch.cnv.height/dpr);
+    for(let k=0;k<ch.live.length;k++) live.push(ch.live[k]);
+  }
+  ctx.restore();                                           // back to the world transform
+  for(let k=0;k<live.length;k++){ const tx=live[k][0], ty=live[k][1];
+    if(tx<x0||tx>=x1||ty<y0||ty>=y1) continue;
+    drawTile(state,tx,ty, tx*TILE, ty*TILE);               // water/procedural live, world space
+  }
 }
 function drawTile(state,tx,ty,px,py){
   const i=ty*state.W+tx;
@@ -928,11 +1019,27 @@ function drawHubTrainees(state, ox, oy){
   drawHubTraineeShots(state, draw, target, targets, TRAINEE_SCALE, ox, oy);
 }
 
+// Strategic-zoom sprite LOD: only at MINIMUM and near-minimum zoom (ZOOM_MIN=0.35), where each sprite is
+// barely ~11–14px. We still draw the unit's actual sprite (it stays recognizable) but as a LIGHT sprite —
+// a single static frame with NONE of the per-frame idle-"life" animation, action-anim selection, facing
+// bookkeeping, or per-unit HUD (hp bar / rank stars / control-group badge / co-op pip), all of which are
+// illegible at this zoom yet cost real work ×(units on screen). Near-min-zoom-only (PERF.opts.spriteLod).
+const SPRITE_LOD_ZOOM = 0.45;
 function drawUnit(state,u,ox,oy){
   const px=u.x+ox, py=u.y+oy;
   const r=u.r;
   const alt = u.air?16:0;   // flyers are drawn raised
   const vh = unitDrawH(u);   // drawn sprite height (incl. hero 15% bump) — HUD/ring scale to this, not collision r
+
+  if(PERF.opts.spriteLod && (state.zoom||1) < SPRITE_LOD_ZOOM){
+    const sType = u.spriteType || u.type;
+    const anim = unitWalk(sType, u.owner);
+    if(u.selected){ ctx.strokeStyle='#8effb0'; ctx.lineWidth=2; ctx.beginPath(); ctx.ellipse(px, py-alt+vh*0.3, vh*0.34, vh*0.14, 0,0,6.28); ctx.stroke(); }
+    if(anim){ blitFrame(u, px, py-alt, anim, vh, 0); }                    // light: static frame, no idle/action anim, no HUD
+    else { ctx.fillStyle = isRedSide(u.owner)?'#c0392b':(u.ctrl==='p2'?'#c47a1f':'#3b7fd0'); ctx.fillRect(px-r*0.6, py-alt-r*0.6, r*1.2, r*1.2); }
+    if(u.hitFx>0) u.hitFx-=1/60;                                          // keep the transient decaying so it doesn't freeze
+    return;
+  }
 
   // ---- movement state for sprite animation (updated each render frame) ----
   const lax = u._ax==null?u.x:u._ax, lay = u._ay==null?u.y:u._ay;
@@ -1094,9 +1201,11 @@ function drawRings(ox,oy){
 }
 
 /* ---- minimap ---- */
-function renderMinimap(state){
-  const W=mm.width, H=mm.height;
-  mmx.fillStyle='#05080d'; mmx.fillRect(0,0,W,H);
+// Terrain + topography-feature layer of the minimap — the expensive O(W*H) tile scan. Extracted so the
+// cached path (minimapCache) can rasterize it into an offscreen base at a low cadence while the OFF path
+// draws it straight into mmx every frame, byte-identical to the original.
+function _mmDrawBase(state, g, W, H){
+  g.fillStyle='#05080d'; g.fillRect(0,0,W,H);
   const sx=W/state.W, sy=H/state.H;
   for(let ty=0;ty<state.H;ty++)for(let tx=0;tx<state.W;tx++){
     const i=ty*state.W+tx;
@@ -1108,7 +1217,7 @@ function renderMinimap(state){
     else if(t===T_TREE)  c = b===B_DESERT?'#2e4a2a': b===B_VOLCANIC?'#1c1411':'#16241a';
     else                 c = BIOME_MINI[b] || '#1c2a1e';
     if(!state.visible[i]) c=shade(c,-30);
-    mmx.fillStyle=c; mmx.fillRect(tx*sx,ty*sy,Math.ceil(sx),Math.ceil(sy));
+    g.fillStyle=c; g.fillRect(tx*sx,ty*sy,Math.ceil(sx),Math.ceil(sy));
   }
   // topography features: their footprint cells are now plain floor, so re-dot them
   // (same colors the T_TREE/T_ROCK tiles used) over the feature's FEAT_SIZE block.
@@ -1120,8 +1229,33 @@ function renderMinimap(state){
     let c = f.slot==='rock' ? (b===B_VOLCANIC?'#3a241c': b===B_ICE?'#3a4854':'#3a3d44')
                             : (b===B_DESERT?'#2e4a2a': b===B_VOLCANIC?'#1c1411':'#16241a');
     if(!state.visible[si]) c=shade(c,-30);
-    mmx.fillStyle=c; mmx.fillRect(f.tx*sx, f.ty*sy, Math.ceil(sx*fw), Math.ceil(sy*fh));
+    g.fillStyle=c; g.fillRect(f.tx*sx, f.ty*sy, Math.ceil(sx*fw), Math.ceil(sy*fh));
   } }
+}
+
+// minimapCache: keep the terrain/feature base on an offscreen canvas, re-rasterized at ~10Hz (the dim/fog
+// shading changes slowly — a reveal shows within ~100ms, imperceptible), then blit it each frame and draw
+// live entity blips + the viewport rect at full rate. Removes the full O(W*H) scan on ~5 of every 6 frames.
+// Module-local (NOT stored on state) so save serialization is untouched; rebuilt on map/state or size change.
+let _mmBase=null, _mmBaseCtx=null, _mmTick=0, _mmBaseFor=null;
+const MM_BASE_PERIOD=6;
+
+function renderMinimap(state){
+  const W=mm.width, H=mm.height;
+  const sx=W/state.W, sy=H/state.H;
+  if(PERF.opts.minimapCache){
+    if(!_mmBase || _mmBase.width!==W || _mmBase.height!==H){
+      _mmBase=document.createElement('canvas'); _mmBase.width=W; _mmBase.height=H;
+      _mmBaseCtx=_mmBase.getContext('2d'); _mmBaseFor=null;
+    }
+    if(_mmBaseFor!==state){ _mmBaseFor=state; _mmTick=0; }   // new map/state → rebuild immediately
+    if(_mmTick<=0){ _mmDrawBase(state,_mmBaseCtx,W,H); _mmTick=MM_BASE_PERIOD; }
+    _mmTick--;
+    mmx.drawImage(_mmBase,0,0);
+  } else {
+    _mmDrawBase(state, mmx, W, H);
+  }
+  // ---- live per-frame layer: entity blips + viewport rect (both paths, drawn into mmx) ----
   for(const e of state.entities){
     if(e.dead||e.storedIn) continue;
     if(e.type==='goldmine'){ const N=FEAT_SIZE, ftx=(e.ftx!=null)?e.ftx:(((e.x/TILE)|0)-(N>>1)), fty=(e.fty!=null)?e.fty:(((e.y/TILE)|0)-(N>>1)); const si=(fty+N-1)*state.W+(ftx+(N>>1)); if(state.explored[si]){ mmx.fillStyle='#b06bff'; mmx.fillRect(ftx*sx, fty*sy, Math.ceil(sx*N), Math.ceil(sy*N));} continue; }

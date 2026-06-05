@@ -42,6 +42,7 @@ const VOICE = (function(){
   for(let i=0;i<POOL;i++){ const a = new Audio(); a.preload='none'; chans.push(a); }
   let rr = 0;
   let crawlAudio = null;
+  let sceneAudio = null;          // dedicated channel for scripted-cutscene narration (its own slot, like the crawl)
   let unlocked = false;
 
   // Bark rate-limit: chain-selecting several units (esp. same-type interns) spams their voice.
@@ -98,20 +99,37 @@ const VOICE = (function(){
       const p = a.play(); if(p && p.catch) p.catch(()=>{});
     },
     stopCrawl(){ if(crawlAudio){ try { crawlAudio.pause(); } catch(e){} crawlAudio = null; } },
+    // scripted-cutscene line (Nino's Ep VII monologue, etc.) on its own channel. `onended` fires when
+    // the clip finishes OR is missing/blocked, so the sequencer can advance; a no-op when audio is off
+    // (calls onended immediately so the cutscene still progresses on its text-timer).
+    playScene(id, onended, rate){
+      this.stopScene();
+      if(!enabled || id == null || typeof scenePath !== 'function'){ if(onended) onended(); return; }
+      const a = new Audio(); a.preload = 'auto';
+      let cb = onended;
+      const done = ()=>{ const f=cb; cb=null; if(f) f(); };   // fire at most once (ended OR error)
+      a.onended = done; a.onerror = done;
+      a.muted = false; a.volume = volume; a.src = scenePath(id);
+      if(rate && rate>0){ a.defaultPlaybackRate = a.playbackRate = rate;   // slow/speed the line; keep the natural timbre
+        try{ a.preservesPitch = a.mozPreservesPitch = a.webkitPreservesPitch = true; }catch(_){} }
+      sceneAudio = a;
+      const p = a.play(); if(p && p.catch) p.catch(()=>{});   // autoplay blocked → sequencer's max-timer advances
+    },
+    stopScene(){ if(sceneAudio){ try { sceneAudio.pause(); } catch(e){} sceneAudio.onended=null; sceneAudio.onerror=null; sceneAudio=null; } },
     unlock,
 
     /* ---- settings API (HUD) ---- */
     isEnabled(){ return enabled; },
     setEnabled(v){
       enabled = !!v;
-      if(!enabled){ chans.forEach(a=>{ try { a.pause(); } catch(e){} }); this.stopCrawl(); }
+      if(!enabled){ chans.forEach(a=>{ try { a.pause(); } catch(e){} }); this.stopCrawl(); this.stopScene(); }
       save();
     },
     toggle(){ this.setEnabled(!enabled); return enabled; },
     getVolume(){ return volume; },
     setVolume(v){
       volume = Math.max(0, Math.min(1, +v || 0));
-      chans.forEach(a=>{ a.volume = volume; }); if(crawlAudio) crawlAudio.volume = volume;
+      chans.forEach(a=>{ a.volume = volume; }); if(crawlAudio) crawlAudio.volume = volume; if(sceneAudio) sceneAudio.volume = volume;
       save();
     },
   };

@@ -66,7 +66,9 @@ function update(state, dt){
   if(state.hub && typeof updateHub==='function') updateHub(state, dt);
 
   // ---- fog of war ----
+  if(PERF.on) PERF.mark('fogSim');
   computeFog(state);
+  if(PERF.on) PERF.lap('fogSim');
 
   // ---- ambient topography particles (fireflies/embers/snow/dust/motes; pure visual) ----
   if(typeof updateParticles==='function') updateParticles(state, dt);

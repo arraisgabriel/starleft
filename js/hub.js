@@ -238,7 +238,47 @@ function updateExtraction(state, dt){
     const s=spd*dt; f.x+=dx/d*Math.min(s,d); f.y+=dy/d*Math.min(s,d); return false;
   };
   if(f.phase==='in' && step(f.hqX,f.hqY,flySpeed)){ f.phase='hover'; f.t=0; }
-  else if(f.phase==='hover' && f.t>1.6){ f.phase='out'; f.t=0; }
+  else if(f.phase==='hover' && f.t>1.6){
+    if(mapIndex===6){
+      // EPISODE VII — "the flash": the bomber is on the roof and the sky goes white. Instead of flying
+      // out to the panorama, a nuke consumes the whole map (FX: js/nuke_finale.js drawNukeFinale).
+      f.phase='nuke'; f.t=0; f.detonated=false; f.camBaseX=state.camX; f.camBaseY=state.camY;
+      if(typeof document!=='undefined') document.body.classList.add('scene-flash');
+      if(typeof MUSIC!=='undefined' && MUSIC.playCinematic && typeof MUSIC_FLASH!=='undefined') MUSIC.playCinematic(MUSIC_FLASH);   // cue the bomb-drop track
+    } else { f.phase='out'; f.t=0; }
+  }
+  else if(f.phase==='nuke'){
+    const T_IMP=(typeof NUKE_T_IMPACT!=='undefined'?NUKE_T_IMPACT:10.0);
+    const T_END=(typeof NUKE_T_ANIM_END!=='undefined'?NUKE_T_ANIM_END:28.0);
+    if(!f.detonated && f.t>=T_IMP){                 // the bomb hits the crash site
+      f.detonated=true;
+      epSevenFlashAftermath(state);                 // memorialize the whole roster + carry nobody — but the base, units and
+      if(typeof clearToast==='function') clearToast();   // buildings STAY on the map (just violently shaken, then whited out)
+    }
+    // screen-shake: nothing while the bomb falls; from the moment it hits the ground the shake GRADUALLY
+    // INTENSIFIES, peaking right as the screen goes fully white at T_END (then moot — the hold is pure white).
+    let amp=0;
+    if(f.t>=T_IMP && f.t<T_END){
+      const g=Math.max(0, Math.min(1, (f.t-T_IMP)/(T_END-T_IMP)));   // 0 at impact → 1 at white-out
+      amp = 42*(0.10 + 0.90*Math.pow(g,1.3));                        // builds from a tremor to a big, heavy climax
+    }
+    // lower frequencies → a slower, heavier rumble/sway (shakes harder but far less jittery)
+    const sx=Math.sin(f.t*20)+0.5*Math.sin(f.t*37+2.0), sy=Math.sin(f.t*17+1.7)+0.5*Math.sin(f.t*31+0.4);
+    state.camX=(f.camBaseX||state.camX)+sx*amp;
+    state.camY=(f.camBaseY||state.camY)+sy*amp;
+    // once the white gives way to the STARLEFT-title / extraction-panorama scene, drive its drifting drones
+    if(f.t >= (typeof NUKE_T_TITLE_IN!=='undefined'?NUKE_T_TITLE_IN:10)){
+      if(!f.panoStarted){ f.panoStarted=true; if(typeof resetHubPanoDrones==='function') resetHubPanoDrones(); }
+      if(typeof updateHubPanoDrones==='function') updateHubPanoDrones(state, dt);
+    }
+    // music finale: the echo intensifies over the cue's last 6s; the music plays to NUKE_DURATION then STOPS,
+    // and a resounding echo rings for NUKE_T_ECHO_TAIL more seconds — the scene cuts to the hub only AFTER it ends.
+    const _dur=(typeof NUKE_DURATION!=='undefined'?NUKE_DURATION:67.0);
+    const _tail=(typeof NUKE_T_ECHO_TAIL!=='undefined'?NUKE_T_ECHO_TAIL:6.0);
+    if(typeof MUSIC!=='undefined' && MUSIC.cinematicEcho && f.t>=_dur-6 && f.t<_dur) MUSIC.cinematicEcho((f.t-(_dur-6))/6);
+    if(!f.musicStopped && f.t>=_dur){ f.musicStopped=true; if(typeof MUSIC!=='undefined' && MUSIC.stopCinematic) MUSIC.stopCinematic(); }
+    if(f.t >= _dur+_tail) enterHubFlashAftermath(state);
+  }
   // The bomber has left the mission map → hand off to the HUB panorama loading scene
   // (js/hub_loading.js). It plays for HUB_LOAD_DURATION (13s) as a hidden HUB loader; the
   // DOM HUD is hidden meanwhile so the canvas shows the full-screen cinematic.
@@ -253,7 +293,7 @@ function updateExtraction(state, dt){
   }
 }
 function drawExtractionFlight(state){
-  const f=state.extractFlight; if(!f || f.phase==='panorama') return;   // panorama draws its own bomber
+  const f=state.extractFlight; if(!f || f.phase==='panorama' || f.phase==='nuke') return;   // panorama draws its own bomber; the nuke consumes it
   const u={type:'bomber', owner:'player', x:f.x, y:f.y, air:true, r:16, _face:f.phase==='out'?(f.exitX<f.x?-1:1):(f.hqX<f.x?-1:1)};
   const anim=unitWalk('bomber','player');
   if(anim && anim.ready) blitFrame(u,f.x,f.y,anim,UNIT_SPRITE_H.bomber, ((state.time*8)|0)%anim.frames.length);
@@ -278,8 +318,12 @@ function enterHubFromCombat(state){
   const reward=hubRewardFor(state);
   CAMPAIGN.m3 += reward.total;
   CAMPAIGN.lastReward=reward;
-  hubBuildRosterFromCombat(state);
-  if(typeof captureHeroes==='function') captureHeroes(state);
+  if(mapIndex===6 && typeof epSevenFlashAftermath==='function'){
+    epSevenFlashAftermath(state);            // Episode VII "the flash": memorialize all, carry nobody (co-op host path; solo uses enterHubFlashAftermath)
+  } else {
+    hubBuildRosterFromCombat(state);
+    if(typeof captureHeroes==='function') captureHeroes(state);
+  }
   CAMPAIGN.mode='hub'; CAMPAIGN.visit++; CAMPAIGN.gambled=false; CAMPAIGN.dispatch={mdcId:null, staged:[]};
   G=newHubMap();
   mapIndex = Math.max(0, Math.min(CAMPAIGN.nextMapIndex, MAPS.length-1));
@@ -289,6 +333,48 @@ function enterHubFromCombat(state){
   clampCam(G); computeFog(G); refreshUI(); running=true;
   if(typeof syncPauseBtn==='function') syncPauseBtn();
   if(netRole==='host' && typeof mpHostEnterHub==='function') mpHostEnterHub();
+  toast('Arrived at the H.U.B. — M3$ +'+reward.total);
+}
+
+// Episode VII "the flash": memorialize EVERY dossier'd player veteran (the nuke takes them all) and
+// carry nobody forward. Path-independent — called from the solo nuke detonation AND the co-op host
+// hub entry. recordFallen dedups by id, so calling it here is safe even if death-cleanup also records.
+function epSevenFlashAftermath(state){
+  for(const u of (state.entities||[])){
+    if(u && u.owner==='player' && u.lore && typeof recordFallen==='function') recordFallen(u);
+  }
+  CAMPAIGN.roster=[];
+  if(typeof setCarryover==='function') setCarryover([]);   // no veterans carry to Episode VIII
+  if(typeof resetHeroes==='function') resetHeroes();        // (no heroes exist before Ep VIII; defensive)
+}
+
+// Solo Episode VII hand-off: the nuke has played; drop into the H.U.B. with the roster gone, spawn the
+// returning Nino, and start his mandatory monologue framed on him. Mirrors enterHubFromCombat's tail
+// but skips the roster build / hero capture (everyone died — handled at detonation by epSevenFlashAftermath).
+function enterHubFlashAftermath(state){
+  if(typeof document!=='undefined'){ document.body.classList.remove('scene-flash'); document.body.classList.remove('scene-hubload'); }
+  const reward=hubRewardFor(state);
+  CAMPAIGN.m3 += reward.total; CAMPAIGN.lastReward=reward;     // you DID liquidate THE CONGLOMERATE — meta merit survives the flash
+  CAMPAIGN.mode='hub'; CAMPAIGN.visit++; CAMPAIGN.gambled=false; CAMPAIGN.dispatch={mdcId:null, staged:[]};
+  if(typeof MUSIC!=='undefined' && MUSIC.stopCinematic) MUSIC.stopCinematic();   // the flash track ends as the hub map loads
+  G=newHubMap();
+  mapIndex=Math.max(0, Math.min(CAMPAIGN.nextMapIndex, MAPS.length-1));   // → Episode VIII
+  if(typeof resetDialogs==='function') resetDialogs();
+  syncHud();
+  // spawn the returning Nino as a cutscene actor (Episode VIII re-introduces him via its own heroes[])
+  const nc=(typeof MAPS!=='undefined' && MAPS[7] && MAPS[7].heroes && MAPS[7].heroes[0]) || null;
+  let nino=null;
+  if(typeof _placeHero==='function'){
+    const type=(nc&&nc.type)||'lobbyist';
+    const lvl=Math.max(0, Math.min((typeof CAREER!=='undefined'?CAREER.maxStars:30), (nc&&nc.level)||11));
+    _placeHero(G, G.cfg.player, 0, type, (nc&&nc.name)||'Nino', lvl,
+               (typeof CAREER!=='undefined'?CAREER.xpFor(lvl):0), null, (nc&&nc.dossier)||{name:'Nino'}, (nc&&nc.sprite)||'nino');
+    nino=G.entities.find(e=>e.hero && e.heroId==='Nino');
+  }
+  clampCam(G); computeFog(G); refreshUI(); running=true;
+  if(typeof syncPauseBtn==='function') syncPauseBtn();
+  if(typeof startFlashCutscene==='function') startFlashCutscene(G, nino, (typeof NINO_FLASH_LINES!=='undefined'?NINO_FLASH_LINES:[]));
+  else { hubFocusUltra(G); clampCam(G); }
   toast('Arrived at the H.U.B. — M3$ +'+reward.total);
 }
 

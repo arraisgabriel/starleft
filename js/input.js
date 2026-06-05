@@ -255,6 +255,7 @@ function centerOnSelection(){
 
 // edge + key scroll
 function updateCamera(state,dt){
+  if(state && state.flashCutscene){ edgeTopHold=0; return; }   // a cutscene owns the camera (it eases onto the speaker)
   if(isGamePaused()){ edgeTopHold=0; return; }
   const spd=620*dt;
   let dx=0,dy=0;

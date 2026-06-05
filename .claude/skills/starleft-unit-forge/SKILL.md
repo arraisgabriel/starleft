@@ -39,7 +39,7 @@ Read these so you're matching the game, not re-deriving it:
 - **`references/art-prompt-guide.md`** — how to turn a description into a `UNITS[type]` entry in
   `_dev/gen/gen_units.mjs` and run the generate→slice pipeline (the shared style rules are already
   baked into the generator). The backbone of Phases 3–4.
-- For lore/faction tone (especially heroes), skim `../starleft-mapmaker/references/world-bible.md`.
+- For lore/faction tone (especially heroes), skim `docs/world-bible.md` (the canonical world bible).
 
 Then read the live source so your edits match reality:
 - `js/config.js` — the `DEF` table (and `BUILD_HIRES` just below it) and, for heroes, the `MAPS`

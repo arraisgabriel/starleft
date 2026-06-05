@@ -13,6 +13,11 @@ addEventListener('orientationchange', ()=>resize());
    --------------------------------------------------------------------- */
 function gestureBegin(e){
   if(!G||G.over) return;
+  // mandatory cutscene (e.g. Nino's Ep VII flash monologue): a tap only advances the line — no
+  // selection/commands reach the world until it finishes.
+  if(G.flashCutscene){ e.preventDefault(); if(typeof advanceFlashCutscene==='function') advanceFlashCutscene(); return; }
+  // Ep VII "flash" cinematic (bomb drop → mushroom → white → STARLEFT logo → panorama): no interaction.
+  if(G.extractFlight && G.extractFlight.phase==='nuke'){ e.preventDefault(); return; }
   if(typeof isGamePaused==='function' && isGamePaused()){
     e.preventDefault();
     return;
@@ -335,12 +340,17 @@ let uiTick=0;
 let autoTick=0;
 function loop(now){
   const dt=Math.min(0.05,(now-last)/1000); last=now;
+  if(PERF.on){
+    if(PERF.driving){ requestAnimationFrame(loop); return; }      // benchmark window drives render itself — fully yield this frame
+    PERF.frameStart(now);
+  }
   if(G){
     if(running && !G.over){
       if(window.USE_ROLLBACK && NET.rbSession){
         NET.rbStepLoop(dt);                                        // rollback co-op: fixed-tick session drives the sim on every peer
       } else if(netRole==='solo'){
-        update(G,dt);                                              // single-player: rAF drives the sim
+        if(PERF.on){ PERF.mark('simUpdate'); update(G,dt); PERF.lap('simUpdate'); }  // single-player: rAF drives the sim
+        else update(G,dt);
         autoTick+=dt; if(autoTick>60){ autoTick=0; autosaveGame(); }
       } else if(netRole==='host'){
         // host sim + snapshot broadcast run via the host-clock (real-time dt); the worker keeps them
@@ -351,10 +361,13 @@ function loop(now){
       }
     }
     updateCamera(G,dt);
+    if(typeof updateFlashCutscene==='function') updateFlashCutscene(G,dt);   // mandatory scripted dialog (camera ease + line advance); no-op unless G.flashCutscene
     if(typeof updateHubDrones==='function') updateHubDrones(G,dt);   // decorative HUB drones — netRole-agnostic, gated on state.hub internally
     render(G);
     if(typeof updateSprintRipple==='function') updateSprintRipple(G);   // glue the sprint ripple to its world point
     uiTick+=dt; if(uiTick>0.2){ uiTick=0; if(running) refreshUI(); }
+    if(typeof QUAL!=='undefined') QUAL.tick(now);                        // adaptive quality: degrade dpr only under sustained load
+    if(PERF.on) PERF.frameEnd();
   }
   requestAnimationFrame(loop);
 }

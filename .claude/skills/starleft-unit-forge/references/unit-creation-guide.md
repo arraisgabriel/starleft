@@ -175,7 +175,7 @@ Differences from a rank-and-file unit:
   `u.spriteType=sprite`, `u.lore.fixed=dossier`. Heroes persist across maps via `carryoverHeroes[]`.
 - **Dossier tone**: dark, satirical, second-person-adjacent; the fields feed the in-game dossier
   panel and the campaign's career/memorial system. Keep it coherent with the world bible
-  (`../starleft-mapmaker/references/world-bible.md`).
+  (`docs/world-bible.md`).
 
 A hero still goes through art-gen → slice → DEF? No: if the hero reuses an existing base `type`'s
 stats, you do **not** add a new `DEF` entry — only the recolored sprite set + the `heroes[]` entry.

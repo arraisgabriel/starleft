@@ -1111,3 +1111,18 @@ const LORE_SAY_FALLBACK = {
     ]
   }
 };
+
+/* ---- Scripted-cutscene lines (NOT life-events; played in order via VOICE.playScene + the
+   cutscene sequencer, js/cutscene.js). NINO_FLASH_LINES is Nino's mandatory monologue in the
+   H.U.B. after Episode VII's "flash" wipes the roster — he came back to fix things and save the
+   fallen, with a subtle resurrection hint and NO mention of the GRAAL (see docs/world-bible.md §2).
+   Voiced in Nino's clone voice ('cast1'); clips render to assets/audio/voice/scene/<id>.mp3. ---- */
+const NINO_FLASH_LINES = [
+  { id:'nino_flash_00', text:"So that's what winning costs. A whole quarter gone in one flash. Every line we had went silent at once." },
+  { id:'nino_flash_01', text:"I was three streets out when the sky went white. Close enough to feel it. Far enough to still be standing here." },
+  { id:'nino_flash_02', text:"I didn't crawl back for the money. There's always more money. I came back for them, the names on that wall." },
+  { id:'nino_flash_03', text:"I spent this company's first life writing laws that made people disappear. I'm done making things disappear." },
+  { id:'nino_flash_04', text:"There's talk. That the wall doesn't have to be the last word. I won't promise you a miracle yet, but I didn't claw out of that crater to bury anyone twice." },
+  { id:'nino_flash_05', text:"So get me a room and a reputation. I'll get you the rest. We're not done, not while I can still read a cap table." },
+];
+if(typeof window!=='undefined') window.NINO_FLASH_LINES = NINO_FLASH_LINES;

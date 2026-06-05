@@ -26,7 +26,9 @@
     <div class="lbl">Episode <span id="mapname">—</span></div>
     <div id="objective">Disrupt the competition.</div>
     <div id="top-menu">
-      <button class="tc-btn" id="btn-topmenu" title="Menu" aria-haspopup="true" aria-expanded="false">☰ Menu<span id="topmenu-badge" class="tc-badge" style="display:none;">0</span></button>
+      <button class="tc-btn" id="btn-topmenu" title="Menu" aria-haspopup="true" aria-expanded="false">☰ Menu</button>
+      <!-- badge lives OUTSIDE the button: the button's clip-path would otherwise clip this overflowing corner badge -->
+      <span id="topmenu-badge" class="tc-badge" style="display:none;">0</span>
       <div id="topmenu-panel" style="display:none;">
         <button class="tc-btn" id="btn-pause" title="Pause game">Pause</button>
         <button class="tc-btn" id="btn-news" title="Toggle live news ticker">News</button>
@@ -378,12 +380,16 @@
   <div class="overlay" id="endScreen" style="display:none;"></div>
   <!-- Extraction "leave them behind?" confirmation -->
   <div class="overlay" id="extractConfirm" style="display:none;"></div>
+  <!-- Scripted-cutscene caption (lower third), e.g. Nino's Ep VII flash monologue -->
+  <div id="cutsceneCaption"><div class="cs-text"></div><div class="cs-hint"></div></div>
 </div>
 
 <!-- Game code — classic scripts sharing one global scope, loaded in dependency order.
      config FIRST (constants/DEF/MAPS); main LAST (the only file with top-level executing
      code: event listeners + RAF loop). See js/<file>.js headers. -->
 <script src="js/config.js"></script>
+<script src="js/perf.js"></script><!-- render benchmark + instrumentation harness; OFF (zero hot-loop cost) unless ?perf=1 -->
+<script src="js/quality.js"></script><!-- adaptive render-quality controller (QUAL); inert at full FPS, degrades dpr only under sustained load -->
 <script src="js/tips.js"></script>
 <script src="js/assets.js"></script>
 <script src="js/muzzle_data.js"></script>
@@ -405,11 +411,14 @@
 <script src="js/lore.js"></script>
 <script src="js/ai.js"></script>
 <script src="js/render.js"></script>
+<script src="js/lyrics.js"></script><!-- runtime-loaded timed song subtitles (LRC/plain); text lives in assets/, not code -->
+<script src="js/nuke_finale.js"></script><!-- Episode VII "flash" detonation FX (extractFlight.phase==='nuke'); needs render.js globals (cv/ctx/dpr) -->
 <script src="js/voice.js"></script>
 <script src="js/dialogs.js"></script>
 <script src="js/water.js"></script>
 <script src="js/ui.js"></script>
 <script src="js/input.js"></script>
+<script src="js/cutscene.js"></script><!-- mandatory scripted-dialog sequencer (Nino's Ep VII flash monologue); needs voice.js + camera helpers -->
 <script src="js/core.js"></script>
 <script src="js/save.js"></script>
 <script src="js/ultra_news_data.js"></script>
@@ -431,6 +440,7 @@
 <script src="js/net/mp-ui.js"></script>
 <script src="js/net/voice-chat.js"></script>
 <script src="js/net/features.js"></script>
+<script src="js/perf_scenarios.js"></script><!-- perf harness deterministic worst-case scenes (test-only; needs loadMap/newHubMap/mkUnit) -->
 <script src="js/main.js"></script>
 <script src="js/net/determinism.js"></script><!-- rollback determinism experiment: NET.determinismTest() (Stage 0), NET.simHash() -->
 <script src="js/net/rollback-game.js"></script><!-- rollback Game adapter: NET.makeStarleftGame(), NET.rbRoundTripTest(), NET.rbLocalTest() -->

@@ -33,7 +33,7 @@ entities. You never write tiles by hand.
 
 ```js
 {
-  // ---- identity & narrative (see world-bible.md §8) ----
+  // ---- identity & narrative (see docs/world-bible.md §9) ----
   name:      'VIII — The Title',        // Roman numeral MUST match array position & episode
   enemyName: 'THE FACTION',             // appears in crawl + objective (cohesion)
   crawl: {
@@ -105,7 +105,7 @@ Notes on consumption by the generator:
 
 ## 3. Biome cookbook (copy-paste, then tune)
 
-These are the exact recipes the shipping maps use. Pick by the mood you want (see world-bible §6).
+These are the exact recipes the shipping maps use. Pick by the mood you want (see docs/world-bible.md §7).
 
 **Grassland — scrappy origin / deceptive calm** (Ep I)
 ```js
@@ -290,7 +290,7 @@ what they report before shipping.)*
    no longer matches its array position. Check every map, not just the new one.
 4. **Objective/enemy mismatch** — objective says "FOUR campuses" but `enemies` has three (or vice
    versa). Pure narrative break; scripts can only warn, so verify by hand.
-5. **Biome/story mismatch** — a betrayal chapter on cheerful grassland. Re-read world-bible §6.
+5. **Biome/story mismatch** — a betrayal chapter on cheerful grassland. Re-read docs/world-bible.md §7.
 6. **Pre-scaled coordinates** — multiplying by 1.7 yourself. Don't; write in `w`×`h` space.
 7. **Stranded economy** — all rich gold next to enemies, none near the player (or vice versa). The
    previewer's distance read helps catch this.

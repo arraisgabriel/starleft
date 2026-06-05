@@ -14,7 +14,33 @@
 body.scene-hubload #topbar,
 body.scene-hubload #bottom,
 body.scene-hubload #lns-ingame,
-body.scene-hubload #minimap-wrap { display:none !important; }
+body.scene-hubload #minimap-wrap,
+body.scene-flash #topbar,
+body.scene-flash #bottom,
+body.scene-flash #lns-ingame,
+body.scene-flash #minimap-wrap,
+body.scene-cutscene #topbar,
+body.scene-cutscene #bottom,
+body.scene-cutscene #lns-ingame,
+body.scene-cutscene #minimap-wrap { display:none !important; }
+
+/* ---------- Scripted-cutscene caption (lower third; e.g. Nino's Ep VII flash monologue) ----------
+   Shown over #cv while body.scene-cutscene hides the HUD; pointer-events pass through to the canvas
+   so a tap anywhere advances the line (handled in gestureBegin). */
+#cutsceneCaption {
+  position:fixed; left:0; right:0; bottom:0; z-index:60; display:none;
+  padding:30px 22px 34px; text-align:center; pointer-events:none;
+  background:linear-gradient(to top, rgba(4,6,11,.95), rgba(4,6,11,.62) 58%, rgba(4,6,11,0));
+}
+#cutsceneCaption.show { display:block; }
+#cutsceneCaption .cs-text {
+  max-width:760px; margin:0 auto; font-size:21px; line-height:1.62; color:#e6eef7;
+  letter-spacing:.3px; text-shadow:0 2px 14px rgba(0,0,0,.85);
+}
+#cutsceneCaption .cs-hint {
+  margin-top:15px; font-size:12px; letter-spacing:1.6px; text-transform:uppercase; color:#7fa6c8; opacity:.75;
+}
+@media (max-width:820px){ #cutsceneCaption .cs-text { font-size:17px; } #cutsceneCaption { padding:20px 16px 24px; } }
 
 /* ---------- Overlays ---------- */
 .overlay {
