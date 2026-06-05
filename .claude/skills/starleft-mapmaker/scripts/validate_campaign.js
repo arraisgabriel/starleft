@@ -12,6 +12,7 @@
  *   • terrain.biomes use only known biome kinds
  *   • enemyName actually appears in the crawl and objective (cohesion)        [warn]
  *   • placed enemy count is reflected by a number in the objective            [warn]
+ *   • crawl.summary present for the M.D.C. dispatch briefing (2–4 sentences)  [warn]
  *
  * Usage:  node .claude/skills/starleft-mapmaker/scripts/validate_campaign.js [repoRoot]
  * Exit:   0 if no hard errors (warnings allowed), 1 if any hard error.
@@ -90,6 +91,13 @@ for (let i = 0; i < MAPS.length; i++) {
     if (typeof m.crawl.episode !== 'string') err(i, 'missing `crawl.episode`');
     if (typeof m.crawl.title !== 'string') err(i, 'missing `crawl.title`');
     if (typeof m.crawl.text !== 'string' || !m.crawl.text) err(i, 'missing `crawl.text`');
+    /* deployment summary (M.D.C. briefing) — warn-only: legacy maps fall back to crawl.text */
+    if (m.crawl.summary == null || m.crawl.summary === '')
+      warn(i, 'missing `crawl.summary` — the M.D.C. dispatch screen will fall back to the crawl text; write a 2–4 sentence spoiler-free briefing');
+    else if (typeof m.crawl.summary !== 'string')
+      err(i, '`crawl.summary` must be a string');
+    else if (m.crawl.summary.trim().length < 60)
+      warn(i, `crawl.summary is very short (${m.crawl.summary.trim().length} chars) — aim for a 2–4 sentence briefing`);
   }
 
   /* sequence: Roman numeral in name + episode label must match array position.

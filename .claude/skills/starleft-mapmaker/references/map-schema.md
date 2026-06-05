@@ -40,6 +40,7 @@ entities. You never write tiles by hand.
     episode: 'EPISODE VIII',            // 'EPISODE ' + Roman, matches name
     title:   'THE TITLE',               // uppercase
     text:    'Para 1.\n\nPara 2.\n\nDark closing line....',
+    summary: 'Stage, enemy, stakes — 2-4 sentences, spoiler-free.',  // M.D.C. dispatch briefing (see below)
   },
   objective: 'THE FACTION holds N campuses — liquidate all N.',  // N == enemies.length
 
@@ -94,6 +95,13 @@ entities. You never write tiles by hand.
 ```
 
 Notes on consumption by the generator:
+- `crawl.summary` (OPTIONAL but expected for shipping episodes) — a **2–4 sentence, spoiler-free
+  briefing** rendered on the **M.D.C. (Mission Dispatch)** screen before the player launches the
+  episode. Distilled from `crawl.text` + the arc: name the stage, the enemy, and the stakes — never
+  the twist (no nukes/betrayal/resurrection/who-dies reveals). Same dark startup-satire voice; plain
+  text, no `{token}` templating; not spoken by TTS (only `crawl.text` is). If absent, the briefing
+  falls back to the first two sentences of `crawl.text`, so author one to control what's shown.
+  `validate_campaign.js` **warns** (does not fail) when a shipped map omits it.
 - `enemies[i].defenders` = starting soldier count at that campus; `extraBarracks:true` gives it a
   second People Ops (tougher to crack).
 - If a `goldNode` or base lands on water/rock, the generator clears its footprint and carves a land
@@ -260,7 +268,8 @@ A frozen-tech "post-IPO" beat: you've won, and now you fight the hollow machine 
   startGold:1500, startWorkers:8, startSoldiers:6, startBarracks:true,
   graceTime:115, waveTimer:118,
   crawl:{ episode:'EPISODE VIII', title:'THE DEAD CAP TABLE',
-    text:'You went public. The confetti is already landfill.\n\nWhat\'s left of everyone you liquidated has been rolled into THE ESTATE — an automated holding company with no people in it, only standing orders and your own playbook turned against you.\n\nThe ones who carried names this far are tired. Reclaim the cold campuses, shut down the machine, and find out if winning was ever a thing that could happen....' },
+    text:'You went public. The confetti is already landfill.\n\nWhat\'s left of everyone you liquidated has been rolled into THE ESTATE — an automated holding company with no people in it, only standing orders and your own playbook turned against you.\n\nThe ones who carried names this far are tired. Reclaim the cold campuses, shut down the machine, and find out if winning was ever a thing that could happen....',
+    summary:'You went public, and the market congratulated you by turning everyone you ruined into one machine. THE ESTATE is a holding company with no people in it — just standing orders and your own playbook, running on cold automated campuses. Reclaim the five frozen sites and shut it down. The veterans who carried names this far are tired.' },
   w:96, h:78,
   seed:8,
   // a tech grid gone to frost — the monopoly you built, abandoned and freezing over

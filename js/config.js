@@ -169,7 +169,8 @@ const MAPS = [
 
 Fueled by Venture Funding and free cold brew, your unpaid INTERNS must mine Funding, scale the team, and bury the rival startup DISRUPTR INC. before the runway runs out.
 
-The board is watching. Synergy awaits....` },
+The board is watching. Synergy awaits....`,
+      summary:`Zero revenue, one slick pitch deck, and a runway measured in weeks. Mine Funding, scale your unpaid interns, and bury the rival startup DISRUPTR INC. before the cold brew runs dry. Move fast. Break things.` },
     w:48, h:40,
     seed:1,
     player:{ x:5, y:33 },
@@ -194,7 +195,8 @@ The board is watching. Synergy awaits....` },
 
 But across the Silicon Wastes sprawls MEGACORP — a bloated incumbent with infinite cash, two HR departments, and a litigation army.
 
-Weaponize your buzzwords, circle back, and disrupt MegaCorp into bankruptcy. There is no exit strategy but victory....` },
+Weaponize your buzzwords, circle back, and disrupt MegaCorp into bankruptcy. There is no exit strategy but victory....`,
+      summary:`You've gone unicorn — wildly overvalued and out of patience. Across the Silicon Wastes sprawls MEGACORP: a bloated incumbent with infinite cash and a litigation army. Weaponize the buzzwords and disrupt them into bankruptcy. There's no exit but victory.` },
     w:54, h:46,
     seed:2,
     player:{ x:6, y:6 },
@@ -216,7 +218,8 @@ Weaponize your buzzwords, circle back, and disrupt MegaCorp into bankruptcy. The
     startGold:600, startWorkers:6, startSoldiers:3, startBarracks:true,
     graceTime:95, waveTimer:105,
     crawl:{ episode:'EPISODE III', title:'THE MERGER',
-      text:'Your war chest is overflowing and the press calls you a "category leader."\n\nBut your two biggest rivals just MERGED into SYNERGY CORP — a hydra with two campuses, double the middle managers, and a synergy mandate.\n\nThe board wired you extra Funding. Mine fast, scale faster, and bankrupt BOTH campuses before the all-hands.' },
+      text:'Your war chest is overflowing and the press calls you a "category leader."\n\nBut your two biggest rivals just MERGED into SYNERGY CORP — a hydra with two campuses, double the middle managers, and a synergy mandate.\n\nThe board wired you extra Funding. Mine fast, scale faster, and bankrupt BOTH campuses before the all-hands.',
+      summary:`The press calls you a category leader — so your two biggest rivals merged to take you out. SYNERGY CORP is a hydra: three campuses, double the middle managers, one synergy mandate. The board wired extra Funding. Mine fast and bankrupt every campus before the all-hands.` },
     w:64, h:54,
     seed:3,
     player:{ x:6, y:46 },
@@ -238,7 +241,8 @@ Weaponize your buzzwords, circle back, and disrupt MegaCorp into bankruptcy. The
     startGold:800, startWorkers:6, startSoldiers:4, startBarracks:true,
     graceTime:100, waveTimer:110,
     crawl:{ episode:'EPISODE IV', title:'THE MONOPOLY ENDGAME',
-      text:'You are no longer a startup. You are a threat.\n\nOMNICORP — the incumbent that owns the cloud, the ads, and the antitrust lawyers — just activated its TWIN headquarters to crush you for good.\n\nThis is the exit. Burn down BOTH OMNICORP HQs and the market is yours. Go public, or go home.' },
+      text:'You are no longer a startup. You are a threat.\n\nOMNICORP — the incumbent that owns the cloud, the ads, and the antitrust lawyers — just activated its TWIN headquarters to crush you for good.\n\nThis is the exit. Burn down BOTH OMNICORP HQs and the market is yours. Go public, or go home.',
+      summary:`You're not a startup anymore — you're a threat. OMNICORP owns the cloud, the ads, and the antitrust lawyers, and it just lit up its headquarters to crush you for good. Raze every OMNICORP HQ and the market is yours. Go public, or go home.` },
     w:72, h:60,
     seed:4,
     player:{ x:7, y:7 },
@@ -260,7 +264,8 @@ Weaponize your buzzwords, circle back, and disrupt MegaCorp into bankruptcy. The
     startGold:1000, startWorkers:7, startSoldiers:4, startBarracks:true,
     graceTime:95, waveTimer:105,
     crawl:{ episode:'EPISODE V', title:'THE CARTEL',
-      text:'You won. You are the monopoly. And monopolies make enemies.\n\nYour three biggest victims — bankrupt but vengeful — pooled their severance into THE CARTEL: a three-campus coalition sworn to disrupt the disruptor.\n\nThe board tripled your war chest. Mine relentlessly, field an overwhelming army, and liquidate all THREE campuses — one quarterly review at a time.' },
+      text:'You won. You are the monopoly. And monopolies make enemies.\n\nYour three biggest victims — bankrupt but vengeful — pooled their severance into THE CARTEL: a three-campus coalition sworn to disrupt the disruptor.\n\nThe board tripled your war chest. Mine relentlessly, field an overwhelming army, and liquidate all THREE campuses — one quarterly review at a time.',
+      summary:`You won — you're the monopoly, and monopolies make enemies. Your bankrupt victims pooled their severance into THE CARTEL, a coalition sworn to disrupt the disruptor. The board tripled your war chest; field an overwhelming army and liquidate every campus, one quarterly review at a time.` },
     w:80, h:66,
     seed:5,
     player:{ x:6, y:58 },
@@ -282,7 +287,8 @@ Weaponize your buzzwords, circle back, and disrupt MegaCorp into bankruptcy. The
     startGold:1300, startWorkers:8, startSoldiers:5, startBarracks:true,
     graceTime:100, waveTimer:110,
     crawl:{ episode:'EPISODE VI', title:'THE HOSTILE BOARD',
-      text:'There is one threat left, and it signs your paychecks.\n\nTHE BOARD has staged a coup — three fortified strongholds, infinite lawyers, and a vote to replace you with "synergistic leadership."\n\nThis is the real endgame. Raze all THREE board strongholds and the company — the market, the future — is yours alone. Vest, or die.' },
+      text:'There is one threat left, and it signs your paychecks.\n\nTHE BOARD has staged a coup — three fortified strongholds, infinite lawyers, and a vote to replace you with "synergistic leadership."\n\nThis is the real endgame. Raze all THREE board strongholds and the company — the market, the future — is yours alone. Vest, or die.',
+      summary:`One threat remains, and it signs your paychecks. THE BOARD has staged a coup — fortified strongholds, infinite lawyers, and a vote for "synergistic leadership." Raze every board stronghold and the company is yours alone. Vest, or die.` },
     w:88, h:72,
     seed:6,
     player:{ x:7, y:7 },
@@ -304,7 +310,8 @@ Weaponize your buzzwords, circle back, and disrupt MegaCorp into bankruptcy. The
     startGold:1600, startWorkers:8, startSoldiers:6, startBarracks:true,
     graceTime:125, waveTimer:125,
     crawl:{ episode:'EPISODE VII', title:'THE DUNES AND THE DRIFTS',
-      text:'You crushed the board. You ARE the market. So the survivors did the only thing left — they merged into one.\n\nTHE CONGLOMERATE spans a frozen-and-scorched wasteland: EIGHT subsidiary campuses ringing a dead sea, defended by every lawyer money can rent.\n\nBut two of your own outposts were abandoned out on the dunes and the drifts — reach them and they\'re yours again. Mine the wastes, reclaim what\'s lost, and liquidate all eight. This is the last quarter. Make it count.' },
+      text:'You crushed the board. You ARE the market. So the survivors did the only thing left — they merged into one.\n\nTHE CONGLOMERATE spans a frozen-and-scorched wasteland: EIGHT subsidiary campuses ringing a dead sea, defended by every lawyer money can rent.\n\nBut two of your own outposts were abandoned out on the dunes and the drifts — reach them and they\'re yours again. Mine the wastes, reclaim what\'s lost, and liquidate all eight. This is the last quarter. Make it count.',
+      summary:`You crushed the board; you ARE the market — so the survivors merged into one. THE CONGLOMERATE rings a dead sea with eight subsidiary campuses across a frozen-and-scorched waste, defended by every lawyer money can rent. Two of your own outposts lie abandoned on the dunes — reclaim them, then liquidate all eight. This is the last quarter.` },
     // Double the area of the previous biggest map (88×72 = 6,336 tiles → 124×102 ≈ 12,648).
     w:124, h:102,
     seed:7,
@@ -344,7 +351,8 @@ Weaponize your buzzwords, circle back, and disrupt MegaCorp into bankruptcy. The
     startGold:350, startWorkers:4, startSoldiers:2, startBarracks:false,
     graceTime:105, waveTimer:112,
     crawl:{ episode:'EPISODE VIII', title:'THE DOWN ROUND',
-      text:'The blast took everything. The campuses, the war chest, the names you carried this far — all of it gone to light and ash. The memorial is the only thing that scaled.\n\nYou come to broke in the crater of your own empire, and you are not alone in it. A&O — Alpha & Omega, the fund that buys the beginning and the end — filed the paperwork before the dust settled. They picked up your wreckage at auction and call it a portfolio.\n\nNo runway. No team — almost. NINO walked back into the crater the day he heard: the lobbyist who bought your first hundred votes, owed favors in one hand and nothing left to lose in the other. He says he can buy you a room and a reputation. After that, you are on your own.\n\nTwo A&O campuses squat on the bones of what you built. Mine the ruins, hire whoever is left, and take it back one down round at a time. Begin again, or stay buried.' },
+      text:'The blast took everything. The campuses, the war chest, the names you carried this far — all of it gone to light and ash. The memorial is the only thing that scaled.\n\nYou come to broke in the crater of your own empire, and you are not alone in it. A&O — Alpha & Omega, the fund that buys the beginning and the end — filed the paperwork before the dust settled. They picked up your wreckage at auction and call it a portfolio.\n\nNo runway. No team — almost. NINO walked back into the crater the day he heard: the lobbyist who bought your first hundred votes, owed favors in one hand and nothing left to lose in the other. He says he can buy you a room and a reputation. After that, you are on your own.\n\nTwo A&O campuses squat on the bones of what you built. Mine the ruins, hire whoever is left, and take it back one down round at a time. Begin again, or stay buried.',
+      summary:`You come to broke in the crater of your own empire — the campuses, the war chest, the names you carried, all gone to ash. A&O, the fund that buys the beginning and the end, picked up your wreckage at auction and calls it a portfolio. NINO walks back in with a room and a reputation to lend. Mine the ruins, hire whoever's left, and take it back one down round at a time.` },
     w:52, h:44,
     seed:8,
     player:{ x:5, y:38 },
@@ -381,7 +389,8 @@ Weaponize your buzzwords, circle back, and disrupt MegaCorp into bankruptcy. The
     startGold:550, startWorkers:5, startSoldiers:3, startBarracks:true,
     graceTime:100, waveTimer:108,
     crawl:{ episode:'EPISODE IX', title:'THE PROOF OF CONCEPT',
-      text:'You clawed the company out of the crater and put A&O\'s Research campus to the torch. In its vault, behind the NDAs and the dead-man switches, you found it: the blueprint for the GRAAL.\n\nA brain chip that lifts a mind out of a failing body and writes it into another — metal, if it has to be. The names on your memorial wall stop looking quite so final. The board calls it the cure for the only churn that ever mattered.\n\nBut a blueprint is not a product, and A&O wants its stolen IP back. Stand up the lab, ship a proof of concept, and liquidate all THREE A&O research campuses before they repossess your future. Resurrection has a roadmap now. Hit the deadline.' },
+      text:'You clawed the company out of the crater and put A&O\'s Research campus to the torch. In its vault, behind the NDAs and the dead-man switches, you found it: the blueprint for the GRAAL.\n\nA brain chip that lifts a mind out of a failing body and writes it into another — metal, if it has to be. The names on your memorial wall stop looking quite so final. The board calls it the cure for the only churn that ever mattered.\n\nBut a blueprint is not a product, and A&O wants its stolen IP back. Stand up the lab, ship a proof of concept, and liquidate all THREE A&O research campuses before they repossess your future. Resurrection has a roadmap now. Hit the deadline.',
+      summary:`You clawed the company out of the crater and torched A&O's research vault — and walked out with the blueprint for the GRAAL, the chip A&O calls the cure for the only churn that matters. But a blueprint is not a product, and A&O wants its stolen IP back. Stand up the lab, ship a proof of concept, and liquidate all three research campuses before they repossess your future.` },
     w:58, h:48,
     seed:9,
     player:{ x:6, y:42 },
@@ -412,7 +421,8 @@ Weaponize your buzzwords, circle back, and disrupt MegaCorp into bankruptcy. The
     startGold:0, startWorkers:0, startSoldiers:0, startBarracks:false,   // infiltration: no funding, no workers, no factory — just the crew
     graceTime:130, waveTimer:120,
     crawl:{ episode:'EPISODE X', title:'THE ACQUIHIRE',
-      text:'The proof of concept works on paper and nowhere else. A blueprint is not a mind, and no one left on your payroll can bridge the gap.\n\nNino found the one who can. Her name is BIBA — the engineer who first dreamed the GRAAL, before A&O folded her lab into a portfolio and folded her into a cell. They do not want her working. They want her retained.\n\nA&O calls the place an office. It runs for miles — open plan, no doors that open from your side, talent filed in rows. The line to the people inside went silent long ago.\n\nThis time Nino does not walk in alone — but he walks in light. No funding, no factory, no campus at your back: only the names you carried this far, the survivors of every quarter since the crater. Reach the center, get Biba and the intern out, seize the outpost beyond the cell, and liquidate the three campuses between you and the way back.\n\nThere is no exit interview. Only an exit....' },
+      text:'The proof of concept works on paper and nowhere else. A blueprint is not a mind, and no one left on your payroll can bridge the gap.\n\nNino found the one who can. Her name is BIBA — the engineer who first dreamed the GRAAL, before A&O folded her lab into a portfolio and folded her into a cell. They do not want her working. They want her retained.\n\nA&O calls the place an office. It runs for miles — open plan, no doors that open from your side, talent filed in rows. The line to the people inside went silent long ago.\n\nThis time Nino does not walk in alone — but he walks in light. No funding, no factory, no campus at your back: only the names you carried this far, the survivors of every quarter since the crater. Reach the center, get Biba and the intern out, seize the outpost beyond the cell, and liquidate the three campuses between you and the way back.\n\nThere is no exit interview. Only an exit....',
+      summary:`The proof of concept works on paper and nowhere else — you need the engineer who first dreamed the GRAAL. Her name is BIBA, and A&O has her filed in a cell inside a place it calls an office: open plan, no doors that open from your side. No funding, no factory — only the veterans you carried this far. Reach the center, get her out, and cut a path back through three campuses.` },
     w:90, h:270,
     seed:10,
     player:{ x:45, y:10 },
@@ -478,7 +488,8 @@ Weaponize your buzzwords, circle back, and disrupt MegaCorp into bankruptcy. The
     startGold:1100, startWorkers:7, startSoldiers:5, startBarracks:true,
     graceTime:120, waveTimer:116,
     crawl:{ episode:'EPISODE XI', title:'THE LAUNCH',
-      text:'Biba is free and the blueprint is yours, but a blueprint is not a factory. A&O has the only one that works, The DARK TOWER.\n\nThe altar stands at the top of A&O\'s peninsula: a black spire on a spit of land in a coolant sea, where the GRAAL writes the dying into fresh metal and the dead into product. The keynote is scheduled; the line to the people who live inside went quiet long ago.\n\n{?party}The pilgrimage walks in with you: {party} — the survivors of every battle since the crater, here to take the thing that was built to take them.{/party}{^party}You walk the road alone. Everyone who carried you this far went on ahead, into the ground.{/party}{?fallen} You carry the wall with you too — {fallen} — names A&O filed as churn, the reason you march toward the altar instead of away from it.{/fallen}{?biba} Biba says the chip cannot tell salvation from theft. She solders anyway.{/biba}\n\nFight down the guided road, liquidate all SIX A&O campuses between you and the sea, and seize the dark tower at the peninsula\'s end. Steal the GRAAL before they ship it.\n\n It`s time to bring them back.' },
+      text:'Biba is free and the blueprint is yours, but a blueprint is not a factory. A&O has the only one that works, The DARK TOWER.\n\nThe altar stands at the top of A&O\'s peninsula: a black spire on a spit of land in a coolant sea, where the GRAAL writes the dying into fresh metal and the dead into product. The keynote is scheduled; the line to the people who live inside went quiet long ago.\n\n{?party}The pilgrimage walks in with you: {party} — the survivors of every battle since the crater, here to take the thing that was built to take them.{/party}{^party}You walk the road alone. Everyone who carried you this far went on ahead, into the ground.{/party}{?fallen} You carry the wall with you too — {fallen} — names A&O filed as churn, the reason you march toward the altar instead of away from it.{/fallen}{?biba} Biba says the chip cannot tell salvation from theft. She solders anyway.{/biba}\n\nFight down the guided road, liquidate all SIX A&O campuses between you and the sea, and seize the dark tower at the peninsula\'s end. Steal the GRAAL before they ship it.\n\n It`s time to bring them back.',
+      summary:`Biba is free and the blueprint is yours — but a blueprint is not a factory, and A&O owns the only one that works: the DARK TOWER, a black spire on a peninsula in a coolant sea. The keynote is scheduled. Fight down the guided road, liquidate all six A&O labs between you and the sea, and seize the tower before they ship. It's time to bring them back.` },
     w:96, h:156,
     seed:11,
     player:{ x:48, y:8 },
@@ -518,5 +529,5 @@ Weaponize your buzzwords, circle back, and disrupt MegaCorp into bankruptcy. The
       {x:48,y:134,amt:3500},{x:42,y:144,amt:2000},{x:54,y:144,amt:2000},    // the altar prize (peninsula)
     ],
   },
-  {name:'XII — The Continuity Farm',enemyName:'A&O',aggression:2.00,startGold:3600,startWorkers:12,startSoldiers:12,startBarracks:true,graceTime:118,waveTimer:112,crawl:{episode:'EPISODE XII',title:'THE CONTINUITY FARM',text:'You rebuilt after the flash, but the new company was never alive. It was a cap table wearing a grief mask.\n\nA&O now leases the dead into refrigerated prototype bodies, charging subscription fees for memories that used to belong to people. Their Continuity Farm hums under black ice and server heat, promising immortality with a cancellation clause.\n\nYour veterans carry names. Your memorial carries more. Crack the farm, steal the transfer lattice, and decide which ghost gets equity again....'},objective:'A&O holds SIX continuity campuses — liquidate all six and seize the transfer lattice.',w:118,h:96,seed:12012,terrain:{biomes:['tech','ice'],temp:{axis:'diag',base:0.26,gradient:0.18,noise:0.14},freeze:0.24,seaFrac:0.14,mtnFrac:0.08,forest:0,beach:true},player:{x:8,y:88},enemies:[{x:106,y:8,defenders:7,extraBarracks:true},{x:106,y:84,defenders:7,extraBarracks:true},{x:58,y:10,defenders:6,extraBarracks:true},{x:62,y:84,defenders:6},{x:92,y:48,defenders:7,extraBarracks:true},{x:34,y:28,defenders:5}],goldNodes:[{x:6,y:90,amt:3600},{x:13,y:88,amt:3200},{x:9,y:80,amt:2800},{x:22,y:82,amt:2400},{x:55,y:52,amt:4200},{x:42,y:44,amt:3000},{x:76,y:42,amt:3000},{x:96,y:54,amt:2500},{x:110,y:12,amt:1900},{x:110,y:82,amt:1900},{x:58,y:6,amt:1900},{x:64,y:90,amt:1900}],lakes:[{x:56,y:48,r:7},{x:86,y:26,r:5},{x:30,y:66,r:4},{x:74,y:72,r:4}],rockClusters:[{x:48,y:25,n:18},{x:70,y:30,n:16},{x:88,y:62,n:18},{x:24,y:48,n:14},{x:60,y:68,n:16}],forests:[],thickets:[{x:38,y:34,w:22,h:14,density:0.72,mix:0.25,trail:'h'},{x:80,y:34,w:18,h:18,density:0.66,mix:0.15,trail:'v'}]}
+  {name:'XII — The Continuity Farm',enemyName:'A&O',aggression:2.00,startGold:3600,startWorkers:12,startSoldiers:12,startBarracks:true,graceTime:118,waveTimer:112,crawl:{episode:'EPISODE XII',title:'THE CONTINUITY FARM',text:'You rebuilt after the flash, but the new company was never alive. It was a cap table wearing a grief mask.\n\nA&O now leases the dead into refrigerated prototype bodies, charging subscription fees for memories that used to belong to people. Their Continuity Farm hums under black ice and server heat, promising immortality with a cancellation clause.\n\nYour veterans carry names. Your memorial carries more. Crack the farm, steal the transfer lattice, and decide which ghost gets equity again....',summary:`You rebuilt after the flash, but the new company was never alive — just a cap table wearing a grief mask. A&O now leases the dead into refrigerated bodies and bills subscriptions for memories that used to belong to people. Crack the six campuses of its Continuity Farm, seize the transfer lattice, and decide which ghost gets equity again.`},objective:'A&O holds SIX continuity campuses — liquidate all six and seize the transfer lattice.',w:118,h:96,seed:12012,terrain:{biomes:['tech','ice'],temp:{axis:'diag',base:0.26,gradient:0.18,noise:0.14},freeze:0.24,seaFrac:0.14,mtnFrac:0.08,forest:0,beach:true},player:{x:8,y:88},enemies:[{x:106,y:8,defenders:7,extraBarracks:true},{x:106,y:84,defenders:7,extraBarracks:true},{x:58,y:10,defenders:6,extraBarracks:true},{x:62,y:84,defenders:6},{x:92,y:48,defenders:7,extraBarracks:true},{x:34,y:28,defenders:5}],goldNodes:[{x:6,y:90,amt:3600},{x:13,y:88,amt:3200},{x:9,y:80,amt:2800},{x:22,y:82,amt:2400},{x:55,y:52,amt:4200},{x:42,y:44,amt:3000},{x:76,y:42,amt:3000},{x:96,y:54,amt:2500},{x:110,y:12,amt:1900},{x:110,y:82,amt:1900},{x:58,y:6,amt:1900},{x:64,y:90,amt:1900}],lakes:[{x:56,y:48,r:7},{x:86,y:26,r:5},{x:30,y:66,r:4},{x:74,y:72,r:4}],rockClusters:[{x:48,y:25,n:18},{x:70,y:30,n:16},{x:88,y:62,n:18},{x:24,y:48,n:14},{x:60,y:68,n:16}],forests:[],thickets:[{x:38,y:34,w:22,h:14,density:0.72,mix:0.25,trail:'h'},{x:80,y:34,w:18,h:18,density:0.66,mix:0.15,trail:'v'}]}
 ];

@@ -177,6 +177,13 @@ function render(state){
   ctx.setTransform(1,0,0,1,0,0);
   ctx.fillStyle='#05080d'; ctx.fillRect(0,0,cv.width,cv.height);
 
+  // ---- HUB panorama loading scene (solo extraction cinematic): full-screen, replaces the
+  //      world + HUD. The DOM HUD is hidden by body.scene-hubload while this phase plays. ----
+  if(state.extractFlight && state.extractFlight.phase==='panorama' && typeof drawHubLoadingScene==='function'){
+    drawHubLoadingScene(state);
+    return;
+  }
+
   // ---- phase 2: world space. dpr maps CSS->device px; VIEW_TOP is a fixed
   //      CSS band (applied before scale); zoom + camera translate the world.
   //      Everything below draws in raw world coords, so offsets are zero. ----
@@ -262,6 +269,10 @@ function render(state){
 
   // ---- ambient particles: FRONT pass (fireflies/embers/snow/dust/motes) — over the sprites ----
   if(typeof drawParticles==='function') drawParticles(state, x0,y0,x1,y1, 'front');
+
+  // ---- HUB decorative drones: a dedicated pass AFTER the depth sort so they fly on top of
+  //      every building (even the tallest HQ), drawn small + high. Cosmetic, module-local. ----
+  if(state.hub && typeof drawHubDrones==='function') drawHubDrones(state);
 
   // ---- laser shot FX: glowing bolts from each shooter's gun muzzle to its target ----
   for(const e of state.entities){
@@ -827,11 +838,50 @@ function drawBuilding(state,e,ox,oy,dim){
 // controller pip + minimap blips, shown only when networked (netRole!=='solo').
 function ctrlColor(ctrl){ return ctrl==='p2' ? '#ff9d3c' : '#7fd6ff'; }
 
+// Muzzle world-point for a TRAINEE, reusing the canonical muzzleWorld() math. muzzleWorld computes
+// the barrel at full unitDrawH and adds the flyer alt-raise, but trainees are drawn at `scale`
+// (TRAINEE_SCALE) and ground-locked on their lane — so scale the muzzle OFFSET down and drop the alt
+// so the bolt still leaves the drawn barrel pixel-for-pixel.
+function hubTraineeMuzzle(u, scale){
+  const mw=muzzleWorld(u), alt=(u.air?16:0);
+  return { x:u.x + (mw.x-u.x)*scale, y:u.y + (mw.y-(u.y-alt))*scale };
+}
+// In-session trainee fire cadence (render-only / cosmetic): each shooter loops fire → travel → reload,
+// staggered per unit, and each shot is aimed at a RANDOM downrange target so the beams fan across the
+// range. Uses the exact in-game bolt (drawLaserBolt) + muzzle anchoring (muzzleWorld).
+const TRAIN_FIRE_PERIOD = 1.05;   // seconds per shot (fire + reload)
+const TRAIN_FIRE_FLIGHT = 0.32;   // fraction of the cycle the bolt is travelling (rest = reload gap)
+// Draw the repeating laser bolts for the in-session trainees in `draw` (cosmetic; mirrors the combat
+// FX pass, which skips storedIn units). Each shooter picks a random UR target per shot, with a little
+// jitter, so the lanes crisscross like a live firing range.
+function drawHubTraineeShots(state, draw, target, targets, scale, ox, oy){
+  if(!targets || !targets.length) return;
+  // Honor prefers-reduced-motion like the other render-only effects (particles/water/neon): this is
+  // a persistent looping additive strobe on the live H.U.B. screen, so freeze it (no bolts) for users
+  // who opt out of motion. The trainees keep their static shooting pose; only the flashing stops.
+  if(typeof megaReducedMotion==='function' && megaReducedMotion()) return;
+  const hash=(typeof hubHash01==='function') ? hubHash01 : ((a,b,c)=>{ const n=Math.sin(a*127.1+b*311.7+c*74.7)*43758.5453; return n-Math.floor(n); });
+  for(const it of draw){
+    const u=it.u, t=(typeof hubUnitKey==='function') ? target.get(hubUnitKey(u)) : null;
+    if(!t || !t.shoot) continue;                                  // only firing (in-session) trainees
+    const seed=(u.id||0)+1;
+    const phase=hash(seed,0,3);                                   // 0..1 per-unit stagger
+    const cyc=(((state.time/TRAIN_FIRE_PERIOD)+phase)%1+1)%1;
+    if(cyc>=TRAIN_FIRE_FLIGHT) continue;                          // between shots — reloading
+    const p=cyc/TRAIN_FIRE_FLIGHT;                                // 0..1 bolt flight progress
+    const shotIx=Math.floor((state.time/TRAIN_FIRE_PERIOD)+phase);
+    const tg=targets[(hash(seed,shotIx,7)*targets.length)|0] || targets[0];
+    const jx=(hash(seed,shotIx,11)-0.5)*16, jy=(hash(seed,shotIx,13)-0.5)*12;   // small per-shot spread
+    const mz=hubTraineeMuzzle(u, scale);
+    const w=2.2*(it.vh/64)*((typeof muzzleW==='function')?muzzleW(u):1);        // same width formula as combat
+    drawLaserBolt(mz.x+ox, mz.y+oy, tg.x+jx+ox, tg.y+jy+oy, isRedSide(u.owner), w, p, false);
+  }
+}
 // H.U.B.-only: draw the locked trainees inside the Training Grounds. They're storedIn (so the main
 // depth pass skips them). Their spot + pose depend on STATE:
 //   • IDLE (awaiting a session) → wait in the LOBBY (lower-left open floor), facing LEFT, idle anim.
 //   • IN A SESSION (training)   → stand two-abreast in their own shooting LANE (mentor+junior), facing
-//     RIGHT, looping the shooting animation at the downrange targets.
+//     RIGHT, looping the shooting animation, firing laser bolts at the downrange targets.
 // First placement snaps; later target changes glide. Drawn back-to-front (y-sort) for correct overlap.
 function drawHubTrainees(state, ox, oy){
   if(typeof hubTrainees!=='function' || typeof hubFindTrainingGrounds!=='function') return;
@@ -872,6 +922,10 @@ function drawHubTrainees(state, ox, oy){
     if(it.anim) blitFrame(u, px, py, it.anim, it.vh, it.fi);
     else { ctx.fillStyle=isRedSide(u.owner)?'#c0392b':'#3b7fd0'; ctx.beginPath(); ctx.arc(px, py-it.vh*0.3, it.vh*0.2, 0, 6.28); ctx.fill(); }
   }
+  // laser/bullet FX — in-session trainees fire bolts at random downrange targets, drawn over the
+  // sprites like the combat laser pass (which skips these storedIn units).
+  const targets=(typeof hubTrainTargetPoints==='function') ? hubTrainTargetPoints(fac) : null;
+  drawHubTraineeShots(state, draw, target, targets, TRAINEE_SCALE, ox, oy);
 }
 
 function drawUnit(state,u,ox,oy){

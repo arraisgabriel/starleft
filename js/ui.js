@@ -29,7 +29,10 @@ function refreshUI(){
   } else if(!sel.length){
     elTitle.textContent='Nothing selected';
     elStats.textContent=''; if(elDossierBtn) elDossierBtn.style.display='none';
-    elDesc.innerHTML='<b>Tap</b> a unit to select; tap an enemy/mine/ground to attack, gather or move. <b>Drag</b> to pan, <b>pinch</b> (or wheel / +−) to zoom.<br><b>Units box-select:</b> Shift+drag or the <b>Select box</b> button. Select a <b>Worker</b> then a build button, then tap a spot. <b>Shift+1-9</b> set / <b>1-9</b> recall control group.';
+    // HUB has no combat — a concise, relevant line (also keeps the idle bar short on desktop).
+    elDesc.innerHTML = G.hub
+      ? 'Select a <b>unit</b>, or walk one up to a facility (<b>CONDO</b> · <b>M.D.C.</b> · <b>ULTRA</b> · <b>Training</b>) to manage it. <b>Drag</b> to pan, <b>pinch</b>/wheel to zoom.'
+      : '<b>Tap</b> a unit to select; tap an enemy/mine/ground to attack, gather or move. <b>Drag</b> to pan, <b>pinch</b> (or wheel / +−) to zoom.<br><b>Units box-select:</b> Shift+drag or the <b>Select box</b> button. Select a <b>Worker</b> then a build button, then tap a spot. <b>Shift+1-9</b> set / <b>1-9</b> recall control group.';
   } else if(sel.length>1){
     const counts={}; sel.forEach(s=>counts[s.type]=(counts[s.type]||0)+1);
     elTitle.textContent= sel.length+' units selected';
@@ -83,6 +86,13 @@ function refreshUI(){
 
   // production-queue cards live in the selected building's info panel
   updateProdQueue((sel.length===1 && sel[0].kind==='building' && (sel[0].owner==='player' || (G.hub && sel[0].hubPoi))) ? sel[0] : null);
+
+  // Layout hooks for the responsive bottom bar: flag HUB mode + the idle (nothing-selected)
+  // state so CSS can slim the desktop panel/minimap when idle in the HUB. Toggling #bottom's
+  // height trips the ResizeObserver, which re-syncs VIEW_BOT so the canvas viewport follows.
+  const bottomEl=document.getElementById('bottom');
+  if(bottomEl) bottomEl.classList.toggle('sel-empty', !G.placing && !sel.length);
+  document.body.classList.toggle('in-hub', !!G.hub);
 }
 
 // Preview a building in the info panel while the player is choosing where to
@@ -243,13 +253,11 @@ function buildHubCommands(sel){
   const owned=sel.filter(e=>e.owner==='player');
   const poi=sel.find(e=>e.hubPoi);
   const unit=owned.find(e=>e.kind==='unit');
-  if(poi && poi.hubPoi.kind==='condo'){
-    const c=CAMPAIGN.condos[poi.hubPoi.id], lvl=(c&&c.level)||0, cost=HUB.condoCosts[lvl];
-    addCmd('🏙️','Upgrade Condo',cost==null?null:cost,()=>hubUpgradeSelectedCondo());
-  }
-  if(poi && poi.hubPoi.kind==='mdc') buildHubMdcMenu(poi);
-  if(poi && poi.hubPoi.kind==='ultra') addCmd('📈','Speculate',HUB.gambleStake,()=>hubGamble());
-  if(poi && poi.hubPoi.kind==='training') addCmd('🎓','TRAINING GROUNDS',null,()=>showTrainingPanel());
+  // Each HUB facility opens its full-screen menu in the reusable shell (openHubMenu).
+  if(poi && poi.hubPoi.kind==='condo')    addCmd('🏙️','CONDO',null,()=>openCondoMenu(poi));
+  if(poi && poi.hubPoi.kind==='mdc')      addCmd('🛰️','M.D.C.',null,()=>openMdcMenu(poi));
+  if(poi && poi.hubPoi.kind==='ultra')    addCmd('◆','ULTRA',null,()=>openUltraMenu());
+  if(poi && poi.hubPoi.kind==='training') addCmd('🎯','TRAINING GROUNDS',null,()=>openTrainingMenu());
   if(unit){
     const key=hubUnitKey(unit), up=(CAMPAIGN.upgrades[key]||{}), il=up.implantLevel||0;
     addCmd('🧬','Implant',HUB.implantCosts[il]==null?null:HUB.implantCosts[il],()=>hubUpgradeSelectedUnit('implant'));
@@ -258,9 +266,6 @@ function buildHubCommands(sel){
   }
   elCmd.classList.toggle('has-cmds', elCmd.children.length>0);
   syncCmdLine();
-}
-function buildHubMdcMenu(poi){
-  addCmd('🚀','DISPATCH',null,()=>hubDispatchNextEpisode());
 }
 // Stop = hold position: cancel orders/motion for every selected player unit.
 function stopSelection(){
@@ -373,36 +378,99 @@ function showRoster(){
   showSub('rosterScreen');
 }
 
-/* ---- Training Grounds panel: animated trainee pairs, pairing, live countdowns ----
-   A full-screen overlay (live behind the running H.U.B.) listing staged trainees (to pair) and
-   active mentorships (with a regressive in-game-hour countdown). Cards animate via a RAF loop. */
-let trainSel=[];          // up to 2 selected staged unit keys (for pairing)
-let trainPanelRaf=0;      // requestAnimationFrame handle while the panel is open
-let trainPanelSig='';     // contents signature → rebuild cards only when something changes
+/* =====================================================================
+   HUB MENU SYSTEM — reusable full-screen building-menu shell.
+   One controller drives a pluggable `spec` for each facility (Training Grounds,
+   M.D.C., Condo, ULTRA). A spec = { id, icon, title, subtitle, build(body),
+   tick?(body), signature?() }. The shell keeps #topbar + the LNS ticker visible,
+   dims the HUB behind, rebuilds on signature change, and animates every unit-card
+   canvas in the body. Facilities open it from buildHubCommands.
+   ===================================================================== */
+let hubMenu = { raf:0, sig:'', spec:null };
+function hubMenuOpen(){ const v=document.getElementById('hubMenuView'); return !!(v && v.style.display!=='none'); }
+function openHubMenu(spec){
+  if(!spec) return;
+  hubMenu.spec=spec; hubMenu.sig='';
+  const set=(id,html)=>{ const e=document.getElementById(id); if(e) e.innerHTML=html||''; };
+  set('hubMenuIcon', spec.icon); set('hubMenuTitle', spec.title); set('hubMenuSub', spec.subtitle);
+  buildHubMenuBody();
+  document.body.classList.add('hub-menu-open');
+  showSub('hubMenuView');
+  hubMenuSyncTop();
+  if(typeof syncHud==='function'){ syncHud(); if(typeof G!=='undefined'&&G&&typeof clampCam==='function') clampCam(G); }
+  if(!hubMenu.raf) hubMenu.raf=requestAnimationFrame(hubMenuTick);
+}
+function closeHubMenu(){
+  hideSub('hubMenuView');
+  document.body.classList.remove('hub-menu-open');
+  if(hubMenu.raf){ cancelAnimationFrame(hubMenu.raf); hubMenu.raf=0; }
+  hubMenu.spec=null;
+  if(typeof syncHud==='function'){ syncHud(); if(typeof G!=='undefined'&&G&&typeof clampCam==='function') clampCam(G); }
+}
+function buildHubMenuBody(){
+  const body=document.getElementById('hubMenuBody'), spec=hubMenu.spec; if(!body||!spec) return;
+  hubMenu.sig = spec.signature ? spec.signature() : '';
+  body.innerHTML=''; spec.build(body);
+}
+// keep the panel below the (possibly 2-row, responsive) topbar — VIEW_TOP is the measured topbar height
+function hubMenuSyncTop(){
+  const v=document.getElementById('hubMenuView'); if(!v) return;
+  if(typeof VIEW_TOP==='number'){ const t=VIEW_TOP+'px'; if(v.style.top!==t) v.style.top=t; }
+}
+function hubMenuTick(){
+  const v=document.getElementById('hubMenuView');
+  if(!v || v.style.display==='none'){ hubMenu.raf=0; return; }
+  const spec=hubMenu.spec, body=document.getElementById('hubMenuBody');
+  if(spec){
+    if(spec.signature){ const s=spec.signature(); if(s!==hubMenu.sig) buildHubMenuBody(); }
+    if(spec.tick && body) spec.tick(body);
+  }
+  // shared: animate every unit-card portrait in the body (any facility menu)
+  if(body){ const tnow=performance.now()/1000;
+    body.querySelectorAll('canvas.train-spr').forEach(cv=>drawTrainCanvas(cv, cv.dataset.type, cv.dataset.sprite||'', tnow)); }
+  hubMenuSyncTop();
+  hubMenu.raf=requestAnimationFrame(hubMenuTick);
+}
 
-function showTrainingPanel(){
-  if(typeof CAMPAIGN==='undefined' || !CAMPAIGN.training) return;
-  trainSel=[];
-  buildTrainingPanel();
-  showSub('trainingScreen');
-  if(!trainPanelRaf) trainPanelRaf=requestAnimationFrame(trainingPanelTick);
+/* ---- reusable building-menu sub-components ---- */
+function hubMenuSection(title){ const h=document.createElement('div'); h.className='train-h'; h.textContent=title; return h; }
+// rigid column layout: hubMenuColumns(n) → a grid of n columns (collapses to 1 on narrow); each
+// hubMenuColumn() is a stacked column. Building panels lay their sections into columns.
+function hubMenuColumns(n){ const g=document.createElement('div'); g.className='hub-cols c'+(n||1); return g; }
+function hubMenuColumn(scroll){ const c=document.createElement('div'); c.className='hub-col'+(scroll?' scroll':''); return c; }
+// a card with a live-animated portrait (drawTrainCanvas, animated by hubMenuTick) + caption + optional action.
+// `u` is a roster snapshot or a live unit (both expose type/stars/spriteType/lore/heroId).
+function hubMenuUnitCard(u, opts){
+  opts=opts||{};
+  const card=document.createElement(opts.onClick?'button':'div');
+  card.className='train-card'+(opts.sel?' sel':'');
+  const cv=document.createElement('canvas'); cv.width=200; cv.height=200; cv.className='train-spr';
+  cv.dataset.type=u.type; cv.dataset.sprite=u.spriteType||''; card.appendChild(cv);
+  const cap=document.createElement('div'); cap.className='train-cap'; cap.innerHTML=opts.caption||trainTypeName(u); card.appendChild(cap);
+  if(opts.onClick) card.onclick=opts.onClick;
+  if(opts.action){ const a=document.createElement('button'); a.className='hub-card-act'; a.textContent=opts.action.label;
+    a.onclick=(ev)=>{ ev.stopPropagation(); opts.action.onClick(); }; card.appendChild(a); }
+  return card;
 }
-function closeTrainingPanel(){
-  hideSub('trainingScreen');
-  if(trainPanelRaf){ cancelAnimationFrame(trainPanelRaf); trainPanelRaf=0; }
+// a wrapped grid of unit cards (the shared "card list" used by Training "Awaiting orders" + M.D.C. enlisted,
+// so both render identically). `optsFn(u,i)` returns the per-card opts passed to hubMenuUnitCard.
+function hubMenuUnitGrid(units, optsFn, cls){
+  const grid=document.createElement('div'); grid.className=cls||'hub-cards';
+  (units||[]).forEach((u,i)=>{ grid.appendChild(hubMenuUnitCard(u, optsFn?optsFn(u,i):{})); });
+  return grid;
 }
-function trainPanelSignature(){
-  const t=(typeof CAMPAIGN!=='undefined'&&CAMPAIGN.training)||{staged:[],sessions:[]};
-  return 'st:'+(t.staged||[]).map(s=>s.key+'@'+(s.stars||0)).join(',')
-       +'|se:'+(t.sessions||[]).map(s=>s.id+':'+(s.done?1:0)).join(',')
-       +'|sel:'+trainSel.join(',');
+// a themed primary action button; `cost` (M3$) dims/disables it when unaffordable (null = free)
+function hubMenuActionBtn(label, cost, enabled, onClick){
+  const b=document.createElement('button');
+  const afford = cost==null || (typeof CAMPAIGN!=='undefined' && (CAMPAIGN.m3|0)>=cost);
+  const ok = enabled!==false && afford;
+  b.className='sc-btn hub-action'+(ok?'':' disabled');
+  b.innerHTML=label+(cost!=null?' · <b>M3$ '+cost+'</b>':'');
+  b.onclick=()=>{ if(ok) onClick(); };
+  return b;
 }
-function toggleTrainSel(key){
-  const i=trainSel.indexOf(key);
-  if(i>=0) trainSel.splice(i,1);
-  else { trainSel.push(key); if(trainSel.length>2) trainSel.shift(); }
-  buildTrainingPanel();
-}
+
+/* ---- shared helpers (used by the menus) ---- */
 // real-seconds → "Hh MMm" / "Mm SSs" countdown (1 in-game hour = HUB.trainHourSeconds real seconds)
 function fmtTrainRemain(sec){
   sec=Math.max(0, Math.ceil(sec));
@@ -411,7 +479,7 @@ function fmtTrainRemain(sec){
   if(m>0) return m+'m '+String(s).padStart(2,'0')+'s';
   return s+'s';
 }
-// draw one big (200px) animated idle frame for a trainee into its card canvas
+// draw one big animated idle frame for a unit into its card canvas
 function drawTrainCanvas(cv, type, spriteType, tnow){
   const c=cv.getContext('2d'); c.clearRect(0,0,cv.width,cv.height);
   const sType=spriteType||type;
@@ -425,83 +493,72 @@ function drawTrainCanvas(cv, type, spriteType, tnow){
     c.fillStyle='#bfe6ff'; c.fillText((DEF[type]&&DEF[type].icon)||'•', cv.width/2, cv.height/2);
   }
 }
-function trainingPanelTick(){
-  const screen=document.getElementById('trainingScreen');
-  if(!screen || screen.style.display==='none'){ trainPanelRaf=0; return; }
-  const sig=trainPanelSignature();
-  if(sig!==trainPanelSig) buildTrainingPanel();                 // contents changed → rebuild
-  const tnow=performance.now()/1000;
-  const body=document.getElementById('trainingBody');
-  if(body){
-    body.querySelectorAll('canvas.train-spr').forEach(cv=>drawTrainCanvas(cv, cv.dataset.type, cv.dataset.sprite||'', tnow));
-    body.querySelectorAll('[data-sesid]').forEach(el=>{
-      const ses=(CAMPAIGN.training.sessions||[]).find(s=>s.id===el.dataset.sesid); if(!ses) return;
-      const total=ses.hoursTotal*HUB.trainHourSeconds, remain=Math.max(0, total-(ses.secElapsed||0));
-      const bar=el.querySelector('.train-bar>i'); if(bar) bar.style.width=Math.min(100, (total?(ses.secElapsed||0)/total*100:100))+'%';
-      const cd=el.querySelector('.train-countdown'); if(cd) cd.textContent=ses.done?'✓ COMPLETE':fmtTrainRemain(remain);
-    });
-  }
-  trainPanelRaf=requestAnimationFrame(trainingPanelTick);
-}
-// Display name for a trainee SNAPSHOT (staged/session): a named hero shows its heroId; a regular
-// career unit shows its dossier full name (built from its saved lore seed); fall back to the type.
+// Display name for a roster snapshot OR live unit: hero → heroId; career unit → dossier full name; else type.
 function trainUnitName(s){
   if(!s) return '';
   if(s.heroId) return s.heroId;
-  try { if(typeof buildDossier==='function' && s.lore){ const d=buildDossier({type:s.type, lore:s.lore}); if(d&&d.full) return d.full; } } catch(e){}
+  try { if(typeof buildDossier==='function' && s.lore){ const d=buildDossier({type:s.type, lore:s.lore, id:s.id}); if(d&&d.full) return d.full; } } catch(e){}
   return (DEF[s.type]&&DEF[s.type].name)||s.type;
 }
-// "<Type> <b>Name</b>" — the unit's type, then its name in bold (same for heroes).
-function trainTypeName(s){
-  return ((DEF[s.type]&&DEF[s.type].name)||s.type)+' <b>'+trainUnitName(s)+'</b>';
+function trainTypeName(s){ return ((DEF[s.type]&&DEF[s.type].name)||s.type)+' <b>'+trainUnitName(s)+'</b>'; }
+
+/* ---- Training Grounds menu (the first facility migrated into the shell) ---- */
+let trainSel=[];          // up to 2 selected staged unit keys (for pairing)
+function trainPanelSignature(){
+  const t=(typeof CAMPAIGN!=='undefined'&&CAMPAIGN.training)||{staged:[],sessions:[]};
+  return 'st:'+(t.staged||[]).map(s=>s.key+'@'+(s.stars||0)).join(',')
+       +'|se:'+(t.sessions||[]).map(s=>s.id+':'+(s.done?1:0)).join(',')
+       +'|sel:'+trainSel.join(',');
 }
-function buildTrainingPanel(){
-  const body=document.getElementById('trainingBody'); if(!body) return;
-  trainPanelSig=trainPanelSignature();
-  body.innerHTML='';
+function toggleTrainSel(key){
+  const i=trainSel.indexOf(key);
+  if(i>=0) trainSel.splice(i,1);
+  else { trainSel.push(key); if(trainSel.length>2) trainSel.shift(); }
+  buildHubMenuBody();
+}
+function buildTrainingBody(body){
   const t=(typeof CAMPAIGN!=='undefined'&&CAMPAIGN.training)||{staged:[],sessions:[]};
   const staged=t.staged||[], sessions=t.sessions||[];
 
-  const sum=document.createElement('div'); sum.className='train-summary';
+  const sum=document.createElement('div'); sum.className='hub-stat';
   sum.innerHTML='Sessions <b>'+sessions.length+' / '+HUB.trainPairCap+'</b> · Trainees inside <b>'+(staged.length+sessions.length*2)+' / '+(HUB.trainPairCap*2)+'</b>';
   body.appendChild(sum);
 
-  const sh=document.createElement('div'); sh.className='train-h'; sh.textContent='Awaiting orders'; body.appendChild(sh);
+  // rigid 2-column layout: LEFT = Awaiting orders, RIGHT = In training
+  const cols=hubMenuColumns(2), left=hubMenuColumn(true), right=hubMenuColumn(true);
+  cols.appendChild(left); cols.appendChild(right); body.appendChild(cols);
+
+  // ---- LEFT: Awaiting orders (staged trainees + pairing) ----
+  left.appendChild(hubMenuSection('Awaiting orders'));
   if(!staged.length){
     const m=document.createElement('div'); m.className='muted';
     m.textContent='Walk two same-type veterans into the Training Grounds (≤'+HUB.trainMaxGap+' levels apart), then pair them here.';
-    body.appendChild(m);
+    left.appendChild(m);
   } else {
-    const row=document.createElement('div'); row.className='train-staged';
-    for(const s of staged){
-      const card=document.createElement('button'); card.className='train-card'+(trainSel.includes(s.key)?' sel':'');
-      const cv=document.createElement('canvas'); cv.width=200; cv.height=200; cv.className='train-spr';
-      cv.dataset.type=s.type; cv.dataset.sprite=s.spriteType||''; card.appendChild(cv);
-      const cap=document.createElement('div'); cap.className='train-cap';
-      cap.innerHTML=trainTypeName(s)+'<br>'+(typeof careerTitle==='function'?careerTitle(s.stars||0):'')+' · Lv '+(s.stars||0);
-      card.appendChild(cap);
-      card.onclick=()=>toggleTrainSel(s.key);
-      row.appendChild(card);
-    }
-    body.appendChild(row);
+    left.appendChild(hubMenuUnitGrid(staged, s=>({
+      sel: trainSel.includes(s.key),
+      caption: trainTypeName(s)+'<br>'+(typeof careerTitle==='function'?careerTitle(s.stars||0):'')+' · Lv '+(s.stars||0),
+      onClick: ()=>toggleTrainSel(s.key)
+    })));
 
     const pc=document.createElement('div'); pc.className='train-pairctl';
     const a=staged.find(s=>s.key===trainSel[0]), b=staged.find(s=>s.key===trainSel[1]);
-    let info='Select two units to pair.', canStart=false;
+    let info='Select two units to train together.', canStart=false;
     if(trainSel.length>=2 && typeof hubTrainValidatePair==='function'){
       const v=hubTrainValidatePair(a,b);
       if(v.ok){ info='→ Both reach <b>Level '+v.target+'</b> · duration <b>'+v.hours+' in-game hour'+(v.hours===1?'':'s')+'</b>'; canStart=true; }
       else info=v.reason;
     }
     const txt=document.createElement('div'); txt.className='train-pairinfo'; txt.innerHTML=info; pc.appendChild(txt);
-    const btn=document.createElement('button'); btn.className='sc-btn train-start'+(canStart?'':' disabled'); btn.textContent='Create Training Session';
-    btn.onclick=()=>{ if(canStart && hubTrainCreateSession(trainSel[0],trainSel[1])){ trainSel=[]; buildTrainingPanel(); } };
+    const btn=document.createElement('button'); btn.className='sc-btn train-start'+(canStart?'':' disabled'); btn.textContent='Start Training';
+    btn.onclick=()=>{ if(canStart && hubTrainCreateSession(trainSel[0],trainSel[1])){ trainSel=[]; buildHubMenuBody(); } };
     pc.appendChild(btn);
-    body.appendChild(pc);
+    left.appendChild(pc);
   }
 
-  const ah=document.createElement('div'); ah.className='train-h'; ah.textContent='In training'; body.appendChild(ah);
-  if(!sessions.length){ const m=document.createElement('div'); m.className='muted'; m.textContent='No active mentorships.'; body.appendChild(m); }
+  // ---- RIGHT: In training (active mentorship sessions) ----
+  right.appendChild(hubMenuSection('In training'));
+  if(!sessions.length){ const m=document.createElement('div'); m.className='muted'; m.textContent='No active mentorships.'; right.appendChild(m); }
   for(const ses of sessions){
     const card=document.createElement('div'); card.className='train-session'; card.dataset.sesid=ses.id;
     const pair=document.createElement('div'); pair.className='train-pair';
@@ -519,10 +576,161 @@ function buildTrainingPanel(){
       +'<div class="muted">'+((DEF[ses.type]&&DEF[ses.type].name)||ses.type)+' · both → Level '+ses.target+'</div>';
     card.appendChild(meta);
     const wb=document.createElement('button'); wb.className='sc-btn train-withdraw'; wb.textContent='Withdraw — junior loses all gains';
-    wb.onclick=()=>{ if(typeof hubTrainWithdraw==='function' && hubTrainWithdraw(ses.a.key)) buildTrainingPanel(); };
+    wb.onclick=()=>{ if(typeof hubTrainWithdraw==='function' && hubTrainWithdraw(ses.a.key)) buildHubMenuBody(); };
     card.appendChild(wb);
-    body.appendChild(card);
+    right.appendChild(card);
   }
+}
+function openTrainingMenu(){
+  if(typeof CAMPAIGN==='undefined' || !CAMPAIGN.training) return;
+  trainSel=[];
+  openHubMenu({
+    id:'training', icon:'🎯', title:'Training Grounds',
+    subtitle:"Mentor a junior up to the senior's level + 1 — both lock in for the session",
+    signature: trainPanelSignature,
+    build: buildTrainingBody,
+    tick: function(body){
+      body.querySelectorAll('[data-sesid]').forEach(el=>{
+        const ses=(CAMPAIGN.training.sessions||[]).find(s=>s.id===el.dataset.sesid); if(!ses) return;
+        const total=ses.hoursTotal*HUB.trainHourSeconds, remain=Math.max(0, total-(ses.secElapsed||0));
+        const bar=el.querySelector('.train-bar>i'); if(bar) bar.style.width=Math.min(100, (total?(ses.secElapsed||0)/total*100:100))+'%';
+        const cd=el.querySelector('.train-countdown'); if(cd) cd.textContent=ses.done?'✓ COMPLETE':fmtTrainRemain(remain);
+      });
+    }
+  });
+}
+
+/* ---- M.D.C. (Mission Dispatch) menu ---- */
+// spoiler-free teaser for the next deployment: prefer the authored crawl.summary; fall back to the
+// first ~2 sentences of the crawl text (legacy/future maps with no summary), then the objective.
+function hubEpisodeSummary(m){
+  const cr=(m&&m.crawl)||{};
+  if(cr.summary) return cr.summary;
+  if(cr.text){
+    const plain=String(cr.text).replace(/\s+/g,' ').trim();
+    const parts=plain.split(/(?<=[.!?])\s+/);
+    return parts.slice(0,2).join(' ');
+  }
+  return (m&&m.objective)||'';
+}
+// the "Next deployment" briefing card built from MAPS[idx]: episode tag, big title, enemy, summary, objective.
+function hubMdcBriefCard(idx){
+  const m=(typeof MAPS!=='undefined'&&MAPS[idx])||null;
+  const wrap=document.createElement('div'); wrap.className='mdc-brief';
+  if(!m){
+    const done=document.createElement('div'); done.className='mdc-brief-sum';
+    done.textContent='No further deployments scheduled — the campaign is complete.'; wrap.appendChild(done);
+    return wrap;
+  }
+  const cr=m.crawl||{};
+  const tag=document.createElement('div'); tag.className='mdc-brief-tag'; tag.textContent=cr.episode||('EPISODE '+(idx+1)); wrap.appendChild(tag);
+  const title=document.createElement('div'); title.className='mdc-brief-title'; title.textContent=cr.title||m.name||''; wrap.appendChild(title);
+  if(m.enemyName){ const en=document.createElement('div'); en.className='mdc-brief-enemy'; en.innerHTML='⚔ <b>'+_escHtml(m.enemyName)+'</b>'; wrap.appendChild(en); }
+  const sum=document.createElement('div'); sum.className='mdc-brief-sum'; sum.textContent=hubEpisodeSummary(m); wrap.appendChild(sum);
+  if(m.objective){ const ob=document.createElement('div'); ob.className='mdc-brief-obj'; ob.innerHTML='<span>OBJECTIVE</span> '+_escHtml(m.objective); wrap.appendChild(ob); }
+  return wrap;
+}
+function openMdcMenu(poi){
+  openHubMenu({
+    id:'mdc', icon:'🛰️', title:'M.D.C. — Mission Dispatch',
+    subtitle:'Enlist veterans here, then launch the next quarterly deployment',
+    signature: function(){ const d=(CAMPAIGN.dispatch&&CAMPAIGN.dispatch.staged)||[];
+      return 'mdc:'+d.join(',')+'|m3:'+(CAMPAIGN.m3|0)+'|nx:'+(CAMPAIGN&&CAMPAIGN.nextMapIndex!=null?CAMPAIGN.nextMapIndex:-1); },
+    build: function(body){
+      const cap=(typeof hubDispatchVetCap==='function')?hubDispatchVetCap():6;
+      const live=(typeof hubEnlistedUnits==='function')?hubEnlistedUnits(G):[];
+      const vets=live.filter(u=>!u.hero), heroes=live.filter(u=>u.hero);
+      const idx=(CAMPAIGN&&CAMPAIGN.nextMapIndex!=null)?CAMPAIGN.nextMapIndex:0;
+
+      const sum=document.createElement('div'); sum.className='hub-stat';
+      sum.innerHTML='Enlisted <b>'+vets.length+' / '+cap+'</b> vets'+(heroes.length?' + <b>'+heroes.length+'</b> hero'+(heroes.length>1?'es':''):'');
+      body.appendChild(sum);
+
+      // rigid 2-column layout: LEFT = enlisted veterans (same card as Training "Awaiting orders"),
+      // RIGHT = the next-deployment briefing distilled from the episode's lore + crawl.
+      const cols=hubMenuColumns(2), left=hubMenuColumn(true), right=hubMenuColumn(true);
+      cols.appendChild(left); cols.appendChild(right); body.appendChild(cols);
+
+      // ---- LEFT: Enlisted for the next mission ----
+      left.appendChild(hubMenuSection('Enlisted for the next mission'));
+      if(!live.length){ const m=document.createElement('div'); m.className='muted';
+        m.textContent='Walk veterans into a red M.D.C. to enlist them for the next deployment.'; left.appendChild(m); }
+      else {
+        left.appendChild(hubMenuUnitGrid(live, u=>({
+          caption: trainTypeName(u)+'<br>'+(typeof careerTitle==='function'?careerTitle(u.stars||0):'')+' · Lv '+(u.stars||0)+(u.hero?' · ⭐ hero':''),
+          action: u.hero?null:{ label:'↩ Release', onClick:()=>{ if(hubReleaseFromMdc(hubUnitKey(u))) buildHubMenuBody(); } }
+        })));
+      }
+
+      // ---- RIGHT: Next deployment briefing ----
+      right.appendChild(hubMenuSection('Next deployment'));
+      right.appendChild(hubMdcBriefCard(idx));
+
+      // ---- FOOTER (full width): vet-cap note + DISPATCH ----
+      const foot=document.createElement('div'); foot.className='hub-footer';
+      const info=document.createElement('div'); info.className='grow';
+      info.innerHTML='The next quarter only requires <b>'+cap+'</b> units. Heroes auto-deploy and don’t count.';
+      foot.appendChild(info);
+      foot.appendChild(hubMenuActionBtn('🚀 DISPATCH — Launch Episode '+(idx+1), null, live.length>0, ()=>{ closeHubMenu(); hubDispatchNextEpisode(); }));
+      body.appendChild(foot);
+    }
+  });
+}
+
+/* ---- Condo (resident housing) menu ---- */
+function openCondoMenu(poi){
+  const id = (poi && poi.hubPoi) ? poi.hubPoi.id : null;
+  const nm = (poi && poi.hubPoi && poi.hubPoi.name) ? poi.hubPoi.name : 'Unit Condo';
+  openHubMenu({
+    id:'condo', icon:'🏙️', title:nm,
+    subtitle:'Upgrade resident housing — +4% max HP per level for everyone who lives here',
+    signature: function(){ const c=(CAMPAIGN.condos&&CAMPAIGN.condos[id])||{}; return 'condo:'+id+':'+(c.level||0)+'|m3:'+(CAMPAIGN.m3|0); },
+    build: function(body){
+      const c=(CAMPAIGN.condos&&CAMPAIGN.condos[id])||{level:0,residents:[]};
+      const lvl=c.level||0, cost=HUB.condoCosts[lvl];
+      const s=document.createElement('div'); s.className='hub-stat';
+      s.innerHTML='Level <b>'+lvl+'</b> · Residents <b>'+((c.residents||[]).length)+'</b> · HP bonus <b>+'+(lvl*4)+'%</b>';
+      body.appendChild(s);
+      body.appendChild(hubMenuSection('Residents'));
+      const res=(c.residents||[]);
+      if(!res.length){ const m=document.createElement('div'); m.className='muted'; m.textContent='No residents yet — veterans move in as they join your roster.'; body.appendChild(m); }
+      else {
+        const names=res.map(k=>{ const r=(CAMPAIGN.roster||[]).find(x=>x.key===k); return r?trainUnitName(r):k.replace(/^.*?:/,''); });
+        const list=document.createElement('div'); list.className='hub-stat'; list.innerHTML=names.map(_escHtml).join(' · '); body.appendChild(list);
+      }
+      const foot=document.createElement('div'); foot.className='hub-footer';
+      const info=document.createElement('div'); info.className='grow';
+      info.innerHTML = cost==null ? 'This condo is fully upgraded.' : 'Next level: <b>+4% max HP</b> for its residents.';
+      foot.appendChild(info);
+      foot.appendChild(hubMenuActionBtn('🏙️ Upgrade Condo', cost, cost!=null, ()=>{ hubUpgradeSelectedCondo(); buildHubMenuBody(); }));
+      body.appendChild(foot);
+    }
+  });
+}
+
+/* ---- ULTRA Headquarters menu ---- */
+function openUltraMenu(){
+  openHubMenu({
+    id:'ultra', icon:'◆', title:'ULTRA Headquarters',
+    subtitle:'The company that fabricates life for everyone, everywhere',
+    signature: function(){ return 'ultra:'+(CAMPAIGN.m3|0)+'|g:'+(CAMPAIGN.gambled?1:0)+'|v:'+(CAMPAIGN.visit|0); },
+    build: function(body){
+      const s=document.createElement('div'); s.className='hub-stat';
+      s.innerHTML='Treasury <b>M3$ '+(CAMPAIGN.m3|0)+'</b> · H.U.B. visit <b>#'+(CAMPAIGN.visit|0)+'</b>';
+      body.appendChild(s);
+      body.appendChild(hubMenuSection('Speculation Kiosk'));
+      const note=document.createElement('div'); note.className='hub-note';
+      note.textContent = CAMPAIGN.gambled ? 'The kiosk already liquidated your optimism this visit.'
+        : 'Stake M3$ '+HUB.gambleStake+' on the market. Sometimes it pays out; mostly it calls the loss "learning".';
+      body.appendChild(note);
+      const foot=document.createElement('div'); foot.className='hub-footer';
+      const info=document.createElement('div'); info.className='grow';
+      info.innerHTML='Implants, styles and academy training are bought by selecting a resident out on the map.';
+      foot.appendChild(info);
+      foot.appendChild(hubMenuActionBtn('📈 Speculate', HUB.gambleStake, !CAMPAIGN.gambled, ()=>{ hubGamble(); buildHubMenuBody(); }));
+      body.appendChild(foot);
+    }
+  });
 }
 
 // Notifications panel — renders the accumulated toast log (newest first).

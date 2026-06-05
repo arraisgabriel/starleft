@@ -66,7 +66,7 @@ State your read of the arc position in one or two sentences ("this sits between 
 monopoly turn and the CARTEL revenge beat, so the player is at peak power and just starting to make
 enemies") and confirm placement with the user before moving on.
 
-### Phase 2 — Write the story beat first (faction, crawl, objective)
+### Phase 2 — Write the story beat first (faction, crawl, summary, objective)
 
 Before a single coordinate. Decide and draft, in prose:
 
@@ -78,6 +78,14 @@ Before a single coordinate. Decide and draft, in prose:
 - **The opening crawl** — `crawl: { episode, title, text }`. Star-Wars-style, second person, dark
   cyberpunk-startup satire, **never triumphal** (see the tone rules in the world bible). It should
   pick up from where the previous chapter left the player emotionally and financially.
+- **The deployment summary** — `crawl.summary`. A **2–4 sentence, spoiler-free briefing** shown on
+  the M.D.C. (Mission Dispatch) screen before the player launches this episode. Distill it from the
+  crawl and the arc: name the **stage** (where the player stands now), the **enemy**, and the
+  **stakes** — but **never the twist**. No nukes/betrayal/resurrection/who-dies reveals; nothing the
+  crawl itself withholds until the player is in-mission. Same dark startup-satire voice as the crawl,
+  plain text (no `{token}` templating). Think back-of-the-box teaser, not the plot. If you skip it,
+  the M.D.C. briefing falls back to the first two sentences of the crawl — so writing one is how you
+  control what the player sees up front.
 - **The objective** — the terse in-HUD win condition. It names the faction and how many
   bases/campuses/strongholds must fall, and it must agree with the enemy count you'll place in
   Phase 4.
@@ -86,8 +94,8 @@ Where it's natural, let the writing acknowledge the campaign's living systems �
 veterans, the fallen memorial, the dreams units chase (see the career system in the world bible).
 This is what makes the campaign feel continuous rather than a list of skirmishes.
 
-Show the user the faction + crawl + objective and get a thumbs-up before building terrain. The land
-is about to be shaped to match this, so it has to be right first.
+Show the user the faction + crawl + summary + objective and get a thumbs-up before building terrain.
+The land is about to be shaped to match this, so it has to be right first.
 
 ### Phase 3 — Make the geography express the story
 

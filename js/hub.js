@@ -238,16 +238,27 @@ function updateExtraction(state, dt){
   };
   if(f.phase==='in' && step(f.hqX,f.hqY,flySpeed)){ f.phase='hover'; f.t=0; }
   else if(f.phase==='hover' && f.t>1.6){ f.phase='out'; f.t=0; }
-  else if(f.phase==='out' && step(f.exitX,f.exitY,flySpeed)){ enterHubFromCombat(state); }
+  // The bomber has left the mission map → hand off to the HUB panorama loading scene
+  // (js/hub_loading.js). It plays for HUB_LOAD_DURATION (13s) as a hidden HUB loader; the
+  // DOM HUD is hidden meanwhile so the canvas shows the full-screen cinematic.
+  else if(f.phase==='out' && step(f.exitX,f.exitY,flySpeed)){
+    f.phase='panorama'; f.t=0;
+    if(typeof document!=='undefined') document.body.classList.add('scene-hubload');
+  }
+  // Bomber crosses the panorama skyline; when it reaches the far side the HUB map appears.
+  else if(f.phase==='panorama' && f.t >= (typeof HUB_LOAD_DURATION!=='undefined'?HUB_LOAD_DURATION:20)){
+    enterHubFromCombat(state);
+  }
 }
 function drawExtractionFlight(state){
-  const f=state.extractFlight; if(!f) return;
+  const f=state.extractFlight; if(!f || f.phase==='panorama') return;   // panorama draws its own bomber
   const u={type:'bomber', owner:'player', x:f.x, y:f.y, air:true, r:16, _face:f.phase==='out'?(f.exitX<f.x?-1:1):(f.hqX<f.x?-1:1)};
   const anim=unitWalk('bomber','player');
   if(anim && anim.ready) blitFrame(u,f.x,f.y,anim,UNIT_SPRITE_H.bomber, ((state.time*8)|0)%anim.frames.length);
   else { ctx.fillStyle='#7fd6ff'; ctx.beginPath(); ctx.arc(f.x,f.y,18,0,Math.PI*2); ctx.fill(); }
 }
 function enterHubFromCombat(state){
+  if(typeof document!=='undefined') document.body.classList.remove('scene-hubload');   // end the panorama loading scene
   const reward=hubRewardFor(state);
   CAMPAIGN.m3 += reward.total;
   CAMPAIGN.lastReward=reward;
@@ -942,6 +953,18 @@ function hubTrainLobbyPos(fac, idx, total){
   const s  = 0.88 + col*0.085;            // 0.88..1.30 — full lobby width, incl. the down-right floor
   const dd = -0.26 - row*0.12;            // two ranks, between counter (-0.14) and front wall (-0.55)
   return hubTrainSpritePos(fac, (s+dd)/2, (s-dd)/2);
+}
+// World-space centres of the downrange shooting-range TARGETS — the silhouette panels on the
+// facility's upper-right wall. In-session trainees fire laser bolts at these (picked at random per
+// shot, see drawHubTrainees). Calibrated to training_enemy.png: same lane s=u+v as the firing
+// positions, downrange depth d=u-v≈0.45 lands on the silhouettes (one per lane, 6 total).
+function hubTrainTargetPoints(fac){
+  const out=[];
+  for(let lane=0; lane<6; lane++){
+    const s=0.749+lane*0.099, d=0.45;
+    out.push(hubTrainSpritePos(fac, (s+d)/2, (s-d)/2));
+  }
+  return out;
 }
 // Lock a live unit inside the facility (storedIn, like an M.D.C. garrison). Its exact lane/waiting
 // position + animation are resolved every frame by drawHubTrainees from CAMPAIGN.training state;

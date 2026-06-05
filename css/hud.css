@@ -245,28 +245,24 @@ html,body{ overscroll-behavior:none; -webkit-touch-callout:none; }
    the max-height guard spares ultrawide monitors. Placed last so it wins the
    cascade where it overlaps the hover:none / max-height:480px blocks above. */
 @media (min-aspect-ratio: 2/1) and (max-height: 600px){
-  #bottom{ height:auto; flex-direction:row; flex-wrap:wrap; align-items:stretch; }
+  #bottom{ height:auto; flex-direction:row; flex-wrap:nowrap; align-items:center; }
   #minimap-wrap{ display:none; }                       /* reachable via the floating 🗺 */
 
-  /* row 1 — command buttons, full width, scroll sideways (never wrap to a 3rd row).
-     min-height keeps the panel a constant height whether or not anything is selected,
-     so syncHud()'s VIEW_BOT (synced on resize) stays accurate as commands populate. */
-  #commands{ order:1; flex:1 1 100%; width:auto; border-left:none; min-height:48px;
+  /* building / build buttons — sit immediately RIGHT of the name+HP (order:2), take the
+     middle of the SINGLE row and scroll sideways when there are many, so they never wrap
+     to a second line. ResizeObserver re-syncs VIEW_BOT as the row's height settles. */
+  #commands{ order:2; flex:1 1 auto; width:auto; border-left:none; min-height:0;
     flex-wrap:nowrap; overflow-x:auto; -webkit-overflow-scrolling:touch;
     padding:4px 8px; gap:6px; align-items:center; }
   .cmd-btn{ flex:0 0 auto; width:auto; min-width:58px; height:42px; min-height:42px;
     font-size:11px; padding:3px 8px; }
   .cmd-btn .emoji{ font-size:17px; }
 
-  /* row 2 — selection summary (left) shares the row with the controls (right). The summary
-     WRAPS: a long unit name takes line 1 and its stats + Dossier button flow onto line 2 so
-     nothing is clipped. A building's short name + HP stay on line 1 with its live production
-     queue inline to the right (the queue's flex-basis:0 keeps it from forcing a wrap). */
-  /* flex-basis:0 (not auto) so a long name doesn't bloat #selinfo's basis and shove the
-     controls onto their own row — instead #selinfo is capped to the leftover width beside
-     the controls, which is what forces a long name's stats/Dossier onto the second line. */
-  #selinfo{ display:flex; flex-wrap:wrap; align-items:center; align-content:center;
-    column-gap:8px; row-gap:2px; order:2; flex:1 1 0; min-width:0; max-width:none;
+  /* selection summary (name + HP) — LEFTMOST (order:1). Hugs its content and ellipsizes a
+     long name; stays on the single row, with the building's action button following to its
+     right. min-width:0 lets it shrink (rather than shove the controls off) on narrow phones. */
+  #selinfo{ display:flex; flex-wrap:nowrap; align-items:center;
+    column-gap:8px; order:1; flex:0 1 auto; min-width:0;
     padding:2px 10px; overflow:hidden; }
   #selinfo h3{ display:block; font-size:12px; margin:0; flex:0 1 auto; min-width:0; max-width:100%;
     white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
@@ -277,12 +273,12 @@ html,body{ overscroll-behavior:none; -webkit-touch-callout:none; }
     font-size:10px; min-height:0; flex:0 0 auto; }
   /* production queue: inline, just right of the building name/HP, scrolls sideways if long.
      flex:1 1 0 (basis 0) means it never adds width that would push a building onto two lines. */
-  #selinfo #prod-queue{ display:flex; flex:1 1 0; min-width:0; margin:0; gap:5px;
+  #selinfo #prod-queue{ display:flex; flex:0 1 auto; min-width:0; margin:0; gap:5px;
     flex-wrap:nowrap; overflow-x:auto; -webkit-overflow-scrolling:touch; }
   #selinfo #prod-queue .pq-card{ width:38px; height:38px; }
   #selinfo #prod-queue .pq-spr{ width:32px; height:32px; }
 
-  #touch-controls{ display:flex; order:3; flex:0 0 auto; justify-content:flex-end;
+  #touch-controls{ display:flex; order:3; flex:0 1 auto; min-width:0; justify-content:flex-end;
     overflow-x:auto; -webkit-overflow-scrolling:touch; padding:3px 6px; }
 
   /* minimap toggle becomes a floating corner button (reuses #btn-minimap → .as-overlay) */
@@ -295,6 +291,25 @@ html,body{ overscroll-behavior:none; -webkit-touch-callout:none; }
      command row vanish for non-builder units (only the intern keeps a 2nd line). */
   .cmd-btn.cmd-stop{ display:none; }
   #commands:not(.has-cmds){ display:none; }
+}
+
+/* ---- Desktop / wide-landscape HUB idle: when nothing is selected, slim the bottom bar
+   down to little more than the middle help text and shrink the minimap so it still fits,
+   reclaiming canvas height. Scoped to the HUB (body.in-hub, set by refreshUI) so combat
+   keeps its full-size minimap, to wide landscape (width > height), and to tall-enough
+   desktops (min-height 601) so it never collides with the wide-short phone block above.
+   height:auto lets the bar hug its content; the ResizeObserver re-syncs VIEW_BOT after. */
+@media (min-width:901px) and (min-height:601px) and (min-aspect-ratio:1/1){
+  body.in-hub #bottom.sel-empty{ height:auto; align-items:center; }
+  /* minimap: CSS display size only — renderMinimap stays 154×124 (crisp) and the click
+     handler maps via getBoundingClientRect, so a smaller rendered map still works. */
+  body.in-hub #bottom.sel-empty #minimap-wrap{ padding:6px 10px; justify-content:center; }
+  body.in-hub #bottom.sel-empty .panel-label{ display:none; }
+  body.in-hub #bottom.sel-empty #minimap{ width:87px; height:70px; }
+  /* drop the empty command column's reserved 330px so the idle help text gets the room
+     (fewer wrapped lines = shorter bar) and nothing pads the panel beyond the text. */
+  body.in-hub #bottom.sel-empty #commands{ width:0; min-width:0; padding:0; border-left:none; }
+  body.in-hub #bottom.sel-empty #selinfo{ padding:8px 16px; }
 }
 
 /* ---- The Sprint destination ripple: a point-anchored node (left/top set per-frame by

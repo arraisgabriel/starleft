@@ -308,13 +308,19 @@
     </div>
   </div>
 
-  <!-- Training Grounds sub-screen (live behind the running H.U.B.) -->
-  <div class="overlay submenu live-overlay" id="trainingScreen" style="display:none;">
-    <div class="submenu-panel">
-      <h2>🎯 Training Grounds</h2>
-      <div class="panel-label">Mentor a junior up to the senior's level + 1 — both lock in for the session</div>
-      <div id="trainingBody"></div>
-      <button class="sc-btn back" onclick="closeTrainingPanel()">◀ Back</button>
+  <!-- Reusable full-screen H.U.B. building-menu shell (topbar + LNS stay; dimmed HUB behind).
+       Any facility menu (Training Grounds, M.D.C., Condo, ULTRA) renders into #hubMenuBody. -->
+  <div class="overlay hub-menu live-overlay" id="hubMenuView" style="display:none;">
+    <div class="hub-menu-panel">
+      <header class="hub-menu-head">
+        <span class="hub-menu-icon" id="hubMenuIcon"></span>
+        <div class="hub-menu-titles">
+          <h2 id="hubMenuTitle"></h2>
+          <div class="panel-label" id="hubMenuSub"></div>
+        </div>
+        <button class="sc-btn back hub-menu-close" onclick="closeHubMenu()">✕ Close</button>
+      </header>
+      <div class="hub-menu-body" id="hubMenuBody"></div>
     </div>
   </div>
 
@@ -409,6 +415,9 @@
 <script src="js/ultra_news_data.js"></script>
 <script src="js/lns.js"></script>
 <script src="js/particles.js"></script>
+<script src="js/hub_drones.js"></script><!-- decorative HUB-only courier drones (cosmetic, module-local, never on G) -->
+<script src="js/hub_panoramic_neon.js"></script><!-- pre-generated neon dot map for the extraction loading scene -->
+<script src="js/hub_loading.js"></script><!-- HUB panorama loading scene (extraction → hub transition); needs megasprites.js + assets.js -->
 <!-- ── multiplayer (classic; define functions only — must load before main.js) ── -->
 <script src="js/profile.js"></script>
 <script src="js/net/mp-ready.js"></script>

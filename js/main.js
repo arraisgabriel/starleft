@@ -136,7 +136,8 @@ addEventListener('keydown', e=>{
   // and on macOS its keyup never fires while ⌘ is held, which would leave 's' stuck panning down.
   if(!e.metaKey && !e.ctrlKey && !e.altKey) keys[e.key.toLowerCase()]=true;
   if(e.key==='Escape'){
-    if(G&&G.placing){ G.placing=null; refreshUI(); }     // first: cancel building placement
+    if(typeof hubMenuOpen==='function' && hubMenuOpen()){ closeHubMenu(); return; }   // first: close an open HUB facility menu
+    if(G&&G.placing){ G.placing=null; refreshUI(); }     // then: cancel building placement
     else if(G&&G.selection.length){ clearSelection(); refreshUI(); }  // then: deselect so you can pick others
     return;
   }
@@ -350,6 +351,7 @@ function loop(now){
       }
     }
     updateCamera(G,dt);
+    if(typeof updateHubDrones==='function') updateHubDrones(G,dt);   // decorative HUB drones — netRole-agnostic, gated on state.hub internally
     render(G);
     if(typeof updateSprintRipple==='function') updateSprintRipple(G);   // glue the sprint ripple to its world point
     uiTick+=dt; if(uiTick>0.2){ uiTick=0; if(running) refreshUI(); }
