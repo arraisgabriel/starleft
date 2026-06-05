@@ -93,7 +93,7 @@ function drawHubPanoTower(state, fit){
   const dw=fit.dw*T.w, dh=dw*(spr.fh/spr.fw)*T.heightScale;
   const dx=fit.ox + T.bx*fit.dw - dw/2;
   const dy=fit.oy + T.by*fit.dh - dh;        // bottom-anchored on the hilltop
-  const fps=(typeof MEGA_FPS!=='undefined' && MEGA_FPS.megabuilding) || 1.4;
+  const fps=((typeof MEGA_FPS!=='undefined' && MEGA_FPS.megabuilding) || 1.4) * 0.5;   // half the hub's loop speed
   const fi=HUB_TOWER_FRAMES[((Math.floor((state.time||0)*fps)%HUB_TOWER_FRAMES.length)+HUB_TOWER_FRAMES.length)%HUB_TOWER_FRAMES.length];
   const neon=(typeof megaNeonFrame==='function') ? megaNeonFrame(m,fi) : null;
   if(neon && typeof drawMegaNeonLayer==='function') drawMegaNeonLayer(state,m,neon,dx,dy,dw,dh,'aura');
@@ -151,6 +151,110 @@ function drawHubPanoThrusters(px, py, S, anim, t){
   ctx.restore();
 }
 
+/* ---- ambient courier drones (panorama scene) -------------------------------------------
+   Reuses the HUB drone visual contract (small flyer sprite + blinking neon nav lights), but
+   in the panorama's NORMALIZED image space: drones enter from one side margin near the
+   bomber's altitude band and cross to the opposite margin, FASTER than the bomber and ~15% its
+   size. Cosmetic + module-local (no G state) so saves/netcode are untouched; ticks only while
+   the scene runs (frozen on pause) and is off under prefers-reduced-motion. */
+const HUB_PANO_DRONE = {
+  CAP: 7,                         // max airborne at once
+  sizeFrac: 0.143 * 0.15,         // 15% of the bomber height (bomber sizeFrac = 0.143)
+  spdMin: 0.09, spdRange: 0.06,   // normalized image-widths / sec (bomber ≈ 0.06 → ~1.5-2.5× faster)
+  vyDrift: 0.012,                 // tiny vertical wander
+  spawnMin: 0.8, spawnRange: 1.47,// seconds between spawns
+  band: 0.10,                     // ± vertical spread around the bomber band when flying "near" it
+  margin: 0.12,                   // spawn / despawn this far outside the image (normalized)
+};
+const HUB_PANO_DRONE_COLORS = ['cyan','purple','blue','red'];
+const _hubPanoDrones = [];
+const _hubPanoDroneState = { clock:0, spawnAcc:0, nextSpawn:0 };
+const _hubPanoReducedMotion = (()=>{ try{ return window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches; }catch(_){ return false; } })();
+
+// Clear the pool at the start of each panorama (called from js/hub.js when the phase begins).
+function resetHubPanoDrones(){
+  _hubPanoDrones.length = 0;
+  _hubPanoDroneState.clock = 0;
+  _hubPanoDroneState.spawnAcc = 0;
+  _hubPanoDroneState.nextSpawn = 0.4 + Math.random()*0.8;   // first drone shortly after the scene opens
+}
+
+// The bomber's current normalized altitude — drones mostly fly near this band.
+function _hubPanoBomberNy(f){
+  const B=HUB_PANO_BOMBER, p=Math.min(1, Math.max(0, (f?f.t:0)/HUB_LOAD_DURATION));
+  return B.sy + (B.ey-B.sy)*p;
+}
+
+function _spawnHubPanoDrone(state){
+  const D=HUB_PANO_DRONE, R=Math.random;
+  if(_hubPanoDrones.length >= D.CAP) return;
+  const fromLeft = R()<0.5;
+  const face = fromLeft ? 1 : -1;                            // +1 → flies right, -1 → flies left
+  const nx = fromLeft ? -D.margin : 1+D.margin;              // enter just outside one side margin
+  const bomberNy = _hubPanoBomberNy(state.extractFlight);
+  const ny = (R()<0.72) ? bomberNy + (R()-0.5)*2*D.band      // mostly near the bomber...
+                        : 0.12 + R()*0.30;                   // ...sometimes elsewhere in the upper sky
+  const spd = D.spdMin + R()*D.spdRange;
+  _hubPanoDrones.push({
+    nx, ny, vnx: face*spd, vny:(R()-0.5)*2*D.vyDrift, face,
+    owner: R()<0.5 ? 'player' : 'enemy',                     // red / blue courier sheet (mix)
+    color: HUB_PANO_DRONE_COLORS[(R()*HUB_PANO_DRONE_COLORS.length)|0],
+    phase: R()*6.2832, life:0, sz: 0.85 + R()*0.4,
+  });
+}
+
+// dt-stepped update (called from js/hub.js updateExtraction while phase==='panorama').
+function updateHubPanoDrones(state, dt){
+  if(_hubPanoReducedMotion) return;
+  if(!state || !state.extractFlight) return;
+  const D=HUB_PANO_DRONE;
+  _hubPanoDroneState.clock += dt;
+  for(let i=_hubPanoDrones.length-1; i>=0; i--){
+    const d=_hubPanoDrones[i];
+    d.nx += d.vnx*dt; d.ny += d.vny*dt; d.life += dt;
+    if(d.nx < -D.margin-0.06 || d.nx > 1+D.margin+0.06) _hubPanoDrones.splice(i,1);   // crossed the far margin
+  }
+  _hubPanoDroneState.spawnAcc += dt;
+  if(_hubPanoDroneState.spawnAcc >= _hubPanoDroneState.nextSpawn){
+    _hubPanoDroneState.spawnAcc = 0;
+    _hubPanoDroneState.nextSpawn = D.spawnMin + Math.random()*D.spawnRange;
+    _spawnHubPanoDrone(state);
+  }
+}
+
+// Draw the drones (clipped to the image, like the bomber) with blinking neon nav lights.
+function drawHubPanoDrones(state, fit){
+  if(!_hubPanoDrones.length) return;
+  const animR=(typeof unitWalk==='function')?unitWalk('courier','player'):null;   // red sheet
+  const animB=(typeof unitWalk==='function')?unitWalk('courier','enemy'):null;     // blue sheet
+  const t=_hubPanoDroneState.clock;
+  const baseS=fit.vh * HUB_PANO_DRONE.sizeFrac;
+  ctx.save();
+  ctx.beginPath(); ctx.rect(fit.ox, fit.oy, fit.dw, fit.dh); ctx.clip();            // framed-movie clip
+  for(const d of _hubPanoDrones){
+    const anim = d.owner==='enemy' ? animB : animR;
+    if(!anim || !anim.ready) continue;
+    const px=fit.ox + d.nx*fit.dw, py=fit.oy + d.ny*fit.dh;
+    const wob=Math.sin(t*0.9 + d.phase);
+    const S=Math.max(7, baseS*d.sz*(1+wob*0.12));
+    const a=Math.min(1, d.life/0.6);
+    const u={ type:'courier', owner:d.owner, _face:d.face };
+    ctx.save(); ctx.globalAlpha=a;
+    blitFrame(u, px, py, anim, S, ((t*6)|0)%anim.frames.length);
+    ctx.restore();
+    // neon nav lights: a soft body underglow + two out-of-phase blinking wingtip lights, additive.
+    const accent=HUB_PANO_COLORS[d.color]||HUB_PANO_COLORS.cyan;
+    const ly=py - S*0.18, wx=S*0.42, gr=S*0.42;
+    const b1=0.35+0.5*Math.sin(t*4.2 + d.phase), b2=0.35+0.5*Math.sin(t*4.2 + d.phase + 2.1);
+    ctx.save(); ctx.globalCompositeOperation='lighter';
+    megaFillEllipseGlow(px,    ly, S*0.7, S*0.5, 0, accent,               0.22*a*(0.6+0.4*wob), 0.07*a);  // body underglow
+    megaFillEllipseGlow(px-wx, ly, gr,    gr,    0, accent,               0.85*a*b1, 0.22*a*b1);          // port light
+    megaFillEllipseGlow(px+wx, ly, gr,    gr,    0, HUB_PANO_COLORS.cyan,  0.85*a*b2, 0.22*a*b2);          // starboard light
+    ctx.restore();
+  }
+  ctx.restore();
+}
+
 // Entry point — called from render.js when extractFlight.phase==='panorama'. Draws the
 // whole scene full-screen in CSS px (caller has already cleared the backing store), then
 // resets the transform to identity for anything that runs after.
@@ -161,6 +265,7 @@ function drawHubLoadingScene(state){
   if(HUB_PANO_READY) ctx.drawImage(HUB_PANO_IMG, fit.ox, fit.oy, fit.dw, fit.dh);
   drawHubPanoNeon(state, fit);
   drawHubPanoTower(state, fit);
+  drawHubPanoDrones(state, fit);
   drawHubPanoBomber(state, fit);
   ctx.setTransform(1,0,0,1,0,0);
 }

@@ -230,6 +230,7 @@ function showExtractConfirm(state, hq, n){
 function updateExtraction(state, dt){
   const f=state.extractFlight; if(!f) return;
   f.t+=dt;
+  if(f.phase==='panorama' && typeof updateHubPanoDrones==='function') updateHubPanoDrones(state, dt);
   const flySpeed=((DEF.bomber&&DEF.bomber.speed)||1.7)*TILE;
   const step=(tx,ty,spd)=>{
     const dx=tx-f.x, dy=ty-f.y, d=Math.hypot(dx,dy);
@@ -243,6 +244,7 @@ function updateExtraction(state, dt){
   // DOM HUD is hidden meanwhile so the canvas shows the full-screen cinematic.
   else if(f.phase==='out' && step(f.exitX,f.exitY,flySpeed)){
     f.phase='panorama'; f.t=0;
+    if(typeof resetHubPanoDrones==='function') resetHubPanoDrones();
     if(typeof document!=='undefined') document.body.classList.add('scene-hubload');
   }
   // Bomber crosses the panorama skyline; when it reaches the far side the HUB map appears.
@@ -257,6 +259,20 @@ function drawExtractionFlight(state){
   if(anim && anim.ready) blitFrame(u,f.x,f.y,anim,UNIT_SPRITE_H.bomber, ((state.time*8)|0)%anim.frames.length);
   else { ctx.fillStyle='#7fd6ff'; ctx.beginPath(); ctx.arc(f.x,f.y,18,0,Math.PI*2); ctx.fill(); }
 }
+// Frame the freshly-entered HUB at minimum zoom, centered on the ULTRA HQ tower (the central
+// landmark in the middle of the map). Must run AFTER syncHud() so viewW()/viewH() reflect the
+// live HUD band heights; clampCam() afterwards keeps the view inside the map bounds.
+function hubFocusUltra(state){
+  if(!state) return;
+  state.zoom = (typeof ZOOM_MIN!=='undefined') ? ZOOM_MIN : 0.35;
+  let cx, cy;
+  const u=(state.megaSprites||[]).find(m=>m && (m.poiId==='ultra' || m.id==='ultra_mega' || (m.tags && m.tags.indexOf('hubUltra')>=0)));
+  if(u){ cx=(u.tx + u.w/2)*TILE; cy=(u.ty + u.h/2)*TILE; }
+  else if(state.hubPois && state.hubPois.ultra){ const e=state.hubPois.ultra; cx=((e.tx||0) + (e.w||0)/2)*TILE; cy=((e.ty||0) + (e.h||0)/2)*TILE; }
+  else { cx=state.W*TILE/2; cy=state.H*TILE/2; }
+  state.camX = cx - (viewW()/state.zoom)/2;
+  state.camY = cy - (viewH()/state.zoom)/2;
+}
 function enterHubFromCombat(state){
   if(typeof document!=='undefined') document.body.classList.remove('scene-hubload');   // end the panorama loading scene
   const reward=hubRewardFor(state);
@@ -268,7 +284,9 @@ function enterHubFromCombat(state){
   G=newHubMap();
   mapIndex = Math.max(0, Math.min(CAMPAIGN.nextMapIndex, MAPS.length-1));
   if(typeof resetDialogs==='function') resetDialogs();
-  syncHud(); clampCam(G); computeFog(G); refreshUI(); running=true;
+  syncHud();
+  hubFocusUltra(G);                 // open at minimum zoom, centered on the ULTRA HQ (map middle)
+  clampCam(G); computeFog(G); refreshUI(); running=true;
   if(typeof syncPauseBtn==='function') syncPauseBtn();
   if(netRole==='host' && typeof mpHostEnterHub==='function') mpHostEnterHub();
   toast('Arrived at the H.U.B. — M3$ +'+reward.total);
