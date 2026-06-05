@@ -6,7 +6,7 @@
   const HUB_MAP_BIOMES = ['grass','mountain','water','tech','desert','ice','volcanic'];
   const HUB_MAP_MEGA_CATS = ['megabuilding','mountain','volcano','ruin'];
   const HUB_MAP_TOPO_SLOTS = ['tree','rock'];
-  const HUB_MAP_BUILDING_TYPES = ['hq','barracks','turret','outpost','condo','mdc','ultra','garage','launchpad'];
+  const HUB_MAP_BUILDING_TYPES = ['hq','barracks','turret','outpost','condo','mdc','ultra','garage','launchpad','training'];
   const HUB_MAP_ALLOWED = {
     root:['version','W','H','player','wasteland','pois','rivers','bridges','megaSprites','buildings','topography','terrainPaint'],
     poi:['id','kind','name','type','x','y','w','h','visual'],

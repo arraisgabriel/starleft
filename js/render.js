@@ -255,6 +255,9 @@ function render(state){
     else if(d.g) drawGoldmine(state, d.g, ox,oy, d.dim);
     else drawUnit(state, d.u, ox,oy);
   }
+  // Training Grounds: trainees are storedIn (skipped by the depth loop) — draw them live, on
+  // top of the facility, standing on their shooting-range lanes.
+  if(state.hub && typeof drawHubTrainees==='function') drawHubTrainees(state, ox, oy);
   if(state.extractFlight && typeof drawExtractionFlight==='function') drawExtractionFlight(state);
 
   // ---- ambient particles: FRONT pass (fireflies/embers/snow/dust/motes) — over the sprites ----
@@ -823,6 +826,43 @@ function drawBuilding(state,e,ox,oy,dim){
 // (distinct from enemy red, goldmine violet, neutral green). Used for the per-unit/building
 // controller pip + minimap blips, shown only when networked (netRole!=='solo').
 function ctrlColor(ctrl){ return ctrl==='p2' ? '#ff9d3c' : '#7fd6ff'; }
+
+// H.U.B.-only: draw the locked trainees inside the Training Grounds. They're storedIn (so the main
+// depth pass skips them). ALL trainees stand on the firing line BEFORE the counter, spread evenly
+// across the lanes (never cramped). Only their pose changes with training state:
+//   • IDLE (awaiting a session)  → idle animation, facing LEFT (away from the range).
+//   • IN A SESSION (training)    → SHOOTING animation looping, facing RIGHT toward the targets.
+// Positions are by stable slot order, re-spaced smoothly as trainees come and go. Same world-space
+// ctx + (ox,oy) convention as drawUnit; drawn back-row-first so the near row overlaps correctly.
+function drawHubTrainees(state, ox, oy){
+  if(typeof hubTrainees!=='function' || typeof hubFindTrainingGrounds!=='function') return;
+  const fac=hubFindTrainingGrounds(state); if(!fac) return;
+  const T=(typeof CAMPAIGN!=='undefined' && CAMPAIGN.training) || {staged:[], sessions:[]};
+  const shootKeys=new Set();
+  for(const s of (T.sessions||[])){ if(s.a) shootKeys.add(s.a.key); if(s.b) shootKeys.add(s.b.key); }
+  const list=hubTrainees(state).slice().sort((a,b)=>((a.trainSlot|0)-(b.trainSlot|0))||((a.id|0)-(b.id|0)));
+  const N=list.length, draw=[];
+  for(let i=0;i<N;i++){
+    const u=list[i], sType=u.spriteType||u.type;
+    const shoot=(typeof hubUnitKey==='function') && shootKeys.has(hubUnitKey(u));
+    const t=hubTrainFiringPos(fac, i, N);
+    if(!u._trainPlaced){ u.x=t.x; u.y=t.y; u._trainPlaced=true; }              // first frame → snap in
+    else { u.x+=(t.x-u.x)*0.25; u.y+=(t.y-u.y)*0.25; }                         // smooth re-spacing
+    u._face = shoot ? 1 : -1;                                                   // shoot→face range(right); idle→left
+    let anim=null, fi=0;
+    if(shoot){ anim=(typeof actionAnim==='function' && actionAnim(sType,'attack',u.owner)) || (typeof unitWalk==='function'?unitWalk(sType,u.owner):null);
+      if(anim) fi=((state.time*6 + (u.id||0)*0.7)|0)%anim.frames.length; }      // shooting loop
+    else { anim=(typeof unitWalk==='function')?unitWalk(sType,u.owner):null;
+      if(anim) fi=((state.time*1.8 + (u.id||0)*0.5)|0)%anim.frames.length; }    // gentle idle
+    draw.push({u, anim, fi});
+  }
+  draw.sort((a,b)=>a.u.y-b.u.y);                                                // depth: farther (lower y) first
+  for(const it of draw){
+    const u=it.u, px=u.x+ox, py=u.y+oy, vh=unitDrawH(u);
+    if(it.anim) blitFrame(u, px, py, it.anim, vh, it.fi);
+    else { ctx.fillStyle=isRedSide(u.owner)?'#c0392b':'#3b7fd0'; ctx.beginPath(); ctx.arc(px, py-vh*0.3, vh*0.2, 0, 6.28); ctx.fill(); }
+  }
+}
 
 function drawUnit(state,u,ox,oy){
   const px=u.x+ox, py=u.y+oy;

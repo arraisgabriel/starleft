@@ -144,6 +144,23 @@ window.HUB_MAP_DATA = {
       "visual": {
         "megaId": "ultra_mega"
       }
+    },
+    {
+      "id": "training",
+      "kind": "training",
+      "name": "Training Grounds",
+      "type": "training",
+      "x": 96,
+      "y": 24,
+      "w": 28,
+      "h": 22,
+      "visual": {
+        "type": "training",
+        "faction": "player",
+        "fixedFrame": 0,
+        "overhang": 1,
+        "heightScale": 0.82
+      }
     }
   ],
   "rivers": [
@@ -1401,17 +1418,6 @@ window.HUB_MAP_DATA = {
   ],
   "buildings": [
     {
-      "id": "launchpad_1",
-      "poiId": null,
-      "type": "launchpad",
-      "owner": "neutral",
-      "tx": 100,
-      "ty": 27,
-      "w": 16,
-      "h": 16,
-      "visual": null
-    },
-    {
       "id": "garage_1",
       "poiId": null,
       "type": "garage",
@@ -2496,198 +2502,6 @@ window.HUB_MAP_DATA = {
       "slot": "rock",
       "tx": 37,
       "ty": 89,
-      "w": 3,
-      "h": 3,
-      "biome": "grass",
-      "v": 0.35,
-      "overhang": 1.08,
-      "heightScale": 1
-    },
-    {
-      "id": "tree_127",
-      "slot": "tree",
-      "tx": 116,
-      "ty": 23,
-      "w": 3,
-      "h": 3,
-      "biome": "grass",
-      "v": 0.35,
-      "overhang": 1.08,
-      "heightScale": 1
-    },
-    {
-      "id": "tree_128",
-      "slot": "tree",
-      "tx": 115,
-      "ty": 22,
-      "w": 3,
-      "h": 3,
-      "biome": "grass",
-      "v": 0.35,
-      "overhang": 1.08,
-      "heightScale": 1
-    },
-    {
-      "id": "tree_129",
-      "slot": "tree",
-      "tx": 114,
-      "ty": 23,
-      "w": 3,
-      "h": 3,
-      "biome": "grass",
-      "v": 0.35,
-      "overhang": 1.08,
-      "heightScale": 1
-    },
-    {
-      "id": "tree_130",
-      "slot": "tree",
-      "tx": 115,
-      "ty": 25,
-      "w": 3,
-      "h": 3,
-      "biome": "grass",
-      "v": 0.35,
-      "overhang": 1.08,
-      "heightScale": 1
-    },
-    {
-      "id": "tree_131",
-      "slot": "tree",
-      "tx": 116,
-      "ty": 21,
-      "w": 3,
-      "h": 3,
-      "biome": "grass",
-      "v": 0.35,
-      "overhang": 1.08,
-      "heightScale": 1
-    },
-    {
-      "id": "tree_132",
-      "slot": "tree",
-      "tx": 114,
-      "ty": 21,
-      "w": 3,
-      "h": 3,
-      "biome": "grass",
-      "v": 0.35,
-      "overhang": 1.08,
-      "heightScale": 1
-    },
-    {
-      "id": "tree_133",
-      "slot": "tree",
-      "tx": 113,
-      "ty": 23,
-      "w": 3,
-      "h": 3,
-      "biome": "grass",
-      "v": 0.35,
-      "overhang": 1.08,
-      "heightScale": 1
-    },
-    {
-      "id": "tree_134",
-      "slot": "tree",
-      "tx": 105,
-      "ty": 22,
-      "w": 3,
-      "h": 3,
-      "biome": "grass",
-      "v": 0.35,
-      "overhang": 1.08,
-      "heightScale": 1
-    },
-    {
-      "id": "tree_135",
-      "slot": "tree",
-      "tx": 103,
-      "ty": 22,
-      "w": 3,
-      "h": 3,
-      "biome": "grass",
-      "v": 0.35,
-      "overhang": 1.08,
-      "heightScale": 1
-    },
-    {
-      "id": "tree_136",
-      "slot": "tree",
-      "tx": 103,
-      "ty": 24,
-      "w": 3,
-      "h": 3,
-      "biome": "grass",
-      "v": 0.35,
-      "overhang": 1.08,
-      "heightScale": 1
-    },
-    {
-      "id": "tree_137",
-      "slot": "tree",
-      "tx": 101,
-      "ty": 24,
-      "w": 3,
-      "h": 3,
-      "biome": "grass",
-      "v": 0.35,
-      "overhang": 1.08,
-      "heightScale": 1
-    },
-    {
-      "id": "tree_138",
-      "slot": "tree",
-      "tx": 100,
-      "ty": 22,
-      "w": 3,
-      "h": 3,
-      "biome": "grass",
-      "v": 0.35,
-      "overhang": 1.08,
-      "heightScale": 1
-    },
-    {
-      "id": "tree_139",
-      "slot": "tree",
-      "tx": 104,
-      "ty": 22,
-      "w": 3,
-      "h": 3,
-      "biome": "grass",
-      "v": 0.35,
-      "overhang": 1.08,
-      "heightScale": 1
-    },
-    {
-      "id": "tree_140",
-      "slot": "tree",
-      "tx": 106,
-      "ty": 24,
-      "w": 3,
-      "h": 3,
-      "biome": "grass",
-      "v": 0.35,
-      "overhang": 1.08,
-      "heightScale": 1
-    },
-    {
-      "id": "tree_141",
-      "slot": "tree",
-      "tx": 100,
-      "ty": 26,
-      "w": 3,
-      "h": 3,
-      "biome": "grass",
-      "v": 0.35,
-      "overhang": 1.08,
-      "heightScale": 1
-    },
-    {
-      "id": "tree_142",
-      "slot": "tree",
-      "tx": 100,
-      "ty": 23,
       "w": 3,
       "h": 3,
       "biome": "grass",

@@ -16,7 +16,23 @@ const LIFE_FX = { aspectBias: 0.70, crimeChance: 0.45, buffDur: 25 };
 /* ---- seeded helpers (reuse the game's makeRng for determinism) ---- */
 function _loHash(n){ let h=((n|0)*2654435761) ^ 0x9e3779b9; h=Math.imul(h^(h>>>15),2246822519); return (h>>>0); }
 function _loPick(rng, arr){ return arr[(rng()*arr.length)|0]; }
+// version-gated pick: like _loPick but caps the draw to the first `n` entries (a unit only ever
+// sees the background pool as it stood at the content-version it was minted at). Consumes exactly
+// one rng() step regardless of n, so adding entries never disturbs an existing seed's draw stream.
+function _loPickN(rng, arr, n){ return arr[(rng()*(n>0?n:arr.length))|0]; }
 function _loCap(s){ return s ? s[0].toUpperCase()+s.slice(1) : s; }
+
+// ---- dossier content-versioning (see _dev/gen/lore_additions.mjs + gen_lore.mjs) ----
+// LORE_DATA.versions[v-1] = the background-pool LENGTHS a unit minted at content-version v should
+// draw from. Growing a pool appends a new version row; already-minted veterans keep their row, so
+// their name/backstory never shifts. Missing table (pre-versioning data) or missing v (legacy save)
+// resolves to full current lengths — i.e. exactly the old, un-versioned behavior.
+function _latestVersion(){ const V = (typeof LORE_DATA!=='undefined') && LORE_DATA.versions; return (V && V.length) ? V.length : 1; }
+function _poolLens(v){
+  const V = (typeof LORE_DATA!=='undefined') && LORE_DATA.versions;
+  if(!V || !V.length) return null;                                   // no table → full-length picks
+  return V[Math.min(Math.max((v|0)||1, 1), V.length) - 1];
+}
 // Pick one prose variation per lore area from a (deterministic) rng. Stored raw on the dossier;
 // slots are resolved at render time by dossierHTML's fillP. See LORE_DATA.paras.
 function _attachParas(d, rng){
@@ -38,6 +54,17 @@ const _NAME_POOL = {
   f: (LORE_DATA.namesF||[]).concat(LORE_DATA.namesX||[]),   // female voice → female + unisex names
 };
 function _namePool(type){ const p=_NAME_POOL[_UNIT_GENDER[type]]; return (p&&p.length)?p:LORE_DATA.firstNames; }
+// version-gated name pool: slice each gendered pool to its version length, then concat in the same
+// order as _NAME_POOL (gendered first, unisex last) so a unit only draws names that existed at its
+// version. L null (no versions table) → the full-length pool, identical to _namePool.
+function _namePoolV(type, L){
+  if(!L) return _namePool(type);
+  const g = _UNIT_GENDER[type] || 'm';
+  const X = (LORE_DATA.namesX||[]).slice(0, L.namesX);
+  const base = (g==='f' ? (LORE_DATA.namesF||[]) : (LORE_DATA.namesM||[])).slice(0, g==='f' ? L.namesF : L.namesM);
+  const pool = base.concat(X);
+  return pool.length ? pool : (LORE_DATA.firstNames||[]).slice(0, L.firstNames || (LORE_DATA.firstNames||[]).length);
+}
 
 /* ---- backstory assignment ---- */
 const _dossierCache = new Map();   // seed -> built backstory (module-global; not serialized)
@@ -50,7 +77,10 @@ function ensureDossier(u){
   // salt 0 (pre-salt saves, or G absent) reduces to _loHash(id+1) — identical to the legacy behavior.
   if(!u.lore){
     const salt = (typeof G!=='undefined' && G && G.runSalt) ? (G.runSalt|0) : 0;
-    u.lore = { seed: _loHash(((u.id||0)+1) ^ salt), events: [] };
+    // Stamp the content-version at MINT time so this unit's background pools are frozen forever, even
+    // if later content drops grow the pools. Existing u.lore (carried vets / loaded saves) is left
+    // untouched — a missing v is read as v1 — so no already-minted veteran's identity ever shifts.
+    u.lore = { seed: _loHash(((u.id||0)+1) ^ salt), events: [], v: _latestVersion() };
   }
 }
 
@@ -81,25 +111,27 @@ function makeHeroDossier(spec){
 function buildDossier(u){
   if(u.lore && u.lore.fixed) return makeHeroDossier(u.lore.fixed);   // named hero — skip the RNG
   const seed = u.lore.seed;
-  const ck = seed+'|'+(_UNIT_GENDER[u.type]||'');   // gender shapes the name pool → part of the cache key
+  const v = (u.lore.v|0) || 1;                       // missing v (legacy save) → v1
+  const L = _poolLens(v);                            // version pool lengths (null = full-length, pre-versions)
+  const ck = seed+'|'+(_UNIT_GENDER[u.type]||'')+'|v'+v;   // gender + version shape the pools → cache key
   if(_dossierCache.has(ck)) return _dossierCache.get(ck);
   // % 233280 reduces the 32-bit hash into makeRng's LCG range BEFORE the first step. Without it,
   // makeRng's internal seed*9301*9301 overflows 2^53 and rounds away its low bits, biasing the early
   // draws toward repeats among the small/consecutive ids real games use (see rollLifeEvent's note).
   const r = makeRng(seed % 233280);
-  const first  = _loPick(r, _namePool(u.type));   // gender-matched to the unit's voice
-  const last   = _loPick(r, LORE_DATA.surnames);
-  const home   = _loPick(r, LORE_DATA.hometowns);
-  const fam    = _loPick(r, LORE_DATA.family);
-  const relName= _loPick(r, LORE_DATA.firstNames);
+  const first  = _loPickN(r, _namePoolV(u.type, L));         // gender- + version-matched
+  const last   = _loPickN(r, LORE_DATA.surnames,  L && L.surnames);
+  const home   = _loPickN(r, LORE_DATA.hometowns, L && L.hometowns);
+  const fam    = _loPickN(r, LORE_DATA.family,    L && L.family);
+  const relName= _loPickN(r, LORE_DATA.firstNames,L && L.firstNames);
   const full   = first+' '+last;
   // baseFill resolves the "person" slots that the backstory fragments THEMSELVES contain,
   // so the dream/trauma/crime/family strings are slot-free before any event embeds them.
   const baseFill = (t)=> t.replace(/\{me\}/g, first).replace(/\{full\}/g, full)
     .replace(/\{home\}/g, home).replace(/\{rel\}/g, fam.rel).replace(/\{relName\}/g, relName);
-  const trauma = baseFill(_loPick(r, LORE_DATA.traumas));
-  const dream  = baseFill(_loPick(r, LORE_DATA.dreams));
-  const crime  = (r() < LIFE_FX.crimeChance) ? baseFill(_loPick(r, LORE_DATA.crimes)) : null;
+  const trauma = baseFill(_loPickN(r, LORE_DATA.traumas, L && L.traumas));
+  const dream  = baseFill(_loPickN(r, LORE_DATA.dreams,  L && L.dreams));
+  const crime  = (r() < LIFE_FX.crimeChance) ? baseFill(_loPickN(r, LORE_DATA.crimes, L && L.crimes)) : null;
   const familyText = baseFill(fam.text);
   const d = { first, last, full, home, rel:fam.rel, relName, trauma, dream, crime, familyText };
   // event/prose filler: person slots (baseFill) + the already-resolved backstory slots

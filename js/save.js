@@ -126,6 +126,10 @@ function deserializeGame(s){
   if(g.hub){
     g.hubPois={}; g.entities.forEach(e=>{ if(e.hubPoi) g.hubPois[e.hubPoi.id]=e; });
     if(typeof hubRestorePoiVisuals==='function') hubRestorePoiVisuals(g);
+    // migrate old HUB saves: inject facilities added since the save was written (e.g. the
+    // Training Grounds, which replaced the launchpad) and re-materialise any trainees.
+    if(typeof hubReconcileFacilities==='function') hubReconcileFacilities(g);
+    if(typeof hubSpawnTrainees==='function') hubSpawnTrainees(g);
   }
   // funding nodes carry a 3x3 footprint; feat[] was rebuilt from features[] only, so
   // restamp each node's mask (blocked[] was serialized and is already correct).

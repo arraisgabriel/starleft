@@ -129,7 +129,8 @@ button.roster-row:hover { background:rgba(60,28,40,.85); color:#fff; }
 #crawlScreen { background:#000; overflow:hidden; justify-content:flex-start; }
 #crawl-intro {
   position:absolute; top:50%; left:50%; transform:translate(-50%,-50%);
-  color:#e06b5b; font-size:24px; letter-spacing:1px; text-align:center; max-width:80%;
+  color:#ff6a6a; font-size:24px; letter-spacing:1px; text-align:center; max-width:80%;
+  text-shadow:0 0 8px rgba(255,60,60,.5);
   opacity:0; animation: introFade 5s ease-in-out forwards;
 }
 @keyframes introFade { 0%{opacity:0;} 15%{opacity:1;} 80%{opacity:1;} 100%{opacity:0;} }
@@ -143,12 +144,14 @@ button.roster-row:hover { background:rgba(60,28,40,.85); color:#fff; }
 #crawl-content {
   position:absolute; top:100%; left:50%; width:min(600px,58vw); box-sizing:border-box;
   transform:translateX(-50%) rotateX(18deg);
-  transform-origin:50% 0%; color:#ffd75e; text-align:justify;
+  transform-origin:50% 0%; color:#ff6a6a; text-align:justify; text-shadow:0 0 6px rgba(255,55,55,.45);
   animation: crawlUp 86.97s linear forwards; animation-delay:0.1s;
 }
 #crawlScreen.fast #crawl-content { animation-duration:0s; }
-.crawl-ep { text-align:center; font-size:22px; letter-spacing:6px; margin-bottom:10px; color:#ffd75e; }
-.crawl-title { text-align:center; font-size:46px; letter-spacing:3px; margin-bottom:36px; color:#ffd75e; text-shadow:0 0 14px #ffb70060; }
+.crawl-ep { text-align:center; font-size:22px; letter-spacing:6px; margin-bottom:10px; color:#ff6a6a; }
+.crawl-title { text-align:center; font-size:46px; letter-spacing:3px; margin-bottom:36px; text-shadow:0 0 14px rgba(255,50,50,.55), 0 0 30px rgba(255,0,0,.32); }
+/* #crawl-title (id) outranks `.overlay h2{color:#ffd86b}` so the title shows the crawl red, not the amber heading colour */
+#crawl-title { color:#ff7b7b; }
 .crawl-text { font-size:26px; line-height:1.7; white-space:pre-wrap; font-weight:600; }
 @keyframes crawlUp { 0%{ top:83%; } 100%{ top:-260%; } }
 #crawl-skip { position:absolute; bottom:34px; right:34px; padding:9px 20px; font-size:14px; z-index:5; }
@@ -224,6 +227,41 @@ button.roster-row:hover { background:rgba(60,28,40,.85); color:#fff; }
   #endScreen .carry-card{ width:clamp(150px,30vw,210px); min-height:0; padding:7px 10px; }
   #endScreen .btn{ margin-top:2px; }
 }
+
+/* ---------- Training Grounds panel ---------- */
+#trainingScreen .submenu-panel{ width:min(860px,96vw); align-items:stretch; gap:12px; }
+#trainingBody{ display:flex; flex-direction:column; gap:12px; }
+.train-summary{ color:#e7c8a0; font-size:13px; letter-spacing:.5px; }
+.train-summary b{ color:#ffd86b; }
+.train-h{ font-size:11px; letter-spacing:2px; text-transform:uppercase; color:#ff9aa2;
+  border-bottom:1px solid #5a2f3a; padding-bottom:4px; margin-top:4px; }
+.train-staged{ display:flex; flex-wrap:wrap; gap:10px; }
+.train-card{ display:flex; flex-direction:column; align-items:center; gap:4px; cursor:pointer;
+  background:rgba(40,20,28,.6); border:1px solid #5a2f3a; border-radius:9px; padding:8px;
+  color:#f0d6da; transition:.12s; font:inherit; }
+.train-card:hover{ background:rgba(60,28,40,.85); }
+.train-card.sel{ border-color:#8effb0; box-shadow:0 0 0 1px #8effb0 inset, 0 0 14px rgba(142,255,176,.25); }
+.train-card.sel .train-cap b::after{ content:' ✓'; color:#8effb0; }
+.train-spr{ width:clamp(128px,17vw,190px); height:clamp(128px,17vw,190px);
+  background:radial-gradient(ellipse at 50% 80%, rgba(120,200,255,.10), rgba(0,0,0,0) 62%); }
+.train-cap{ text-align:center; font-size:12px; line-height:1.35; color:#e7c8a0; }
+.train-cap b{ color:#fff; }
+.train-pairctl{ display:flex; align-items:center; gap:14px; flex-wrap:wrap;
+  background:rgba(20,10,14,.55); border:1px solid #4a2630; border-radius:8px; padding:10px 12px; }
+.train-pairinfo{ flex:1; min-width:200px; color:#cfe9ff; font-size:13px; }
+.train-pairinfo b{ color:#8effb0; }
+.sc-btn.train-start, .sc-btn.train-withdraw{ width:auto; min-width:200px; justify-content:center; text-align:center; clip-path:none; }
+.sc-btn.disabled{ opacity:.4; pointer-events:none; }
+.train-withdraw{ align-self:flex-end; font-size:12px; min-width:0; padding:6px 14px; }
+.train-session{ display:flex; flex-direction:column; gap:8px;
+  background:rgba(28,12,17,.7); border:1px solid #5a2f3a; border-left:3px solid #ffd24a; border-radius:9px; padding:12px; }
+.train-pair{ display:flex; gap:18px; justify-content:center; flex-wrap:wrap; }
+.train-pair-slot{ display:flex; flex-direction:column; align-items:center; gap:4px; }
+.train-meta{ display:flex; flex-direction:column; gap:6px; align-items:center; }
+.train-countdown{ font-size:20px; font-weight:700; letter-spacing:1px; color:#ffd86b; font-variant-numeric:tabular-nums; }
+.train-bar{ width:100%; max-width:420px; height:8px; background:rgba(0,0,0,.45);
+  border:1px solid #5a2f3a; border-radius:5px; overflow:hidden; }
+.train-bar>i{ display:block; height:100%; width:0; background:linear-gradient(90deg,#3b86ff,#8effb0); transition:width .3s linear; }
 
 /* mobile / narrow: let the load-game panel scroll as one piece (shared with the menu's
    narrow breakpoint in menu.css; these two rules target screen selectors so they live here) */

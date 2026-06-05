@@ -142,6 +142,9 @@ const DEF = {
               flavor:'Vehicle bay. Turns Funding into Food Trucks, Auditors and Founder Mechs.' },
   launchpad:{ name:'Launch Pad', icon:'🚀', kind:'building', w:3,h:3, hp:850,  cost:250, build:28, sight:5, supply:0, color:'#5a6b8a',
               flavor:'Starport. Assembles Drugztore Delivery Drones and Buzzword Bombers. Requires a Garage.' },
+  /* ---- H.U.B.-only Training Grounds (level-cloning facility; never built in combat) ---- */
+  training: { name:'Training Grounds', icon:'🎯', kind:'building', w:28,h:22, hp:4000, cost:0, build:1, sight:8, supply:0, color:'#5a6b8a',
+              flavor:'A neon shooting academy. Lock a veteran mentor in with a junior of the same type — both walk out one level above the senior.' },
 };
 
 /* Which units each production building can hire — single source for the build

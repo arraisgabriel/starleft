@@ -15,6 +15,10 @@ const HUB = Object.assign({
   styleCost:120,
   academyCost:250,
   gambleStake:100,
+  // ---- Training Grounds tunables ----
+  trainHourSeconds:3600,  // real seconds of ACTIVE play per "in-game hour" of training (1h = 1 real hour)
+  trainPairCap:6,         // max simultaneous training sessions (pairs)
+  trainMaxGap:6,          // max level difference allowed between mentor and junior
 }, HUB_PLACEMENT);
 
 function hubBiomeId(v, fallback){
@@ -66,6 +70,7 @@ function hubDefaultCampaign(){
     condos,
     upgrades:{},
     dispatch:{ mdcId:null, staged:[] },
+    training:{ staged:[], sessions:[] },
     visit:0,
     gambled:false,
     lastReward:null,
@@ -81,6 +86,10 @@ function deserializeHubCampaign(data){
     CAMPAIGN.condos = Object.assign(defaults.condos, data.condos||{});
     CAMPAIGN.upgrades = data.upgrades || {};
     CAMPAIGN.dispatch = Object.assign({mdcId:null, staged:[]}, data.dispatch||{});
+    // legacy-safe: saves predating the Training Grounds simply load with empty training
+    CAMPAIGN.training = Object.assign({staged:[], sessions:[]}, data.training||{});
+    if(!Array.isArray(CAMPAIGN.training.staged)) CAMPAIGN.training.staged=[];
+    if(!Array.isArray(CAMPAIGN.training.sessions)) CAMPAIGN.training.sessions=[];
   }
 }
 function hubOwnerCtrl(){ return 'p1'; }
@@ -408,6 +417,7 @@ function newHubMap(){
   if(typeof buildWaterDepth==='function') buildWaterDepth(state);
   hubPlacePois(state);
   hubSpawnRoster(state);
+  if(typeof hubSpawnTrainees==='function') hubSpawnTrainees(state);
   hubRevealAll(state);
   recomputeSupply(state);
   return state;
@@ -514,6 +524,62 @@ function hubRestorePoiVisuals(state){
   }
   hubEnsureMapMegas(state);
 }
+// Clear a tile box so a facility footprint reads cleanly: turn tree/rock tiles to grass and
+// drop any topography feature (+ its walk-under mask) overlapping the box. Used when injecting
+// a facility into an ALREADY-GENERATED (loaded) HUB map.
+function hubClearFootprint(state, x0, y0, w, h){
+  const W=state.W, H=state.H;
+  for(let y=y0;y<y0+h;y++) for(let x=x0;x<x0+w;x++){
+    if(x<0||y<0||x>=W||y>=H) continue;
+    const i=y*W+x;
+    if(state.tiles[i]===T_TREE || state.tiles[i]===T_ROCK){ state.tiles[i]=T_GRASS; if(state.feat) state.feat[i]=0; }
+  }
+  const ov=(f)=>{ const fw=Math.max(1,(f.w||1)|0), fh=Math.max(1,(f.h||1)|0);
+    return f.tx < x0+w && f.tx+fw > x0 && f.ty < y0+h && f.ty+fh > y0; };
+  const drop=(state.features||[]).filter(ov);
+  if(drop.length){
+    for(const f of drop){ const fw=Math.max(1,(f.w||1)|0), fh=Math.max(1,(f.h||1)|0);
+      for(let y=0;y<fh;y++) for(let x=0;x<fw;x++){ const cx=f.tx+x, cy=f.ty+y;
+        if(cx>=0&&cy>=0&&cx<W&&cy<H && state.feat) state.feat[cy*W+cx]=0; } }
+    state.features=state.features.filter(f=>!ov(f));
+  }
+}
+// A loaded HUB save snapshots the map as it was when SAVED, so HUB-layout edits (a new facility
+// like the Training Grounds, a removed building) won't appear on old saves. Reconcile the loaded
+// map against the current HUB.pois: inject any missing POI, remove superseded decor buildings that
+// occupy its footprint, clear terrain under it, then re-materialise any trainees. Idempotent.
+function hubReconcileFacilities(state){
+  if(!state || !state.hub) return;
+  state.hubPois = state.hubPois || {};
+  const overlaps=(ax,ay,aw,ah, bx,by,bw,bh)=> ax < bx+bw && ax+aw > bx && ay < by+bh && ay+ah > by;
+  let added=false;
+  for(const p of (HUB.pois||[])){
+    if((state.entities||[]).some(e=>e&&!e.dead&&e.hubPoi&&e.hubPoi.id===p.id)) continue;   // already present
+    const d=DEF[p.type]||{w:3,h:3}, w=p.w||d.w||3, h=p.h||d.h||3;
+    // remove decor / non-POI buildings sitting on this footprint (e.g. the old launchpad)
+    for(const e of (state.entities||[])){
+      if(!e || e.dead || e.kind!=='building') continue;
+      if(e.hubPoi && e.hubPoi.kind!=='decor') continue;                 // keep real POIs
+      if(overlaps(p.x,p.y,w,h, e.tx,e.ty,e.w,e.h)){
+        if(typeof markBuilding==='function') markBuilding(state,e,false);
+        e.dead=true;
+        if(state.hubPois && e.hubPoi) delete state.hubPois[e.hubPoi.id];
+      }
+    }
+    hubClearFootprint(state, p.x-2, p.y-2, w+4, h+4);
+    const e=mkBuilding(state, p.type, 'neutral', p.x, p.y, true);
+    hubResizeBuilding(state, e, w, h);
+    e.hubPoi={id:p.id, kind:p.kind, name:p.name};
+    state.hubPois[p.id]=e;
+    hubApplyPoiVisual(e, p);
+    added=true;
+  }
+  if(added){
+    hubEnsureMapMegas(state);
+    if(typeof hubSpawnTrainees==='function') hubSpawnTrainees(state);
+    if(typeof recomputeSupply==='function') recomputeSupply(state);
+  }
+}
 function hubPlacePois(state){
   for(const p of HUB.pois){
     const e=mkBuilding(state,p.type,'neutral',p.x,p.y,true);
@@ -586,6 +652,7 @@ function hubUnitArrivedPoi(state,u,poi){
   if(p.kind==='mdc') hubStageUnit(u,p.id,poi);
   else if(p.kind==='condo') hubShowCondo(p.id);
   else if(p.kind==='ultra') hubShowUltra(u);
+  else if(p.kind==='training') hubTrainStage(state,u,poi);
 }
 function hubEnlistedKeys(){
   CAMPAIGN.dispatch = Object.assign({mdcId:null, staged:[]}, CAMPAIGN.dispatch||{});
@@ -777,6 +844,250 @@ function hubGamble(){
 }
 function hubShowCondo(id){ const c=CAMPAIGN.condos[id]; toast('Condo level '+(c.level||0)+' — residents: '+(c.residents||[]).length); }
 function hubShowUltra(u){ toast('ULTRA services unlocked for '+((u&&u.heroId)||'resident')+'.'); }
+
+/* =====================================================================
+   TRAINING GROUNDS — level-cloning between two same-type units.
+   A junior + a higher-level mentor (<= HUB.trainMaxGap apart) lock inside the
+   facility; after (target - juniorLevel) in-game hours of ACTIVE play (1 hour =
+   HUB.trainHourSeconds real seconds) both leave one level above the senior.
+   State lives on CAMPAIGN.training so it survives the roster rebuild + save/load;
+   the clock ticks in update() for both HUB and missions. Reuses the M.D.C.
+   garrison pattern (storedIn + lane positions) for intake/lock/release.
+   ===================================================================== */
+
+// The live Training Grounds POI entity on this map (or null).
+function hubFindTrainingGrounds(state){
+  if(!state) return null;
+  if(state.hubPois && state.hubPois.training) return state.hubPois.training;
+  return (state.entities||[]).find(e=>e&&!e.dead&&e.hubPoi&&e.hubPoi.kind==='training') || null;
+}
+// Lane indices (0..trainPairCap*2-1) currently occupied by staged or in-session trainees.
+function hubTrainUsedSlots(){
+  const t=CAMPAIGN.training, used=new Set();
+  for(const s of (t.staged||[])) if(s && s.slot!=null) used.add(s.slot);
+  for(const ses of (t.sessions||[])){ if(ses.a&&ses.a.slot!=null) used.add(ses.a.slot); if(ses.b&&ses.b.slot!=null) used.add(ses.b.slot); }
+  return used;
+}
+function hubTrainNextSlot(){
+  const used=hubTrainUsedSlots(), cap=HUB.trainPairCap*2;
+  for(let i=0;i<cap;i++) if(!used.has(i)) return i;
+  return -1;
+}
+function hubTrainCount(){
+  const t=CAMPAIGN.training;
+  return (t.staged||[]).length + (t.sessions||[]).length*2;
+}
+// Map a normalised point on the facility SPRITE (un,vn in 0..1, left→right / top→bottom) to a world
+// position. The sprite is bottom-anchored over the footprint with a ~1.1-tile top inset (see
+// drawHubBuildingSpriteVisual: heightScale 0.82 → ~21 tiles tall on the 22-tall footprint).
+function hubTrainSpritePos(fac, un, vn){
+  return { x:(fac.tx + un*fac.w)*TILE, y:(fac.ty + 1.1 + vn*(fac.h-1.1))*TILE };
+}
+// Firing-line spot BEFORE the counter, spread across the lanes. `idx` of `total` live trainees is
+// distributed left→right along the counter's near edge (a second row appears past 6) so they never
+// cram together. Trainees stand here whether idle or shooting — only their facing/animation changes.
+function hubTrainFiringPos(fac, idx, total){
+  const perRow=6, rows = total>perRow ? 2 : 1;
+  const r0 = Math.ceil(total/rows);                 // count in the front row
+  const row = idx < r0 ? 0 : 1, inRow = row===0 ? r0 : (total-r0), col = row===0 ? idx : idx-r0;
+  const t = inRow<=1 ? 0.5 : col/(inRow-1);         // 0..1 across the lanes
+  // Seat units on the lane NEAR-ENDS (the firing line), which run DOWN-RIGHT in the iso sprite
+  // (lane 0 upper-left → lane 5 lower-right) — so each trainee stands in a lane, not across them.
+  let u = 0.32 + t*0.27, v = 0.44 + t*0.17;
+  if(row){ u -= 0.03; v += 0.045; }                 // 2nd rank: one step back toward the viewer, same lanes
+  return hubTrainSpritePos(fac, u, v);
+}
+// Lock a live unit inside the facility (storedIn, like an M.D.C. garrison). Its exact lane/waiting
+// position + animation are resolved every frame by drawHubTrainees from CAMPAIGN.training state;
+// _trainPlaced=false makes the first render snap it into place (later target changes glide).
+function hubTrainLockUnit(state, u, fac, slot){
+  resetMotion(u);
+  u.cmd=null; u.state='idle'; u.vx=0; u.vy=0; u.sprinting=false;
+  u.storedIn=fac.id; u.trainSlot=slot; u._face=1; u._trainPlaced=false;
+  u.x=fac.x; u.y=fac.y;
+  u.selected=false;
+  if(state && state.selection) state.selection=state.selection.filter(e=>e!==u);
+}
+// Resolve the live entity for a snapshot (by hubUnitKey), or null.
+function hubTrainLiveUnit(state, snap){
+  if(!state||!snap) return null;
+  return (state.entities||[]).find(e=>e&&!e.dead&&e.owner==='player'&&e.kind==='unit'&&hubUnitKey(e)===snap.key) || null;
+}
+// Live trainee entities currently inside the Training Grounds (render pass + panel animations).
+function hubTrainees(state){
+  if(!state) return [];
+  return (state.entities||[]).filter(e=>e&&!e.dead&&e.kind==='unit'&&e.trainSlot!=null && e.storedIn);
+}
+
+// Command-arrival intake: a unit walked into the Training Grounds → garrison it as "staged".
+function hubTrainStage(state, u, poi){
+  if(!hubCanAct()) return;
+  if(!state||!state.hub||!u||u.dead||u.owner!=='player'||u.kind!=='unit') return;
+  const fac=poi || hubFindTrainingGrounds(state);
+  if(!fac||!fac.hubPoi||fac.hubPoi.kind!=='training') return;
+  const bail=(msg)=>{ resetMotion(u); u.cmd=null; u.state='idle'; toast(msg); refreshUI(); };
+  if(typeof isCombatVet==='function' && !isCombatVet(u)) return bail((DEF[u.type].name||'That unit')+' has no career — only combat veterans train here.');
+  if(u.hero) return bail((u.heroId||'That hero')+' is one of a kind — heroes cannot be cloned.');
+  if(hubTrainCount() >= HUB.trainPairCap*2) return bail('Training Grounds full ('+(HUB.trainPairCap*2)+' trainees).');
+  const slot=hubTrainNextSlot();
+  if(slot<0) return bail('No free training lane.');
+  const snap=hubSnapUnit(u); snap.slot=slot;
+  CAMPAIGN.training.staged.push(snap);
+  hubTrainLockUnit(state, u, fac, slot);
+  spawnRing(u.x,u.y,'#ffd24a');
+  toast((DEF[u.type].name||'Unit')+' (Lv '+(u.stars||0)+') entered the Training Grounds.');
+  refreshUI();
+}
+
+// Push a snapshot back into the roaming roster (dedupe by key) so it persists like any HUB unit.
+function hubTrainToRoster(snap){
+  if(!snap) return;
+  CAMPAIGN.roster=(CAMPAIGN.roster||[]).filter(r=>r.key!==snap.key);
+  const clean=Object.assign({}, snap); delete clean.slot;
+  CAMPAIGN.roster.push(clean);
+}
+// Release a trainee snapshot to a free exit tile (and hand it back to the roaming roster).
+function hubTrainReleaseSnap(state, fac, snap){
+  hubTrainToRoster(snap);
+  const u=hubTrainLiveUnit(state, snap);
+  if(!u) return;
+  const spot=fac ? hubMdcExitTile(state, fac, (snap.slot||0)+1) : null;
+  delete u.storedIn; delete u.trainSlot;
+  if(spot){ u.x=spot.tx*TILE+TILE/2; u.y=spot.ty*TILE+TILE/2; }
+  else if(fac){ u.x=fac.x; u.y=(fac.ty+fac.h+1)*TILE; }
+  resetMotion(u); u.cmd=null; u.state='idle'; u.selected=false;
+  spawnRing(u.x,u.y,'#7fd6ff');
+}
+// Withdraw a staged unit OR cancel a whole session (frees both) — junior keeps its ORIGINAL level.
+function hubTrainWithdraw(unitKey){
+  if(!hubCanAct()){ toast('Only the host can operate the H.U.B.'); return false; }
+  if(!G||!G.hub||!unitKey) return false;
+  const t=CAMPAIGN.training, fac=hubFindTrainingGrounds(G);
+  const si=(t.staged||[]).findIndex(s=>s.key===unitKey);
+  if(si>=0){
+    const snap=t.staged.splice(si,1)[0];
+    hubTrainReleaseSnap(G, fac, snap);
+    toast(((DEF[snap.type]&&DEF[snap.type].name)||'Unit')+' left the Training Grounds.');
+    refreshUI(); return true;
+  }
+  const ses=(t.sessions||[]).find(x=>x.a.key===unitKey||x.b.key===unitKey);
+  if(ses){
+    t.sessions=t.sessions.filter(x=>x!==ses);
+    hubTrainReleaseSnap(G, fac, ses.a);
+    hubTrainReleaseSnap(G, fac, ses.b);
+    toast('Training cancelled — the junior leaves with nothing gained.');
+    refreshUI(); return true;
+  }
+  return false;
+}
+
+// Training duration (in-game hours) for a junior/mentor level pair (0 = pointless).
+function hubTrainDurationHours(minLvl, maxLvl){
+  const target=Math.min((typeof CAREER!=='undefined'?CAREER.maxStars:30), maxLvl+1);
+  return Math.max(0, target-minLvl);
+}
+// Validate a candidate pair (two staged snapshots): {ok, reason?, min, max, target, hours}.
+function hubTrainValidatePair(a, b){
+  if(!a||!b) return {ok:false, reason:'Pick two trainees inside the facility.'};
+  if(a.key===b.key) return {ok:false, reason:'Pick two different units.'};
+  if(a.type!==b.type) return {ok:false, reason:'Both units must be the same type.'};
+  const sa=a.stars||0, sb=b.stars||0, min=Math.min(sa,sb), max=Math.max(sa,sb);
+  if(Math.abs(sa-sb) > HUB.trainMaxGap) return {ok:false, reason:'Too far apart — max '+HUB.trainMaxGap+' levels of difference.'};
+  if((CAMPAIGN.training.sessions||[]).length >= HUB.trainPairCap) return {ok:false, reason:'All '+HUB.trainPairCap+' sessions are in use.'};
+  const target=Math.min((typeof CAREER!=='undefined'?CAREER.maxStars:30), max+1);
+  const hours=Math.max(0, target-min);
+  if(hours<=0) return {ok:false, reason:'Both units are already at the level cap.'};
+  return {ok:true, min, max, target, hours};
+}
+// Start a session from two staged units (keys are hubUnitKeys). mentor = higher level.
+function hubTrainCreateSession(keyA, keyB){
+  if(!hubCanAct()){ toast('Only the host can operate the H.U.B.'); return false; }
+  const t=CAMPAIGN.training;
+  const a=(t.staged||[]).find(s=>s.key===keyA), b=(t.staged||[]).find(s=>s.key===keyB);
+  const v=hubTrainValidatePair(a,b);
+  if(!v.ok){ toast(v.reason); return false; }
+  const mentor=((a.stars||0) >= (b.stars||0)) ? a : b, junior=(mentor===a)?b:a;
+  t.staged=t.staged.filter(s=>s!==a && s!==b);
+  t.sessions.push({ id:'ts_'+(HUB.nextId++), type:mentor.type, a:mentor, b:junior,
+    startMax:v.max, startMin:v.min, target:v.target, hoursTotal:v.hours, secElapsed:0, done:false });
+  toast('Training started — both reach Level '+v.target+' in '+v.hours+'h.');
+  refreshUI();
+  return true;
+}
+
+// Bump a snapshot to a level and apply it to the live entity if present.
+function hubTrainApplyLevel(state, snap, level){
+  const cap=(typeof CAREER!=='undefined')?CAREER.maxStars:30;
+  const lvl=Math.max(0, Math.min(cap, level));
+  snap.stars=lvl; snap.xp=(typeof CAREER!=='undefined')?CAREER.xpFor(lvl):snap.xp;
+  const u=hubTrainLiveUnit(state, snap);
+  if(u){ u.stars=lvl; u.xp=snap.xp; if(typeof applyVetHp==='function') applyVetHp(u,true); }
+}
+// Graduate a finished session in the HUB: both reach target, get released to roam, session removed.
+function hubGraduateSession(state, ses){
+  const fac=hubFindTrainingGrounds(state);
+  hubTrainApplyLevel(state, ses.a, ses.target);
+  hubTrainApplyLevel(state, ses.b, ses.target);
+  hubTrainReleaseSnap(state, fac, ses.a);
+  hubTrainReleaseSnap(state, fac, ses.b);
+  CAMPAIGN.training.sessions=(CAMPAIGN.training.sessions||[]).filter(x=>x!==ses);
+  const nm=(DEF[ses.type]&&DEF[ses.type].name)||'Recruits';
+  toast('🎓 Training complete — two '+nm+' graduate at Level '+ses.target+'.');
+}
+
+// Per-tick clock — runs from core.js update() for BOTH the HUB and missions (active play only).
+function updateTrainingSessions(dt){
+  if(typeof netRole!=='undefined' && netRole==='client') return;     // clients don't simulate campaign state
+  if(typeof CAMPAIGN==='undefined' || !CAMPAIGN || !CAMPAIGN.training) return;
+  const sessions=CAMPAIGN.training.sessions||[];
+  if(!sessions.length) return;
+  const inHub=(typeof G!=='undefined' && G && G.hub);
+  for(const ses of sessions.slice()){
+    if(ses.done) continue;
+    ses.secElapsed=(ses.secElapsed||0)+dt;
+    if(ses.secElapsed >= ses.hoursTotal*HUB.trainHourSeconds){
+      ses.done=true;
+      // bake the result into the snapshots now so it survives even if finished mid-mission
+      hubTrainApplyLevel(inHub?G:null, ses.a, ses.target);
+      hubTrainApplyLevel(inHub?G:null, ses.b, ses.target);
+      if(inHub) hubGraduateSession(G, ses);                            // live in the HUB → release immediately
+      else toast('🎓 A Training Grounds session finished — collect them at the H.U.B.');
+    }
+  }
+}
+
+// Re-materialise trainees when a fresh HUB map is built (after the roaming roster spawns).
+// Pending staged/sessions spawn LOCKED at their lanes; finished sessions graduate to roaming.
+function hubSpawnTrainees(state){
+  if(!state || typeof CAMPAIGN==='undefined' || !CAMPAIGN.training) return;
+  const fac=hubFindTrainingGrounds(state);
+  if(!fac) return;
+  const fillSnap=(u,snap)=>{ u.hubKey=snap.key; u.stars=snap.stars||0; u.xp=snap.xp||0; u.lore=snap.lore||null;
+    u.hero=!!snap.hero; u.heroId=snap.heroId||null; u.spriteType=snap.spriteType||null;
+    if(typeof hubApplyUpgrades==='function') hubApplyUpgrades(u);
+    if(typeof applyVetHp==='function') applyVetHp(u,true); };
+  const spawnLocked=(snap)=>{
+    if(!snap) return;
+    if(hubTrainLiveUnit(state, snap)) return;             // idempotent: entity already restored from a save
+    const slot=(snap.slot!=null)?snap.slot:hubTrainNextSlot(); snap.slot=slot;
+    const u=mkUnit(state, snap.type, 'player', fac.tx+((fac.w/2)|0), fac.ty+((fac.h*0.6)|0));
+    fillSnap(u, snap); hubTrainLockUnit(state, u, fac, slot);
+  };
+  for(const snap of (CAMPAIGN.training.staged||[])) spawnLocked(snap);
+  for(const ses of (CAMPAIGN.training.sessions||[]).slice()){
+    if(ses.done){
+      hubTrainApplyLevel(state, ses.a, ses.target);
+      hubTrainApplyLevel(state, ses.b, ses.target);
+      [ses.a, ses.b].forEach(snap=>{ hubTrainToRoster(snap);
+        if(hubTrainLiveUnit(state, snap)) return;         // already present (restored save) → don't duplicate
+        const u=mkUnit(state, snap.type, 'player', fac.tx+((fac.w/2)|0), fac.ty+fac.h+1);
+        fillSnap(u, snap); });
+      CAMPAIGN.training.sessions=CAMPAIGN.training.sessions.filter(x=>x!==ses);
+      const nm=(DEF[ses.type]&&DEF[ses.type].name)||'Recruits';
+      toast('🎓 Training complete — two '+nm+' graduated at Level '+ses.target+'.');
+    } else { spawnLocked(ses.a); spawnLocked(ses.b); }
+  }
+}
 
 function drawHubOverlays(state){
   if(!state||!state.hub) return;

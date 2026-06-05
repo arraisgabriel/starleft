@@ -237,6 +237,7 @@ function buildHubCommands(sel){
   }
   if(poi && poi.hubPoi.kind==='mdc') buildHubMdcMenu(poi);
   if(poi && poi.hubPoi.kind==='ultra') addCmd('📈','Speculate',HUB.gambleStake,()=>hubGamble());
+  if(poi && poi.hubPoi.kind==='training') addCmd('🎓','TRAINING GROUNDS',null,()=>showTrainingPanel());
   if(unit){
     const key=hubUnitKey(unit), up=(CAMPAIGN.upgrades[key]||{}), il=up.implantLevel||0;
     addCmd('🧬','Implant',HUB.implantCosts[il]==null?null:HUB.implantCosts[il],()=>hubUpgradeSelectedUnit('implant'));
@@ -358,6 +359,146 @@ function showRoster(){
     el.onclick=()=>{ const id=+el.dataset.uid; const u=G&&G.entities.find(e=>e.id===id&&!e.dead); if(u){ hideSub('rosterScreen'); showDossier(u); } };
   });
   showSub('rosterScreen');
+}
+
+/* ---- Training Grounds panel: animated trainee pairs, pairing, live countdowns ----
+   A full-screen overlay (live behind the running H.U.B.) listing staged trainees (to pair) and
+   active mentorships (with a regressive in-game-hour countdown). Cards animate via a RAF loop. */
+let trainSel=[];          // up to 2 selected staged unit keys (for pairing)
+let trainPanelRaf=0;      // requestAnimationFrame handle while the panel is open
+let trainPanelSig='';     // contents signature → rebuild cards only when something changes
+
+function showTrainingPanel(){
+  if(typeof CAMPAIGN==='undefined' || !CAMPAIGN.training) return;
+  trainSel=[];
+  buildTrainingPanel();
+  showSub('trainingScreen');
+  if(!trainPanelRaf) trainPanelRaf=requestAnimationFrame(trainingPanelTick);
+}
+function closeTrainingPanel(){
+  hideSub('trainingScreen');
+  if(trainPanelRaf){ cancelAnimationFrame(trainPanelRaf); trainPanelRaf=0; }
+}
+function trainPanelSignature(){
+  const t=(typeof CAMPAIGN!=='undefined'&&CAMPAIGN.training)||{staged:[],sessions:[]};
+  return 'st:'+(t.staged||[]).map(s=>s.key+'@'+(s.stars||0)).join(',')
+       +'|se:'+(t.sessions||[]).map(s=>s.id+':'+(s.done?1:0)).join(',')
+       +'|sel:'+trainSel.join(',');
+}
+function toggleTrainSel(key){
+  const i=trainSel.indexOf(key);
+  if(i>=0) trainSel.splice(i,1);
+  else { trainSel.push(key); if(trainSel.length>2) trainSel.shift(); }
+  buildTrainingPanel();
+}
+// real-seconds → "Hh MMm" / "Mm SSs" countdown (1 in-game hour = HUB.trainHourSeconds real seconds)
+function fmtTrainRemain(sec){
+  sec=Math.max(0, Math.ceil(sec));
+  const h=(sec/3600)|0, m=((sec%3600)/60)|0, s=sec%60;
+  if(h>0) return h+'h '+String(m).padStart(2,'0')+'m';
+  if(m>0) return m+'m '+String(s).padStart(2,'0')+'s';
+  return s+'s';
+}
+// draw one big (200px) animated idle frame for a trainee into its card canvas
+function drawTrainCanvas(cv, type, spriteType, tnow){
+  const c=cv.getContext('2d'); c.clearRect(0,0,cv.width,cv.height);
+  const sType=spriteType||type;
+  const anim=(typeof unitWalk==='function')?unitWalk(sType,'player'):null;
+  if(anim && anim.ready && anim.frames){
+    const n=anim.frames.length, fi=((tnow*4)|0)%n, fr=anim.frames[fi], fw=fr[2], fh=fr[3];
+    const s=Math.min(cv.width/fw, cv.height/fh)*0.9, dw=fw*s, dh=fh*s;
+    c.drawImage(anim.img, fr[0],fr[1],fw,fh, (cv.width-dw)/2, (cv.height-dh)/2, dw, dh);
+  } else {
+    c.font='72px '+GAME_FONT; c.textAlign='center'; c.textBaseline='middle';
+    c.fillStyle='#bfe6ff'; c.fillText((DEF[type]&&DEF[type].icon)||'•', cv.width/2, cv.height/2);
+  }
+}
+function trainingPanelTick(){
+  const screen=document.getElementById('trainingScreen');
+  if(!screen || screen.style.display==='none'){ trainPanelRaf=0; return; }
+  const sig=trainPanelSignature();
+  if(sig!==trainPanelSig) buildTrainingPanel();                 // contents changed → rebuild
+  const tnow=performance.now()/1000;
+  const body=document.getElementById('trainingBody');
+  if(body){
+    body.querySelectorAll('canvas.train-spr').forEach(cv=>drawTrainCanvas(cv, cv.dataset.type, cv.dataset.sprite||'', tnow));
+    body.querySelectorAll('[data-sesid]').forEach(el=>{
+      const ses=(CAMPAIGN.training.sessions||[]).find(s=>s.id===el.dataset.sesid); if(!ses) return;
+      const total=ses.hoursTotal*HUB.trainHourSeconds, remain=Math.max(0, total-(ses.secElapsed||0));
+      const bar=el.querySelector('.train-bar>i'); if(bar) bar.style.width=Math.min(100, (total?(ses.secElapsed||0)/total*100:100))+'%';
+      const cd=el.querySelector('.train-countdown'); if(cd) cd.textContent=ses.done?'✓ COMPLETE':fmtTrainRemain(remain);
+    });
+  }
+  trainPanelRaf=requestAnimationFrame(trainingPanelTick);
+}
+function buildTrainingPanel(){
+  const body=document.getElementById('trainingBody'); if(!body) return;
+  trainPanelSig=trainPanelSignature();
+  body.innerHTML='';
+  const t=(typeof CAMPAIGN!=='undefined'&&CAMPAIGN.training)||{staged:[],sessions:[]};
+  const staged=t.staged||[], sessions=t.sessions||[];
+
+  const sum=document.createElement('div'); sum.className='train-summary';
+  sum.innerHTML='Sessions <b>'+sessions.length+' / '+HUB.trainPairCap+'</b> · Trainees inside <b>'+(staged.length+sessions.length*2)+' / '+(HUB.trainPairCap*2)+'</b>';
+  body.appendChild(sum);
+
+  const sh=document.createElement('div'); sh.className='train-h'; sh.textContent='Awaiting orders'; body.appendChild(sh);
+  if(!staged.length){
+    const m=document.createElement('div'); m.className='muted';
+    m.textContent='Walk two same-type veterans into the Training Grounds (≤'+HUB.trainMaxGap+' levels apart), then pair them here.';
+    body.appendChild(m);
+  } else {
+    const row=document.createElement('div'); row.className='train-staged';
+    for(const s of staged){
+      const card=document.createElement('button'); card.className='train-card'+(trainSel.includes(s.key)?' sel':'');
+      const cv=document.createElement('canvas'); cv.width=200; cv.height=200; cv.className='train-spr';
+      cv.dataset.type=s.type; cv.dataset.sprite=s.spriteType||''; card.appendChild(cv);
+      const cap=document.createElement('div'); cap.className='train-cap';
+      cap.innerHTML='<b>'+((DEF[s.type]&&DEF[s.type].name)||s.type)+'</b><br>'+(typeof careerTitle==='function'?careerTitle(s.stars||0):'')+' · Lv '+(s.stars||0);
+      card.appendChild(cap);
+      card.onclick=()=>toggleTrainSel(s.key);
+      row.appendChild(card);
+    }
+    body.appendChild(row);
+
+    const pc=document.createElement('div'); pc.className='train-pairctl';
+    const a=staged.find(s=>s.key===trainSel[0]), b=staged.find(s=>s.key===trainSel[1]);
+    let info='Select two units to pair.', canStart=false;
+    if(trainSel.length>=2 && typeof hubTrainValidatePair==='function'){
+      const v=hubTrainValidatePair(a,b);
+      if(v.ok){ info='→ Both reach <b>Level '+v.target+'</b> · duration <b>'+v.hours+' in-game hour'+(v.hours===1?'':'s')+'</b>'; canStart=true; }
+      else info=v.reason;
+    }
+    const txt=document.createElement('div'); txt.className='train-pairinfo'; txt.innerHTML=info; pc.appendChild(txt);
+    const btn=document.createElement('button'); btn.className='sc-btn train-start'+(canStart?'':' disabled'); btn.textContent='Create Training Session';
+    btn.onclick=()=>{ if(canStart && hubTrainCreateSession(trainSel[0],trainSel[1])){ trainSel=[]; buildTrainingPanel(); } };
+    pc.appendChild(btn);
+    body.appendChild(pc);
+  }
+
+  const ah=document.createElement('div'); ah.className='train-h'; ah.textContent='In training'; body.appendChild(ah);
+  if(!sessions.length){ const m=document.createElement('div'); m.className='muted'; m.textContent='No active mentorships.'; body.appendChild(m); }
+  for(const ses of sessions){
+    const card=document.createElement('div'); card.className='train-session'; card.dataset.sesid=ses.id;
+    const pair=document.createElement('div'); pair.className='train-pair';
+    [ses.a, ses.b].forEach(who=>{
+      const slot=document.createElement('div'); slot.className='train-pair-slot';
+      const cv=document.createElement('canvas'); cv.width=200; cv.height=200; cv.className='train-spr';
+      cv.dataset.type=who.type; cv.dataset.sprite=who.spriteType||''; slot.appendChild(cv);
+      const lab=document.createElement('div'); lab.className='train-cap';
+      lab.innerHTML='<b>'+(who===ses.a?'Mentor':'Junior')+'</b><br>Lv '+(who.stars||0)+' → <b>Lv '+ses.target+'</b>';
+      slot.appendChild(lab); pair.appendChild(slot);
+    });
+    card.appendChild(pair);
+    const meta=document.createElement('div'); meta.className='train-meta';
+    meta.innerHTML='<div class="train-countdown">…</div><div class="train-bar"><i></i></div>'
+      +'<div class="muted">'+((DEF[ses.type]&&DEF[ses.type].name)||ses.type)+' · both → Level '+ses.target+'</div>';
+    card.appendChild(meta);
+    const wb=document.createElement('button'); wb.className='sc-btn train-withdraw'; wb.textContent='Withdraw — junior loses all gains';
+    wb.onclick=()=>{ if(typeof hubTrainWithdraw==='function' && hubTrainWithdraw(ses.a.key)) buildTrainingPanel(); };
+    card.appendChild(wb);
+    body.appendChild(card);
+  }
 }
 
 // Notifications panel — renders the accumulated toast log (newest first).

@@ -99,7 +99,7 @@ function waterSpriteFor(biome, slot, frame){
    assets/buildings/<type>_<player|enemy>.png. (Mirrors loadWalk / loadMega.) */
 const BUILDING_FRAMES = 9;
 const BUILDING_FPS = 0.9;               // slow ambient neon-flicker playback
-const BUILDING_TYPES = ['hq','barracks','turret','garage','launchpad','outpost'];
+const BUILDING_TYPES = ['hq','barracks','turret','garage','launchpad','outpost','training'];
 function loadBuildingStrip(type, faction){
   const a = { img:new Image(), ready:false, fw:0, fh:0 };
   a.img.onload  = ()=>{ a.fw = a.img.naturalWidth/BUILDING_FRAMES; a.fh = a.img.naturalHeight; a.ready = true; };

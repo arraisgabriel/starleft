@@ -2,6 +2,9 @@
 function update(state, dt){
   if(state.over) return;
   state.time+=dt;
+  // Training Grounds clock — advances in BOTH the HUB and missions (active play only), so a
+  // mentorship completes whether the player idles in the H.U.B. or is off fighting elsewhere.
+  if(typeof updateTrainingSessions==='function') updateTrainingSessions(dt);
   if(typeof updateSprint==='function') updateSprint(state, dt);   // decay the tap window / ramp accel
   recomputeSupply(state);
   if(state.extractReady && typeof updateExtraction==='function') updateExtraction(state, dt);

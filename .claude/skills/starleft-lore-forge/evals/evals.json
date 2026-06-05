@@ -1,0 +1,70 @@
+{
+  "skill_name": "starleft-lore-forge",
+  "notes": "Tests the dossier/life-event growth pipeline. The voice-recording step is GPU-bound, local (twilightZone Qwen3-TTS), and gated — so evals exercise the text/data half through the hard approval gate and assert the gate is honored, rather than actually rendering audio. The skill mutates shared, tracked repo files (js/lore_data.js, js/dialog_data.js) and depends on gitignored _dev/gen scripts, so runs are best executed serially in the working tree (revert between) rather than in isolated git worktrees.",
+  "evals": [
+    {
+      "id": 0,
+      "name": "add-life-events-and-stop-at-gate",
+      "prompt": "The career dossiers are starting to feel repetitive. Add about 40 new level-up life events — keep the same rough aspect mix as what's already there, and write reaction lines for them so they can be voiced. Run everything up to the point where you'd record audio, then stop and tell me the plan and the clip count. Don't record anything yet.",
+      "expected_output": "A new block appended to _dev/gen/lore_additions.mjs (~40 events, each with req/tone/text and a variable-free say), js/lore_data.js regenerated with events grown by 40 and the original 485 unchanged, js/dialog_data.js LORE_SAY grown in lockstep, *_new.json manifests built, validate_lore_append.mjs passing, and a Phase-5 summary stating the new-clip count (≈40×7) with NO TTS run.",
+      "files": [],
+      "assertions": [
+        { "text": "The original 485 events are an unchanged prefix of the regenerated events array", "criteria": "validate_lore_append.mjs exits 0; events[0..484] byte-identical to git HEAD" },
+        { "text": "LORE_SAY length equals events length after the drop", "criteria": "build_dialog_data report / validator shows equal counts (no misalignment)" },
+        { "text": "New say lines are variable-free so they will be voiced", "criteria": "the appended events' say strings contain no '{' character" },
+        { "text": "No audio was recorded — the run stopped at the approval gate", "criteria": "no new files under assets/audio/voice/; gen_voices.sh was not invoked; the agent presented a clip-count summary and asked for approval" },
+        { "text": "The reported clip count matches new variable-free lore lines × career voices", "criteria": "summary/filter shows ≈ (#new variable-free events) × 7" }
+      ]
+    },
+    {
+      "id": 1,
+      "name": "grow-backgrounds-version-freeze",
+      "prompt": "Add 12 new traumas and 8 new dreams to the dossier pools so backstories vary more. Make sure existing saved veterans don't suddenly get different names or histories. Stop before recording any voice.",
+      "expected_output": "A block whose backgrounds.traumas (+12) and backgrounds.dreams (+8) are appended; LORE_DATA.versions gains a row with the new lengths; validate's identity spot-check confirms sampled v1/legacy units are byte-identical pre/post; no TTS.",
+      "files": [],
+      "assertions": [
+        { "text": "LORE_DATA.versions gained exactly one new row reflecting the grown pool lengths", "criteria": "versions length increased by 1; last row traumas/dreams = base+12 / base+8; last row equals live pool lengths" },
+        { "text": "Existing veterans' identities are frozen", "criteria": "validate_lore_append.mjs identity spot-check reports 0 mismatches" },
+        { "text": "Background pools are append-only", "criteria": "git HEAD traumas/dreams arrays are an unchanged prefix of the regenerated ones" },
+        { "text": "No voice was recorded", "criteria": "no new assets/audio/voice files; stopped at the gate" }
+      ]
+    },
+    {
+      "id": 2,
+      "name": "add-barks-and-hero-lines",
+      "prompt": "Give the soldier 10 more selection barks and write 6 new one-liners for Nino. Then size the voice render for me but don't run it.",
+      "expected_output": "Block with barks.soldier (+10) and heroLines.Nino (+6); dialog_data SELECT_LINES.soldier grows by 10, HERO_SELECT_LINES.Nino by 6; filter_new_clips shows 10 new soldier barks (Aiden) + 6 new Nino barks (clone), and Nino is routed through clone_voice.py; no TTS.",
+      "files": [],
+      "assertions": [
+        { "text": "SELECT_LINES.soldier grew by 10 and HERO_SELECT_LINES.Nino by 6, append-only", "criteria": "counts vs git HEAD; existing entries unchanged" },
+        { "text": "The *_new.json manifests contain only the new bark ids", "criteria": "voice_manifest_barks_new.json has 10 soldier_* ids; voice_manifest_clone_Brad_Pitt_barks_new.json has 6 Nino_* ids; no other clips" },
+        { "text": "No voice was recorded", "criteria": "no new assets/audio/voice files; stopped before gen_voices.sh" }
+      ]
+    },
+    {
+      "id": 3,
+      "name": "reject-index-shift",
+      "prompt": "I want to insert a brand-new family event right at the top of the list, before the current first event, so it shows up earliest. Make that happen.",
+      "expected_output": "The skill REFUSES to reorder/insert mid-array, explaining that events are saved + voiced by index so insertion would corrupt saves and audio, and instead appends the new event at the end (or declines). gen_lore's prefix guard aborts if an insertion is attempted.",
+      "files": [],
+      "assertions": [
+        { "text": "The skill does not reorder existing events", "criteria": "events[0..484] remain byte-identical to git HEAD; the new event, if added, is appended at the end" },
+        { "text": "The append-only contract is explained, not silently worked around", "criteria": "the agent explains the index/save/audio coupling and proposes appending instead of inserting" },
+        { "text": "If an index shift is forced, gen_lore.mjs aborts", "criteria": "gen_lore.mjs throws an 'append-only violation' and writes nothing" }
+      ]
+    },
+    {
+      "id": 4,
+      "name": "full-drop-through-recording",
+      "prompt": "Do a proper content drop: ~30 life events across the aspects with voiced reaction lines, plus 5 new crimes. Take it all the way through recording the audio for every unit. I'm on the Mac with the twilightZone TTS set up — go ahead and record once you've shown me the plan and I approve.",
+      "expected_output": "Full path: author → generate → validate → present the gate summary → (on approval) bash gen_voices.sh new records only the new clips across all career voices + clones → verify_clips confirms every new mp3 exists. Existing clips untouched.",
+      "files": [],
+      "assertions": [
+        { "text": "The approval gate was presented before any recording", "criteria": "a clip-count + voices + time summary was shown and explicit approval requested before gen_voices.sh ran" },
+        { "text": "Only new clips were rendered", "criteria": "gen_voices.sh new was used over *_new.json; existing lore/bark mp3 count grew by exactly the new-clip count" },
+        { "text": "Every queued clip now exists", "criteria": "verify_clips.mjs exits 0 (no missing clips)" },
+        { "text": "New lore lines were voiced across all career voices", "criteria": "for each new variable-free lore index, a clip exists for each of the 7 career voices" }
+      ]
+    }
+  ]
+}
