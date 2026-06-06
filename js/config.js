@@ -529,5 +529,47 @@ Weaponize your buzzwords, circle back, and disrupt MegaCorp into bankruptcy. The
       {x:48,y:134,amt:3500},{x:42,y:144,amt:2000},{x:54,y:144,amt:2000},    // the altar prize (peninsula)
     ],
   },
-  {name:'XII — The Continuity Farm',enemyName:'A&O',aggression:2.00,startGold:3600,startWorkers:12,startSoldiers:12,startBarracks:true,graceTime:118,waveTimer:112,crawl:{episode:'EPISODE XII',title:'THE CONTINUITY FARM',text:'You rebuilt after the flash, but the new company was never alive. It was a cap table wearing a grief mask.\n\nA&O now leases the dead into refrigerated prototype bodies, charging subscription fees for memories that used to belong to people. Their Continuity Farm hums under black ice and server heat, promising immortality with a cancellation clause.\n\nYour veterans carry names. Your memorial carries more. Crack the farm, steal the transfer lattice, and decide which ghost gets equity again....',summary:`You rebuilt after the flash, but the new company was never alive — just a cap table wearing a grief mask. A&O now leases the dead into refrigerated bodies and bills subscriptions for memories that used to belong to people. Crack the six campuses of its Continuity Farm, seize the transfer lattice, and decide which ghost gets equity again.`},objective:'A&O holds SIX continuity campuses — liquidate all six and seize the transfer lattice.',w:118,h:96,seed:12012,terrain:{biomes:['tech','ice'],temp:{axis:'diag',base:0.26,gradient:0.18,noise:0.14},freeze:0.24,seaFrac:0.14,mtnFrac:0.08,forest:0,beach:true},player:{x:8,y:88},enemies:[{x:106,y:8,defenders:7,extraBarracks:true},{x:106,y:84,defenders:7,extraBarracks:true},{x:58,y:10,defenders:6,extraBarracks:true},{x:62,y:84,defenders:6},{x:92,y:48,defenders:7,extraBarracks:true},{x:34,y:28,defenders:5}],goldNodes:[{x:6,y:90,amt:3600},{x:13,y:88,amt:3200},{x:9,y:80,amt:2800},{x:22,y:82,amt:2400},{x:55,y:52,amt:4200},{x:42,y:44,amt:3000},{x:76,y:42,amt:3000},{x:96,y:54,amt:2500},{x:110,y:12,amt:1900},{x:110,y:82,amt:1900},{x:58,y:6,amt:1900},{x:64,y:90,amt:1900}],lakes:[{x:56,y:48,r:7},{x:86,y:26,r:5},{x:30,y:66,r:4},{x:74,y:72,r:4}],rockClusters:[{x:48,y:25,n:18},{x:70,y:30,n:16},{x:88,y:62,n:18},{x:24,y:48,n:14},{x:60,y:68,n:16}],forests:[],thickets:[{x:38,y:34,w:22,h:14,density:0.72,mix:0.25,trail:'h'},{x:80,y:34,w:18,h:18,density:0.66,mix:0.15,trail:'v'}]}
+  {name:'XII — The Continuity Farm',enemyName:'A&O',aggression:2.00,startGold:3600,startWorkers:12,startSoldiers:12,startBarracks:true,graceTime:118,waveTimer:112,crawl:{episode:'EPISODE XII',title:'THE CONTINUITY FARM',text:'You rebuilt after the flash, but the new company was never alive. It was a cap table wearing a grief mask.\n\nA&O now leases the dead into refrigerated prototype bodies, charging subscription fees for memories that used to belong to people. Their Continuity Farm hums under black ice and server heat, promising immortality with a cancellation clause.\n\nYour veterans carry names. Your memorial carries more. Crack the farm, steal the transfer lattice, and decide which ghost gets equity again....',summary:`You rebuilt after the flash, but the new company was never alive — just a cap table wearing a grief mask. A&O now leases the dead into refrigerated bodies and bills subscriptions for memories that used to belong to people. Crack the six campuses of its Continuity Farm, seize the transfer lattice, and decide which ghost gets equity again.`},objective:'A&O holds SIX continuity campuses — liquidate all six and seize the transfer lattice.',w:118,h:96,seed:12012,terrain:{biomes:['tech','ice'],temp:{axis:'diag',base:0.26,gradient:0.18,noise:0.14},freeze:0.24,seaFrac:0.14,mtnFrac:0.08,forest:0,beach:true},player:{x:8,y:88},enemies:[{x:106,y:8,defenders:7,extraBarracks:true},{x:106,y:84,defenders:7,extraBarracks:true},{x:58,y:10,defenders:6,extraBarracks:true},{x:62,y:84,defenders:6},{x:92,y:48,defenders:7,extraBarracks:true},{x:34,y:28,defenders:5}],goldNodes:[{x:6,y:90,amt:3600},{x:13,y:88,amt:3200},{x:9,y:80,amt:2800},{x:22,y:82,amt:2400},{x:55,y:52,amt:4200},{x:42,y:44,amt:3000},{x:76,y:42,amt:3000},{x:96,y:54,amt:2500},{x:110,y:12,amt:1900},{x:110,y:82,amt:1900},{x:58,y:6,amt:1900},{x:64,y:90,amt:1900}],lakes:[{x:56,y:48,r:7},{x:86,y:26,r:5},{x:30,y:66,r:4},{x:74,y:72,r:4}],rockClusters:[{x:48,y:25,n:18},{x:70,y:30,n:16},{x:88,y:62,n:18},{x:24,y:48,n:14},{x:60,y:68,n:16}],forests:[],thickets:[{x:38,y:34,w:22,h:14,density:0.72,mix:0.25,trail:'h'},{x:80,y:34,w:18,h:18,density:0.66,mix:0.15,trail:'v'}]},
+  {
+    name:'XIII — The Vesting Cliff',
+    enemyName:'A&O',
+    // Penultimate Arc-2 chapter. You hold the transfer lattice from Ep XII but it is inert — bodies,
+    // no souls: A&O kept the minds upstream as encrypted backups ("inventory"), files an injunction
+    // calling your dead delinquent assets, and schedules a purge. You raid SEVEN backup-vault
+    // campuses to extract the dead before the "cliff" zeroes them — running A&O's own billing engine
+    // one last time (Biba: "salvation from theft"). Sets up the Ep XIV resurrection choice ("you can
+    // still only write one home"); the Reborn-Cyborg unit/death-reset is SEPARATE code work, not this
+    // map. Carried roster + Nino/Biba arrive by carryover (no cfg.heroes) → contextual crawl vars.
+    // aggression eased to 1.6 (below Ep XII's 2.0): with SEVEN vault campuses the difficulty is the
+    // sprawl, not per-base ferocity — same judgement as the Ep VII finale (1.7 at eight bases). This
+    // also keeps the carryover swing on the shipping curve beside Ep XI/XII.
+    aggression:1.6,
+    startGold:3600, startWorkers:12, startSoldiers:12, startBarracks:true,
+    graceTime:120, waveTimer:112,
+    crawl:{ episode:'EPISODE XIII', title:'THE VESTING CLIFF',
+      text:'The transfer lattice is yours, and it is empty. You stole the machine that writes a mind into metal and learned, the way you always learn, one quarter too late: a lattice is not a soul. You have the bodies. The cold racks hum, addressed and waiting, and no one is home.\n\nThe minds were never in the farm. A&O keeps them upstream — every churned name backed up, encrypted, booked as inventory on the servers of the fund that owns the beginning and the end. And A&O filed before you finished the manual: an injunction that calls your dead delinquent assets, your rescue an act of churn, the only theft on record the one chip you took. The purge is scheduled. After the cliff, the backups vest to zero.\n\n{?party}They walk the vaults with you: {party} — the ones who reached the cliff alive, here to drag the rest back over it.{/party}{^party}You walk the vaults alone. Everyone who carried you this far is already inside them, filed and waiting.{/party}{?fallen} You came for these names: {fallen} — churn on A&O\'s ledger, the wall on yours.{/fallen}{?biba} Biba says you are not saving them, you are repossessing them — A&O\'s word, A&O\'s machine. She runs the extraction anyway.{/biba}\n\nBreak the SEVEN vault campuses, turn A&O\'s billing engine against itself, and pull every backup out before the cliff zeroes it. You can still only write one of them home. That ledger waits. Tonight, you carry them out of the fire....',
+      summary:`You hold A&O's transfer lattice at last — and it is an empty machine: prototype bodies with no minds to wake in them. The minds are upstream, backed up and booked as inventory by the fund that owns the beginning and the end, and A&O has filed to purge them as delinquent assets. Crack its seven backup-vault campuses and pull your dead out of the billing engine before the deadline zeroes them.` },
+    objective:'A&O has filed to purge your dead and holds SEVEN backup-vault campuses — liquidate all seven and pull every backup out before the cliff zeroes them.',
+    w:112, h:92,
+    seed:13013,
+    // deep cold storage: the tech server-farm refrozen into cryo backup vaults — colder than the
+    // Continuity Farm, pure tech under heavy ice, coolant pools in the margins, nothing growing.
+    terrain:{ biomes:['tech','ice'], temp:{base:0.22,noise:0.14}, freeze:0.52, seaFrac:0.13, mtnFrac:0.09, forest:0 },
+    player:{ x:8, y:84 },
+    // seven backup-vault campuses: three hardened (extraBarracks) corner/core vaults guard the deep
+    // archive at the east-centre (88,46); four lighter forward vaults make first contact. Tuned to
+    // ~40 total defenders so the carryover swing sits beside Ep XII on the shipping curve.
+    enemies:[ {x:104,y:8, defenders:7, extraBarracks:true}, {x:104,y:84, defenders:7, extraBarracks:true},
+              {x:58,y:8, defenders:6}, {x:60,y:84, defenders:5},
+              {x:88,y:46, defenders:7, extraBarracks:true}, {x:38,y:24, defenders:4},
+              {x:40,y:62, defenders:4} ],
+    goldNodes:[ {x:6,y:86,amt:3000},{x:13,y:84,amt:2800},{x:9,y:78,amt:2600},{x:20,y:80,amt:2200},
+                {x:54,y:48,amt:4000},{x:70,y:40,amt:3000},{x:44,y:46,amt:2600},
+                {x:106,y:12,amt:1900},{x:106,y:80,amt:1900},{x:58,y:12,amt:1900},{x:62,y:80,amt:1900},
+                {x:90,y:50,amt:2400},{x:38,y:28,amt:1900},{x:40,y:58,amt:1900} ],
+    lakes:[ {x:50,y:46,r:7},{x:80,y:24,r:5},{x:28,y:54,r:4},{x:74,y:70,r:5},{x:96,y:64,r:4} ],
+    rockClusters:[ {x:44,y:24,n:16},{x:72,y:30,n:16},{x:86,y:60,n:18},{x:26,y:40,n:14},{x:58,y:60,n:16},{x:100,y:44,n:14} ],
+    forests:[],
+    thickets:[ {x:30,y:30,w:20,h:14,density:0.70,mix:0.20,trail:'h'},{x:70,y:54,w:18,h:18,density:0.66,mix:0.18,trail:'v'} ],
+  },
 ];

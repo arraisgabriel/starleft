@@ -808,6 +808,58 @@ function loadMap(idx){
 }
 
 /* ---- Star-Wars-style intro crawl ---- */
+// The crawl scroll is PACED TO THE NARRATION so every line the voice reads is on screen as it is
+// read. The body text rises through the readable mask band (#crawl-viewport masks 24%–54% opaque);
+// CRAWL_ANCHOR is where (as a fraction of viewport height, 0=top) a line should sit when spoken.
+// We match the scroll speed to the narration (no drift), skip the long dead lead-in, start the
+// voice when the first line reaches the anchor, and auto-advance shortly after the last line fades.
+const CRAWL_ANCHOR  = 0.36;   // read position of the spoken line (fraction of viewport height)
+const CRAWL_EXIT    = 0.15;   // above this a line has scrolled/faded out of view ("came off the top")
+const CRAWL_LEAD_S  = 2.2;    // seconds the first line eases up into the anchor before narration
+const CRAWL_WPS     = 2.7;    // narrated words/sec (measured) — reading-pace estimate when no clip
+// Sample the (paused) crawl animation to find, in progress-space [0..1], when the first body line
+// and the last body line cross CRAWL_ANCHOR; from the narration length A (seconds) derive a matched
+// scroll duration and the lead-in skip. Returns { anim, pStartMs, voiceMs, finishMs } or null if the
+// geometry can't be measured (caller then keeps a safe, slower-than-voice fallback). Leaves the
+// animation paused at pStart, ready for the caller to play().
+function crawlSchedule(content, A){
+  const vp = document.getElementById('crawl-viewport');
+  const txt = document.getElementById('crawl-text');
+  const anim = content.getAnimations ? content.getAnimations()[0] : null;
+  if(!anim || !txt) return null;
+  const H = (vp && vp.clientHeight) || window.innerHeight || 800;
+  try {
+    anim.pause();
+    const base = (anim.effect && anim.effect.getTiming().duration) || 86970;  // ms; progress = currentTime/base
+    const topAt = (p)=>{ anim.currentTime = p*base; return txt.getBoundingClientRect().top / H; };
+    const botAt = (p)=>{ anim.currentTime = p*base; return txt.getBoundingClientRect().bottom / H; };
+    let pTopA=null, pBotA=null, pGone=null;
+    let pt=topAt(0), pb=botAt(0), pp=0;            // bodyTop / bodyBot screen-fraction at progress 0
+    for(let p=0.02; p<=1.0001; p+=0.02){
+      const t=topAt(p), b=botAt(p);
+      // first body line crossing the anchor (it scrolls upward, so the value decreases past ANCHOR)
+      if(pTopA==null && (pt-CRAWL_ANCHOR)*(t-CRAWL_ANCHOR)<=0 && pt!==t) pTopA = pp + (CRAWL_ANCHOR-pt)/(t-pt)*(p-pp);
+      // last body line crossing the anchor
+      if(pBotA==null && (pb-CRAWL_ANCHOR)*(b-CRAWL_ANCHOR)<=0 && pb!==b) pBotA = pp + (CRAWL_ANCHOR-pb)/(b-pb)*(p-pp);
+      // last body line fading out the top (only meaningful after it has passed the anchor)
+      if(pGone==null && pBotA!=null && (pb-CRAWL_EXIT)*(b-CRAWL_EXIT)<=0 && pb!==b) pGone = pp + (CRAWL_EXIT-pb)/(b-pb)*(p-pp);
+      pt=t; pb=b; pp=p;
+    }
+    if(pTopA==null || pBotA==null || pBotA<=pTopA){ anim.currentTime=0; anim.play(); return null; }
+    const sweep = pBotA - pTopA;                  // progress span the body takes to cross the anchor
+    const D = A / sweep;                          // seconds for the full keyframe at reading pace
+    let pStart = pTopA - CRAWL_LEAD_S/D, voiceMs;
+    if(pStart < 0){ pStart = 0; voiceMs = pTopA*D*1000; } else { voiceMs = CRAWL_LEAD_S*1000; }
+    if(pGone == null) pGone = Math.min(1, pBotA + sweep*0.45);
+    const tailMs = Math.min(Math.max((pGone-pBotA)*D*1000, 1500), 9000);   // last line fades after the voice ends
+    content.style.animationDelay = '0s';
+    content.style.animationDuration = D + 's';
+    const a2 = (content.getAnimations && content.getAnimations()[0]) || anim;  // duration change keeps the anim
+    const pStartMs = pStart*D*1000;
+    a2.currentTime = pStartMs;
+    return { anim:a2, pStartMs, voiceMs, finishMs: voiceMs + A*1000 + tailMs };
+  } catch(e){ try { anim.currentTime=0; anim.play(); } catch(_){} return null; }
+}
 function showCrawl(idx, done){
   if(typeof MUSIC!=='undefined') MUSIC.leaveMenu();
   if(idx>0 && typeof LNS!=='undefined' && LNS.ultraEvent) LNS.ultraEvent('episodeReached', { idx });
@@ -817,28 +869,57 @@ function showCrawl(idx, done){
   document.getElementById('crawl-ep').textContent=cr.episode;
   document.getElementById('crawl-title').textContent=cr.title;
   const _ct=document.getElementById('crawl-text');
-  try { _ct.textContent = (typeof fillCrawl==='function')
+  let _text=cr.text;
+  try { _text = (typeof fillCrawl==='function')
         ? fillCrawl(cr.text, typeof crawlVars==='function'?crawlVars():{}) : cr.text; }
-  catch(e){ _ct.textContent = cr.text; }   // never soft-lock the crawl on a templating/data error
+  catch(e){ _text = cr.text; }                   // never soft-lock the crawl on a templating/data error
+  _ct.textContent = _text;
   document.getElementById('crawl-intro').style.display = idx===0? 'block':'none';
-  // restart the CSS animation by reflow
+  // restart the CSS animation by reflow, then freeze it until we know the narration length so the
+  // first (default-speed) frames never flash before we re-pace the scroll.
   const content=document.getElementById('crawl-content');
   scr.classList.remove('fast'); content.style.animation='none'; void content.offsetWidth;
-  content.style.animation='';
+  content.style.animation=''; content.style.animationPlayState='paused';
   scr.style.display='flex';
-  let finished=false;
-  // Hold the rod-clone narration until the crawl TEXT is actually on screen, never over the black
-  // lead-in: the content scrolls up from top:83% (below the masked viewport), and on Episode I the
-  // 5s "A long sprint ago…" introFade plays first. Tune CRAWL_VOICE_DELAY_MS to taste.
-  const CRAWL_VOICE_DELAY_MS = (idx===0 ? 5200 : 3500);   // idx 0: after the 5s intro fades; else: text risen into view
-  let voiceTimer = (typeof VOICE!=='undefined')
-    ? setTimeout(()=>{ if(!finished) VOICE.playCrawl(idx); }, CRAWL_VOICE_DELAY_MS) : null;
-  const finish=()=>{ if(finished) return; finished=true; clearTimeout(timer); clearTimeout(voiceTimer);
+
+  let finished=false, voiceTimer=null, playTimer=null, timer=null;
+  const finish=()=>{ if(finished) return; finished=true;
+    clearTimeout(timer); clearTimeout(voiceTimer); clearTimeout(playTimer);
+    content.style.animationPlayState='';
     if(typeof VOICE!=='undefined') VOICE.stopCrawl();     // stop narration on skip OR auto-advance
     scr.style.display='none'; done&&done(); };
   document.getElementById('crawl-skip').onclick=finish;
-  // auto-advance when the crawl scrolls off (anim 86.97s + 0.2s delay) — but keep it skippable
-  const timer=setTimeout(finish, idx===0? 90132 : 88550);
+
+  // Episode I plays a 5s "A long sprint ago…" introFade first; hold the scroll + voice for it.
+  const introMs = idx===0 ? 5000 : 0;
+  // Start the schedule once we know A: the real narration length when a clip exists (perfect sync),
+  // otherwise a reading-pace estimate from the word count (also keeps long un-narrated crawls — e.g.
+  // Episode XIII — readable instead of flying past).
+  const words = (_text||'').trim().split(/\s+/).filter(Boolean).length;
+  const estA = Math.max(10, words / CRAWL_WPS);
+  const begin = (A)=>{
+    if(finished) return;
+    const plan = crawlSchedule(content, A);
+    if(plan){
+      const play = ()=>{ content.style.animationPlayState=''; plan.anim.play(); };   // clear the freeze, then run
+      if(introMs>0){                              // keep the scroll below view under the introFade
+        plan.anim.currentTime = 0;
+        playTimer = setTimeout(()=>{ if(finished) return; plan.anim.currentTime = plan.pStartMs; play(); }, introMs);
+      } else { play(); }
+      if(typeof VOICE!=='undefined') voiceTimer = setTimeout(()=>{ if(!finished) VOICE.playCrawl(idx); }, introMs + plan.voiceMs);
+      timer = setTimeout(finish, introMs + plan.finishMs);
+    } else {
+      // Geometry unavailable (no Web Animations API): degrade to a duration that is at least slower
+      // than the voice, scrolling from the start, and a generous skippable auto-advance.
+      const D = Math.max(70, A*2.4);
+      content.style.animationDuration = D + 's'; content.style.animationPlayState='';
+      if(typeof VOICE!=='undefined') voiceTimer = setTimeout(()=>{ if(!finished) VOICE.playCrawl(idx); }, introMs + CRAWL_LEAD_S*1000);
+      timer = setTimeout(finish, introMs + (A + CRAWL_LEAD_S + 10)*1000);
+    }
+  };
+  if(typeof VOICE!=='undefined' && VOICE.crawlDuration)
+    VOICE.crawlDuration(idx, (A)=> begin((A!=null && isFinite(A) && A>1) ? A : estA), 400);
+  else begin(estA);
 }
 
 function onVictory(){

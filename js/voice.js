@@ -99,6 +99,23 @@ const VOICE = (function(){
       const p = a.play(); if(p && p.catch) p.catch(()=>{});
     },
     stopCrawl(){ if(crawlAudio){ try { crawlAudio.pause(); } catch(e){} crawlAudio = null; } },
+    // Probe the crawl narration length (metadata only) so showCrawl can pace its scroll to the
+    // voice — every spoken line stays on screen. cb(seconds) on success; cb(null) if voice is off,
+    // the clip is missing/blocked, or it doesn't load within `timeoutMs` (caller then falls back to
+    // a reading-rate estimate from the word count). The clip the browser fetches here is cached, so
+    // the later playCrawl() reuses it. Loading metadata never plays sound.
+    crawlDuration(idx, cb, timeoutMs){
+      if(typeof cb !== 'function') return;
+      if(!enabled || typeof crawlPath !== 'function'){ cb(null); return; }
+      let done = false; const fin = (v)=>{ if(done) return; done = true; cb(v); };
+      try {
+        const a = new Audio(); a.preload = 'metadata';
+        a.onloadedmetadata = ()=> fin(isFinite(a.duration) && a.duration > 0 ? a.duration : null);
+        a.onerror = ()=> fin(null);                 // missing clip (e.g. an un-narrated map) → estimate
+        a.src = crawlPath(idx);
+      } catch(e){ fin(null); }
+      if(timeoutMs > 0) setTimeout(()=> fin(null), timeoutMs);
+    },
     // scripted-cutscene line (Nino's Ep VII monologue, etc.) on its own channel. `onended` fires when
     // the clip finishes OR is missing/blocked, so the sequencer can advance; a no-op when audio is off
     // (calls onended immediately so the cutscene still progresses on its text-timer).

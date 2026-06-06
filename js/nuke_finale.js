@@ -213,15 +213,19 @@ if(typeof window!=='undefined'){
   function dtone(i){ return DIST_SMOKE[(hash(i*13.7)*DIST_SMOKE.length)|0]; }
   function drawDistantMushroom(cx, gy, dt, S){
     const ge=smooth(Math.min(1, dt/3.0));        // grows to full over ~3s, then lingers
-    const capR=S*(0.4+0.7*ge), capCY=gy - ge*S*2.2, stemHW=capR*0.32, cool=Math.min(1, dt/3.2);
+    const capR=S*(0.4+0.7*ge), capCY=gy - ge*S*2.2, stemHW=capR*0.384, cool=Math.min(1, dt/3.2);   // stem 20% wider (0.32→0.384)
     // soft outer halo so the far cloud pops against the dark sky (additive)
     ctx.globalCompositeOperation='lighter'; glow(cx, capCY, capR*2.2, '150,140,170', 0.12); ctx.globalCompositeOperation='source-over';
-    // light silhouette: thin stem + domed cap
+    // cap base silhouette (the top reads fine — keep it as-is)
     ctx.globalAlpha=0.60; ctx.fillStyle='rgb(104,100,118)';
-    ctx.beginPath();
-    ctx.moveTo(cx-stemHW,gy); ctx.lineTo(cx-stemHW*0.8,capCY); ctx.lineTo(cx+stemHW*0.8,capCY); ctx.lineTo(cx+stemHW,gy); ctx.closePath(); ctx.fill();
     ctx.beginPath(); ctx.ellipse(cx,capCY,capR*1.3,capR*0.8,0,0,TAU); ctx.fill();
     ctx.globalAlpha=1;
+    // stem (middle): a billowy, OPAQUE column of overlapping puffs — irregular borders, not a straight pillar
+    const stemTop=capCY+capR*0.42, ssegs=7;
+    for(let i=0;i<ssegs;i++){ const fr=i/(ssegs-1), sy=gy-(gy-stemTop)*fr;
+      const wob=Math.sin(dt*1.0+i*1.3)*stemHW*0.45 + (hash(i*5)-0.5)*stemHW*0.55;   // irregular horizontal wander
+      const sr=stemHW*(1.25-0.2*fr)*(0.82+0.32*hash(i*7));                          // slight width variation
+      puff(cx+wob, sy, sr, dtone(i+2), 0.85); }                                     // more opaque than the cap
     for(let i=0;i<9;i++){ const ang=Math.PI+(i/8)*Math.PI, wob=Math.sin(dt*1.2+i)*S*0.06;   // lit cap puffs
       puff(cx+Math.cos(ang)*capR*1.2+wob, capCY+Math.sin(ang)*capR*0.72, capR*(0.42+0.26*hash(i*3)), dtone(i), 0.72); }
     for(let i=0;i<3;i++) puff(cx+(hash(i)-0.5)*capR*0.6, capCY, capR*0.6, dtone(i+1), 0.74);   // dense core
@@ -263,7 +267,7 @@ if(typeof window!=='undefined'){
     ctx.save(); ctx.setTransform(d,0,0,d,0,0);
     ctx.beginPath(); ctx.rect(fit.ox, fit.oy, fit.dw, fit.dh); ctx.clip();      // framed-movie clip (no draw on letterbox)
     drawDistantNuke(fit.ox + DIST_PTS[0].x*fit.dw, fit.oy + DIST_PTS[0].y*fit.dh, t-NUKE_T_DISTANT_START, S);                       // #1
-    drawDistantNuke(fit.ox + DIST_PTS[1].x*fit.dw, fit.oy + DIST_PTS[1].y*fit.dh, t-(NUKE_T_DISTANT_START+NUKE_DISTANT_FALL), S);   // #2 (starts when #1 bursts)
+    drawDistantNuke(fit.ox + DIST_PTS[1].x*fit.dw, fit.oy + DIST_PTS[1].y*fit.dh, t-(NUKE_T_DISTANT_START+NUKE_DISTANT_FALL), S*0.66);   // #2 — fell farther away, so smaller
     ctx.restore();
   }
 
