@@ -363,6 +363,7 @@ function loop(now){
     updateCamera(G,dt);
     if(typeof updateFlashCutscene==='function') updateFlashCutscene(G,dt);   // mandatory scripted dialog (camera ease + line advance); no-op unless G.flashCutscene
     if(typeof updateHubDrones==='function') updateHubDrones(G,dt);   // decorative HUB drones — netRole-agnostic, gated on state.hub internally
+    if(typeof updateDispatchFlight==='function') updateDispatchFlight(G,dt);   // MDC dispatch panorama bomber — advances while running=false (crawl playing)
     render(G);
     if(typeof updateSprintRipple==='function') updateSprintRipple(G);   // glue the sprint ripple to its world point
     uiTick+=dt; if(uiTick>0.2){ uiTick=0; if(running) refreshUI(); }

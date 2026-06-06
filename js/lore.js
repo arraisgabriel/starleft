@@ -200,6 +200,10 @@ let fallenVets = [];
 let _fallenIds = new Set();   // rollback-safe: memorialize each fallen unit at most once, even if a re-sim re-kills it
 // wipe the memorial for a brand-new campaign (called from startGame, alongside the carry resets)
 function resetFallen(){ fallenVets.length = 0; _fallenIds.clear(); }
+// restore the memorial from a save blob (the list is now persisted; entries are plain JSON). Clears
+// the dedup id-set — the restored fallen are already gone from G.entities, so they can't be re-killed
+// and re-memorialized; deaths AFTER load repopulate it normally.
+function restoreFallen(arr){ fallenVets.length=0; _fallenIds.clear(); if(Array.isArray(arr)) for(const f of arr){ if(f) fallenVets.push(f); } }
 function recordFallen(u){
   if(!u.lore) return;
   if(u.id!=null){ if(_fallenIds.has(u.id)) return; _fallenIds.add(u.id); }   // dedup across rollback re-simulations (the dead unit leaves G.entities, so the guard can't live on it)
@@ -211,11 +215,17 @@ function recordFallen(u){
 }
 
 /* ---- rendering (returns HTML strings; ui.js owns showing the overlays) ---- */
-function dossierHTML(u){
+// the header block (name + role/level/home) — split out so the dossier panel can lay the
+// Back button beside it without the personnel prose wrapping around the button.
+function dossierHeadHTML(u){
   const d = buildDossier(u), def = DEF[u.type], lvl = u.stars||0;
-  let h = `<div class="dossier">`;
-  h += `<h2>${def.icon?def.icon+' ':''}${d.full}</h2>`;
-  h += `<div class="dossier-sub">${careerTitle(lvl)} ${def.name} · Level ${lvl} · from ${d.home}</div>`;
+  return `<h2>${def.icon?def.icon+' ':''}${d.full}</h2>`
+    + `<div class="dossier-sub">${careerTitle(lvl)} ${def.name} · Level ${lvl} · from ${d.home}</div>`;
+}
+// the personnel file body (prose + service record), everything after the header.
+function dossierFileHTML(u){
+  const d = buildDossier(u), def = DEF[u.type], lvl = u.stars||0;
+  let h = '';
   // narrative prose: one deterministically-chosen paragraph per lore area, slots resolved here
   // ({rank}/{unit}/{lvl} only exist at render time; {me}/{home}/{trauma}/{dream}/{crime}/{family} via d.fill)
   if(d.paras){
@@ -230,8 +240,11 @@ function dossierHTML(u){
   h += `<div class="dk">Service record</div><ol class="dossier-log">`;
   for(const ev of u.lore.events){ const t = LORE_DATA.events[ev.i]; if(!t) continue;
     h += `<li><b>Lv ${ev.lvl}</b> — ${_loCap(d.fill(t.text))}</li>`; }
-  h += `</ol></div>`;
+  h += `</ol>`;
   return h;
+}
+function dossierHTML(u){
+  return `<div class="dossier">${dossierHeadHTML(u)}${dossierFileHTML(u)}</div>`;
 }
 
 function rosterHTML(){

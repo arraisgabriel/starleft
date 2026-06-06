@@ -161,6 +161,17 @@ window.HUB_MAP_DATA = {
         "overhang": 1,
         "heightScale": 1.08
       }
+    },
+    {
+      "id": "mentalhealth",
+      "kind": "mentalhealth",
+      "name": "Mental Health Facility",
+      "type": "outpost",
+      "x": 22,
+      "y": 39,
+      "w": 13,
+      "h": 10,
+      "visual": { "megaId": "mentalhealth_mega" }
     }
   ],
   "rivers": [
@@ -413,6 +424,24 @@ window.HUB_MAP_DATA = {
       "tags": [
         "hubUltra",
         "neon"
+      ]
+    },
+    {
+      "id": "mentalhealth_mega",
+      "poiId": "mentalhealth",
+      "cat": "megabuilding",
+      "variant": 4,
+      "tx": 22,
+      "ty": 39,
+      "w": 13,
+      "h": 10,
+      "overhang": 1.3,
+      "heightScale": 1.0,
+      "biome": "tech",
+      "seed": 0.44,
+      "tags": [
+        "neon",
+        "hubAnim"
       ]
     },
     {
@@ -1141,22 +1170,6 @@ window.HUB_MAP_DATA = {
       "biome": "grass",
       "fixedFrame": 9,
       "seed": 0.8381844184627103,
-      "tags": []
-    },
-    {
-      "id": "mega_43",
-      "poiId": null,
-      "cat": "megabuilding",
-      "variant": 4,
-      "tx": 23,
-      "ty": 41,
-      "w": 8,
-      "h": 9,
-      "overhang": 1.3,
-      "heightScale": 1,
-      "biome": "grass",
-      "fixedFrame": null,
-      "seed": 0.3604870099594105,
       "tags": []
     },
     {

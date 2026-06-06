@@ -71,6 +71,7 @@ function hubDefaultCampaign(){
     upgrades:{},
     dispatch:{ mdcId:null, staged:[] },
     training:{ staged:[], sessions:[] },
+    healing:{ staged:[], sessions:[] },
     visit:0,
     gambled:false,
     lastReward:null,
@@ -90,6 +91,10 @@ function deserializeHubCampaign(data){
     CAMPAIGN.training = Object.assign({staged:[], sessions:[]}, data.training||{});
     if(!Array.isArray(CAMPAIGN.training.staged)) CAMPAIGN.training.staged=[];
     if(!Array.isArray(CAMPAIGN.training.sessions)) CAMPAIGN.training.sessions=[];
+    // legacy-safe: saves predating the Mental Health Facility load with empty healing
+    CAMPAIGN.healing = Object.assign({staged:[], sessions:[]}, data.healing||{});
+    if(!Array.isArray(CAMPAIGN.healing.staged)) CAMPAIGN.healing.staged=[];
+    if(!Array.isArray(CAMPAIGN.healing.sessions)) CAMPAIGN.healing.sessions=[];
   }
 }
 function hubOwnerCtrl(){ return 'p1'; }
@@ -107,7 +112,8 @@ function hubUnitKey(u){
 function hubSnapUnit(u){
   const key=hubUnitKey(u);
   return { key, type:u.type, stars:u.stars||0, xp:u.xp||0, lore:u.lore||null,
-    hero:!!u.hero, heroId:u.heroId||null, spriteType:u.spriteType||null, hp:u.hp, maxHp:u.maxHp };
+    hero:!!u.hero, heroId:u.heroId||null, spriteType:u.spriteType||null, hp:u.hp, maxHp:u.maxHp,
+    madosis:u.madosis||0, sanityThreshold:u.sanityThreshold||0, scarred:!!u.scarred };
 }
 function hubBuildRosterFromCombat(state){
   const seen=new Set(), out=[];
@@ -298,6 +304,32 @@ function drawExtractionFlight(state){
   const anim=unitWalk('bomber','player');
   if(anim && anim.ready) blitFrame(u,f.x,f.y,anim,UNIT_SPRITE_H.bomber, ((state.time*8)|0)%anim.frames.length);
   else { ctx.fillStyle='#7fd6ff'; ctx.beginPath(); ctx.arc(f.x,f.y,18,0,Math.PI*2); ctx.fill(); }
+}
+/* ---- MDC dispatch cinematic: the Buzzword Bomber's LAUNCH flight ---------------------------
+   Mirror of the extraction panorama, but flying LEFT→RIGHT and shown BEHIND the dispatch crawl
+   (the crawl background becomes a semi-transparent scrim). Unlike extraction there is no
+   in/hover/out approach — it starts directly in the panorama. The crawl's own finish() drives
+   loadMap(); here we only set up / advance / tear down the backdrop. `dur` is the crawl's total
+   length (set by showCrawl once the narration length is known) so the single pass exits the right
+   edge exactly as the map loads. */
+function hubStartDispatchFlight(state, durSeconds){
+  if(!state) return;
+  state.dispatchFlight={ t:0, dir:'lr', dur: durSeconds>0 ? durSeconds : 60 };
+  if(typeof resetHubPanoDrones==='function') resetHubPanoDrones();
+  if(typeof document!=='undefined') document.body.classList.add('scene-dispatch');
+}
+// Called every frame from the rAF loop (unconditionally — running=false while the crawl plays).
+// Advances state.time too so the sprite anim / bob / drones animate with the sim paused; harmless
+// because this HUB state is discarded by loadMap the moment the crawl finishes.
+function updateDispatchFlight(state, dt){
+  const f=state && state.dispatchFlight; if(!f) return;
+  state.time=(state.time||0)+dt;
+  f.t+=dt;
+  if(typeof updateHubPanoDrones==='function') updateHubPanoDrones(state, dt);
+}
+function endDispatchFlight(state){
+  if(state) delete state.dispatchFlight;
+  if(typeof document!=='undefined') document.body.classList.remove('scene-dispatch');
 }
 // Frame the freshly-entered HUB at minimum zoom, centered on the ULTRA HQ tower (the central
 // landmark in the middle of the map). Must run AFTER syncHud() so viewW()/viewH() reflect the
@@ -563,6 +595,7 @@ function newHubMap(){
   hubPlacePois(state);
   hubSpawnRoster(state);
   if(typeof hubSpawnTrainees==='function') hubSpawnTrainees(state);
+  if(typeof hubSpawnHealers==='function') hubSpawnHealers(state);
   hubRevealAll(state);
   recomputeSupply(state);
   return state;
@@ -615,6 +648,7 @@ function hubMegaFromConfig(state, cfg, idx){
   if(hubHasTag(cfg,'neon')) m.neon=true;
   if(hubHasTag(cfg,'hubCondo')){ m.hubCondo=true; m.neon=true; }
   if(hubHasTag(cfg,'hubUltra')){ m.hubUltra=true; m.neon=true; }
+  if(hubHasTag(cfg,'hubAnim')){ m.hubAnim=true; m.neon=true; }   // animate (smooth, half-speed) in the HUB instead of a static frame
   if(hubHasTag(cfg,'hubWaste')) m.hubWaste=true;
   return m;
 }
@@ -722,6 +756,7 @@ function hubReconcileFacilities(state){
   if(added){
     hubEnsureMapMegas(state);
     if(typeof hubSpawnTrainees==='function') hubSpawnTrainees(state);
+  if(typeof hubSpawnHealers==='function') hubSpawnHealers(state);
     if(typeof recomputeSupply==='function') recomputeSupply(state);
   }
 }
@@ -756,6 +791,7 @@ function hubSpawnRoster(state){
     const u=mkUnit(state,r.type,'player',home.tx+2+(n%5),home.ty+home.h+1+((n/5)|0));
     u.hubKey=r.key; u.stars=r.stars||0; u.xp=r.xp||0; u.lore=r.lore||null;
     u.hero=!!r.hero; u.heroId=r.heroId||null; u.spriteType=r.spriteType||null;
+    u.madosis=r.madosis||0; u.sanityThreshold=r.sanityThreshold||0; u.scarred=!!r.scarred;   // sanity persists in the roster
     hubApplyUpgrades(u); if(typeof applyVetHp==='function') applyVetHp(u,true);
   }
 }
@@ -798,6 +834,7 @@ function hubUnitArrivedPoi(state,u,poi){
   else if(p.kind==='condo') hubShowCondo(p.id);
   else if(p.kind==='ultra') hubShowUltra(u);
   else if(p.kind==='training') hubTrainStage(state,u,poi);
+  else if(p.kind==='mentalhealth') hubHealStage(state,u,poi);
 }
 function hubEnlistedKeys(){
   CAMPAIGN.dispatch = Object.assign({mdcId:null, staged:[]}, CAMPAIGN.dispatch||{});
@@ -941,11 +978,15 @@ function hubDispatchNextEpisode(){
   const heroes=live.filter(u=>u.hero), vets=live.filter(u=>!u.hero);
   const cap=hubDispatchVetCap();
   if(vets.length>cap){ toast(hubDispatchFullMessage(cap)); return; }
+  // MADOSIS rest-decay: every veteran left behind this dispatch recovers a little sanity (Training
+  // Grounds trainees are exempt — their minds are occupied). Operates on the persistent roster.
+  if(typeof madosisRestDecay==='function') madosisRestDecay(new Set(live.map(u=>hubUnitKey(u))));
   setCarryover(vets.slice(0,cap)); captureHeroes({entities:heroes});
   CAMPAIGN.mode='combat';
   const idx=Math.max(0, Math.min(CAMPAIGN.nextMapIndex, MAPS.length-1));
   mapIndex=idx;
-  showCrawl(idx, ()=>loadMap(idx));
+  hubStartDispatchFlight(G, 0);                 // dur refined by showCrawl once narration length is known
+  showCrawl(idx, ()=>{ endDispatchFlight(G); loadMap(idx); });
 }
 function hubLaunchNextEpisode(){ hubDispatchNextEpisode(); }
 function hubSpend(cost){
@@ -958,7 +999,21 @@ function hubUpgradeSelectedCondo(){
   const poi=G&&G.selection[0]; if(!poi||!poi.hubPoi||poi.hubPoi.kind!=='condo') return;
   const c=CAMPAIGN.condos[poi.hubPoi.id], lvl=c.level||0, cost=HUB.condoCosts[lvl];
   if(cost==null){ toast('Condo already maxed'); return; }
-  if(hubSpend(cost)){ c.level=lvl+1; toast('Condo upgraded to level '+c.level); refreshUI(); }
+  if(hubSpend(cost)){
+    c.level=lvl+1;
+    hubRebakeResidents(c);                 // apply the new +HP to this condo's spawned residents NOW (mirrors the implant upgrade)
+    toast('Condo upgraded to level '+c.level); refreshUI();
+  }
+}
+// Re-bake HP/upgrades for a condo's residents currently spawned in the H.U.B. so a condo-level change
+// takes effect immediately, not only on the next spawn. Host-gated via the caller (hubUpgradeSelectedCondo).
+function hubRebakeResidents(c){
+  if(!c || typeof G==='undefined' || !G || !G.entities) return;
+  const res=c.residents||[];
+  for(const u of G.entities){
+    if(u.dead || u.kind!=='unit' || u.owner!=='player') continue;
+    if(res.includes(hubUnitKey(u))){ hubApplyUpgrades(u); if(typeof applyVetHp==='function') applyVetHp(u,false); }
+  }
 }
 function hubUpgradeSelectedUnit(kind){
   if(!hubCanAct()){ toast('Only the host can upgrade H.U.B. residents.'); return; }
@@ -1262,6 +1317,159 @@ function hubSpawnTrainees(state){
       const nm=(DEF[ses.type]&&DEF[ses.type].name)||'Recruits';
       toast('🎓 Training complete — two '+nm+' graduated at Level '+ses.target+'.');
     } else { spawnLocked(ses.a); spawnLocked(ses.b); }
+  }
+}
+
+/* =====================================================================
+   MENTAL HEALTH FACILITY — madosis healing. A unit walks in; the player pays
+   up-front to enroll it; it spends ONE mission-dispatch occupied inside, and on
+   return is released having recovered up to MADOSIS.heal.fracOfMax of its MAX
+   madosis. Single-unit (no pairing); timed by mission visits, not a real clock.
+   Reuses the Training-Grounds garrison / lock / respawn machinery.
+   ===================================================================== */
+function hubFindMentalHealth(state){
+  if(!state) return null;
+  if(state.hubPois && state.hubPois.mentalhealth) return state.hubPois.mentalhealth;
+  return (state.entities||[]).find(e=>e&&!e.dead&&e.hubPoi&&e.hubPoi.kind==='mentalhealth') || null;
+}
+function hubHealUsedSlots(){
+  const h=CAMPAIGN.healing||{staged:[],sessions:[]}, used=new Set();
+  for(const s of (h.staged||[])) if(s && s.slot!=null) used.add(s.slot);
+  for(const ses of (h.sessions||[])) if(ses.unit && ses.unit.slot!=null) used.add(ses.unit.slot);
+  return used;
+}
+function hubHealNextSlot(){
+  const used=hubHealUsedSlots(), cap=(MADOSIS.healCap||6);
+  for(let i=0;i<cap;i++) if(!used.has(i)) return i;
+  return -1;
+}
+function hubHealCount(){ const h=CAMPAIGN.healing||{staged:[],sessions:[]}; return (h.staged||[]).length + (h.sessions||[]).length; }
+function hubHealLiveUnit(state, snap){
+  if(!state||!snap) return null;
+  return (state.entities||[]).find(e=>e&&!e.dead&&e.owner==='player'&&e.kind==='unit'&&hubUnitKey(e)===snap.key) || null;
+}
+function hubHealLockUnit(state, u, fac, slot){
+  resetMotion(u);
+  u.cmd=null; u.state='idle'; u.vx=0; u.vy=0; u.sprinting=false;
+  u.storedIn=fac.id; u.healSlot=slot; u._face=1;
+  u.x=fac.x; u.y=fac.y; u.selected=false;
+  if(state && state.selection) state.selection=state.selection.filter(e=>e!==u);
+}
+function hubHealCost(snap){ return Math.round(MADOSIS.heal.baseCost + MADOSIS.heal.costPerStar*((snap&&snap.stars)||0)); }
+// Command-arrival intake: a unit walked into the facility → garrison it as "awaiting treatment".
+function hubHealStage(state, u, poi){
+  if(!hubCanAct()) return;
+  if(!state||!state.hub||!u||u.dead||u.owner!=='player'||u.kind!=='unit') return;
+  const fac=poi || hubFindMentalHealth(state);
+  if(!fac||!fac.hubPoi||fac.hubPoi.kind!=='mentalhealth') return;
+  const bail=(msg)=>{ resetMotion(u); u.cmd=null; u.state='idle'; toast(msg); refreshUI(); };
+  if(!(u.sanityThreshold>0)) return bail((DEF[u.type].name||'That unit')+' has no madosis to treat.');
+  if(!(u.madosis>0)) return bail((DEF[u.type].name||'That unit')+' is steady — nothing to treat.');
+  if(hubHealCount() >= (MADOSIS.healCap||6)) return bail('Mental Health Facility full ('+(MADOSIS.healCap||6)+').');
+  const slot=hubHealNextSlot();
+  if(slot<0) return bail('No free treatment slot.');
+  const snap=hubSnapUnit(u); snap.slot=slot;
+  CAMPAIGN.healing.staged.push(snap);
+  hubHealLockUnit(state, u, fac, slot);
+  spawnRing(u.x,u.y,'#7fffd0');
+  toast((DEF[u.type].name||'Unit')+' entered the Mental Health Facility.');
+  refreshUI();
+}
+// Enroll a staged unit: pay up-front; it occupies one mission, then recovers `heal` madosis.
+function hubHealStartSession(key){
+  if(!hubCanAct()){ toast('Only the host can operate the H.U.B.'); return false; }
+  const h=CAMPAIGN.healing;
+  const snap=(h.staged||[]).find(s=>s.key===key);
+  if(!snap){ toast('Unit not in the facility.'); return false; }
+  if(!(snap.madosis>0)){ toast('Nothing to treat.'); return false; }
+  const cost=hubHealCost(snap);
+  if(!hubSpend(cost)) return false;   // hubSpend toasts if M3$ is short
+  const heal=Math.min(snap.madosis, Math.round((MADOSIS.heal.fracOfMax||0.7) * (snap.sanityThreshold||0)));
+  h.staged=h.staged.filter(s=>s!==snap);
+  h.sessions.push({ id:'hs_'+(HUB.nextId++), unit:snap, startMadosis:snap.madosis, heal, startVisit:CAMPAIGN.visit, slot:snap.slot });
+  toast('🧠 Treatment started — recovers '+heal+' madosis after the next mission.');
+  refreshUI();
+  return true;
+}
+function hubHealToRoster(snap){
+  if(!snap) return;
+  CAMPAIGN.roster=(CAMPAIGN.roster||[]).filter(r=>r.key!==snap.key);
+  const clean=Object.assign({}, snap); delete clean.slot;
+  CAMPAIGN.roster.push(clean);
+}
+function hubHealReleaseSnap(state, fac, snap){
+  hubHealToRoster(snap);
+  const u=hubHealLiveUnit(state, snap);
+  if(!u) return;
+  const spot=fac ? hubMdcExitTile(state, fac, (snap.slot||0)+1) : null;
+  delete u.storedIn; delete u.healSlot;
+  if(spot){ u.x=spot.tx*TILE+TILE/2; u.y=spot.ty*TILE+TILE/2; }
+  else if(fac){ u.x=fac.x; u.y=(fac.ty+fac.h+1)*TILE; }
+  resetMotion(u); u.cmd=null; u.state='idle'; u.selected=false;
+  spawnRing(u.x,u.y,'#7fffd0');
+}
+// Apply the recovery to the snapshot (+ live unit if present).
+function hubHealApply(state, ses){
+  const snap=ses.unit, start=(ses.startMadosis!=null)?ses.startMadosis:(snap.madosis||0);
+  const healed=Math.max(0, start - (ses.heal||0));
+  snap.madosis=healed;
+  const u=hubHealLiveUnit(state, snap); if(u) u.madosis=healed;
+}
+// Withdraw a staged unit OR cancel an in-care session — released un-healed, no refund.
+function hubHealCancel(key){
+  if(!hubCanAct()){ toast('Only the host can operate the H.U.B.'); return false; }
+  if(!G||!G.hub||!key) return false;
+  const h=CAMPAIGN.healing, fac=hubFindMentalHealth(G);
+  const si=(h.staged||[]).findIndex(s=>s.key===key);
+  if(si>=0){
+    const snap=h.staged.splice(si,1)[0];
+    hubHealReleaseSnap(G, fac, snap);
+    toast(((DEF[snap.type]&&DEF[snap.type].name)||'Unit')+' left the facility.');
+    refreshUI(); return true;
+  }
+  const ses=(h.sessions||[]).find(x=>x.unit && x.unit.key===key);
+  if(ses){
+    h.sessions=h.sessions.filter(x=>x!==ses);
+    hubHealReleaseSnap(G, fac, ses.unit);
+    toast('Treatment cancelled — no recovery, no refund.');
+    refreshUI(); return true;
+  }
+  return false;
+}
+// Re-materialise facility occupants when a fresh HUB map is built (after the roster spawns).
+// A session whose mission cycle elapsed (CAMPAIGN.visit advanced past startVisit) COMPLETES: the unit
+// is healed and released to roam. Otherwise occupants spawn LOCKED inside, still in care.
+function hubSpawnHealers(state){
+  if(!state || typeof CAMPAIGN==='undefined' || !CAMPAIGN.healing) return;
+  const fac=hubFindMentalHealth(state);
+  if(!fac) return;
+  const fillSnap=(u,snap)=>{ u.hubKey=snap.key; u.stars=snap.stars||0; u.xp=snap.xp||0; u.lore=snap.lore||null;
+    u.hero=!!snap.hero; u.heroId=snap.heroId||null; u.spriteType=snap.spriteType||null;
+    u.madosis=snap.madosis||0; u.sanityThreshold=snap.sanityThreshold||0; u.scarred=!!snap.scarred;
+    if(typeof hubApplyUpgrades==='function') hubApplyUpgrades(u);
+    if(typeof applyVetHp==='function') applyVetHp(u,true); };
+  const spawnLocked=(snap)=>{
+    if(!snap) return;
+    if(hubHealLiveUnit(state, snap)) return;            // idempotent: entity already restored from a save
+    const slot=(snap.slot!=null)?snap.slot:hubHealNextSlot(); snap.slot=slot;
+    const u=mkUnit(state, snap.type, 'player', fac.tx+((fac.w/2)|0), fac.ty+((fac.h*0.6)|0));
+    fillSnap(u, snap); hubHealLockUnit(state, u, fac, slot);
+  };
+  for(const snap of (CAMPAIGN.healing.staged||[])) spawnLocked(snap);
+  for(const ses of (CAMPAIGN.healing.sessions||[]).slice()){
+    if(CAMPAIGN.visit > (ses.startVisit||0)){            // a mission has passed → treatment complete
+      hubHealApply(state, ses);
+      const snap=ses.unit; hubHealToRoster(snap);
+      CAMPAIGN.healing.sessions=CAMPAIGN.healing.sessions.filter(x=>x!==ses);
+      if(!hubHealLiveUnit(state, snap)){
+        const u=mkUnit(state, snap.type, 'player', fac.tx+((fac.w/2)|0), fac.ty+fac.h+1);
+        fillSnap(u, snap);
+      }
+      const nm=(typeof trainUnitName==='function')?trainUnitName(snap):((DEF[snap.type]&&DEF[snap.type].name)||'Unit');
+      toast('🧠 '+nm+' completed treatment — madosis down to '+(snap.madosis|0)+'.');
+    } else {
+      spawnLocked(ses.unit);
+    }
   }
 }
 

@@ -22,7 +22,11 @@ body.scene-flash #minimap-wrap,
 body.scene-cutscene #topbar,
 body.scene-cutscene #bottom,
 body.scene-cutscene #lns-ingame,
-body.scene-cutscene #minimap-wrap { display:none !important; }
+body.scene-cutscene #minimap-wrap,
+body.scene-dispatch #topbar,
+body.scene-dispatch #bottom,
+body.scene-dispatch #lns-ingame,
+body.scene-dispatch #minimap-wrap { display:none !important; }
 
 /* ---------- Scripted-cutscene caption (lower third; e.g. Nino's Ep VII flash monologue) ----------
    Shown over #cv while body.scene-cutscene hides the HUD; pointer-events pass through to the canvas
@@ -114,6 +118,68 @@ body.scene-cutscene #minimap-wrap { display:none !important; }
 .dossier-prose { text-align:left; margin:6px 0 14px; color:#cdb6bc; font-size:13.5px; line-height:1.62; }
 .dossier-prose p { margin:0 0 9px; }
 .dossier-prose .assess { color:#9a6b78; font-style:italic; border-left:2px solid #6f3644; padding-left:10px; margin-bottom:0; }
+
+/* ---- Dossier two-column layout: LEFT personnel file, RIGHT live H.U.B. player card ----
+   Lay the file + card side by side; collapse to one column (card on top) on narrow screens. */
+/* Allocate the in-game dossier exactly like the HUB facility menus (M.D.C. / Training Grounds):
+   a full-bleed panel filling the whole screen BELOW the top menu bar. JS sets #dossierScreen.top
+   to the measured topbar height (VIEW_TOP); the CSS var is the pre-measure fallback. Scoped to
+   #dossierScreen so the HUB menu (.hub-menu-panel) is untouched. Kept a touch more transparent
+   than other live overlays (panel .80/.73 vs .95/.92). */
+#dossierScreen{
+  top:calc(var(--top-h) + var(--safe-t));   /* JS overrides with the measured VIEW_TOP */
+  left:0; right:0; bottom:0;
+  z-index:19;                                /* same layer as the HUB menu: BELOW #topbar/#topmenu-panel(20/30) & #lns-ingame(21) so they render on top */
+  align-items:stretch; justify-content:center;
+}
+body.dossier-open #bottom{ display:none; }   /* like the HUB menu: hide the bottom HUD so the z-19 panel isn't occluded; syncHud() then drops the LNS to bottom:0 */
+#dossierScreen .submenu-panel{
+  width:100%; max-width:none; height:100%; max-height:none; margin:0; align-self:stretch;
+  border:none; border-top:2px solid #ff5a5a; border-bottom:1px solid #6f3644; border-radius:0;
+  background:linear-gradient(135deg, rgba(36,12,17,.80), rgba(10,5,8,.73));   /* more transparent than other live overlays */
+  box-shadow:0 18px 60px rgba(0,0,0,.5), inset 0 0 40px rgba(255,60,60,.05);
+  padding:clamp(14px,2.2vw,30px); padding-bottom:calc(40px + var(--safe-b));  /* clear the LNS band, like the HUB menu */
+}
+#dossierBody{ width:100%; }                                  /* fill the full-bleed panel regardless of .submenu-panel align-items */
+/* Center the two columns together as a group (max-width block + auto margins) so the file doesn't
+   hug the left edge and the card doesn't hug the right — like the HUB facility two-column menus. */
+.dossier-2col{ width:100%; max-width:1120px; margin-inline:auto; display:grid;
+  grid-template-columns:1fr minmax(230px,300px); gap:26px; align-items:start; }
+.dossier-2col .dossier-col-left{ min-width:0; }
+.dossier-2col .dossier-col-right{ min-width:0; position:sticky; top:0; }
+/* Header row: [Back | name+role]. Back sits cleanly to the left of the name; the personnel prose
+   below stays full width (no float wrapping it). ID-scoped to outrank .sc-btn.back's width. */
+.dossier-headrow{ display:flex; align-items:flex-start; gap:16px; margin-bottom:10px; }
+.dossier-headrow .dossier-head{ flex:1 1 auto; min-width:0; }
+.dossier-headrow .dossier-head h2{ margin-top:3px; }
+#dossierBody .dossier-back{ flex:0 0 auto; width:fit-content; min-width:0; margin:0; padding:8px 16px; justify-content:center; }
+@media (max-width:760px){
+  .dossier-2col{ grid-template-columns:1fr; }
+  .dossier-2col .dossier-col-right{ order:-1; position:static; }   /* card on top when stacked */
+}
+/* the live player card — a big version of the HUB unit card (.train-card) */
+.dcard{ display:flex; flex-direction:column; align-items:center; gap:8px;
+  background:linear-gradient(160deg, rgba(48,16,24,.7), rgba(14,6,10,.7));
+  border:1px solid #5a2f3a; border-radius:12px; padding:14px;
+  box-shadow:inset 0 0 26px rgba(255,60,60,.05); }
+.dcard-spr{ width:clamp(140px,40vw,190px); height:clamp(140px,40vw,190px);
+  background:radial-gradient(ellipse at 50% 80%, rgba(120,200,255,.10), rgba(0,0,0,0) 62%); }
+.dcard-name{ font-size:clamp(16px,2.4vw,20px); color:#fff; letter-spacing:.5px; text-align:center; line-height:1.2; }
+.dcard-type{ font-size:12px; color:#e7c8a0; letter-spacing:.5px; text-align:center; }
+.dcard-bars{ width:100%; display:flex; flex-direction:column; gap:9px; margin-top:6px; }
+.dcard-bar{ position:relative; width:100%; height:17px; background:rgba(0,0,0,.5);
+  border:1px solid #5a2f3a; border-radius:6px; overflow:hidden; }
+.dcard-bar>i{ display:block; height:100%; width:0; transition:width .12s linear; }
+.dcard-hp>i{ background:#4cd964; }                 /* live-overridden by hpColor() to match the world-view bar */
+.dcard-mad>i{ background:linear-gradient(90deg,#7a35ff,#b06bff); box-shadow:0 0 10px rgba(150,80,255,.5); }
+.dcard-mad.over>i{ background:linear-gradient(90deg,#b06bff,#ff5bff); animation:dcardPulse 1s ease-in-out infinite; }
+@keyframes dcardPulse{ 0%,100%{ filter:brightness(1); } 50%{ filter:brightness(1.5); } }
+.dcard-bar-cap{ position:absolute; left:8px; top:0; height:100%; display:flex; align-items:center;
+  font-size:9px; letter-spacing:1.5px; text-transform:uppercase; color:#fff; opacity:.9;
+  text-shadow:0 1px 2px #000; pointer-events:none; }
+.dcard-bar-val{ position:absolute; right:8px; top:0; height:100%; display:flex; align-items:center;
+  font-size:11px; color:#fff; font-variant-numeric:tabular-nums; text-shadow:0 1px 2px #000; pointer-events:none; }
+
 .roster-cols { display:flex; gap:18px; text-align:left; flex-wrap:wrap; }
 .roster-col { flex:1; min-width:230px; }
 .roster-col h3 { color:#ffd86b; font-size:14px; letter-spacing:1px; margin-bottom:8px; }
@@ -161,6 +227,15 @@ button.roster-row:hover { background:rgba(60,28,40,.85); color:#fff; }
 
 /* ---------- Intro text crawl ---------- */
 #crawlScreen { background:#000; overflow:hidden; justify-content:flex-start; }
+/* MDC dispatch: the Buzzword-Bomber panorama plays on #cv behind the crawl, so the opaque black
+   becomes a semi-transparent scrim — darker through the ~30–60% read band so the red text stays
+   legible, lighter at the edges so the skyline + bomber show through. Other crawls (title screen,
+   victory→next-quarter) never get .scene-dispatch, so they keep the solid #000 above. */
+body.scene-dispatch #crawlScreen {
+  background:linear-gradient(180deg,
+    rgba(0,0,0,.12) 0%, rgba(0,0,0,.44) 30%,
+    rgba(0,0,0,.44) 60%, rgba(0,0,0,.10) 100%);
+}
 #crawl-intro {
   position:absolute; top:50%; left:50%; transform:translate(-50%,-50%);
   color:#ff6a6a; font-size:24px; letter-spacing:1px; text-align:center; max-width:80%;

@@ -47,6 +47,18 @@ function computePlayerVPI(state){
   return vpi;
 }
 
+/* Combat power of a unit TYPE at a star level: effective damage × effective HP (the same dmg×HP
+   product the game grants per level). Unlike unitVetPower (which is 0 for un-promoted units), this
+   counts everyone — used by MADOSIS to size a Kennel squad against ALL units guarding a rescued dog,
+   fresh recruits included. Healers/workers (no dmg) get a small presence value so they still matter. */
+function typePower(type, stars){
+  const d=DEF[type]||{}; const s=stars||0;
+  const dmg=(d.dmg||0)>0 ? d.dmg : ((d.heal||0)>0 ? 2 : 1);   // healers count a little; workers minimally
+  const hp=d.hp||1;
+  return dmg*(1+CAREER.dmgPerStar*s) * hp*(1+CAREER.hpPerStar*s);
+}
+function combatPower(u){ return u ? typePower(u.type, u.stars||0) : 0; }
+
 /* Pure: extra enemy soldiers per base for a given VPI. idx is reserved for future per-arc tuning. */
 function vetScalingBonus(vpi, idx){
   if(!(vpi > 0)) return 0;
@@ -75,4 +87,5 @@ function applyVetScalingToBase(state, base, idx, vpi){
 if(typeof window!=='undefined'){
   window.computePlayerVPI=computePlayerVPI; window.vetScalingBonus=vetScalingBonus;
   window.vetMintFactor=vetMintFactor; window.applyVetScalingToBase=applyVetScalingToBase;
+  window.typePower=typePower; window.combatPower=combatPower;
 }

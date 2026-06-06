@@ -258,6 +258,7 @@ function buildHubCommands(sel){
   if(poi && poi.hubPoi.kind==='mdc')      addCmd('🛰️','M.D.C.',null,()=>openMdcMenu(poi));
   if(poi && poi.hubPoi.kind==='ultra')    addCmd('◆','ULTRA',null,()=>openUltraMenu());
   if(poi && poi.hubPoi.kind==='training') addCmd('🎯','TRAINING GROUNDS',null,()=>openTrainingMenu());
+  if(poi && poi.hubPoi.kind==='mentalhealth') addCmd('🧠','MENTAL HEALTH',null,()=>openHealingMenu());
   if(unit){
     const key=hubUnitKey(unit), up=(CAMPAIGN.upgrades[key]||{}), il=up.implantLevel||0;
     addCmd('🧬','Implant',HUB.implantCosts[il]==null?null:HUB.implantCosts[il],()=>hubUpgradeSelectedUnit('implant'));
@@ -362,12 +363,96 @@ function showSub(id){ const el=document.getElementById(id); if(el) el.style.disp
 function hideSub(id){ const el=document.getElementById(id); if(el) el.style.display='none'; }
 
 // career v3: per-unit dossier modal + campaign roster/memorial
+// The dossier is a two-column panel: LEFT is the personnel file (dossierHTML);
+// RIGHT is a live H.U.B.-style player card (animated idle sprite + name/type +
+// HP bar synced to the world-view bar + a madosis bar). The game keeps running
+// while it's open, so dossierTick() refreshes the card every frame from the live unit.
+let dossierUnit=null, dossierRaf=0;
 function showDossier(u){
   if(!u || !u.lore || typeof dossierHTML!=='function') return;
   const keepRunning = !!(G && running && !G.over);
-  document.getElementById('dossierBody').innerHTML = dossierHTML(u);
+  dossierUnit = u;
+  document.getElementById('dossierBody').innerHTML = dossierBodyHTML(u);
+  document.body.classList.add('dossier-open');   // hide the bottom HUD so the z-19 panel reads as full-bleed (HUB-menu behavior)
   showSub('dossierScreen');
+  dossierSyncTop();                       // sit the full-bleed panel just below the (responsive) topbar
+  dossierSyncHud();                       // recompute VIEW_BOT with #bottom hidden (drops the LNS to bottom:0)
   if(keepRunning) running=true;
+  if(!dossierRaf) dossierRaf=requestAnimationFrame(dossierTick);
+}
+// keep the full-bleed dossier below the (possibly 2-row, responsive) topbar — mirrors hubMenuSyncTop.
+function dossierSyncTop(){
+  const v=document.getElementById('dossierScreen'); if(!v) return;
+  if(typeof VIEW_TOP==='number'){ const t=VIEW_TOP+'px'; if(v.style.top!==t) v.style.top=t; }
+}
+function dossierSyncHud(){
+  if(typeof syncHud==='function'){ syncHud(); if(typeof G!=='undefined' && G && typeof clampCam==='function') clampCam(G); }
+}
+// close + tear down: restore the bottom HUD and the gameplay viewport (mirrors closeHubMenu).
+function closeDossier(){
+  hideSub('dossierScreen');
+  document.body.classList.remove('dossier-open');
+  if(dossierRaf){ cancelAnimationFrame(dossierRaf); dossierRaf=0; }
+  dossierUnit=null;
+  dossierSyncHud();
+}
+function dossierBodyHTML(u){
+  // Left column: a header row [Back button | name+role] so Back is reachable without scrolling
+  // and sits cleanly beside the player name; then the personnel file below at full width.
+  return `<div class="dossier-2col">`
+    + `<div class="dossier-col-left">`
+    +   `<div class="dossier-headrow">`
+    +     `<button class="sc-btn back dossier-back" onclick="closeDossier()">◀ Back</button>`
+    +     `<div class="dossier dossier-head">${dossierHeadHTML(u)}</div>`
+    +   `</div>`
+    +   `<div class="dossier">${dossierFileHTML(u)}</div>`
+    + `</div>`
+    + `<div class="dossier-col-right">${dossierCardHTML(u)}</div>`
+    + `</div>`;
+}
+// the live player card markup — a big version of the HUB unit card (hubMenuUnitCard).
+// The bar <i> widths/colors and the sprite are driven live by dossierTick().
+function dossierCardHTML(u){
+  const def=DEF[u.type], lvl=u.stars||0;
+  let name='';
+  try{ const d=(u.lore && typeof buildDossier==='function')?buildDossier(u):null; name=(d&&d.full)?d.full:(u.heroId||def.name); }
+  catch(e){ name=u.heroId||def.name; }
+  const type=(def.icon?def.icon+' ':'')+(lvl>0?careerTitle(lvl)+' ':'')+def.name+' · Lv '+lvl;
+  return `<div class="dcard">`
+    + `<canvas class="dcard-spr" width="220" height="220" data-type="${u.type}" data-sprite="${u.spriteType||''}"></canvas>`
+    + `<div class="dcard-name">${name}</div>`
+    + `<div class="dcard-type">${type}</div>`
+    + `<div class="dcard-bars">`
+    +   `<div class="dcard-bar dcard-hp"><i></i><span class="dcard-bar-cap">HP</span><span class="dcard-bar-val"></span></div>`
+    +   `<div class="dcard-bar dcard-mad"><i></i><span class="dcard-bar-cap">Madosis</span><span class="dcard-bar-val"></span></div>`
+    + `</div></div>`;
+}
+// per-frame refresh of the live card; self-terminates when the dossier is hidden.
+function dossierTick(){
+  const scr=document.getElementById('dossierScreen');
+  if(!scr || scr.style.display==='none' || !dossierUnit){
+    dossierRaf=0; dossierUnit=null;
+    if(document.body.classList.contains('dossier-open')){ document.body.classList.remove('dossier-open'); dossierSyncHud(); }  // fallback teardown if hidden without closeDossier()
+    return;
+  }
+  dossierSyncTop();                        // track responsive topbar height changes while open
+  const u=dossierUnit, body=document.getElementById('dossierBody');
+  if(body){
+    const cv=body.querySelector('canvas.dcard-spr');
+    if(cv) drawTrainCanvas(cv, cv.dataset.type, cv.dataset.sprite||'', performance.now()/1000);
+    // HP — same fraction + hpColor thresholds the world-view bar uses; 0 once dead.
+    const maxHp=u.maxHp||1, hp=u.dead?0:Math.max(0,u.hp||0), hpFrac=Math.max(0,Math.min(1,hp/maxHp));
+    const hpI=body.querySelector('.dcard-hp>i'); if(hpI){ hpI.style.width=(hpFrac*100)+'%'; hpI.style.background=hpColor(hpFrac); }
+    const hpV=body.querySelector('.dcard-hp .dcard-bar-val'); if(hpV) hpV.textContent=(hp|0)+' / '+(maxHp|0);
+    // Madosis — accumulated points vs the unit's effective break threshold (0 = no mind to break yet).
+    const thr=(typeof madThreshold==='function')?madThreshold(u):(u.sanityThreshold||0);
+    const mad=u.madosis||0, madFrac=thr>0?Math.max(0,Math.min(1,mad/thr)):0;
+    const madBar=body.querySelector('.dcard-mad');
+    const madI=body.querySelector('.dcard-mad>i'); if(madI) madI.style.width=(madFrac*100)+'%';
+    const madV=body.querySelector('.dcard-mad .dcard-bar-val'); if(madV) madV.textContent=thr>0?(Math.round(mad)+' / '+Math.round(thr)):'—';
+    if(madBar) madBar.classList.toggle('over', thr>0 && mad>=thr);
+  }
+  dossierRaf=requestAnimationFrame(dossierTick);
 }
 function showRoster(){
   const b=document.getElementById('rosterBody'); if(!b || typeof rosterHTML!=='function') return;
@@ -438,6 +523,24 @@ function hubMenuSection(title){ const h=document.createElement('div'); h.classNa
 // hubMenuColumn() is a stacked column. Building panels lay their sections into columns.
 function hubMenuColumns(n){ const g=document.createElement('div'); g.className='hub-cols c'+(n||1); return g; }
 function hubMenuColumn(scroll){ const c=document.createElement('div'); c.className='hub-col'+(scroll?' scroll':''); return c; }
+// effective max HP for a roster snapshot / unit, INCLUDING its condo + implant H.U.B. bonuses, so
+// cards reflect condo HP upgrades live. Mirrors applyVetHp()'s formula (career.js).
+function hubUnitMaxHp(u){
+  // the live H.U.B. unit's maxHp is the source of truth the world view shows — prefer it so the card
+  // can never disagree with the in-world HP bar (the condo upgrade re-bakes that live maxHp).
+  if(typeof G!=='undefined' && G && G.entities && u.key && typeof hubUnitKey==='function'){
+    for(const e of G.entities){ if(!e.dead && e.kind==='unit' && e.owner==='player' && e.maxHp && hubUnitKey(e)===u.key) return e.maxHp; }
+  }
+  const def=DEF[u.type]; if(!def) return u.maxHp||0;
+  const hpPerStar=(typeof CAREER!=='undefined'&&CAREER.hpPerStar)||0;
+  let mul=1;
+  if(typeof hubCondoForUnit==='function' && typeof CAMPAIGN!=='undefined' && CAMPAIGN.condos && u.key){
+    const c=hubCondoForUnit(u.key), cl=c?(c.level||0):0;
+    const up=(CAMPAIGN.upgrades && CAMPAIGN.upgrades[u.key])||{};
+    mul=1 + cl*0.04 + (up.implantLevel||0)*0.03;
+  }
+  return Math.round(def.hp * (1 + hpPerStar*(u.stars||0)) * mul) || (u.maxHp||0);
+}
 // a card with a live-animated portrait (drawTrainCanvas, animated by hubMenuTick) + caption + optional action.
 // `u` is a roster snapshot or a live unit (both expose type/stars/spriteType/lore/heroId).
 function hubMenuUnitCard(u, opts){
@@ -447,6 +550,32 @@ function hubMenuUnitCard(u, opts){
   const cv=document.createElement('canvas'); cv.width=200; cv.height=200; cv.className='train-spr';
   cv.dataset.type=u.type; cv.dataset.sprite=u.spriteType||''; card.appendChild(cv);
   const cap=document.createElement('div'); cap.className='train-cap'; cap.innerHTML=opts.caption||trainTypeName(u); card.appendChild(cap);
+  // HP: a compact green bar showing effective max HP (incl. condo/implant bonuses) so the player can
+  // watch HP climb as they upgrade the condo. Units rest at full HP in the H.U.B., so it reads full.
+  const _maxHp=hubUnitMaxHp(u);
+  if(_maxHp>0){
+    const hpBar=document.createElement('div');
+    hpBar.style.cssText='position:relative;width:86%;height:13px;margin:4px auto 1px;background:rgba(0,0,0,.5);border:1px solid #5a2f3a;border-radius:4px;overflow:hidden';
+    hpBar.title='Max HP '+_maxHp;
+    const hi=document.createElement('i');
+    hi.style.cssText='display:block;height:100%;width:100%;background:'+((typeof hpColor==='function')?hpColor(1):'#4cd964');
+    hpBar.appendChild(hi);
+    const hl=document.createElement('span'); hl.textContent='❤ '+_maxHp;
+    hl.style.cssText='position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;color:#06210d;letter-spacing:.3px';
+    hpBar.appendChild(hl);
+    card.appendChild(hpBar);
+  }
+  // MADOSIS: a compact purple sanity bar under the name/type, once a unit can break (has a threshold).
+  const _thr=(typeof madThreshold==='function')?madThreshold(u):(u.sanityThreshold||0);
+  if(_thr>0){
+    const mad=u.madosis||0, frac=Math.max(0,Math.min(1, mad/_thr)), over=mad>=_thr;
+    const bar=document.createElement('div');
+    bar.style.cssText='position:relative;width:86%;height:7px;margin:3px auto 1px;background:rgba(0,0,0,.5);border:1px solid #5a2f3a;border-radius:4px;overflow:hidden';
+    bar.title='Madosis '+Math.round(mad)+' / '+Math.round(_thr)+(u.scarred?' · scarred':'');
+    const i=document.createElement('i');
+    i.style.cssText='display:block;height:100%;width:'+(frac*100)+'%;background:linear-gradient(90deg,#7a35ff,#b06bff)'+(over?';box-shadow:0 0 8px rgba(255,90,255,.85)':'');
+    bar.appendChild(i); card.appendChild(bar);
+  }
   if(opts.onClick) card.onclick=opts.onClick;
   if(opts.action){ const a=document.createElement('button'); a.className='hub-card-act'; a.textContent=opts.action.label;
     a.onclick=(ev)=>{ ev.stopPropagation(); opts.action.onClick(); }; card.appendChild(a); }
@@ -600,6 +729,74 @@ function openTrainingMenu(){
   });
 }
 
+/* ---- Mental Health Facility menu (madosis healing — single-unit, visit-timed) ---- */
+function healPanelSignature(){
+  const h=(typeof CAMPAIGN!=='undefined'&&CAMPAIGN.healing)||{staged:[],sessions:[]};
+  return 'hst:'+(h.staged||[]).map(s=>s.key+'@'+Math.round(s.madosis||0)).join(',')
+       +'|hse:'+(h.sessions||[]).map(s=>s.id+':'+((s.unit&&s.unit.key)||'')).join(',')
+       +'|v:'+((typeof CAMPAIGN!=='undefined'&&CAMPAIGN.visit)||0)
+       +'|m3:'+((typeof CAMPAIGN!=='undefined'&&(CAMPAIGN.m3|0))||0);
+}
+function buildHealingBody(body){
+  const h=(typeof CAMPAIGN!=='undefined'&&CAMPAIGN.healing)||{staged:[],sessions:[]};
+  const staged=h.staged||[], sessions=h.sessions||[];
+  const cap=(typeof MADOSIS!=='undefined'&&MADOSIS.healCap)||6;
+  const fracPct=Math.round((((typeof MADOSIS!=='undefined'&&MADOSIS.heal&&MADOSIS.heal.fracOfMax)||0.7))*100);
+
+  const sum=document.createElement('div'); sum.className='hub-stat';
+  sum.innerHTML='In care <b>'+(staged.length+sessions.length)+' / '+cap+'</b> · M3$ <b>'+((CAMPAIGN.m3|0))+'</b>';
+  body.appendChild(sum);
+
+  const cols=hubMenuColumns(2), left=hubMenuColumn(true), right=hubMenuColumn(true);
+  cols.appendChild(left); cols.appendChild(right); body.appendChild(cols);
+
+  // ---- LEFT: awaiting treatment (staged) — per-unit Start button ----
+  left.appendChild(hubMenuSection('Awaiting treatment'));
+  if(!staged.length){
+    const m=document.createElement('div'); m.className='muted';
+    m.textContent='Walk a frayed veteran (one carrying madosis) into the facility, then begin treatment here.';
+    left.appendChild(m);
+  } else {
+    left.appendChild(hubMenuUnitGrid(staged, s=>{
+      const cost=(typeof hubHealCost==='function')?hubHealCost(s):0;
+      return {
+        caption: trainTypeName(s)+'<br>'+(typeof careerTitle==='function'?careerTitle(s.stars||0):'')+' · Lv '+(s.stars||0),
+        action: { label:'Start · M3$ '+cost, onClick:()=>{ if(typeof hubHealStartSession==='function' && hubHealStartSession(s.key)) buildHubMenuBody(); } }
+      };
+    }));
+    const note=document.createElement('div'); note.className='muted';
+    note.textContent='Treatment recovers up to '+fracPct+'% of a unit’s maximum madosis and occupies it for one mission.';
+    left.appendChild(note);
+  }
+
+  // ---- RIGHT: in treatment (active sessions) ----
+  right.appendChild(hubMenuSection('In treatment'));
+  if(!sessions.length){ const m=document.createElement('div'); m.className='muted'; m.textContent='No one in treatment.'; right.appendChild(m); }
+  for(const ses of sessions){
+    const who=ses.unit||{};
+    const card=document.createElement('div'); card.className='train-session'; card.dataset.healid=ses.id;
+    card.appendChild(hubMenuUnitGrid([who], s=>({ caption: trainTypeName(s)+'<br>recovering <b>'+(ses.heal||0)+'</b> madosis' })));
+    const meta=document.createElement('div'); meta.className='train-meta';
+    meta.innerHTML='<div class="train-countdown">IN CARE</div><div class="train-bar"><i style="width:30%"></i></div>'
+      +'<div class="muted">Completes after the next mission.</div>';
+    card.appendChild(meta);
+    const cb=document.createElement('button'); cb.className='sc-btn train-withdraw'; cb.textContent='Cancel — no recovery, no refund';
+    cb.onclick=()=>{ if(typeof hubHealCancel==='function' && hubHealCancel(who.key)) buildHubMenuBody(); };
+    card.appendChild(cb);
+    right.appendChild(card);
+  }
+}
+function openHealingMenu(){
+  if(typeof CAMPAIGN==='undefined' || !CAMPAIGN.healing) return;
+  openHubMenu({
+    id:'mentalhealth', icon:'🧠', title:'Mental Health Facility',
+    subtitle:'Treat a frayed veteran — recover most of its max madosis over one mission, paid up-front.',
+    signature: healPanelSignature,
+    build: buildHealingBody,
+    tick: function(){}   // visit-based — nothing per-frame (card portraits are animated by hubMenuTick)
+  });
+}
+
 /* ---- M.D.C. (Mission Dispatch) menu ---- */
 // spoiler-free teaser for the next deployment: prefer the authored crawl.summary; fall back to the
 // first ~2 sentences of the crawl text (legacy/future maps with no summary), then the objective.
@@ -688,16 +885,16 @@ function openCondoMenu(poi){
     build: function(body){
       const c=(CAMPAIGN.condos&&CAMPAIGN.condos[id])||{level:0,residents:[]};
       const lvl=c.level||0, cost=HUB.condoCosts[lvl];
+      // present residents = condo resident keys that resolve to a current roster snapshot. Keys for
+      // veterans no longer on the roster (fell / not extracted) are dropped, not shown as raw keys.
+      const units=(c.residents||[]).map(k=>(CAMPAIGN.roster||[]).find(x=>x.key===k)).filter(Boolean);
       const s=document.createElement('div'); s.className='hub-stat';
-      s.innerHTML='Level <b>'+lvl+'</b> · Residents <b>'+((c.residents||[]).length)+'</b> · HP bonus <b>+'+(lvl*4)+'%</b>';
+      s.innerHTML='Level <b>'+lvl+'</b> · Residents <b>'+units.length+'</b> · HP bonus <b>+'+(lvl*4)+'%</b>';
       body.appendChild(s);
       body.appendChild(hubMenuSection('Residents'));
-      const res=(c.residents||[]);
-      if(!res.length){ const m=document.createElement('div'); m.className='muted'; m.textContent='No residents yet — veterans move in as they join your roster.'; body.appendChild(m); }
-      else {
-        const names=res.map(k=>{ const r=(CAMPAIGN.roster||[]).find(x=>x.key===k); return r?trainUnitName(r):k.replace(/^.*?:/,''); });
-        const list=document.createElement('div'); list.className='hub-stat'; list.innerHTML=names.map(_escHtml).join(' · '); body.appendChild(list);
-      }
+      if(!units.length){ const m=document.createElement('div'); m.className='muted'; m.textContent='No residents yet — veterans move in as they join your roster.'; body.appendChild(m); }
+      // render animated player cards (the same component the Training Grounds / M.D.C. menus use)
+      else body.appendChild(hubMenuUnitGrid(units));
       const foot=document.createElement('div'); foot.className='hub-footer';
       const info=document.createElement('div'); info.className='grow';
       info.innerHTML = cost==null ? 'This condo is fully upgraded.' : 'Next level: <b>+4% max HP</b> for its residents.';
@@ -901,6 +1098,8 @@ function showCrawl(idx, done){
     if(finished) return;
     const plan = crawlSchedule(content, A);
     if(plan){
+      // MDC dispatch: pace the single bomber pass to the whole crawl so it exits as the map loads
+      if(G && G.dispatchFlight) G.dispatchFlight.dur = (introMs + plan.finishMs)/1000;
       const play = ()=>{ content.style.animationPlayState=''; plan.anim.play(); };   // clear the freeze, then run
       if(introMs>0){                              // keep the scroll below view under the introFade
         plan.anim.currentTime = 0;
@@ -912,6 +1111,7 @@ function showCrawl(idx, done){
       // Geometry unavailable (no Web Animations API): degrade to a duration that is at least slower
       // than the voice, scrolling from the start, and a generous skippable auto-advance.
       const D = Math.max(70, A*2.4);
+      if(G && G.dispatchFlight) G.dispatchFlight.dur = introMs/1000 + A + CRAWL_LEAD_S + 10;
       content.style.animationDuration = D + 's'; content.style.animationPlayState='';
       if(typeof VOICE!=='undefined') voiceTimer = setTimeout(()=>{ if(!finished) VOICE.playCrawl(idx); }, introMs + CRAWL_LEAD_S*1000);
       timer = setTimeout(finish, introMs + (A + CRAWL_LEAD_S + 10)*1000);

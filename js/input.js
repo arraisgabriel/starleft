@@ -81,7 +81,7 @@ function dispatchTap(e, opts){
 
   if(isAdditive(e)){ clickSelectAt(G,w,e); return; }   // ⌘/Shift+tap aggregates
 
-  const friendlyFinished = ent && ent.owner==='player' && isMine(ent) &&
+  const friendlyFinished = ent && ent.owner==='player' && isMine(ent) && !ent.madDog &&
         (ent.kind==='unit' || (ent.kind==='building' && !ent.constructing));
   const canCommand = G.selection.some(s=>!s.dead && s.owner==='player' && (s.kind==='unit'||s.kind==='building'));
   const hasUnitCommand = G.selection.some(s=>!s.dead && !s.storedIn && s.owner==='player' && s.kind==='unit');
@@ -98,9 +98,10 @@ function dispatchTap(e, opts){
 
   // command targets: enemy → attack, goldmine → gather, unfinished friendly → build-assist, empty → move
   const isEnemy=ent && ent.owner && ent.owner!=='player';
+  const isMad=ent && ent.madDog;     // MADOSIS: a mad dog is "ours" but commandable (attack or rescue)
   const isGold=ent && ent.type==='goldmine';
   const isConstructing=ent && ent.kind==='building' && ent.owner==='player' && ent.constructing;
-  if(canCommand && (isEnemy || isGold || isConstructing || !ent)){
+  if(canCommand && (isEnemy || isMad || isGold || isConstructing || !ent)){
     let target=ent;
     if(isEnemy && !isVisiblePix(G,ent.x,ent.y)) target=null;
     // Empty-ground tap feeds the Sprint window FIRST, so commandUnits' move branch sees

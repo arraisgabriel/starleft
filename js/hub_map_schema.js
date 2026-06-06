@@ -32,6 +32,7 @@
       {id:'mdc_sw', kind:'mdc', name:'M.D.C. South-West', type:'mdc', x:28, y:75, w:3, h:3, visual:{type:'barracks', faction:'enemy', neonId:'barracks_enemy', fixedFrame:4, w:5, h:5, overhang:1.08, heightScale:1}},
       {id:'mdc_ultra', kind:'mdc', name:'M.D.C. Downtown', type:'mdc', x:60, y:63, w:3, h:3, visual:{type:'barracks', faction:'enemy', neonId:'barracks_enemy', fixedFrame:0, w:5, h:5, overhang:1.08, heightScale:1}},
       {id:'ultra', kind:'ultra', name:'ULTRA Headquarters', type:'ultra', x:58, y:42, w:8, h:8, visual:{megaId:'ultra_mega'}},
+      {id:'mentalhealth', kind:'mentalhealth', name:'Mental Health Facility', type:'outpost', x:22, y:39, w:13, h:10, visual:{megaId:'mentalhealth_mega'}},
     ],
     rivers:[
       {id:'north', width:2.1, points:[{x:-3,y:24},{x:14,y:21},{x:31,y:18},{x:46,y:27},{x:64,y:30},{x:83,y:22},{x:104,y:18},{x:127,y:17}]},
@@ -53,6 +54,7 @@
       {id:'condo_ne_mega', poiId:'condo_ne', cat:'megabuilding', variant:2, tx:98, ty:6, w:15, h:12, overhang:1.18, heightScale:0.94, biome:'tech', fixedFrame:2, seed:0.226, tags:['hubCondo','neon']},
       {id:'condo_sw_mega', poiId:'condo_sw', cat:'megabuilding', variant:2, tx:8, ty:74, w:15, h:12, overhang:1.18, heightScale:0.94, biome:'tech', fixedFrame:4, seed:0.339, tags:['hubCondo','neon']},
       {id:'ultra_mega', poiId:'ultra', cat:'megabuilding', variant:3, tx:53, ty:30, w:14, h:12, overhang:1.22, heightScale:1.14, biome:'tech', fixedFrame:0, seed:0.17, tags:['hubUltra','neon']},
+      {id:'mentalhealth_mega', poiId:'mentalhealth', cat:'megabuilding', variant:4, tx:22, ty:39, w:13, h:10, overhang:1.3, heightScale:1.0, biome:'tech', seed:0.44, tags:['neon','hubAnim']},
       {id:'waste_ruin_1', cat:'ruin', variant:0, tx:80, ty:71, w:11, h:9, overhang:1.45, heightScale:1, biome:'desert', fixedFrame:0, seed:0.8, tags:['hubWaste']},
       {id:'waste_ruin_2', cat:'ruin', variant:1, tx:111, ty:70, w:11, h:9, overhang:1.45, heightScale:1, biome:'desert', fixedFrame:0, seed:1.11, tags:['hubWaste']},
       {id:'waste_ruin_3', cat:'ruin', variant:0, tx:101, ty:91, w:11, h:9, overhang:1.45, heightScale:1, biome:'desert', fixedFrame:0, seed:1.01, tags:['hubWaste']},

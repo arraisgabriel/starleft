@@ -158,6 +158,66 @@ const BUILD_HIRES = {
 };
 
 /* =====================================================================
+   MADOSIS (madness / sanity) — see js/madosis.js for the runtime.
+   A veteran's accumulated career trauma can break their mind mid-mission,
+   turning them into a hostile "mad dog". All balance lives here so it's
+   one-file tunable. Episode N = MAPS[N-1]; episodeNo = mapIndex + 1.
+   ===================================================================== */
+const MADOSIS = {
+  // --- campaign gating (no episode before Episode 6, per design) ---
+  accrueFromEpisode: 4,   // no madosis points accrue before Episode 4 (mapIndex>=3)
+  firstEpisodeEpisode: 6, // no episode (breakdown) before Episode 6 (mapIndex>=5)
+  // --- threshold (minted once at level 2, deterministic from lore seed) ---
+  thresholdMin: 70, thresholdMax: 120,
+  scarThresholdMul: 0.7,  // a scarred (previously-broken) unit breaks 30% sooner
+  // --- heroes are far steadier of mind than the rank and file ---
+  heroThresholdMul: 1.6,  // a hero's break point sits 60% higher
+  heroAccrualMul: 0.5,    // and trauma weighs on a hero at half rate
+  // --- legacy-save backfill: approximate a veteran's current madosis when a pre-madosis save loads.
+  //     m = perStar·level + perEpisode·(campaign progress) + perFallen·(memorialized comrades)
+  //         + perTrauma·(logged trauma life-events); halved for heroes; capped below the threshold so
+  //     loading never instantly triggers an episode. Only applies from Episode `accrueFromEpisode`+. ---
+  backfill: { perStar:4, perEpisode:6, perFallen:5, perTrauma:8, maxFrac:0.9 },
+  // --- event point pool (extend by adding a key here + one madosisEvent(...) call) ---
+  events: {
+    vetDeath: 16,         // a fellow player veteran dies (awarded per surviving vet)
+    heroDeath: 28,        // a named hero dies
+    buildingLost: 8,      // a player building is destroyed
+    hqLost: 22,           // a player HQ is destroyed
+    traumaRelapse: 20,    // a req:'trauma' life-event re-fires on level-up
+  },
+  vetDeathRadius: 0,      // tiles; 0 = all surviving player vets on the map
+  decayPerSkip: 12,       // madosis removed per mission a unit sits out (HUB rest)
+  onsetChancePerSec: 0.05,// once over threshold (Ep6+) in a mission, chance/sec to snap
+  // --- episode escalation (seconds) ---
+  tremorDur: 8,           // warning phase: jitter + accuracy down, still obeys orders
+  defianceDur: 10,        // progressively ignores orders, then -> feral
+  defianceIgnore: [0.2, 1.0], // probability of ignoring a command, ramped over defiance
+  tremorDmgMul: 0.7,      // shaky hands while breaking down (tremor/defiance) -> weaker shots
+  feralDmgMul: 1.15,      // feral mad dogs hit a little harder
+  // --- rescue (memory anchors) ---
+  rescueRescuers: ['recruiter'],           // + any hero healer (Biba); gated by def.heal
+  echoFacets: ['trauma','family','dream'], // the 3 dossier memories to recover
+  echoDistBands: [4, 14, 24],              // tiles from the dog: trauma near / family mid / dream far
+  echoReachRange: 1.6,                     // tiles the healer must reach to trigger an echo
+  calmDmgFalloff: [1.0, 0.66, 0.33, 0.0],  // dog dmg multiplier at 0/1/2/3 echoes recovered
+  rescueTimeLimit: 0,                      // 0 = no limit; >0 sec = echoes fade -> rescue fails
+  // --- HUB Mental Health Facility (madosis healing — panel + session) ---
+  heal: { baseCost:200, costPerStar:24, fracOfMax:0.70 }, // cost = base + perStar·stars; heals up to fracOfMax·sanityThreshold over one mission
+  healCap: 6,             // max units in the facility at once (mirrors HUB.trainPairCap)
+};
+
+// Kennel death-squad: spawned when a mad dog is rescued, sized to the units guarding it.
+const KENNEL = {
+  size: 10,
+  powerRatio: 0.85,       // total squad power ~85% of nearby-guard power (a fight, not a wipe)
+  radiusTiles: 12,        // measure player units within this radius of the dog at rescue
+  maxStars: 20,           // hard per-unit level cap (never an unwinnable wall)
+  comp: ['soldier','soldier','ranger','ranger','lobbyist',
+         'hustler','auditor','recruiter','soldier','ranger'], // incl. an anti-healer threat
+};
+
+/* =====================================================================
    MAP DEFINITIONS  (two maps, played in sequence)
    ===================================================================== */
 const MAPS = [

@@ -184,7 +184,7 @@ function render(state){
 
   // ---- HUB panorama loading scene (solo extraction cinematic): full-screen, replaces the
   //      world + HUD. The DOM HUD is hidden by body.scene-hubload while this phase plays. ----
-  if(state.extractFlight && state.extractFlight.phase==='panorama' && typeof drawHubLoadingScene==='function'){
+  if(((state.extractFlight && state.extractFlight.phase==='panorama') || state.dispatchFlight) && typeof drawHubLoadingScene==='function'){
     if(PERF.on) PERF.mark('panorama');
     drawHubLoadingScene(state);
     if(PERF.on) PERF.lap('panorama');
@@ -270,6 +270,8 @@ function render(state){
       if(e.storedIn) continue;
       if(e.owner==='enemy' && !isVisiblePix(state,e.x,e.y)) continue;
       depth.push({y:e.y, u:e});
+    } else if(e.kind==='echo'){
+      depth.push({y:e.y, echo:e});                     // MADOSIS rescue memory beacon
     }
   }
   if(PERF.on){ PERF.lap('depthBuild'); PERF.mark('depthSort'); }
@@ -280,6 +282,7 @@ function render(state){
     else if(d.m) drawOneMega(state, d.m, ox,oy, x0,y0,x1,y1);
     else if(d.f) drawFeature(state, d.f, ox,oy, d.dim);
     else if(d.g) drawGoldmine(state, d.g, ox,oy, d.dim);
+    else if(d.echo) drawEcho(state, d.echo, ox,oy);
     else drawUnit(state, d.u, ox,oy);
   }
   if(PERF.on) PERF.lap('depthDraw');
@@ -1131,7 +1134,20 @@ function drawUnit(state,u,ox,oy){
   if(u.hp<u.maxHp || u.selected){
     barAt(px-vh*0.3, py-alt-vh*0.72-6, vh*0.6, 4, u.hp/u.maxHp, hpColor(u.hp/u.maxHp));
   }
+  // MADOSIS: a purple sanity bar just under the hp bar as a unit nears / suffers an episode
+  if(u.owner==='player' && typeof madThreshold==='function'){
+    const thr=madThreshold(u);
+    if(u.madEpisode || u.madDog || (thr>0 && (u.madosis||0) >= thr*0.8)){
+      const frac = u.madDog ? 1 : (thr>0 ? Math.min(1,(u.madosis||0)/thr) : 1);
+      barAt(px-vh*0.3, py-alt-vh*0.72-1, vh*0.6, 3, frac, '#b05bff');
+    }
+  }
   if(u.stars) drawStars(u, px, py-alt-vh*0.72-13);   // career-rank pips above the HP bar
+  // MADOSIS rescue: "memories X/3" cue above a dog being talked down
+  if(u.madDog && u._rescue){
+    ctx.fillStyle='#d9b3ff'; ctx.font='bold 10px '+GAME_FONT; ctx.textAlign='center'; ctx.textBaseline='alphabetic';
+    ctx.fillText('memories '+(u.calmStage||0)+'/'+MADOSIS.echoFacets.length, px, py-alt-vh*0.72-19);
+  }
   // control-group badge (lowest assigned number) — at the sprite's lower-right
   if(u.owner==='player' && u._groups instanceof Set && u._groups.size){
     const g=Math.min(...[...u._groups].map(Number)); const bx=px+vh*0.30, by=py-alt+vh*0.24;
@@ -1146,6 +1162,31 @@ function drawUnit(state,u,ox,oy){
     ctx.beginPath(); ctx.arc(px - vh*0.30, py-alt+vh*0.30, 3, 0, 6.28); ctx.fill(); ctx.stroke();
   }
   if(u.hitFx>0){ ctx.fillStyle='rgba(255,80,80,'+(u.hitFx*3)+')'; ctx.beginPath(); ctx.arc(px,py-vh*0.2,vh*0.38,0,6.28); ctx.fill(); u.hitFx-=1/60; }
+  // MADOSIS: feral mad dogs pulse a hostile purple aura; rescued (subdued) units a faint calm one
+  if(u.madDog){
+    ctx.save(); ctx.globalAlpha=0.5+0.3*Math.sin((state.time||0)*6);
+    ctx.strokeStyle='#b05bff'; ctx.lineWidth=2;
+    ctx.beginPath(); ctx.arc(px,py-vh*0.2,vh*0.44,0,6.28); ctx.stroke(); ctx.restore();
+  } else if(u.subdued){
+    ctx.save(); ctx.globalAlpha=0.35; ctx.strokeStyle='#7fffd0'; ctx.lineWidth=1.5;
+    ctx.beginPath(); ctx.arc(px,py-vh*0.2,vh*0.38,0,6.28); ctx.stroke(); ctx.restore();
+  }
+}
+
+// MADOSIS rescue beacon — a pulsing memory echo (trauma=red / family=blue / dream=gold).
+function drawEcho(state, e, ox, oy){
+  const px=e.x+ox, py=e.y+oy;
+  const col = e.facet==='trauma' ? '#ff5b6b' : e.facet==='dream' ? '#ffd23f' : '#5aa0ff';
+  const pulse = 0.6 + 0.4*Math.sin((state.time||0)*3 + (e.id||0));
+  ctx.save();
+  ctx.strokeStyle=col; ctx.globalAlpha=0.30; ctx.lineWidth=2;
+  ctx.beginPath(); ctx.moveTo(px,py); ctx.lineTo(px, py-26-10*pulse); ctx.stroke();   // rising beacon
+  ctx.globalAlpha=0.9; ctx.shadowColor=col; ctx.shadowBlur=16*pulse; ctx.fillStyle=col;
+  ctx.beginPath(); ctx.arc(px, py, 7+3*pulse, 0, 6.28); ctx.fill();
+  ctx.shadowBlur=0; ctx.globalAlpha=1;
+  ctx.fillStyle='rgba(8,10,16,0.92)'; ctx.font='bold 11px '+GAME_FONT; ctx.textAlign='center'; ctx.textBaseline='middle';
+  ctx.fillText(e.facet==='trauma'?'!':e.facet==='dream'?'★':'♥', px, py+0.5);
+  ctx.restore();
 }
 
 function drawFog(state,ox,oy,x0,y0,x1,y1){
@@ -1259,6 +1300,8 @@ function renderMinimap(state){
   for(const e of state.entities){
     if(e.dead||e.storedIn) continue;
     if(e.type==='goldmine'){ const N=FEAT_SIZE, ftx=(e.ftx!=null)?e.ftx:(((e.x/TILE)|0)-(N>>1)), fty=(e.fty!=null)?e.fty:(((e.y/TILE)|0)-(N>>1)); const si=(fty+N-1)*state.W+(ftx+(N>>1)); if(state.explored[si]){ mmx.fillStyle='#b06bff'; mmx.fillRect(ftx*sx, fty*sy, Math.ceil(sx*N), Math.ceil(sy*N));} continue; }
+    if(e.kind==='echo'){ mmx.fillStyle = e.facet==='trauma'?'#ff5b6b': e.facet==='dream'?'#ffd23f':'#5aa0ff'; mmx.fillRect(e.x/TILE*sx-1.5, e.y/TILE*sy-1.5, 3, 3); continue; }   // MADOSIS rescue beacon
+    if(e.madDog){ mmx.fillStyle='#ff5bff'; mmx.fillRect(e.x/TILE*sx-1.5, e.y/TILE*sy-1.5, 3, 3); continue; }   // MADOSIS feral mad dog
     if(e.owner==='enemy' && !isVisiblePix(state,e.x,e.y) && !(e.kind==='building'&&e._everSeen)) continue;
     mmx.fillStyle = e.abandoned ? '#8effb0' : isRedSide(e.owner)?'#ff6b6b': (e.ctrl==='p2'?'#ff9d3c':'#7fd6ff');
     const s = e.kind==='building'? (e.abandoned?4:3) :2;

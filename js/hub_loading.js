@@ -114,15 +114,18 @@ function drawHubPanoTower(state, fit){
 // So the 20s always covers exactly the on-screen traversal — slower on a narrow viewport (less
 // width in the same time), visible from the first frame, and out of view at p=1. Returns {px,py,S}.
 function hubPanoBomberPos(state, m, anim){
-  const B=HUB_PANO_BOMBER, f=state.extractFlight;
-  const p=Math.min(1, Math.max(0, (f?f.t:0)/HUB_LOAD_DURATION));
+  const B=HUB_PANO_BOMBER, f=state.dispatchFlight || state.extractFlight;
+  const dur=(f && f.dur) || HUB_LOAD_DURATION;                     // dispatch paces to the crawl; extraction = fixed HUB_LOAD_DURATION
+  const p=Math.min(1, Math.max(0, (f?f.t:0)/dur));
   const t=state.time||0;
   const left=Math.max(0, m.ox), right=Math.min(m.vw, m.ox+m.dw);   // visible image span on screen
   const visW=Math.max(1, right-left);
   const S=Math.round(m.vh * B.sizeFrac);
   const spriteW=(anim && anim.ready) ? S*(anim.fw/anim.fh) : S*1.4;
   const halfW=spriteW/2;
-  const px=(right+halfW) - (visW+spriteW)*p;                       // nose at right edge → tail past left edge
+  const lr=!!(f && f.dir==='lr');                                  // dispatch launch flight flies LEFT → RIGHT
+  const px=lr ? (left-halfW)  + (visW+spriteW)*p                   // nose at left edge → tail past right edge
+              : (right+halfW) - (visW+spriteW)*p;                  // extraction: nose at right edge → tail past left edge
   const ny=B.sy + (B.ey-B.sy)*p + 0.012*Math.sin(t*1.6);          // gentle bob; altitude is screen-height-relative
   const py=m.oy + ny*m.dh;
   return { px, py, S };
@@ -131,20 +134,21 @@ function hubPanoBomberPos(state, m, anim){
 // The BIG Buzzword Bomber crossing the visible skyline. Position is viewport-aware (see
 // hubPanoBomberPos) and driven by f.t (0→HUB_LOAD_DURATION). Reuses the unit sprite + blitFrame.
 function drawHubPanoBomber(state, fit){
-  const f=state.extractFlight; if(!f) return;
+  const f=state.dispatchFlight || state.extractFlight; if(!f) return;
   const t=state.time||0;
+  const lr=(f.dir==='lr');
   const anim=(typeof unitWalk==='function') ? unitWalk('bomber','player') : null;
   const pos=hubPanoBomberPos(state, fit, anim);
   const px=pos.px, py=pos.py, S=pos.S;
   // Framed-movie clip: the bomber is only ever drawn over the panorama image, never over the
-  // black letterbox borders. So its nose emerges from the right edge as it flies in and it
-  // slips gradually off the left edge as it crosses out.
+  // black letterbox borders. So its nose emerges from one edge as it flies in and it slips
+  // gradually off the opposite edge as it crosses out.
   ctx.save();
   ctx.beginPath(); ctx.rect(fit.ox, fit.oy, fit.dw, fit.dh); ctx.clip();
   if(anim && anim.ready){
-    const u={ type:'bomber', owner:'player', _face:-1 };    // facesLeft sprite, flying left → no mirror
+    const u={ type:'bomber', owner:'player', _face: lr ? 1 : -1 };    // facesLeft sprite; mirror to face right on the dispatch (left→right) flight
     blitFrame(u, px, py, anim, S, ((t*8)|0)%anim.frames.length);
-    drawHubPanoThrusters(px, py, S, anim, t);               // red engine glow on the rear thrusters
+    drawHubPanoThrusters(px, py, S, anim, t, lr);           // red engine glow on the rear thrusters
   } else {
     ctx.fillStyle='#7fd6ff'; ctx.beginPath(); ctx.arc(px,py,S*0.18,0,Math.PI*2); ctx.fill();
   }
@@ -155,17 +159,19 @@ function drawHubPanoBomber(state, fit){
 // glows track the sprite pixel-for-pixel: frame box is x∈[px-dw/2, px+dw/2], y∈[py-0.7S, py+0.3S]
 // (no flip, since the sprite faces left and is drawn left). Additive, with a fast per-engine flicker
 // and a backward (rightward) exhaust streak.
-function drawHubPanoThrusters(px, py, S, anim, t){
+function drawHubPanoThrusters(px, py, S, anim, t, lr){
   const dw=S*(anim.fw/anim.fh), dh=S;
   const left=px-dw/2, top=py-0.7*dh;
   const RED=HUB_PANO_COLORS.red;
+  const dir=lr ? -1 : 1;                                  // left→right flight: rear is the LEFT side, so exhaust streaks left
   ctx.save();
   ctx.globalCompositeOperation='lighter';
   for(const e of HUB_BOMBER_THRUSTERS){
-    const ex=left+e.u*dw, ey=top+e.v*dh, er=Math.max(1.5, e.r*S);
+    const eu=lr ? (1-e.u) : e.u;                          // mirror engine x onto the visual rear when the sprite is flipped
+    const ex=left+eu*dw, ey=top+e.v*dh, er=Math.max(1.5, e.r*S);
     const flick=0.62 + 0.38*Math.sin(t*9.0 + e.ph) + 0.08*Math.sin(t*23.0 + e.ph*2.3);
     const a=Math.max(0.15, Math.min(1, flick));
-    megaFillEllipseGlow(ex + er*1.6, ey, er*3.0, er*0.85, 0, RED, 0.20*a, 0.06*a);  // backward exhaust streak
+    megaFillEllipseGlow(ex + dir*er*1.6, ey, er*3.0, er*0.85, 0, RED, 0.20*a, 0.06*a);  // backward exhaust streak
     megaFillEllipseGlow(ex, ey, er*2.4, er*2.4, 0, RED, 0.30*a, 0.10*a);             // outer halo
     megaFillEllipseGlow(ex, ey, er*1.3, er*1.3, 0, RED, 0.80*a, 0.28*a);             // hot core
     ctx.fillStyle='rgba(255,206,196,'+(0.72*a).toFixed(3)+')';                       // white-hot centre

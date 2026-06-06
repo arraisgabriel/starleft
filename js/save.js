@@ -3,7 +3,7 @@
    Multiple manual slots (capped, FIFO) + one periodic autosave slot. Public
    entry points: saveGame / autosaveGame / loadGame / openLoadMenu (called from
    the HUD button, ⌘/Ctrl+S, the main loop, and the "Load Game" menu button). */
-const SAVE_VERSION = 1;
+const SAVE_VERSION = 2;   // v2: madosis fields persist; older (v<2 / null) saves are back-filled on load
 const SAVE_PREFIX  = 'starleft_save_';
 const AUTO_KEY     = SAVE_PREFIX + 'auto';
 const MANUAL_CAP   = 8;             // newest 8 manual saves kept; oldest evicted
@@ -87,8 +87,9 @@ function serializeGame(){
 }
 function deserializeGame(s){
   const g={};
-  const META={v:1, mapIndex:1, savedAt:1, mapName:1, gameTime:1, hubMap:1, campaign:1};
+  const META={v:1, mapIndex:1, savedAt:1, mapName:1, gameTime:1, hubMap:1, campaign:1, fallen:1};
   const idx=saveMapIndex(s), isHub=saveIsHubMap(s);
+  const legacyMadosis = !(s.v>=2);   // pre-madosis save (v<2 / null) → back-fill an approximation on first load
   for(const k in s){ if(!SKIP[k] && !META[k]) g[k]=s[k]; }
   if(typeof deserializeHubCampaign==='function') deserializeHubCampaign(s.campaign);
   g.hub = isHub;
@@ -130,6 +131,7 @@ function deserializeGame(s){
     // Training Grounds, which replaced the launchpad) and re-materialise any trainees.
     if(typeof hubReconcileFacilities==='function') hubReconcileFacilities(g);
     if(typeof hubSpawnTrainees==='function') hubSpawnTrainees(g);
+    if(typeof hubSpawnHealers==='function') hubSpawnHealers(g);
   }
   // funding nodes carry a 3x3 footprint; feat[] was rebuilt from features[] only, so
   // restamp each node's mask (blocked[] was serialized and is already correct).
@@ -139,6 +141,10 @@ function deserializeGame(s){
   if(typeof heroSpriteFor==='function') g.entities.forEach(e=>{
     if(e.hero && !e.spriteType){ const sp=heroSpriteFor(e.heroId, e.type); if(sp) e.spriteType=sp; }
   });
+  // memorial persists from save v2 on — restore it so the campaign death-toll survives save/load
+  if(Array.isArray(s.fallen) && typeof restoreFallen==='function') restoreFallen(s.fallen);
+  // pre-madosis save (v<2): approximate every veteran's current madosis so the system works on older games
+  if(legacyMadosis && typeof madosisBackfill==='function') madosisBackfill(g, idx);
   g.selection = (s.selection||[]).map(id=>byId.get(id)).filter(e=>e && !e.dead && !e.storedIn);
   g.selection.forEach(e=>e.selected=true);
   g.groups={}; for(const k in (s.groups||{})) g.groups[k]=s.groups[k].map(id=>byId.get(id)).filter(Boolean);
@@ -177,6 +183,7 @@ function saveGame(){
   if(!(G && running && !G.over)){ toast('Can only save during a match'); return; }
   try{
     const payload=serializeGame(), now=payload.savedAt;
+    if(typeof fallenVets!=='undefined' && fallenVets) payload.fallen=fallenVets;   // persist the memorial (lost on load before v2)
     const manual=listSaves().filter(s=>!s.auto);       // newest-first
     let key;
     if(manual.length && now-manual[0].savedAt < 3000) key=manual[0].key;  // collapse rapid re-saves
@@ -188,7 +195,7 @@ function saveGame(){
 function autosaveGame(){
   if(netRole!=='solo') return;                    // never autosave a co-op (half-applied) state
   if(!(G && running && !G.over)) return;
-  try{ localStorage.setItem(AUTO_KEY, JSON.stringify(serializeGame())); }catch(_){}
+  try{ const p=serializeGame(); if(typeof fallenVets!=='undefined' && fallenVets) p.fallen=fallenVets; localStorage.setItem(AUTO_KEY, JSON.stringify(p)); }catch(_){}
 }
 function loadGame(key){
   if(netRole!=='solo'){ toast('Loading is disabled in co-op'); return; }

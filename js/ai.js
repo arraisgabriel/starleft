@@ -55,7 +55,7 @@ function enemyAI(state,dt){
   state.enemyWaveTimer-=dt;
   if(!grace && state.enemyWaveTimer<=0){
     state.enemyWaveTimer = Math.max(16, (38/aggr)/pf);   // calmer cadence between waves (quicker with more players)
-    const idle=enemyUnits.filter(u=>!u.cmd||u.cmd.type==='amove'||u.state==='idle');
+    const idle=enemyUnits.filter(u=>!u.kennel && (!u.cmd||u.cmd.type==='amove'||u.state==='idle'));   // Kennel squads stay locked on the rescued dog
     const garrison = Math.round((2 + aggr) * (nBases>1?1.4:1));  // keep more home when defending multiple bases
     if(idle.length > garrison + 2){
       const wave = idle.slice(garrison);            // leave the garrison guarding the base

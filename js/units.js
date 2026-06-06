@@ -101,6 +101,20 @@ function commandUnits(state, wx, wy, target){
     toast('Move a unit onto the outpost to reclaim it');
     return;
   }
+  // MADOSIS: a mad dog is owner:'player' but hostile — handle it before the friendly-target paths.
+  // A selected healer (Recruiter / Biba) RESCUES it (memory-anchors mini-game); others put it down.
+  if(target && target.madDog){
+    const healers = units.filter(u=> typeof madCanRescue==='function' && madCanRescue(u));
+    if(healers.length && typeof madBeginRescue==='function'){
+      healers.forEach(u=> madBeginRescue(state,u,target));
+      units.filter(u=> healers.indexOf(u)<0).forEach((u,i)=>{ resetMotion(u); issueMove(state,u, target.x+((i%3)-1)*26, target.y+28); });
+      spawnRing(target.x,target.y,'#b05bff');
+      return;
+    }
+    units.forEach(u=> attackTarget(state,u,target));
+    spawnRing(target.x,target.y,'#ff6b6b');
+    return;
+  }
   if(target && target.owner && target.owner!=='player'){
     if(state.hub && target.hubPoi && typeof hubCommandPoi==='function'){
       if(hubCommandPoi(state, units, target)) return;
@@ -343,10 +357,18 @@ function placeBuilding(state, type, tx, ty, builder){
    ===================================================================== */
 // Only explicitly flagged anti-air units can target flyers.
 function canHitAir(e){ const d=DEF[e.type]||{}; return !!d.antiAir; }
+// Two entities are enemies if they belong to different sides — OR if either has gone feral. A
+// "mad dog" (MADOSIS) stays owner:'player' so it keeps its roster identity for rescue, but reads as
+// hostile to, and targetable by, EVERYONE. Drives all targeting / splash / retaliation checks.
+function isHostile(a,b){
+  if(!a||!b||a===b) return false;
+  if(a.madDog||b.madDog) return true;
+  return a.owner!==b.owner;
+}
 function nearestEnemy(state, e, radius){
   let best=null,bd=radius*radius; const air=canHitAir(e);
   for(const o of state.entities){
-    if(o.dead||o.storedIn||o.owner==null||o.owner===e.owner) continue;
+    if(o.dead||o.storedIn||o.owner==null||!isHostile(e,o)) continue;
     if(o.owner!=='player'&&o.owner!=='enemy') continue;
     if(o.air && !air) continue;                 // melee/no-AA units ignore flyers
     const dx=o.x-e.x,dy=o.y-e.y,d=dx*dx+dy*dy;
@@ -358,7 +380,7 @@ function nearestEnemy(state, e, radius){
 function applyHit(state, attacker, target, dmg, splash, splashR){
   damage(state, target, dmg, attacker);
   if(splash){ const R=(splashR||1.3)*TILE;
-    for(const o of state.entities){ if(o.dead||o===target||o.owner==null||o.owner===attacker.owner) continue;
+    for(const o of state.entities){ if(o.dead||o===target||o.owner==null||!isHostile(attacker,o)) continue;
       if(o.storedIn) continue;
       if(o.owner!=='player'&&o.owner!=='enemy') continue;
       if(o.air && !target.air) continue;        // ground splash doesn't hit flyers and vice-versa
@@ -415,6 +437,22 @@ function updateUnit(state,u,dt){
   if(u.autoTarget && u.autoTarget.dead) u.autoTarget=null;
   if(cmd && cmd.type==='attack' && (!cmd.target || cmd.target.dead)){ cmd=u.cmd=null; u.state='idle'; }
 
+  // ---- MADOSIS episode: progressively disobey, then go feral (subdued = pacified escort) ----
+  let madBalk=false;
+  if(u.subdued){ u.autoTarget=null; if(cmd && cmd.type==='attack'){ cmd=u.cmd=null; } }
+  else if(u.madDog){ cmd=u.cmd=null; }   // feral: deaf to all orders; hostile auto-acquire drives it
+  else if(u.madEpisode && u.madEpisode.phase==='defiance'){
+    const ep=u.madEpisode, dz=MADOSIS.defianceIgnore;
+    const p=dz[0]+(dz[1]-dz[0])*Math.min(1, ep.t/MADOSIS.defianceDur);
+    if(simRandom(state)<p){ cmd=u.cmd=null; u.autoTarget=null; madBalk=true; }   // balks this tick
+  }
+
+  // ---- MADOSIS rescue: a healer escorting through the dog's memories (memory-anchors mini-game) ----
+  if(cmd && cmd.type==='rescue' && typeof madRescueTick==='function'){
+    if(madRescueTick(state, u, dt)) return;   // handled this frame; an invalid rescue falls through
+    cmd=u.cmd;                                 // madRescueTick may have cleared the cmd
+  }
+
   // ---- siege auto-deploy (Auditor): set up when enemies near & not moving ----
   if(def.siege){
     const sg=def.siege;
@@ -444,7 +482,8 @@ function updateUnit(state,u,dt){
   }
 
   // ---- auto-acquire for any combat unit (not workers, not healers) ----
-  if(def.dmg>0 && u.type!=='worker' && (!cmd || cmd.type==='amove')){
+  // (a balking/subdued MADOSIS unit doesn't fight; a feral mad dog DOES — cmd was cleared above)
+  if(def.dmg>0 && u.type!=='worker' && !madBalk && !u.subdued && (!cmd || cmd.type==='amove')){
     const acqR=(def.siege && u.sieged ? def.siege.range : u.sight*0.9)*TILE;
     const aggro = nearestEnemy(state,u,acqR);
     if(aggro){ u.autoTarget=aggro; } else if(u.autoTarget&&u.autoTarget.dead) u.autoTarget=null;
@@ -470,7 +509,7 @@ function updateUnit(state,u,dt){
     // effective stats (Auditor gains range/dmg/splash while sieged)
     let aRange=u.range, aDmg=u.dmg, aSplash=def.splash||0, aSplashR=def.splashR||1.3;
     if(def.siege && u.sieged){ const sg=def.siege; aRange=sg.range; aDmg=sg.dmg; aSplash=Math.round(sg.dmg*0.6); aSplashR=sg.splashR; }
-    const _m = vetDmgMul(u)*(u.hubDmgMul||1)*(typeof vetBuff==='function'?vetBuff(u,state).dmgMul:1); aDmg = Math.round(aDmg*_m); aSplash = Math.round(aSplash*_m);  // career-rank + HUB implant + life-event damage bonus
+    const _m = vetDmgMul(u)*(u.hubDmgMul||1)*(typeof vetBuff==='function'?vetBuff(u,state).dmgMul:1)*(typeof madDmgMul==='function'?madDmgMul(u):1); aDmg = Math.round(aDmg*_m); aSplash = Math.round(aSplash*_m);  // career-rank + HUB implant + life-event + madosis damage mods
     const reach = aRange*TILE + entRadius(atk);
     const d=dist(u,atk);
     if(d<=reach){
@@ -797,6 +836,7 @@ function callToArms(state, foe, side, from){
   const R=7*TILE, r2=R*R, cx=from.x, cy=from.y;
   for(const o of state.entities){
     if(o.dead||o.storedIn||o.kind!=='unit'||o.owner!==side||o===from) continue;
+    if(!isHostile(o, foe)) continue;                                        // never rally onto a non-hostile (MADOSIS-safe)
     if(o.sprinting) continue;                                               // sprinting allies stay on the run
     if(o.type==='worker' || !(DEF[o.type].dmg>0)) continue;                 // combat units only
     if(o.cmd && (o.cmd.type==='move'||o.cmd.type==='gather'||o.cmd.type==='build')) continue; // respect explicit orders
@@ -815,7 +855,7 @@ function damage(state, t, amt, src){
   // RETALIATE: any unit attacked by an enemy fights back, unless it's already
   // engaging a live target or busy on an explicit gather/build order. A SPRINTING
   // unit ignores the hit — it neither acquires the attacker nor rallies neighbours.
-  if(t.kind==='unit' && src && !src.dead && t.owner!==src.owner && !t.sprinting){
+  if(t.kind==='unit' && src && !src.dead && isHostile(t,src) && !t.sprinting){
     const engaged=(t.cmd&&t.cmd.type==='attack'&&t.cmd.target&&!t.cmd.target.dead) || (t.autoTarget&&!t.autoTarget.dead);
     const onTask = t.cmd && (t.cmd.type==='gather'||t.cmd.type==='build');
     if(!engaged && !onTask && !(src.air && !canHitAir(t))){
@@ -830,4 +870,13 @@ function killEntity(state,e){
   if(e.kind==='building' && e.type==='hq') releaseAllStoredUnits(state,e);
   e.dead=true;
   if(e.kind==='building') markBuilding(state,e,false);
+  // MADOSIS: a dog that dies mid-rescue drops its memory echoes.
+  if(e.kind==='unit' && (e.madDog || e._rescue) && typeof madCleanupEchoes==='function') madCleanupEchoes(state,e);
+  // MADOSIS triggers: losing a friend or a building is traumatic for the surviving veterans.
+  if(typeof madosisEvent==='function' && e.owner==='player'){
+    if(e.kind==='unit' && (e.hero || (typeof isCombatVet==='function' && isCombatVet(e)) ) && (e.stars||0)>=1)
+      madosisEvent(state, e.hero ? 'heroDeath' : 'vetDeath', {dead:e});
+    else if(e.kind==='building' && !e.constructing)
+      madosisEvent(state, e.type==='hq' ? 'hqLost' : 'buildingLost', {b:e});
+  }
 }

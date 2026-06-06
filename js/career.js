@@ -55,6 +55,7 @@ function applyVetHp(u, fullHeal){
 // award career points to a player combat unit; promote across any thresholds crossed
 function gainXp(u, killed, state){
   if(u.owner!=='player' || !isCombatVet(u)) return;
+  if(u.madDog || u.subdued) return;   // a unit mid-breakdown earns no career progress
   u.xp = (u.xp||0) + CAREER.perShot + (killed ? CAREER.perKill : 0);
   const old = u.stars||0;
   let s = old;
@@ -65,7 +66,20 @@ function gainXp(u, killed, state){
   // career v3: dossier is born at level 2, then a backstory-connected life-event at each new level
   if(typeof rollLifeEvent==='function'){
     let last=null;
-    for(let L=Math.max(2, old+1); L<=s; L++){ ensureDossier(u); const ev=rollLifeEvent(u,L); if(ev){ applyEventFx(u,ev.fx,state); last=ev; } }
+    for(let L=Math.max(2, old+1); L<=s; L++){
+      ensureDossier(u);
+      if(typeof mintSanityThreshold==='function') mintSanityThreshold(u);   // sanity threshold is born at level 2
+      const ev=rollLifeEvent(u,L);
+      if(ev){
+        applyEventFx(u,ev.fx,state); last=ev;
+        // madosis: reliving a trauma pushes a career unit toward the edge (gated to Episode 4+ inside addMadosis caller)
+        if(typeof addMadosis==='function' && typeof LORE_DATA!=='undefined' && u.lore && u.lore.events.length
+           && (typeof madEpisodeNo!=='function' || madEpisodeNo()>=MADOSIS.accrueFromEpisode)){
+          const def0=LORE_DATA.events[u.lore.events[u.lore.events.length-1].i];
+          if(def0 && def0.req==='trauma') addMadosis(u, MADOSIS.events.traumaRelapse, 'trauma');
+        }
+      }
+    }
     if(last && typeof eventToast==='function'){
       const d=buildDossier(u);
       eventToast(u.lore.events.length<=1 ? `📖 <b>${d.full}</b> of ${d.home}: ${last.text}` : `📖 <b>${d.first}</b>: ${last.text}`, 8800, last.say);
@@ -127,7 +141,8 @@ function eligibleVets(state){
 }
 // snapshot a chosen set of veteran units into the carryover (their dossier travels too)
 function setCarryover(units){
-  carryoverVets = units.map(e=>({type:e.type, stars:e.stars, xp:e.xp, lore:e.lore}));
+  carryoverVets = units.map(e=>({type:e.type, stars:e.stars, xp:e.xp, lore:e.lore,
+    madosis:e.madosis||0, sanityThreshold:e.sanityThreshold||0, scarred:!!e.scarred}));
 }
 // auto-pick fallback: carry all eligible (spawnVets slices to the count). Player choice uses the
 // victory-screen chooser (ui.js) → setCarryover() instead.
@@ -141,6 +156,7 @@ function spawnVets(state){
   carryoverVets.slice(0, vetCarryCount()).forEach((v,i)=>{
     const u=mkUnit(state, v.type, 'player', c.x-2+(i%4), c.y-3-((i/4)|0));
     u.stars=v.stars; u.xp=v.xp; if(v.lore) u.lore=v.lore;
+    u.madosis=v.madosis||0; u.sanityThreshold=v.sanityThreshold||0; u.scarred=!!v.scarred;   // sanity travels with the vet
     if(typeof hubApplyUpgrades==='function') hubApplyUpgrades(u);
     applyVetHp(u, true);
   });

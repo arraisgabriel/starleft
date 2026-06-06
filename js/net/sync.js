@@ -119,6 +119,17 @@ window.NET = window.NET || {};
       if(e.storedIn) o.si=e.storedIn;
       if(e.cmd && e.cmd.target && !e.cmd.target.dead) o.tg=e.cmd.target.id;   // chase/attack render
       if(e.shootFx && e.shootFx.t>0){ o.sf=1; o.sfx=Math.round(e.shootFx.x*10)/10; o.sfy=Math.round(e.shootFx.y*10)/10; }  // ranged shot endpoint while LIVE → client rebuilds the laser-bolt transient (start derived from synced type/pos/_face). t>0 gate: the expired shootFx object lingers on the host, so without it o.sf would fire forever → client re-loops the beam.
+      // MADOSIS (sanity): client renders the bars / feral aura / rescue cue purely from these (it never simulates)
+      if(e.madosis) o.mad=Math.round(e.madosis);
+      if(e.sanityThreshold) o.sth=Math.round(e.sanityThreshold);
+      if(e.scarred) o.scr=1;
+      if(e.madDog) o.md=1;
+      if(e.subdued) o.sub=1;
+      if(e.calmStage) o.cs=e.calmStage;
+      if(e._rescue) o.rsc=1;
+      if(e.madEpisode) o.ep = e.madEpisode.phase==='feral'?3 : e.madEpisode.phase==='defiance'?2 : 1;
+    } else if(e.kind==='echo'){
+      o.fac=e.facet;   // MADOSIS rescue beacon (x/y/hp already in the base packet); facet drives its color
     } else if(e.kind==='building'){
       o.tx=e.tx; o.ty=e.ty; o.w=e.w; o.h=e.h;
       if(e.constructing){ o.cn=1; o.bp=e.buildProg; o.bt=e.buildTime; }
@@ -165,6 +176,12 @@ window.NET = window.NET || {};
       // ranged shot muzzle-flash: rebuild the transient so the laser-bolt render pass draws
       // it on the client (render decays .t locally at 1/60). Cosmetic only — never simulated.
       if(o.sf) e.shootFx = (e.shootFx && e.shootFx.t>0) ? e.shootFx : { x:(o.sfx!=null?o.sfx:e.x), y:(o.sfy!=null?o.sfy:e.y), t:SHOOTFX_LIFE };
+      // MADOSIS (render-only on the client)
+      e.madosis=o.mad||0; e.sanityThreshold=o.sth||0; e.scarred=!!o.scr;
+      e.madDog=!!o.md; e.subdued=!!o.sub; e.calmStage=o.cs||0; e._rescue=!!o.rsc;
+      e.madEpisode = o.ep ? { phase:(o.ep===3?'feral':o.ep===2?'defiance':'tremor'), t:0 } : null;
+    } else if(o.k==='echo'){
+      e.x=o.x; e.y=o.y; e.facet=o.fac; e.r=12;       // MADOSIS rescue beacon (client render)
     } else if(o.k==='building'){
       e.x=o.x; e.y=o.y;                          // buildings don't move → snap directly
       e.tx=o.tx; e.ty=o.ty; e.w=o.w; e.h=o.h; e.sight=d.sight; e.cd=e.cd||0;

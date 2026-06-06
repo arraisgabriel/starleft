@@ -305,8 +305,8 @@
   <!-- Dossier sub-screen (one veteran's RPG file) -->
   <div class="overlay submenu live-overlay" id="dossierScreen" style="display:none;">
     <div class="submenu-panel">
+      <!-- Back button is rendered as the first element of the left column (see dossierBodyHTML) -->
       <div id="dossierBody"></div>
-      <button class="sc-btn back" onclick="hideSub('dossierScreen')">◀ Back</button>
     </div>
   </div>
 
@@ -409,6 +409,7 @@
 <script src="js/lore_data.js"></script>
 <script src="js/dialog_data.js"></script>
 <script src="js/lore.js"></script>
+<script src="js/madosis.js"></script><!-- Madosis (madness/sanity) runtime: meter, episodes, mad-dog rescue, Kennel; balance in config.js MADOSIS/KENNEL -->
 <script src="js/ai.js"></script>
 <script src="js/render.js"></script>
 <script src="js/lyrics.js"></script><!-- runtime-loaded timed song subtitles (LRC/plain); text lives in assets/, not code -->

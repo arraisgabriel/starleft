@@ -48,6 +48,7 @@ function update(state, dt){
     u.cd-=dt;
     updateUnit(state,u,dt);
     vetRegen(u,state,dt);   // out-of-combat self-heal for high-level veterans
+    if(typeof updateMadosis==='function') updateMadosis(state,u,dt);   // sanity: episode onset + escalation
   }
   // separation (avoid overlap)
   separation(state,dt);

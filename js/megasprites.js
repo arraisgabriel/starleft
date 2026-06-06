@@ -513,20 +513,39 @@ function drawOneMega(state, m, ox, oy, x0, y0, x1, y1){
   ctx.save();
   if(!lit) ctx.globalAlpha=0.5;                                          // explored-not-visible dim
   if(spr){
-    const fi=megaFrameIndex(state,m);
     const dw=w*(m.overhang||1.3), dh=dw*(spr.fh/spr.fw)*(m.heightScale||1);
     const dx=px+(w-dw)/2, dy=py+h-dh+2;
-    const neon=(state.hub || m.neon) ? megaNeonFrame(m,fi) : null;
-    const fog=state.hub && m.cat==='mountain';                 // dense summit fog on hub peaks
     let img=spr.img;
     if(m.cat==='ruin') img=(m.biome===B_ICE?spr.snow : m.biome===B_DESERT?spr.sand : null) || spr.img;
-    if(m.hubWaste) drawWasteMegaSmoke(state,m,dx,dy,dw,dh,'back');
-    if(fog) drawMountainFog(state,m,dx,dy,dw,dh,'back');         // halo behind the peak
-    drawMegaNeonLayer(state,m,neon,dx,dy,dw,dh,'aura');
-    ctx.drawImage(img, fi*spr.fw, 0, spr.fw, spr.fh, dx, dy, dw, dh);
-    drawMegaNeonLayer(state,m,neon,dx,dy,dw,dh,'core');
-    if(fog) drawMountainFog(state,m,dx,dy,dw,dh,'front');        // dense cloud over the summit
-    if(m.hubWaste) drawWasteMegaSmoke(state,m,dx,dy,dw,dh,'front');
+    if(m.hubAnim){
+      // MADOSIS Mental Health Facility: animate (not the static HUB frame) at HALF the ambient speed,
+      // CROSS-FADING consecutive frames so the lights pulse smoothly with no hard frame pops. Frames
+      // share one bbox, so alpha-blending A→B reads as a slow breath of the cyan neon.
+      const N=MEGA_FRAMES, fps=(MEGA_FPS[m.cat]||1.4)*0.5;
+      const p=t*fps + (m.seed||0), fl=Math.floor(p), s=(p-fl)*(p-fl)*(3-2*(p-fl));   // smoothstep
+      const fiA=((fl%N)+N)%N, fiB=(fiA+1)%N, useNeon=(state.hub || m.neon);
+      // force the facility's lights to a calm cyan (the strip bakes red in later frames; recolor the
+      // generated glows so the Mental Health Facility reads as a steady cyan, not an alarm red).
+      const cyanize=(gl)=> gl ? gl.map(g=>Object.assign({},g,{color:[80,230,255]})) : null;
+      const nA=useNeon?cyanize(megaNeonFrame(m,fiA)):null, nB=useNeon?cyanize(megaNeonFrame(m,fiB)):null;
+      ctx.save(); ctx.globalAlpha*=(1-s); drawMegaNeonLayer(state,m,nA,dx,dy,dw,dh,'aura'); ctx.restore();
+      ctx.save(); ctx.globalAlpha*=s;     drawMegaNeonLayer(state,m,nB,dx,dy,dw,dh,'aura'); ctx.restore();
+      ctx.drawImage(img, fiA*spr.fw, 0, spr.fw, spr.fh, dx, dy, dw, dh);
+      ctx.save(); ctx.globalAlpha*=s; ctx.drawImage(img, fiB*spr.fw, 0, spr.fw, spr.fh, dx, dy, dw, dh); ctx.restore();
+      ctx.save(); ctx.globalAlpha*=(1-s); drawMegaNeonLayer(state,m,nA,dx,dy,dw,dh,'core'); ctx.restore();
+      ctx.save(); ctx.globalAlpha*=s;     drawMegaNeonLayer(state,m,nB,dx,dy,dw,dh,'core'); ctx.restore();
+    } else {
+      const fi=megaFrameIndex(state,m);
+      const neon=(state.hub || m.neon) ? megaNeonFrame(m,fi) : null;
+      const fog=state.hub && m.cat==='mountain';                 // dense summit fog on hub peaks
+      if(m.hubWaste) drawWasteMegaSmoke(state,m,dx,dy,dw,dh,'back');
+      if(fog) drawMountainFog(state,m,dx,dy,dw,dh,'back');         // halo behind the peak
+      drawMegaNeonLayer(state,m,neon,dx,dy,dw,dh,'aura');
+      ctx.drawImage(img, fi*spr.fw, 0, spr.fw, spr.fh, dx, dy, dw, dh);
+      drawMegaNeonLayer(state,m,neon,dx,dy,dw,dh,'core');
+      if(fog) drawMountainFog(state,m,dx,dy,dw,dh,'front');        // dense cloud over the summit
+      if(m.hubWaste) drawWasteMegaSmoke(state,m,dx,dy,dw,dh,'front');
+    }
   } else {
     ctx.fillStyle='rgba(16,18,24,.92)';                                  // fallback mass so the obstacle reads
     roundRect(px+3, py+3, w-6, h-6, 7); ctx.fill();
