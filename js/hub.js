@@ -19,6 +19,15 @@ const HUB = Object.assign({
   trainHourSeconds:3600,  // real seconds of ACTIVE play per "in-game hour" of training (1h = 1 real hour)
   trainPairCap:6,         // max simultaneous training sessions (pairs)
   trainMaxGap:6,          // max level difference allowed between mentor and junior
+  // ---- The Wake (resurrection tower) tunables ----
+  rebornHourSeconds:3600, // real seconds of ACTIVE play per "in-game hour" of a write (1h = 1 real hour)
+  rebornTotalCap:3,       // how many Reborn Cyborgs may EVER exist across the whole campaign (hard cap)
+  rebornSlotCap:1,        // how many may be in the lattice at once (one soul at a time)
+  rebornUnlockIdx:13,     // inert until CAMPAIGN.nextMapIndex >= this (after Ep XIII: you hold lattice+backups)
+  rebornBaseHours:6,      // base in-game hours to reassemble a body
+  rebornHoursPerStar:0.5, // + per veteran level
+  rebornBaseCost:300,     // M3$ floor
+  rebornCostPerStar:80,   // + per veteran level
 }, HUB_PLACEMENT);
 
 function hubBiomeId(v, fallback){
@@ -72,6 +81,7 @@ function hubDefaultCampaign(){
     dispatch:{ mdcId:null, staged:[] },
     training:{ staged:[], sessions:[] },
     healing:{ staged:[], sessions:[] },
+    reborn:{ sessions:[], done:[] },
     visit:0,
     gambled:false,
     lastReward:null,
@@ -95,6 +105,10 @@ function deserializeHubCampaign(data){
     CAMPAIGN.healing = Object.assign({staged:[], sessions:[]}, data.healing||{});
     if(!Array.isArray(CAMPAIGN.healing.staged)) CAMPAIGN.healing.staged=[];
     if(!Array.isArray(CAMPAIGN.healing.sessions)) CAMPAIGN.healing.sessions=[];
+    // legacy-safe: saves predating The Wake load with an empty resurrection queue
+    CAMPAIGN.reborn = Object.assign({sessions:[], done:[]}, data.reborn||{});
+    if(!Array.isArray(CAMPAIGN.reborn.sessions)) CAMPAIGN.reborn.sessions=[];
+    if(!Array.isArray(CAMPAIGN.reborn.done)) CAMPAIGN.reborn.done=[];
   }
 }
 function hubOwnerCtrl(){ return 'p1'; }
@@ -113,7 +127,7 @@ function hubSnapUnit(u){
   const key=hubUnitKey(u);
   return { key, type:u.type, stars:u.stars||0, xp:u.xp||0, lore:u.lore||null,
     hero:!!u.hero, heroId:u.heroId||null, spriteType:u.spriteType||null, hp:u.hp, maxHp:u.maxHp,
-    madosis:u.madosis||0, sanityThreshold:u.sanityThreshold||0, scarred:!!u.scarred };
+    madosis:u.madosis||0, sanityThreshold:u.sanityThreshold||0, scarred:!!u.scarred, reborn:!!u.reborn };
 }
 function hubBuildRosterFromCombat(state){
   const seen=new Set(), out=[];
@@ -161,7 +175,7 @@ function hubRewardFor(state){
 function beginExtractionPhase(state){
   if(netRole!=='solo'){ state.over=true; onVictory(); return; }
   CAMPAIGN.mode='extraction';
-  CAMPAIGN.nextMapIndex=Math.min(mapIndex+1, MAPS.length-1);
+  CAMPAIGN.nextMapIndex=(typeof villainNextLinear==='function') ? villainNextLinear(mapIndex) : Math.min(mapIndex+1, MAPS.length-1);   // skips appended villain maps; resumes at returnTo after a boss
   state.extractReady=true;
   state.extractStarted=false;
   state.objective='Episode complete. Garrison your survivors inside an Open-Plan HQ (only Lv2+ are extracted), then press Extraction.';
@@ -350,6 +364,8 @@ function enterHubFromCombat(state){
   const reward=hubRewardFor(state);
   CAMPAIGN.m3 += reward.total;
   CAMPAIGN.lastReward=reward;
+  // boss detour just ended (host path): resume the linear campaign at the villain's returnTo + mark it cleared
+  if(typeof MAPS!=='undefined' && MAPS[mapIndex] && MAPS[mapIndex].isVillain && typeof villainNextLinear==='function') CAMPAIGN.nextMapIndex=villainNextLinear(mapIndex);
   if(mapIndex===6 && typeof epSevenFlashAftermath==='function'){
     epSevenFlashAftermath(state);            // Episode VII "the flash": memorialize all, carry nobody (co-op host path; solo uses enterHubFlashAftermath)
   } else {
@@ -792,6 +808,7 @@ function hubSpawnRoster(state){
     u.hubKey=r.key; u.stars=r.stars||0; u.xp=r.xp||0; u.lore=r.lore||null;
     u.hero=!!r.hero; u.heroId=r.heroId||null; u.spriteType=r.spriteType||null;
     u.madosis=r.madosis||0; u.sanityThreshold=r.sanityThreshold||0; u.scarred=!!r.scarred;   // sanity persists in the roster
+    u.reborn=!!r.reborn;                                                                       // reborn cyborg flag
     hubApplyUpgrades(u); if(typeof applyVetHp==='function') applyVetHp(u,true);
   }
 }
@@ -835,6 +852,7 @@ function hubUnitArrivedPoi(state,u,poi){
   else if(p.kind==='ultra') hubShowUltra(u);
   else if(p.kind==='training') hubTrainStage(state,u,poi);
   else if(p.kind==='mentalhealth') hubHealStage(state,u,poi);
+  else if(p.kind==='wake') openWakeMenu();
 }
 function hubEnlistedKeys(){
   CAMPAIGN.dispatch = Object.assign({mdcId:null, staged:[]}, CAMPAIGN.dispatch||{});
@@ -983,7 +1001,8 @@ function hubDispatchNextEpisode(){
   if(typeof madosisRestDecay==='function') madosisRestDecay(new Set(live.map(u=>hubUnitKey(u))));
   setCarryover(vets.slice(0,cap)); captureHeroes({entities:heroes});
   CAMPAIGN.mode='combat';
-  const idx=Math.max(0, Math.min(CAMPAIGN.nextMapIndex, MAPS.length-1));
+  let idx=Math.max(0, Math.min(CAMPAIGN.nextMapIndex, MAPS.length-1));
+  if(typeof villainGateBefore==='function'){ const g=villainGateBefore(idx); if(g>=0) idx=g; }   // an uncleared villain gates this episode → fight it first
   mapIndex=idx;
   hubStartDispatchFlight(G, 0);                 // dur refined by showCrawl once narration length is known
   showCrawl(idx, ()=>{ endDispatchFlight(G); loadMap(idx); });
@@ -1318,6 +1337,102 @@ function hubSpawnTrainees(state){
       toast('🎓 Training complete — two '+nm+' graduated at Level '+ses.target+'.');
     } else { spawnLocked(ses.a); spawnLocked(ses.b); }
   }
+}
+
+/* =====================================================================
+   THE WAKE — resurrection tower (Ep XIV payoff). Spend M3$ + a lightning-charged
+   build to drag a fallen veteran back as a Reborn Cyborg. Hard-capped lifetime
+   total; one soul in the lattice at a time; each fallen resurrectable once.
+   Host/solo simulate the spend + timer; clients are cosmetic (panel-only).
+   Mirrors the Training Grounds session/clock lifecycle.
+   ===================================================================== */
+function rebornUnlocked(){ return (CAMPAIGN.nextMapIndex||0) >= (HUB.rebornUnlockIdx||0); }
+function rebornPerformed(){ const r=CAMPAIGN.reborn||{sessions:[],done:[]}; return (r.done||[]).length + (r.sessions||[]).length; }
+function rebornChargesLeft(){ return Math.max(0, (HUB.rebornTotalCap||0) - rebornPerformed()); }
+function rebornLvlOf(f){ return (f && (f.stars!=null?f.stars:f.lvl))||0; }
+function rebornCost(f){ return (HUB.rebornBaseCost||0) + (HUB.rebornCostPerStar||0)*rebornLvlOf(f); }
+function rebornHours(f){ return (HUB.rebornBaseHours||0) + Math.round((HUB.rebornHoursPerStar||0)*rebornLvlOf(f)); }
+function rebornIsDone(f){
+  const r=CAMPAIGN.reborn||{sessions:[],done:[]}, fid=(typeof fallenStableId==='function')?fallenStableId(f):'';
+  return !!(f&&f.reborn) || (r.done||[]).includes(fid) || (r.sessions||[]).some(s=>s.fid===fid);
+}
+// roster key for a reborn — MUST match what hubUnitKey() derives for the spawned unit (hero → lore → fallback),
+// so condo residency / upgrades / idempotent spawns all line up.
+function rebornRosterKey(ses){
+  if(ses.heroId) return 'hero:'+ses.heroId;
+  if(ses.lore && ses.lore.seed!=null) return 'lore:'+ses.lore.seed;
+  return 'reborn:'+ses.fid;
+}
+// Begin a resurrection (host/solo only). Returns true on success; toasts the reason on every rejection.
+function hubWakeStart(fid){
+  if(!hubCanAct()){ toast('Only the host can power The Wake.'); return false; }
+  if(!CAMPAIGN.reborn) CAMPAIGN.reborn={sessions:[],done:[]};
+  if(!rebornUnlocked()){ toast('The coils are cold — you don’t hold the lattice yet.'); return false; }
+  const f=(typeof fallenVets!=='undefined'?fallenVets:[]).find(x=>fallenStableId(x)===fid);
+  if(!f){ toast('No such name on the wall.'); return false; }
+  if(!DEF[f.type]){ toast('That body is too corrupted to rebuild.'); return false; }
+  if(rebornIsDone(f)){ toast('Already reborn — The Wake takes a soul only once.'); return false; }
+  if((CAMPAIGN.reborn.sessions||[]).length >= (HUB.rebornSlotCap||1)){ toast('The Wake holds one soul at a time.'); return false; }
+  if(rebornChargesLeft() <= 0){ toast('No charges remain — the rest stay on the wall.'); return false; }
+  const cost=rebornCost(f);
+  if(!hubSpend(cost)) return false;   // host-gated + balance-checked; toasts on failure
+  CAMPAIGN.reborn.sessions.push({ id:'rb_'+(HUB.nextId++), fid, type:f.type, stars:rebornLvlOf(f),
+    lore:(typeof fallenDossierSnap==='function')?fallenDossierSnap(f):(f.lore||null),
+    heroId:f.heroId||null, spriteType:f.spriteType||null, name:f.name||'A veteran',
+    sanityThreshold:f.sanityThreshold||0, xp:f.xp||0,
+    hoursTotal:rebornHours(f), secElapsed:0, done:false, cost });
+  f.reborn=true;   // dim the wall immediately + prevent a double-enqueue across a save
+  if(typeof eventToast==='function') eventToast('⚡ <b>'+(f.name||'A veteran')+'</b> is fed into The Wake. The lightning takes them.', 9000);
+  refreshUI();
+  return true;
+}
+// Per-tick clock — runs from core.js update() in the HUB and missions (active play only).
+function updateRebornProduction(dt){
+  if(typeof netRole!=='undefined' && netRole==='client') return;   // clients don't simulate campaign state
+  if(typeof CAMPAIGN==='undefined' || !CAMPAIGN || !CAMPAIGN.reborn) return;
+  const sessions=CAMPAIGN.reborn.sessions||[];
+  if(!sessions.length) return;
+  const inHub=(typeof G!=='undefined' && G && G.hub);
+  for(const ses of sessions.slice()){
+    if(ses.done) continue;
+    ses.secElapsed=(ses.secElapsed||0)+dt;
+    if(ses.secElapsed >= ses.hoursTotal*(HUB.rebornHourSeconds||3600)){
+      ses.done=true;
+      hubWakeComplete(inHub?G:null, ses);
+    }
+  }
+}
+// A write finishes: permanent record, add the Reborn to the roster, spawn it live if we're in the HUB.
+function hubWakeComplete(state, ses){
+  if(!CAMPAIGN.reborn) CAMPAIGN.reborn={sessions:[],done:[]};
+  if(!(CAMPAIGN.reborn.done||[]).includes(ses.fid)) CAMPAIGN.reborn.done.push(ses.fid);
+  const key=rebornRosterKey(ses);
+  CAMPAIGN.roster=(CAMPAIGN.roster||[]).filter(r=>r.key!==key);   // idempotent
+  CAMPAIGN.roster.push({ key, type:ses.type, stars:ses.stars||0,
+    xp:(ses.xp!=null?ses.xp:((typeof CAREER!=='undefined')?CAREER.xpFor(ses.stars||0):0)),
+    lore:ses.lore||null, hero:!!ses.heroId, heroId:ses.heroId||null, spriteType:ses.spriteType||null,
+    madosis:0, sanityThreshold:ses.sanityThreshold||0, scarred:true, reborn:true });   // scarred → frayed mind, breaks sooner
+  const cids=Object.keys(CAMPAIGN.condos||{});
+  if(cids.length){ const c=CAMPAIGN.condos[cids[0]]; c.residents=c.residents||[]; if(!c.residents.includes(key)) c.residents.push(key); }
+  CAMPAIGN.reborn.sessions=(CAMPAIGN.reborn.sessions||[]).filter(x=>x!==ses);
+  if(state && state.hub) hubSpawnReborn(state, key);
+  if(typeof toast==='function') toast('⚡ '+(ses.name||'A veteran')+' rises from The Wake — a Reborn Cyborg. Nothing came back whole.');
+}
+// Spawn one Reborn roster member as a live unit near The Wake (in-HUB live completion). Idempotent by key.
+function hubSpawnReborn(state, key){
+  if(!state || !state.hub) return;
+  const r=(CAMPAIGN.roster||[]).find(x=>x.key===key); if(!r) return;
+  if((state.entities||[]).some(e=>e&&!e.dead&&e.kind==='unit'&&e.owner==='player'&&hubUnitKey(e)===key)) return;   // already live
+  const poi=(state.hubPois&&state.hubPois['wake'])||null;
+  const px=poi?poi.tx+((poi.w/2)|0):((state.cfg&&state.cfg.player)?state.cfg.player.x:10);
+  const py=poi?poi.ty+poi.h+1:((state.cfg&&state.cfg.player)?state.cfg.player.y:10);
+  const u=mkUnit(state, r.type, 'player', px, py);
+  u.hubKey=r.key; u.stars=r.stars||0; u.xp=r.xp||0; u.lore=r.lore||null;
+  u.hero=!!r.hero; u.heroId=r.heroId||null; u.spriteType=r.spriteType||null;
+  u.madosis=r.madosis||0; u.sanityThreshold=r.sanityThreshold||0; u.scarred=!!r.scarred; u.reborn=!!r.reborn;
+  if(typeof hubApplyUpgrades==='function') hubApplyUpgrades(u);
+  if(typeof applyVetHp==='function') applyVetHp(u,true);
+  if(typeof spawnRing==='function' && poi) spawnRing(poi.x, poi.y, '#7dff9e');
 }
 
 /* =====================================================================

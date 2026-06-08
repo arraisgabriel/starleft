@@ -25,6 +25,11 @@ const CAREER = {
   healCombatGap: 4,     // seconds out of combat before regen resumes
 };
 
+// Reborn Cyborg (The Wake): a resurrected veteran comes back WRONG — a tougher metal chassis (+HP) but
+// dead nerves (no self-heal). Its frayed mind is handled by spawning it `scarred` (breaks sooner) so no
+// madosis.js change is needed. Gated on u.reborn, which travels via every carryover/roster snapshot.
+const REBORN = { hpMul:1.15, regenMul:0 };
+
 // 5-level tier colors for the rank pips (yellow → orange → red → green → blue → purple)
 const CAREER_COLORS = ['#ffd23f','#ff8c1a','#ff3b30','#3cd05a','#3b86ff','#b05bff'];
 // career-ladder titles, one per 5-level tier (tier 0 spans levels 1-4, then 5s)
@@ -48,7 +53,7 @@ function careerTitle(lvl){
 // (re)bake maxHp from base + level, preserving current HP ratio (or full-heal on request)
 function applyVetHp(u, fullHeal){
   const base = DEF[u.type].hp, ratio = fullHeal ? 1 : (u.maxHp ? u.hp/u.maxHp : 1);
-  u.maxHp = Math.round(base * (1 + CAREER.hpPerStar*(u.stars||0)) * (u.hubHpMul||1));
+  u.maxHp = Math.round(base * (1 + CAREER.hpPerStar*(u.stars||0)) * (u.hubHpMul||1) * (u.reborn?REBORN.hpMul:1));
   u.hp = Math.round(u.maxHp * ratio);
 }
 
@@ -97,6 +102,7 @@ function vetRegen(u, state, dt){
   if(state.time - (u._lastHit||-1e9) < CAREER.healCombatGap) return;   // still in/near combat
   let rate = CAREER.healPctBase * Math.pow(2, Math.floor((lvl-CAREER.healStart)/CAREER.healDoubleEvery));
   if(typeof vetBuff==='function') rate *= vetBuff(u,state).regenMul;   // life-event temp buff/debuff
+  if(u.reborn) rate *= REBORN.regenMul;                                // reborn cyborgs have dead nerves — no self-heal
   u.hp = Math.min(u.maxHp, u.hp + u.maxHp*rate*dt);
 }
 
@@ -142,7 +148,7 @@ function eligibleVets(state){
 // snapshot a chosen set of veteran units into the carryover (their dossier travels too)
 function setCarryover(units){
   carryoverVets = units.map(e=>({type:e.type, stars:e.stars, xp:e.xp, lore:e.lore,
-    madosis:e.madosis||0, sanityThreshold:e.sanityThreshold||0, scarred:!!e.scarred}));
+    madosis:e.madosis||0, sanityThreshold:e.sanityThreshold||0, scarred:!!e.scarred, reborn:!!e.reborn}));
 }
 // auto-pick fallback: carry all eligible (spawnVets slices to the count). Player choice uses the
 // victory-screen chooser (ui.js) → setCarryover() instead.
@@ -157,6 +163,7 @@ function spawnVets(state){
     const u=mkUnit(state, v.type, 'player', c.x-2+(i%4), c.y-3-((i/4)|0));
     u.stars=v.stars; u.xp=v.xp; if(v.lore) u.lore=v.lore;
     u.madosis=v.madosis||0; u.sanityThreshold=v.sanityThreshold||0; u.scarred=!!v.scarred;   // sanity travels with the vet
+    u.reborn=!!v.reborn;                                                                       // reborn cyborg flag travels too
     if(typeof hubApplyUpgrades==='function') hubApplyUpgrades(u);
     applyVetHp(u, true);
   });

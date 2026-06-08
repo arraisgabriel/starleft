@@ -129,7 +129,7 @@ body.scene-dispatch #minimap-wrap { display:none !important; }
 #dossierScreen{
   top:calc(var(--top-h) + var(--safe-t));   /* JS overrides with the measured VIEW_TOP */
   left:0; right:0; bottom:0;
-  z-index:19;                                /* same layer as the HUB menu: BELOW #topbar/#topmenu-panel(20/30) & #lns-ingame(21) so they render on top */
+  z-index:19;                                /* same layer as the HUB menu: BELOW #topbar/#topmenu-panel(22/30) & #lns-ingame(21) so they render on top */
   align-items:stretch; justify-content:center;
 }
 body.dossier-open #bottom{ display:none; }   /* like the HUB menu: hide the bottom HUD so the z-19 panel isn't occluded; syncHud() then drops the LNS to bottom:0 */
@@ -391,7 +391,7 @@ body.hub-menu-open #bottom{ display:none; }              /* syncHud() then drops
 #hubMenuView{
   position:fixed; left:0; right:0; bottom:0;
   top:calc(var(--top-h) + var(--safe-t));                /* JS overrides with the measured height */
-  z-index:19;                                            /* below #topbar(20) & #lns-ingame(21), which sit outside it */
+  z-index:19;                                            /* below #topbar(22) & #lns-ingame(21), which sit outside it */
   display:none; align-items:stretch; justify-content:center; text-align:left; pointer-events:auto;
   background:radial-gradient(ellipse at 50% 36%, rgba(20,8,11,.55), rgba(6,3,5,.88));
 }

@@ -50,6 +50,15 @@
     </div>
   </div>
 
+  <!-- Boss HP bar — persistent, map-wide while a VILLAIN lives. position:fixed FLOATING overlay
+       (NOT a child of #topbar, NOT observed) so it never changes VIEW_TOP/VIEW_BOT or the canvas
+       viewport math. Updated each tick in refreshUI(); pulses via CSS; turns red/cracks/shakes in
+       the boss's phase 2. -->
+  <div id="bossbar" style="display:none;" aria-hidden="true">
+    <div id="bossbar-name">BOSS</div>
+    <div id="bossbar-track"><div id="bossbar-fill"></div></div>
+  </div>
+
   <!-- Live News Stream — thin ticker anchored above the bottom HUD (toggled by News) -->
   <div id="lns-ingame" style="display:none;"><div class="lns-tag">LIVE</div><div class="lns-host"></div></div>
 
@@ -98,6 +107,19 @@
   </div>
 
   <div id="toast"></div>
+
+  <!-- Quarter I tutorial "Rod comms" coach panel (js/tutorial.js + css/hud.css). Anchored to the
+       safe play area; repositions/reflows by viewport. Hidden until a tutorial step is active. -->
+  <div id="tutorialCoach" style="display:none;">
+    <div class="tut-portrait" aria-hidden="true">🎙️</div>
+    <div class="tut-body">
+      <div class="tut-name">ROD <span class="tut-tag">// COMMS</span></div>
+      <div class="tut-text" id="tut-text"></div>
+    </div>
+    <button class="tut-skip" id="tut-skip" type="button" title="Skip the tutorial">Skip ▸</button>
+  </div>
+  <!-- pulsing pointer at a HUD button; positioned from the live button rect by tutorial.js -->
+  <div id="tutorialArrow" aria-hidden="true" style="display:none;">▾</div>
 
   <!-- Audio unlock / boot gate -->
   <div class="overlay boot-gate" id="bootGate">
@@ -362,6 +384,19 @@
     </div>
   </div>
 
+  <!-- Tutorial opt-in — shown before Quarter I starts (js/tutorial.js prompt) -->
+  <div class="overlay submenu" id="tutorialPromptScreen" style="display:none;">
+    <div class="submenu-panel">
+      <h2>First Day on the Job</h2>
+      <div class="controls-box">
+        New to the grind? Rod will walk you through the basics — mining, hiring, building, fighting,
+        and getting your team out alive. You can <b>Skip</b> at any time.
+      </div>
+      <button class="sc-btn" onclick="TUTORIAL.choosePrompt(true)"><span class="ic">▶</span> Show me the ropes</button>
+      <button class="sc-btn back" onclick="TUTORIAL.choosePrompt(false)">⊘ I know what I'm doing</button>
+    </div>
+  </div>
+
   <!-- Star-Wars-style intro crawl between maps -->
   <div class="overlay" id="crawlScreen" style="display:none;">
     <div id="crawl-fade"></div>
@@ -397,6 +432,7 @@
 <script src="js/state.js"></script>
 <script src="js/mega_neon_maps.js"></script>
 <script src="js/building_neon_maps.js"></script>
+<script src="js/hero_neon_maps.js"></script><!-- per-frame hero glow anchors (Nino gun / Biba healing mech); rendered via drawMegaNeonLayer, code-synth auras in render.js -->
 <script src="js/megasprites.js"></script>
 <script src="js/map.js"></script>
 <script src="js/hub_map_schema.js"></script>
@@ -410,6 +446,8 @@
 <script src="js/dialog_data.js"></script>
 <script src="js/lore.js"></script>
 <script src="js/madosis.js"></script><!-- Madosis (madness/sanity) runtime: meter, episodes, mad-dog rescue, Kennel; balance in config.js MADOSIS/KENNEL -->
+<script src="js/villains.js"></script><!-- VILLAINS (big bosses): spawn/driver/abilities/phases, boss win condition, campaign gating; balance in VILLAINS table -->
+<script src="js/villain_neon_maps.js"></script><!-- per-frame villain glow anchors (authored later via the calibrator); aura works without it -->
 <script src="js/ai.js"></script>
 <script src="js/render.js"></script>
 <script src="js/lyrics.js"></script><!-- runtime-loaded timed song subtitles (LRC/plain); text lives in assets/, not code -->
@@ -442,6 +480,7 @@
 <script src="js/net/voice-chat.js"></script>
 <script src="js/net/features.js"></script>
 <script src="js/perf_scenarios.js"></script><!-- perf harness deterministic worst-case scenes (test-only; needs loadMap/newHubMap/mkUnit) -->
+<script src="js/tutorial.js"></script><!-- Quarter I guided tutorial (solo, purely local/cosmetic): coach panel + world focus + Rod voice; hooks in ui/core/render/madosis -->
 <script src="js/main.js"></script>
 <script src="js/net/determinism.js"></script><!-- rollback determinism experiment: NET.determinismTest() (Stage 0), NET.simHash() -->
 <script src="js/net/rollback-game.js"></script><!-- rollback Game adapter: NET.makeStarleftGame(), NET.rbRoundTripTest(), NET.rbLocalTest() -->

@@ -8,6 +8,22 @@ const elDesc=document.getElementById('sel-desc');
 const elStats=document.getElementById('sel-stats');
 const elDossierBtn=document.getElementById('sel-dossier');
 
+// Persistent map-wide boss HP bar (#bossbar). Shows while a VILLAIN lives, hides otherwise. Reads
+// only synced entity fields (villain/villainName/villainId/hp/maxHp/bossPhase) so it is correct on
+// a co-op CLIENT too. Per-villain color comes from the global VILLAINS table (present everywhere);
+// phase 2 swaps the --boss-color to red and adds the crack/shake via the .bossbar--rage class.
+function updateBossBar(){
+  const bb=document.getElementById('bossbar'); if(!bb) return;
+  const boss = G && G.entities && G.entities.find(e=>e.villain && !e.dead && !e.escaped);
+  if(!boss){ if(bb.style.display!=='none') bb.style.display='none'; return; }
+  const def=(typeof VILLAINS!=='undefined') && VILLAINS[boss.villainId];
+  bb.style.display='';
+  bb.classList.toggle('bossbar--rage', !!boss.madFlavor);   // red crack/shake only for the themed "Madosis" enrage (Rex)
+  bb.style.setProperty('--boss-color', (def && def.neonColor) || '#50e6ff');
+  document.getElementById('bossbar-name').textContent = boss.villainName || (def && def.name) || 'BOSS';
+  const frac=Math.max(0, Math.min(1, boss.maxHp ? boss.hp/boss.maxHp : 0));
+  document.getElementById('bossbar-fill').style.width=(frac*100)+'%';
+}
 function refreshUI(){
   if(!G) return;
   const _eco=playerEco(G, LOCAL_CTRL);              // HUD shows THIS client's own pool
@@ -15,6 +31,7 @@ function refreshUI(){
   document.getElementById('supply').textContent = _eco.supply+'/'+_eco.supplyCap;
   document.getElementById('mapname').textContent = G.cfg.name;
   document.getElementById('objective').textContent = G.cfg.objective;
+  updateBossBar();
 
   const sel=G.selection.filter(e=>!e.dead);
 
@@ -93,6 +110,9 @@ function refreshUI(){
   const bottomEl=document.getElementById('bottom');
   if(bottomEl) bottomEl.classList.toggle('sel-empty', !G.placing && !sel.length);
   document.body.classList.toggle('in-hub', !!G.hub);
+  // tutorial: re-attach the step's button highlight (buttons rebuild on signature change) and
+  // re-assert its objective line (overwritten at line 17 each tick). No-op when inactive.
+  if(typeof TUTORIAL!=='undefined') TUTORIAL.reapplyHighlight();
 }
 
 // Preview a building in the info panel while the player is choosing where to
@@ -203,17 +223,17 @@ function buildCommands(sel){
   const hasFinished=t=>G.entities.some(e=>!e.dead&&e.owner==='player'&&e.type===t&&!e.constructing);
   const train=(bType,uType)=>{ const b=selectedBuilding(bType); if(b) (typeof netTrain==='function'?netTrain:tryTrain)(G,b,uType); };
   if(owned.some(e=>e.type==='hq'&&!e.constructing)){
-    addCmd(DEF.worker.icon,'Hire Intern',DEF.worker.cost,()=>train('hq','worker'));
+    addCmd(DEF.worker.icon,'Hire Intern',DEF.worker.cost,()=>train('hq','worker'),null,'hire-intern');
     // Post-victory extraction: appears once the mission is won, clickable only when a unit is garrisoned.
     if(G.extractReady){
       const hq=selectedBuilding('hq');
       const ready = !!hq && typeof hqStoredUnits==='function' && hqStoredUnits(G,hq).length>0;
-      addCmd('🚁','Extraction',null,()=>tryStartExtraction(), ready?'':'disabled');
+      addCmd('🚁','Extraction',null,()=>tryStartExtraction(), ready?'':'disabled','extraction');
     }
   }
   if(owned.some(e=>e.type==='barracks'&&!e.constructing)){
-    addCmd(DEF.soldier.icon,'Growth Cyborg',DEF.soldier.cost,()=>train('barracks','soldier'));
-    addCmd(DEF.ranger.icon,'Consultant',DEF.ranger.cost,()=>train('barracks','ranger'));
+    addCmd(DEF.soldier.icon,'Growth Cyborg',DEF.soldier.cost,()=>train('barracks','soldier'),null,'train-soldier');
+    addCmd(DEF.ranger.icon,'Consultant',DEF.ranger.cost,()=>train('barracks','ranger'),null,'train-ranger');
     addCmd(DEF.recruiter.icon,'Recruiter',DEF.recruiter.cost,()=>train('barracks','recruiter'));
     addCmd(DEF.hustler.icon,'Hustler',DEF.hustler.cost,()=>train('barracks','hustler'));
     addCmd(DEF.lobbyist.icon,'Lobbyist',DEF.lobbyist.cost,()=>train('barracks','lobbyist'));
@@ -230,8 +250,8 @@ function buildCommands(sel){
   if(owned.some(e=>e.type==='worker')){
     addCmd(DEF.hq.icon,'Open-Plan HQ',350,()=>tryPlaceFixed('hq'));
     addCmd(DEF.outpost.icon,'Satellite Office',DEF.outpost.cost,()=>tryPlace(G,'outpost'));
-    addCmd(DEF.barracks.icon,'People Ops',DEF.barracks.cost,()=>tryPlace(G,'barracks'));
-    addCmd(DEF.turret.icon,'Legal Team',DEF.turret.cost,()=>tryPlace(G,'turret'));
+    addCmd(DEF.barracks.icon,'People Ops',DEF.barracks.cost,()=>tryPlace(G,'barracks'),null,'build-barracks');
+    addCmd(DEF.turret.icon,'Legal Team',DEF.turret.cost,()=>tryPlace(G,'turret'),null,'build-turret');
     addCmd(DEF.garage.icon,'The Garage',DEF.garage.cost,()=>tryPlace(G,'garage'));
     if(hasFinished('garage')) addCmd(DEF.launchpad.icon,'Launch Pad',DEF.launchpad.cost,()=>tryPlace(G,'launchpad'));
   }
@@ -259,6 +279,7 @@ function buildHubCommands(sel){
   if(poi && poi.hubPoi.kind==='ultra')    addCmd('◆','ULTRA',null,()=>openUltraMenu());
   if(poi && poi.hubPoi.kind==='training') addCmd('🎯','TRAINING GROUNDS',null,()=>openTrainingMenu());
   if(poi && poi.hubPoi.kind==='mentalhealth') addCmd('🧠','MENTAL HEALTH',null,()=>openHealingMenu());
+  if(poi && poi.hubPoi.kind==='wake')     addCmd('⚡','THE WAKE',null,()=>openWakeMenu());
   if(unit){
     const key=hubUnitKey(unit), up=(CAMPAIGN.upgrades[key]||{}), il=up.implantLevel||0;
     addCmd('🧬','Implant',HUB.implantCosts[il]==null?null:HUB.implantCosts[il],()=>hubUpgradeSelectedUnit('implant'));
@@ -302,8 +323,9 @@ function tryPlaceFixed(type){
   }
 }
 
-function addCmd(emoji,label,cost,fn,extraClass){
+function addCmd(emoji,label,cost,fn,extraClass,key){
   const b=document.createElement('div'); b.className='cmd-btn'+(extraClass?' '+extraClass:'');
+  if(key) b.dataset.cmd = key;                 // stable, viewport-independent hook for the tutorial highlight
   b._cost = cost;                              // used by updateAffordability()
   const funds=(G && G.hub && typeof CAMPAIGN!=='undefined') ? CAMPAIGN.m3 : playerEco(G, LOCAL_CTRL).gold;
   if(cost!=null && funds<cost) b.classList.add('disabled');
@@ -729,6 +751,99 @@ function openTrainingMenu(){
   });
 }
 
+/* ---- The Wake (resurrection tower) menu — two columns: the fallen (left) → in the lattice (right) ---- */
+function wakeSignature(){
+  const r=(typeof CAMPAIGN!=='undefined'&&CAMPAIGN.reborn)||{sessions:[],done:[]};
+  return 'unlk:'+((typeof rebornUnlocked==='function'&&rebornUnlocked())?1:0)
+       +'|f:'+((typeof fallenVets!=='undefined')?fallenVets.length:0)
+       +'|done:'+((r.done||[]).join(','))
+       +'|se:'+((r.sessions||[]).map(s=>s.id+':'+(s.done?1:0)).join(','))
+       +'|m3:'+((typeof CAMPAIGN!=='undefined')?(CAMPAIGN.m3|0):0);
+}
+// map a fallen record → a card snapshot hubMenuUnitCard understands (type/stars/spriteType/lore)
+function fallenCardSnap(f){
+  return { type:f.type, stars:(f.stars!=null?f.stars:f.lvl)||0, spriteType:f.spriteType||null,
+    lore:(typeof fallenDossierSnap==='function')?fallenDossierSnap(f):(f.lore||null),
+    heroId:f.heroId||null, key:'wakecard:'+((typeof fallenStableId==='function')?fallenStableId(f):(f.name||'')),
+    madosis:0, sanityThreshold:0 };
+}
+function buildWakeBody(body){
+  const r=(typeof CAMPAIGN!=='undefined'&&CAMPAIGN.reborn)||{sessions:[],done:[]};
+  const sessions=r.sessions||[], fallen=(typeof fallenVets!=='undefined')?fallenVets:[];
+  const unlocked=(typeof rebornUnlocked==='function')?rebornUnlocked():true;
+  const charges=(typeof rebornChargesLeft==='function')?rebornChargesLeft():0;
+  const cap=HUB.rebornTotalCap||0;
+
+  const sum=document.createElement('div'); sum.className='hub-stat';
+  sum.innerHTML = unlocked
+    ? ('Charges left <b>'+charges+' / '+cap+'</b> · In the lattice <b>'+sessions.length+' / '+(HUB.rebornSlotCap||1)+'</b> · One soul at a time.')
+    : 'The coils are cold — you don’t hold the lattice yet.';
+  body.appendChild(sum);
+
+  if(!unlocked){
+    const m=document.createElement('div'); m.className='muted';
+    m.innerHTML='Take A&O’s transfer lattice and pull your dead’s backups out of the purge (Episodes XII–XIII). Then the storm has something to write.';
+    body.appendChild(m); return;
+  }
+
+  const cols=hubMenuColumns(2), colL=hubMenuColumn(true), colR=hubMenuColumn(true);
+  cols.appendChild(colL); cols.appendChild(colR); body.appendChild(cols);
+
+  // ---- LEFT: the fallen ----
+  colL.appendChild(hubMenuSection('The fallen'));
+  if(!fallen.length){
+    const m=document.createElement('div'); m.className='muted';
+    m.textContent='No one has fallen yet. The lattice waits, humming, for its first body.';
+    colL.appendChild(m);
+  } else {
+    colL.appendChild(hubMenuUnitGrid(fallen.map(fallenCardSnap), (snap,i)=>{
+      const f=fallen[i];
+      const already=(typeof rebornIsDone==='function')?rebornIsDone(f):false;
+      const cost=(typeof rebornCost==='function')?rebornCost(f):0;
+      return {
+        caption: trainTypeName(snap)+'<br>'+(typeof careerTitle==='function'?careerTitle(snap.stars||0):'')+' · Lv '+(snap.stars||0)+(already?' · <i>reborn</i>':''),
+        action: { label: already ? 'Reborn' : ('Resurrect · M3$ '+cost),
+          onClick: ()=>{ if(typeof hubWakeStart==='function' && hubWakeStart(fallenStableId(f))) buildHubMenuBody(); } }
+      };
+    }));
+  }
+
+  // ---- RIGHT: in the lattice ----
+  colR.appendChild(hubMenuSection('In the lattice'));
+  if(!sessions.length){ const m=document.createElement('div'); m.className='muted'; m.textContent='The coils are cold.'; colR.appendChild(m); }
+  for(const ses of sessions){
+    const card=document.createElement('div'); card.className='train-session'; card.dataset.wakeid=ses.id;
+    const cv=document.createElement('canvas'); cv.width=200; cv.height=200; cv.className='train-spr';
+    cv.dataset.type=ses.type; cv.dataset.sprite=ses.spriteType||''; card.appendChild(cv);
+    const lab=document.createElement('div'); lab.className='train-cap';
+    lab.innerHTML='<b>'+(ses.name||trainUnitName(ses))+'</b><br>Lv '+(ses.stars||0)+' · reassembling';
+    card.appendChild(lab);
+    const meta=document.createElement('div'); meta.className='train-meta';
+    meta.innerHTML='<div class="train-countdown">…</div><div class="train-bar"><i></i></div>'
+      +'<div class="muted">'+((DEF[ses.type]&&DEF[ses.type].name)||ses.type)+' · written by lightning</div>';
+    card.appendChild(meta);
+    colR.appendChild(card);
+  }
+}
+function openWakeMenu(){
+  if(typeof CAMPAIGN==='undefined') return;
+  if(CAMPAIGN.reborn==null) CAMPAIGN.reborn={sessions:[],done:[]};
+  openHubMenu({
+    id:'wake', icon:'⚡', title:'The Wake',
+    subtitle:'A bootleg of A&O’s tower — the stolen lattice, fed your rescued dead, powered by the storm. Nothing it gives back is whole.',
+    signature: wakeSignature,
+    build: buildWakeBody,
+    tick: function(body){
+      body.querySelectorAll('[data-wakeid]').forEach(el=>{
+        const ses=((CAMPAIGN.reborn&&CAMPAIGN.reborn.sessions)||[]).find(s=>s.id===el.dataset.wakeid); if(!ses) return;
+        const total=ses.hoursTotal*(HUB.rebornHourSeconds||3600), remain=Math.max(0, total-(ses.secElapsed||0));
+        const bar=el.querySelector('.train-bar>i'); if(bar) bar.style.width=Math.min(100, (total?(ses.secElapsed||0)/total*100:100))+'%';
+        const cd=el.querySelector('.train-countdown'); if(cd) cd.textContent=ses.done?'✓ RISEN':fmtTrainRemain(remain);
+      });
+    }
+  });
+}
+
 /* ---- Mental Health Facility menu (madosis healing — single-unit, visit-timed) ---- */
 function healPanelSignature(){
   const h=(typeof CAMPAIGN!=='undefined'&&CAMPAIGN.healing)||{staged:[],sessions:[]};
@@ -837,7 +952,8 @@ function openMdcMenu(poi){
       const cap=(typeof hubDispatchVetCap==='function')?hubDispatchVetCap():6;
       const live=(typeof hubEnlistedUnits==='function')?hubEnlistedUnits(G):[];
       const vets=live.filter(u=>!u.hero), heroes=live.filter(u=>u.hero);
-      const idx=(CAMPAIGN&&CAMPAIGN.nextMapIndex!=null)?CAMPAIGN.nextMapIndex:0;
+      let idx=(CAMPAIGN&&CAMPAIGN.nextMapIndex!=null)?CAMPAIGN.nextMapIndex:0;
+      if(typeof villainGateBefore==='function'){ const g=villainGateBefore(idx); if(g>=0) idx=g; }   // a gated villain is the real next deployment
 
       const sum=document.createElement('div'); sum.className='hub-stat';
       sum.innerHTML='Enlisted <b>'+vets.length+' / '+cap+'</b> vets'+(heroes.length?' + <b>'+heroes.length+'</b> hero'+(heroes.length>1?'es':''):'');
@@ -962,8 +1078,15 @@ function docFooter(){ if(_docCampaign) startGame(0); else hideSub('docScreen'); 
 
 function startGame(idx){
   idx = idx|0;
+  // Quarter I (idx 0) first asks whether the player wants the guided tutorial; the prompt's
+  // Yes/No calls back into beginRun(0). Every other map starts immediately.
+  if(idx===0 && typeof TUTORIAL!=='undefined'){ TUTORIAL.prompt(0); return; }
+  beginRun(idx);
+}
+function beginRun(idx){
+  idx = idx|0;
   if(typeof MUSIC!=='undefined') MUSIC.leaveMenu();
-  ['startScreen','mapScreen','docScreen'].forEach(id=>{ const el=document.getElementById(id); if(el) el.style.display='none'; });
+  ['startScreen','mapScreen','docScreen','tutorialPromptScreen'].forEach(id=>{ const el=document.getElementById(id); if(el) el.style.display='none'; });
   // fresh campaign / map-select replay: clear carried units so a previous run's veterans or heroes
   // don't bleed into this one (heroes persist WITHIN a run, not across a brand-new start).
   if(typeof setCarryover==='function') setCarryover([]);
@@ -978,8 +1101,9 @@ function buildMapSelect(){
   wrap.innerHTML='';
   MAPS.forEach((m,i)=>{
     const sub=(m.name.split('—')[1]||m.name).trim();
-    const b=document.createElement('button'); b.className='map-btn';
-    b.innerHTML=`<b>Quarter ${i+1}</b><span class="mn">${sub}</span><small>vs ${m.enemyName||'rivals'}</small>`;
+    const label = m.isVillain ? ('Boss '+(m.displayEp||'')) : ('Quarter '+(i+1));   // villains show their display episode, not an array-index Quarter
+    const b=document.createElement('button'); b.className='map-btn'+(m.isVillain?' map-btn--boss':'');
+    b.innerHTML=`<b>${label}</b><span class="mn">${sub}</span><small>vs ${m.enemyName||'rivals'}</small>`;
     b.onclick=()=>startGame(i);
     wrap.appendChild(b);
   });
@@ -1001,6 +1125,7 @@ function loadMap(idx){
   if(typeof CAMPAIGN!=='undefined') CAMPAIGN.mode='combat';
   G=newMap(idx); if(typeof resetDialogs==='function') resetDialogs(); syncHud(); clampCam(G); refreshUI(); running=true;
   if(typeof syncPauseBtn==='function') syncPauseBtn();
+  if(typeof TUTORIAL!=='undefined') TUTORIAL.init(G);   // Quarter I guided tutorial (solo only; no-op otherwise)
   toast('Quarter '+(idx+1)+': '+G.cfg.name);
 }
 
@@ -1127,15 +1252,27 @@ function onVictory(){
   if(typeof syncPauseBtn==='function') syncPauseBtn();
   const es=document.getElementById('endScreen');
   const beaten=G.cfg.enemyName||'the competition';
-  if(mapIndex < MAPS.length-1){
+  // villain maps are APPENDED past the linear campaign, so the FINALE is the last non-villain map,
+  // not MAPS.length-1; a villain map always continues (back to its returnTo), never shows the IPO.
+  const lastEp = (typeof lastEpisodeIndex==='function') ? lastEpisodeIndex() : (MAPS.length-1);
+  const isVillainMap = !!(MAPS[mapIndex] && MAPS[mapIndex].isVillain);
+  if(mapIndex < lastEp || isVillainMap){
     // infiltration map (Ep X, cfg.noCarryVets): no vets deployed here, so don't run the chooser and
     // don't overwrite the carryover — the roster waiting outside rejoins unchanged next quarter.
     const keepRoster = !!(G.cfg && G.cfg.noCarryVets);
     const vets = (!keepRoster && typeof eligibleVets==='function') ? eligibleVets(G) : [];
-    const cap  = (typeof vetCarryCountFor==='function') ? vetCarryCountFor(mapIndex+1) : 0;
+    // next index: skip appended villains, resume at returnTo after a boss, and honor a gated villain.
+    let nextIdx = (typeof villainNextLinear==='function') ? villainNextLinear(mapIndex) : Math.min(mapIndex+1, MAPS.length-1);
+    if(typeof villainGateBefore==='function'){ const g=villainGateBefore(nextIdx); if(g>=0) nextIdx=g; }
+    const cap  = (typeof vetCarryCountFor==='function') ? vetCarryCountFor(nextIdx) : 0;
+    // boss-aware headline (killed vs the ninja's escape), else the normal corporate-takeover screen
+    const vdef = (G.cfg && G.cfg.villain && typeof VILLAINS!=='undefined') ? VILLAINS[(Array.isArray(G.cfg.villain)?G.cfg.villain[0]:G.cfg.villain).id] : null;
+    let head;
+    if(vdef && G._fledBoss) head=`<div class="big">🌫️</div><h1>IT GOT AWAY</h1><h2>${vdef.name} slipped the net — but you held the line</h2>`;
+    else if(vdef)          head=`<div class="big">⚔️</div><h1>BOSS DOWN</h1><h2>${vdef.name} is scrap</h2>`;
+    else                   head=`<div class="big">📉</div><h1>ACQUIHIRED</h1><h2>${beaten} has pivoted to bankruptcy</h2>`;
     es.className='overlay win'; es.style.display='flex';
-    es.innerHTML=`<div class="big">📉</div><h1>ACQUIHIRED</h1>
-      <h2>${beaten} has pivoted to bankruptcy</h2>
+    es.innerHTML=`${head}
       <p>Their assets are yours, their founders are "exploring new opportunities," and TechCrunch loves you.<br>
       Funding raised this quarter: <b>💰 ${teamGoldCollected(G)|0}</b></p>
       ${vets.length? `<div class="carry-head">Who deploys to the next quarter? <span class="carry-count" id="carry-count"></span></div>
@@ -1143,7 +1280,7 @@ function onVictory(){
       <button class="btn" id="nextBtn">▶ Next Quarter</button>`;
     const proceed=(chosen)=>{ es.style.display='none'; if(!keepRoster) setCarryover(chosen);
       if(typeof captureHeroes==='function') captureHeroes(G);   // heroes auto-carry (not chooser-driven) until they die — incl. freed Biba
-      mapIndex++; showCrawl(mapIndex, ()=>loadMap(mapIndex)); };
+      G._fledBoss=false; mapIndex=nextIdx; showCrawl(mapIndex, ()=>loadMap(mapIndex)); };
     if(vets.length){ buildCarryChooser(document.getElementById('carry-list'), document.getElementById('carry-count'), vets, cap, document.getElementById('nextBtn'), proceed); }
     else { document.getElementById('nextBtn').onclick=()=>proceed([]); }
   } else {

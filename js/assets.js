@@ -12,6 +12,9 @@ const RESOURCE_CRYSTAL = ASSET_BASE + 'resource/crystal.png'; // Funding crystal
 function buildingSheet(name, faction){ return ASSET_BASE + 'buildings/' + name + '_' + faction + '.png'; }
 // unit sheet: type worker|soldier|... , action walk|mine|attack|heal , enemy bool
 function unitSheet(type, action, enemy){ return ASSET_BASE + 'units/' + type + '/' + action + (enemy ? '_enemy' : '') + '.png'; }
+// faction-keyed variant: player → no suffix, enemy → _enemy, ao → _ao (A&O alien recolor;
+// see _dev/gen/recolor_ao.py). Keeps unitSheet's boolean signature intact for existing callers.
+function unitSheetFac(type, action, faction){ return ASSET_BASE + 'units/' + type + '/' + action + (faction && faction!=='player' ? '_'+faction : '') + '.png'; }
 
 /* ---- Voice audio (locally TTS-generated; see _dev/gen/ + js/voice.js) ----
    Optional like every other asset: VOICE plays a clip if present and silently no-ops if missing.
@@ -23,6 +26,7 @@ function barkPath(speakerKey, idx){ return VOICE_BASE + 'barks/' + speakerKey + 
 function lorePath(voice, idx){      return VOICE_BASE + 'lore/'  + voice      + '_' + String(idx).padStart(3,'0') + '.mp3'; }
 function crawlPath(mapIdx){         return VOICE_BASE + 'crawl/ep_' + String(mapIdx).padStart(2,'0') + '.mp3'; }
 function scenePath(id){             return VOICE_BASE + 'scene/' + id + '.mp3'; }   // scripted-cutscene lines (e.g. Nino's Ep VII flash monologue), keyed by an explicit line id
+function tutorialPath(id){          return VOICE_BASE + 'tutorial/' + id + '.mp3'; } // Quarter I tutorial coach lines (Rod-clone narrator), keyed by step/contextual id
 const MUSIC_MAIN = MUSIC_BASE + 'cyberpunk-rts-theme-main.mp3';
 const MUSIC_MENU_LOOP = MUSIC_BASE + 'cyberpunk-rts-theme-menu-loop.mp3';
 const MUSIC_FLASH = MUSIC_BASE + 'gorillaz-the-sad-god.mp3';   // Episode VII "the flash" cinematic cue (bomb drop → hub)
@@ -114,7 +118,9 @@ function loadBuildingStrip(type, faction){
   return a;
 }
 const BUILDING_ANIM = {};
-for(const t of BUILDING_TYPES) BUILDING_ANIM[t] = { player:loadBuildingStrip(t,'player'), enemy:loadBuildingStrip(t,'enemy') };
+// 'ao' = A&O alien faction (black + toxic-green recolor; optional, falls back to the keyed
+// faction set when the _ao strip is absent — see buildingSprite + _dev/gen/recolor_ao.py).
+for(const t of BUILDING_TYPES) BUILDING_ANIM[t] = { player:loadBuildingStrip(t,'player'), enemy:loadBuildingStrip(t,'enemy'), ao:loadBuildingStrip(t,'ao') };
 /* ---- Visual faction ----
    Gameplay still treats owner==='player' as the human side everywhere; this
    only flips APPEARANCE. With PLAYER_IS_RED the human renders in red art/colors
@@ -125,9 +131,12 @@ function isRedSide(owner){ const human=owner==='player'; return PLAYER_IS_RED ? 
 function factionKey(owner){ return isRedSide(owner) ? 'enemy' : 'player'; }
 
 function loadImg(src){ const i=new Image(); i.src=src; return i; }
-// returns {img, fw, fh, frames} for an entity's building strip (faction-keyed), or null
-function buildingSprite(type,owner){
-  const e=BUILDING_ANIM[type]; const a=e&&e[factionKey(owner)];
+// returns {img, fw, fh, frames} for an entity's building strip (faction-keyed), or null.
+// faction overrides the owner-derived set (e.g. 'ao' for A&O enemies) but gracefully falls
+// back to the factionKey(owner) set when that strip is missing/not-ready.
+function buildingSprite(type,owner,faction){
+  const e=BUILDING_ANIM[type]; if(!e) return null;
+  const a=(faction && e[faction] && e[faction].ready) ? e[faction] : e[factionKey(owner)];
   return (a&&a.ready) ? { img:a.img, fw:a.fw, fh:a.fh, frames:(BUILDING_FRAME_COUNT[type]||BUILDING_FRAMES) } : null;
 }
 
@@ -151,8 +160,10 @@ function loadWalk(src, fw, fh, frames){
   a.img.onerror=()=>{ a.ready=false; }; a.img.src=src;
   return a;
 }
-// a faction pair of auto-derived 10-frame strips for a unit's walk/action sheet
-function walkPair(type, act){ return { player:loadWalk(unitSheet(type,act,false)), enemy:loadWalk(unitSheet(type,act,true)) }; }
+// a faction set of auto-derived 10-frame strips for a unit's walk/action sheet. 'ao' is the
+// optional A&O alien recolor (black + toxic green); absent _ao files just stay !ready and the
+// lookups fall back to the owner-keyed set (see unitWalk/actionAnim + _dev/gen/recolor_ao.py).
+function walkPair(type, act){ return { player:loadWalk(unitSheet(type,act,false)), enemy:loadWalk(unitSheet(type,act,true)), ao:loadWalk(unitSheetFac(type,act,'ao')) }; }
 // per-type walk sets keyed by owner (player cyan / enemy red). Missing/!ready →
 // null → procedural vector fallback (shown only until the art loads).
 const UNIT_WALK = {
@@ -173,7 +184,9 @@ const UNIT_SPRITE_H = { worker:46, soldier:68, ranger:62, recruiter:54, hustler:
 // biba:60.6 (not 54): her walk & heal strips share a 341px frame height (see slice_biba.py STRIP_CANVAS_H);
 // the engine maps frame-height -> draw-height, so 54*341/304 keeps her on-screen body the size it was
 // when the walk strip was 304px tall, while killing the size pop when she switches to the heal anim.
-function unitWalk(type,owner){ const e=UNIT_WALK[type]; const a=e&&e[factionKey(owner)]; return (a&&a.ready)?a:null; }
+// faction overrides the owner-derived set ('ao' for A&O enemies), else falls back to it.
+function unitWalk(type,owner,faction){ const e=UNIT_WALK[type]; if(!e) return null;
+  const a=(faction && e[faction] && e[faction].ready) ? e[faction] : e[factionKey(owner)]; return (a&&a.ready)?a:null; }
 // Drawn-sprite world metrics — shared by the selection ring AND click hit-testing so
 // they track the (now big) VISIBLE sprite, not the small collision radius r. The sprite
 // is blitted from -0.7*h (top) to +0.3*h (feet) around the unit's (x,y) (see blitFrame),
@@ -183,7 +196,7 @@ function unitWalk(type,owner){ const e=UNIT_WALK[type]; const a=e&&e[factionKey(
 // so a hero's drawn height tracks its base unit (Nino → lobbyist) before the hero bump.
 const HERO_SCALE = 1.15;
 function unitDrawH(u){ const base = (UNIT_SPRITE_H[u.spriteType] || UNIT_SPRITE_H[u.type] || u.r*2);
-  return base * (u.hero ? HERO_SCALE : 1); }
+  return base * (u.hero ? HERO_SCALE : 1) * (u.bossScale || 1); }   // villains draw 2×–5× bigger (HUD/ring/glow are vh-relative → all scale together)
 function unitHitBox(u){ const h=unitDrawH(u), alt=u.air?16:0, hw=h*0.34;
   return { cx:u.x, hw, top:u.y-alt-h*0.7, bot:u.y-alt+h*0.3, footY:u.y-alt+h*0.3 }; }
 
@@ -197,7 +210,8 @@ const UNIT_ACTION = {
   bomber:{ attack:walkPair('bomber','attack') },       nino:{ attack:walkPair('nino','attack') },
   biba:{ heal:walkPair('biba','heal') },               // hero Recruiter — custom heal animation
 };
-function actionAnim(type,action,owner){ const t=UNIT_ACTION[type]; const a=t&&t[action]; const x=a&&a[factionKey(owner)]; return (x&&x.ready)?x:null; }
+function actionAnim(type,action,owner,faction){ const t=UNIT_ACTION[type]; const a=t&&t[action]; if(!a) return null;
+  const x=(faction && a[faction] && a[faction].ready) ? a[faction] : a[factionKey(owner)]; return (x&&x.ready)?x:null; }
 // blit one frame of an animation for a unit, mirrored on facing, foot-anchored.
 // Returns the sprite height drawn.
 function blitFrame(u, px, py, anim, S, fi){

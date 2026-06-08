@@ -102,14 +102,18 @@ for (let i = 0; i < MAPS.length; i++) {
 
   /* sequence: Roman numeral in name + episode label must match array position.
      Grab the maximal leading run of Roman-numeral letters and compare exactly — robust to the
-     "—"/" "/"-" that follows, and avoids word-boundary edge cases. */
-  if (typeof m.name === 'string') {
-    const lead = (m.name.trim().match(/^[IVXLCDM]+/) || [null])[0];
-    if (lead !== roman)
-      err(i, `name "${m.name}" should start with Roman numeral "${roman}" (array position ${i})`);
+     "—"/" "/"-" that follows, and avoids word-boundary edge cases.
+     VILLAIN maps (isVillain) are APPENDED past the linear campaign with non-numeric display labels
+     ("Boss 7.5"/"EPISODE 7.5"), so they are exempt from the index↔Roman-numeral sequencing check. */
+  if (!m.isVillain) {
+    if (typeof m.name === 'string') {
+      const lead = (m.name.trim().match(/^[IVXLCDM]+/) || [null])[0];
+      if (lead !== roman)
+        err(i, `name "${m.name}" should start with Roman numeral "${roman}" (array position ${i})`);
+    }
+    if (m.crawl && typeof m.crawl.episode === 'string' && m.crawl.episode.trim() !== `EPISODE ${roman}`)
+      err(i, `crawl.episode "${m.crawl.episode}" should be "EPISODE ${roman}"`);
   }
-  if (m.crawl && typeof m.crawl.episode === 'string' && m.crawl.episode.trim() !== `EPISODE ${roman}`)
-    err(i, `crawl.episode "${m.crawl.episode}" should be "EPISODE ${roman}"`);
 
   /* unique seed */
   if (Number.isFinite(m.seed)) {
@@ -132,7 +136,9 @@ for (let i = 0; i < MAPS.length; i++) {
   if (Number.isFinite(W) && Number.isFinite(H)) {
     if (!m.player) err(i, 'missing `player` start'); else checkPt('player', m.player);
     const bases = Array.isArray(m.enemies) ? m.enemies : (m.enemy ? [m.enemy] : []);
-    if (!bases.length) err(i, 'no enemy bases (need `enemies:[...]` or `enemy:{...}`)');
+    // VILLAIN arenas have NO enemy bases by design — the boss is the encounter (cfg.villain → villains.js)
+    if (!bases.length && !m.isVillain) err(i, 'no enemy bases (need `enemies:[...]` or `enemy:{...}`)');
+    else if (m.isVillain && !m.villain) err(i, 'villain map needs a `villain:{ id, x, y }` block');
     checkList('enemies', bases);
     if (!Array.isArray(m.goldNodes) || !m.goldNodes.length) err(i, 'no `goldNodes`');
     else { checkList('goldNodes', m.goldNodes); m.goldNodes.forEach((g, k) => { if (!Number.isFinite(g.amt)) err(i, `goldNodes[${k}] missing numeric \`amt\``); }); }
@@ -151,7 +157,7 @@ for (let i = 0; i < MAPS.length; i++) {
     const n = bases.length;
     const obj = (m.objective || '').toLowerCase();
     const word = NUM_WORDS[n];
-    if (typeof m.objective === 'string' && !(obj.includes(String(n)) || (word && obj.includes(word))))
+    if (!m.isVillain && typeof m.objective === 'string' && !(obj.includes(String(n)) || (word && obj.includes(word))))
       warn(i, `objective does not mention the enemy-base count (${n}/"${word}") — verify it matches the ${n} placed bases`);
   }
 }

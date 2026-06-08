@@ -5,6 +5,7 @@ function update(state, dt){
   // Training Grounds clock — advances in BOTH the HUB and missions (active play only), so a
   // mentorship completes whether the player idles in the H.U.B. or is off fighting elsewhere.
   if(typeof updateTrainingSessions==='function') updateTrainingSessions(dt);
+  if(typeof updateRebornProduction==='function') updateRebornProduction(dt);   // The Wake clock — charges in HUB & missions
   if(typeof updateSprint==='function') updateSprint(state, dt);   // decay the tap window / ramp accel
   recomputeSupply(state);
   if(state.extractReady && typeof updateExtraction==='function') updateExtraction(state, dt);
@@ -49,6 +50,7 @@ function update(state, dt){
     updateUnit(state,u,dt);
     vetRegen(u,state,dt);   // out-of-combat self-heal for high-level veterans
     if(typeof updateMadosis==='function') updateMadosis(state,u,dt);   // sanity: episode onset + escalation
+    if(typeof updateVillain==='function' && u.villain) updateVillain(state,u,dt);   // boss: phases / abilities / flee (authoritative path only)
   }
   // separation (avoid overlap)
   separation(state,dt);
@@ -79,6 +81,9 @@ function update(state, dt){
 
   // ---- in-world unit dialog boxes: age out ~8s speech bubbles (pure visual) ----
   if(typeof updateDialogs==='function') updateDialogs(state, dt);
+
+  // ---- Quarter I guided tutorial: poll live state, advance steps (purely local/cosmetic, solo) ----
+  if(typeof TUTORIAL!=='undefined') TUTORIAL.update(state, dt);
 
   // ---- cleanup dead ----
   let changed=false;
@@ -155,6 +160,9 @@ function checkWinLose(state){
   if(state.over) return;
   if(state.hub) return;
   if(state.extractReady) return;
+  // BOSS MAPS: the named villain's fate decides the outcome and takes precedence over the normal
+  // "no enemy buildings = win" rule (a boss arena may have NO enemy buildings → would insta-win).
+  if(state.cfg && state.cfg.villain && typeof villainCheckWinLose==='function'){ if(villainCheckWinLose(state)) return; }
   const enemyBuildings = state.entities.some(e=>e.owner==='enemy'&&e.kind==='building'&&!e.dead);
   const playerHas = state.entities.some(e=>e.owner==='player'&&!e.dead&&(e.kind==='building'||e.kind==='unit'));
   const playerHq = state.entities.some(e=>e.owner==='player'&&e.type==='hq'&&!e.dead);

@@ -209,9 +209,36 @@ function recordFallen(u){
   if(u.id!=null){ if(_fallenIds.has(u.id)) return; _fallenIds.add(u.id); }   // dedup across rollback re-simulations (the dead unit leaves G.entities, so the guard can't live on it)
   const d = buildDossier(u);
   fallenVets.push({ name:d.full, type:u.type, lvl:u.stars||0, dream:d.dream, home:d.home,
-                    map:(typeof G!=='undefined'&&G&&G.cfg)?G.cfg.name:'', dreamDone:!!u.dreamDone });
+                    map:(typeof G!=='undefined'&&G&&G.cfg)?G.cfg.name:'', dreamDone:!!u.dreamDone,
+                    // ---- resurrection identity for The Wake (append-only; legacy fallen lack these) ----
+                    fid: fallenMintId(u),
+                    lore: u.lore ? { seed:u.lore.seed, v:u.lore.v, events:(u.lore.events||[]).slice(), fixed:u.lore.fixed||null } : null,
+                    xp: u.xp||0, stars: u.stars||0, hero:!!u.hero, heroId:u.heroId||null,
+                    spriteType: u.spriteType||null, sanityThreshold: u.sanityThreshold||0,
+                    reborn:false });   // f.reborn === "this fallen has been resurrected" (distinct from a unit's u.reborn)
   if(typeof eventToast==='function')
     eventToast(`🕯 <b>${d.full}</b> has fallen — ${u.dreamDone?'their dream fulfilled':'dream unfulfilled: '+_loCap(d.dream)}.`, 10000);
+}
+// ---- The Wake: stable identity + dossier reconstruction for fallen records ----
+// A stable id used to dedup resurrection across save/load + rollback. Prefer the frozen lore seed
+// (survives everything), then heroId, then a synthesized id. Twin of fallenStableId for existing records.
+function fallenMintId(u){
+  if(u.lore && u.lore.seed!=null) return 'f_lore:'+u.lore.seed;
+  if(u.heroId) return 'f_hero:'+u.heroId;
+  return 'f_u'+(u.id||0);
+}
+function fallenStableId(f){
+  if(!f) return '';
+  if(f.fid) return f.fid;                                   // enriched record
+  if(f.lore && f.lore.seed!=null) return 'f_lore:'+f.lore.seed;
+  if(f.heroId) return 'f_hero:'+f.heroId;
+  return 'f_'+(f.name||'')+'|'+(f.type||'')+'|'+(f.lvl||0); // legacy fallback (old saves)
+}
+// Build a buildDossier-compatible lore object from a (possibly legacy) fallen record. Enriched records
+// carry their real seed/events; legacy ones fall back to a name-only fixed (hero-style) dossier.
+function fallenDossierSnap(f){
+  if(f && f.lore && (f.lore.seed!=null || f.lore.fixed)) return f.lore;
+  return { fixed:{ name:(f&&f.name)||'A veteran' }, events:[], seed:null };
 }
 
 /* ---- rendering (returns HTML strings; ui.js owns showing the overlays) ---- */

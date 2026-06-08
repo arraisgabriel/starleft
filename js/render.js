@@ -329,6 +329,9 @@ function render(state){
   // ---- in-world unit dialog boxes — drawn last in world space, above every sprite ----
   if(typeof drawDialogs==='function') drawDialogs(state);
 
+  // ---- tutorial focus ring (pulsing target over a goldmine / enemy / HQ) — world space ----
+  if(typeof TUTORIAL!=='undefined') TUTORIAL.drawWorld(state);
+
   ctx.restore();   // leave world space
 
   // ---- phase 3: screen-space overlays (CSS px, dpr-scaled, NOT world) ----
@@ -837,6 +840,15 @@ function buildingNeonFrame(spriteId, fi){
   const fr=spr && spr.frames && spr.frames[fi];
   return fr && fr.glows && fr.glows.length ? fr.glows : null;
 }
+// Per-frame hero glow anchors (HERO_NEON_MAPS, hero_neon_maps.js) — twin of buildingNeonFrame
+// with an extra `action` level since units have per-action strips (walk/attack/heal).
+function heroNeonFrame(spriteType, action, fi){
+  if(typeof HERO_NEON_MAPS==='undefined' || !HERO_NEON_MAPS || !HERO_NEON_MAPS.sprites) return null;
+  const spr=HERO_NEON_MAPS.sprites[spriteType];
+  const a=spr && spr[action || 'walk'];
+  const fr=a && a.frames && a.frames[((fi||0)%a.frames.length+a.frames.length)%a.frames.length];
+  return fr && fr.glows && fr.glows.length ? fr.glows : null;
+}
 function drawHubBuildingSpriteVisual(state,e,ox,oy){
   const v=e.hubSpriteVisual, spr=v&&buildingSpriteVisual(v.type, v.faction, e.owner);
   if(!v || !spr) return e.ty*TILE+oy;
@@ -852,11 +864,56 @@ function drawHubBuildingSpriteVisual(state,e,ox,oy){
   return dy;
 }
 
+// True when this entity belongs to the A&O alien faction on the ACTIVE map. Render-only signal
+// derived from owner + the loaded map cfg (state.cfg.enemyFaction) — NOT an entity field, so
+// save.js and net/sync.js are untouched and solo/host/client all derive it locally from their cfg.
+function aoSide(state, owner){ return owner==='enemy' && !!(state && state.cfg && state.cfg.enemyFaction==='ao'); }
+
+// The Wake's lightning conduit (render-only): a faint A&O-green corona + periodic bolts striking the
+// spire top. Deterministic from state.time + e.id, additive, reduced-motion aware. Mirrors the A&O
+// emissive pattern; allocates only short-lived gradients per frame (no persistent state).
+function drawHubWakeFX(state, e, ox, oy, topY){
+  if(typeof megaReducedMotion==='function' && megaReducedMotion()) return;
+  const t=state.time||0, id=(e.id||0);
+  const px=e.tx*TILE+ox, w=e.w*TILE;
+  const cx=px+w/2;                              // spire centre x
+  const baseY=(e.ty+e.h)*TILE+oy;              // ground line
+  const coreY=topY+(baseY-topY)*0.35;          // glow anchor on the spire body
+  ctx.save(); ctx.globalCompositeOperation='lighter';
+  // faint green A&O corona (subtle accent)
+  const pulse=0.5+0.5*Math.sin(t*1.3 + id);
+  const cor=ctx.createRadialGradient(cx, coreY, 4, cx, coreY, w*1.15);
+  cor.addColorStop(0,'rgba(62,230,76,'+(0.05+0.04*pulse).toFixed(3)+')');
+  cor.addColorStop(1,'rgba(40,150,60,0)');
+  ctx.fillStyle=cor; ctx.beginPath(); ctx.arc(cx, coreY, w*1.15, 0, 6.283); ctx.fill();
+  // periodic lightning to the spire top — strikes more often while a write is charging
+  const charging=(typeof CAMPAIGN!=='undefined' && CAMPAIGN.reborn && (CAMPAIGN.reborn.sessions||[]).length>0);
+  const period=charging?2.2:5.5, dur=0.34, ph=(t + id*0.7) % period;
+  if(ph < dur){
+    const k=1-ph/dur, flick=0.45+0.55*Math.abs(Math.sin(t*43)), a=k*flick;
+    const sky=Math.max(0, topY - w*3.4);
+    const strike=Math.floor((t + id*0.7)/period);
+    const rnd=(n)=>{ const s=Math.sin(id*12.9898 + strike*78.233 + n*37.719)*43758.5453; return s-Math.floor(s); };
+    const seg=7, dyStep=(topY-sky)/seg;
+    ctx.lineCap='round';
+    ctx.beginPath(); ctx.moveTo(cx, sky);
+    for(let i=1;i<seg;i++) ctx.lineTo(cx + (rnd(i)-0.5)*w*0.85*(i/seg), sky+dyStep*i);
+    ctx.lineTo(cx, topY);
+    ctx.lineWidth=5.5; ctx.strokeStyle='rgba(80,230,120,'+(0.28*a).toFixed(3)+')'; ctx.stroke();   // green outer glow (A&O)
+    ctx.lineWidth=2.0; ctx.strokeStyle='rgba(195,245,255,'+(0.9*a).toFixed(3)+')'; ctx.stroke();   // cyan-white core
+    const fl=ctx.createRadialGradient(cx, topY, 1, cx, topY, w*1.4*flick);
+    fl.addColorStop(0,'rgba(210,255,235,'+(0.5*a).toFixed(3)+')');
+    fl.addColorStop(1,'rgba(60,220,90,0)');
+    ctx.fillStyle=fl; ctx.beginPath(); ctx.arc(cx, topY, w*1.4*flick, 0, 6.283); ctx.fill();
+  }
+  ctx.restore();
+}
 function drawBuilding(state,e,ox,oy,dim){
   const d=DEF[e.type];
   const px=e.tx*TILE+ox, py=e.ty*TILE+oy;
   const w=e.w*TILE, h=e.h*TILE;
-  const spr=buildingSprite(e.type, e.owner);
+  const ao=aoSide(state, e.owner);
+  const spr=buildingSprite(e.type, e.owner, ao?'ao':null);
 
   ctx.save();
   if(dim) ctx.globalAlpha=0.55;
@@ -866,6 +923,7 @@ function drawBuilding(state,e,ox,oy,dim){
   if(e.hubSpriteVisual){
     const topY=drawHubBuildingSpriteVisual(state,e,ox,oy);
     ctx.restore();
+    if(e.hubPoi && e.hubPoi.kind==='wake') drawHubWakeFX(state,e,ox,oy,topY);
     if(e.hp<e.maxHp || e.selected) barAt(px+6, topY-7, w-12, 5, e.hp/e.maxHp, hpColor(e.hp/e.maxHp));
     return;
   }
@@ -898,6 +956,27 @@ function drawBuilding(state,e,ox,oy,dim){
     ctx.fillStyle='rgba(255,255,255,.85)'; ctx.textAlign='center'; ctx.textBaseline='middle';
     ctx.font=(w*0.42|0)+'px '+GAME_FONT; ctx.fillText(d.icon||'🏢', px+w/2, py+h/2+1);
     ctx.fillStyle = isRedSide(e.owner)?'#ff8a8a':(e.ctrl==='p2'?'#ffb84d':'#7fd6ff'); ctx.fillRect(px+w/2-3, py+2, 6, 9);
+  }
+  // ---- A&O alien emissive (render-only): toxic-green pulse over the structure + drifting spores.
+  // Owner-gated (captured A&O buildings flip to 'player' → ao false → FX stops), fog-dimmed via the
+  // outer save's globalAlpha, off under reduced-motion. No pool/alloc — deterministic from time+e.id. ----
+  if(ao && !e.constructing && !(typeof megaReducedMotion==='function' && megaReducedMotion())){
+    const t=state.time||0, ph=((e.id||0)*1.7)%6.283, pulse=0.5+0.5*Math.sin(t*1.4+ph);
+    const cx=px+w/2, cyB=topY+(py+h-topY)*0.5, groundY=py+h;
+    ctx.save(); ctx.globalCompositeOperation='lighter';
+    const gr=w*(0.6+0.05*pulse);
+    const eg=ctx.createRadialGradient(cx, cyB, 2, cx, cyB, gr);
+    eg.addColorStop(0,'rgba(62,230,76,'+(0.10+0.05*pulse).toFixed(3)+')');
+    eg.addColorStop(1,'rgba(40,150,60,0)');
+    ctx.fillStyle=eg; ctx.beginPath(); ctx.arc(cx, cyB, gr, 0, 6.28); ctx.fill();
+    for(let i=0;i<5;i++){                                           // a few slow-rising spore motes
+      const s=(t*0.05 + i*0.21 + (e.id||0)*0.13) % 1;
+      const sx=cx + Math.sin(i*2.3 + (e.id||0) + t*0.4)*w*0.34;
+      const sy=groundY - s*(h*1.15);
+      ctx.fillStyle='rgba(120,230,150,'+((0.30*(1-s))*(0.6+0.4*pulse)).toFixed(3)+')';
+      ctx.beginPath(); ctx.arc(sx, sy, 1.5+1.1*(1-s), 0, 6.28); ctx.fill();
+    }
+    ctx.restore();
   }
   // derelict: desaturating grey wash + a pulsing reclaim beacon over the roof
   if(e.abandoned){
@@ -1028,15 +1107,109 @@ function drawHubTrainees(state, ox, oy){
 // bookkeeping, or per-unit HUD (hp bar / rank stars / control-group badge / co-op pip), all of which are
 // illegible at this zoom yet cost real work ×(units on screen). Near-min-zoom-only (PERF.opts.spriteLod).
 const SPRITE_LOD_ZOOM = 0.45;
+
+// ---- Hero glow FX (render-only) ----------------------------------------------------------------
+// Discreet-but-noticeable HUB-parity glow for named heroes, reusing the building neon renderer
+// (drawMegaNeonLayer) verbatim. Two layers per hero: a code-synth body AURA (purple Nino / white
+// Biba — no pixel source, so it's authored here, like the A&O ground aura), and a per-frame
+// anchored EMITTER (Nino's gold gun-tip / Biba's purple healing mechanism) from HERO_NEON_MAPS.
+// The emitter brightens while the matching action plays. Render-only: keys on synced u.spriteType
+// + u.hero (NOT heroId, which isn't networked), reads only render scratch — never mutates sim.
+function heroAura(u){
+  return u.spriteType==='nino' ? { color:[168,90,238],  rx:0.34, ry:0.30, alpha:0.50 }   // purple
+       : u.spriteType==='biba' ? { color:[236,242,255], rx:0.34, ry:0.30, alpha:0.46 }   // white
+       : null;
+}
+function drawHeroGlowLayer(state, u, anim, px, py, S, layer){
+  if(!u.hero || !anim || typeof drawMegaNeonLayer!=='function') return;
+  const aura = heroAura(u);
+  const per  = heroNeonFrame(u.spriteType, (u._actState || 'walk'), u._heroFi);
+  if(!aura && !per) return;
+  // reconstruct the EXACT blitFrame box (assets.js): foot-anchored, mirrored by facing
+  const dh=S, dw=S*(anim.fw/anim.fh), dx=px-dw/2, dy=py-dh*0.7;
+  const facesLeft=!!(DEF[u.type] && DEF[u.type].facesLeft);
+  const flip=((u._face||1)<0) !== facesLeft;
+  const list=[];
+  // body aura — aura pass only (behind the sprite; excluded from the front 'core' pass so it
+  // never washes out the body)
+  if(aura && layer==='aura'){
+    list.push({ kind:'spot', x:0.5, y:0.46, rx:aura.rx, ry:aura.ry, rot:0,
+                color:aura.color, alpha:aura.alpha, phase:(u.id||0)*0.13, pulse:1, sparkle:0 });
+  }
+  // gun / healing-mechanism — per-frame anchored, in both passes (soft halo behind + bright core in front)
+  if(per){
+    let mul=1;   // brighten while the matching action plays
+    if(u._actState==='attack'){ const dt=state.time-(u._actStamp||0); mul = 1 + 1.1*Math.max(0, 1-Math.abs(dt-0.45)/0.45); }  // peaks on the strike
+    else if(u._actState==='heal'){ mul = 1.7 + 0.3*Math.sin((state.time||0)*7); }                                              // steady, gentle heal-loop throb
+    for(const g of per){
+      const gg=Object.assign({}, g);
+      if(flip) gg.x = 1 - gg.x;                                  // mirror normalized x like blitFrame's scale(-1,1)
+      gg.pulse = (g.pulse==null?1:g.pulse) * mul;                // drawMegaNeonLayer multiplies alpha*pulse
+      list.push(gg);
+    }
+  }
+  if(list.length) drawMegaNeonLayer(state, { seed:(u.id||0) }, list, dx, dy, dw, dh, layer);
+}
+// Villain (boss) glow — the hero-glow machinery at boss scale, with boss colors and a phase-2
+// "rage" tint. Body aura is code-synthesized (works with ZERO authored data); per-frame emitters
+// come from VILLAIN_NEON_MAPS once authored. Colors/phases derive from the global VILLAINS table
+// (present on every client), so the snapshot only carries villain/villainId/bossPhase/bossScale.
+function villainNeonFrame(neonId, action, fi){
+  if(typeof VILLAIN_NEON_MAPS==='undefined' || !VILLAIN_NEON_MAPS || !VILLAIN_NEON_MAPS.sprites) return null;
+  const spr=VILLAIN_NEON_MAPS.sprites[neonId];
+  const a=spr && spr[action || 'walk'];
+  const fr=a && a.frames && a.frames[((fi||0)%a.frames.length+a.frames.length)%a.frames.length];
+  return fr && fr.glows && fr.glows.length ? fr.glows : null;
+}
+function villainPhaseTint(u){
+  const def=(typeof VILLAINS!=='undefined') && VILLAINS[u.villainId];
+  if(!def || !def.phases || (u.bossPhase|0)<2) return null;
+  let tint=null; for(const ph of def.phases){ if(ph.tint) tint=ph.tint; }   // deepest reached tint
+  return tint;
+}
+function drawVillainGlow(state, u, anim, px, py, S, layer){
+  if(!u.villain || !anim || typeof drawMegaNeonLayer!=='function') return;
+  const def=(typeof VILLAINS!=='undefined') && VILLAINS[u.villainId];
+  const auraColor=(def && def.auraColor) || [120,220,255];
+  const tint=villainPhaseTint(u);                              // phase-2 rage color (e.g. red), else null
+  const boost=(u.bossPhase|0)>=2 ? 1.6 : 1.0;                  // brighter in the rage phase
+  const per=villainNeonFrame(u.neonId, (u._actState||'walk'), u._heroFi);
+  // reconstruct the EXACT blitFrame box (assets.js): foot-anchored, mirrored by facing
+  const dh=S, dw=S*(anim.fw/anim.fh), dx=px-dw/2, dy=py-dh*0.7;
+  const facesLeft=!!(DEF[u.type] && DEF[u.type].facesLeft);
+  const flip=((u._face||1)<0) !== facesLeft;
+  const list=[];
+  if(layer==='aura'){                                          // big soft body halo behind the sprite
+    list.push({ kind:'spot', x:0.5, y:0.46, rx:0.42, ry:0.36, rot:0,
+                color:tint||auraColor, alpha:0.55*boost, phase:(u.id||0)*0.13, pulse:1, sparkle:0 });
+  } else if(!per){                                             // no authored emitters → a bright additive core so the boss still reads as glowing
+    list.push({ kind:'spot', x:0.5, y:0.44, rx:0.20, ry:0.18, rot:0,
+                color:tint||auraColor, alpha:0.40*boost, phase:(u.id||0)*0.13, pulse:1, sparkle:0 });
+  }
+  if(per){                                                     // authored per-frame emitters (both passes), brighten on strike/cast
+    let mul=boost;
+    if(u._actState==='attack'){ const dt=state.time-(u._actStamp||0); mul *= 1 + 1.1*Math.max(0, 1-Math.abs(dt-0.45)/0.45); }
+    if(u._abilCastT!=null){ const c=state.time-u._abilCastT; if(c<0.5) mul *= 1 + 1.4*(1-c/0.5); }
+    for(const g of per){
+      const gg=Object.assign({}, g);
+      if(flip) gg.x = 1 - gg.x;
+      if(tint) gg.color = tint;
+      gg.pulse = (g.pulse==null?1:g.pulse) * mul;
+      list.push(gg);
+    }
+  }
+  if(list.length) drawMegaNeonLayer(state, { seed:(u.id||0) }, list, dx, dy, dw, dh, layer);
+}
 function drawUnit(state,u,ox,oy){
   const px=u.x+ox, py=u.y+oy;
   const r=u.r;
   const alt = u.air?16:0;   // flyers are drawn raised
   const vh = unitDrawH(u);   // drawn sprite height (incl. hero 15% bump) — HUD/ring scale to this, not collision r
+  const fac = aoSide(state, u.owner) ? 'ao' : null;   // A&O alien sprite set, else owner-keyed (render-only)
 
   if(PERF.opts.spriteLod && (state.zoom||1) < SPRITE_LOD_ZOOM){
     const sType = u.spriteType || u.type;
-    const anim = unitWalk(sType, u.owner);
+    const anim = unitWalk(sType, u.owner, fac);
     if(u.selected){ ctx.strokeStyle='#8effb0'; ctx.lineWidth=2; ctx.beginPath(); ctx.ellipse(px, py-alt+vh*0.3, vh*0.34, vh*0.14, 0,0,6.28); ctx.stroke(); }
     if(anim){ blitFrame(u, px, py-alt, anim, vh, 0); }                    // light: static frame, no idle/action anim, no HUD
     else { ctx.fillStyle = isRedSide(u.owner)?'#c0392b':(u.ctrl==='p2'?'#c47a1f':'#3b7fd0'); ctx.fillRect(px-r*0.6, py-alt-r*0.6, r*1.2, r*1.2); }
@@ -1057,16 +1230,28 @@ function drawUnit(state,u,ox,oy){
   // selection ring — a ground ellipse under the sprite's FEET, scaled to the sprite (no shadow)
   if(u.selected){ const fy=py-alt+vh*0.3; ctx.strokeStyle='#8effb0'; ctx.lineWidth=2; ctx.beginPath(); ctx.ellipse(px,fy,vh*0.34,vh*0.14,0,0,6.28); ctx.stroke(); }
 
+  // A&O alien ground-aura (render-only): faint toxic-green additive halo under the feet, drawn
+  // beneath the sprite. Owner-gated (captured A&O → fac null → no aura), off under reduced-motion.
+  if(fac && !(typeof megaReducedMotion==='function' && megaReducedMotion())){
+    const fy=py-alt+vh*0.3, t=state.time||0, pulse=0.5+0.5*Math.sin(t*1.6+(u.id||0)*1.7), ar=vh*0.5;
+    ctx.save(); ctx.globalCompositeOperation='lighter';
+    const ag=ctx.createRadialGradient(px, fy, 1, px, fy, ar);
+    ag.addColorStop(0,'rgba(34,160,70,'+(0.15+0.08*pulse).toFixed(3)+')');
+    ag.addColorStop(1,'rgba(20,90,40,0)');
+    ctx.fillStyle=ag; ctx.beginPath(); ctx.ellipse(px, fy, ar, ar*0.42, 0, 0, 6.28); ctx.fill();
+    ctx.restore();
+  }
+
   const _red = isRedSide(u.owner);
   const _p2  = (u.owner==='player' && u.ctrl==='p2');   // co-op 2nd player → amber fallback shapes
   const team = _red ? '#c0392b' : (_p2 ? '#c47a1f' : '#3b7fd0');
   const teamL= _red ? '#e57368' : (_p2 ? '#ffb84d' : '#7fb7f0');
 
   const sType = u.spriteType || u.type;   // hero visual override (e.g. Nino → 'nino'); gameplay still uses u.type
-  const anim = unitWalk(sType, u.owner);
+  const anim = unitWalk(sType, u.owner, fac);
   if(anim){
     const S = vh;
-    const act = u._actState ? actionAnim(sType, u._actState, u.owner) : null;
+    const act = u._actState ? actionAnim(sType, u._actState, u.owner, fac) : null;
     let fi, useAnim, bScale=1, bShift=0;   // bScale/bShift: idle breathing (1/0 = none)
     if(act){
       useAnim = act; const n=act.frames.length;
@@ -1081,7 +1266,7 @@ function drawUnit(state,u,ox,oy){
         // LAYER 2 — occasional action fidget (settled, grounded units): replay the
         // unit's own action strip once as a gesture (no _actState → no combat/bullets).
         if(!moving && idleAmount>0){
-          const fa = fidgetAction(sType), a = fa ? actionAnim(sType, fa, u.owner) : null;
+          const fa = fidgetAction(sType), a = fa ? actionAnim(sType, fa, u.owner, fac) : null;
           if(a){
             const cyc = IDLE.fidgetMin + h01(u.id+1.3)*(IDLE.fidgetMax-IDLE.fidgetMin);
             const dur = IDLE.gestureMin + h01(u.id*1.7+2.1)*(IDLE.gestureMax-IDLE.gestureMin);
@@ -1102,8 +1287,20 @@ function drawUnit(state,u,ox,oy){
         if(u.air) bShift -= IDLE.hoverPx*Math.sin(state.time*IDLE.hoverHz + (u.id||0)*0.7);
       }
     }
+    u._heroFi = fi;   // frame index actually shown — so the per-frame hero glow looks up the right anchor
+    if(u.hero) drawHeroGlowLayer(state, u, useAnim, px, (py-alt)+bShift, S*bScale, 'aura');   // halo behind
+    else if(u.villain) drawVillainGlow(state, u, useAnim, px, (py-alt)+bShift, S*bScale, 'aura');
     const dh = blitFrame(u,px,(py-alt)+bShift,useAnim,S*bScale,fi);
+    if(u.hero) drawHeroGlowLayer(state, u, useAnim, px, (py-alt)+bShift, S*bScale, 'core');   // bright core in front
+    else if(u.villain) drawVillainGlow(state, u, useAnim, px, (py-alt)+bShift, S*bScale, 'core');
     if(u.type==='worker' && u.carrying>0){ ctx.fillStyle='#ffd86b'; ctx.beginPath(); ctx.arc(px,py-alt-dh*0.7-4,3,0,6.28); ctx.fill(); }
+  } else if(u.villain){
+    // defensive fallback — a villain whose bespoke sheet is missing still reads as a giant glowing mass
+    const def=(typeof VILLAINS!=='undefined') && VILLAINS[u.villainId], col=(def&&def.neonColor)||'#50e6ff';
+    const rr=vh*0.32; ctx.fillStyle='rgba(12,16,22,.92)'; ctx.beginPath(); ctx.arc(px,py-alt-rr,rr,0,6.28); ctx.fill();
+    ctx.strokeStyle=col; ctx.lineWidth=3; ctx.stroke();
+    drawVillainGlow(state, u, {fw:1,fh:1,frames:[0]}, px, py-alt, vh, 'aura');
+    drawVillainGlow(state, u, {fw:1,fh:1,frames:[0]}, px, py-alt, vh, 'core');
   } else if(u.type==='worker'){
     ctx.fillStyle=team; ctx.beginPath(); ctx.arc(px,py,r,0,6.28); ctx.fill();
     ctx.fillStyle=teamL; ctx.beginPath(); ctx.arc(px,py-2,r*0.5,0,6.28); ctx.fill();

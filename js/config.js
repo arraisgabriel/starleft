@@ -403,7 +403,7 @@ Weaponize your buzzwords, circle back, and disrupt MegaCorp into bankruptcy. The
   },
   {
     name:'VIII — The Down Round',
-    enemyName:'A&O',
+    enemyName:'A&O', enemyFaction:'ao',
     // A hard reset to scrappy: the empire is ash, so the economy starts near Episode I — you
     // really do rebuild from nothing. A&O is entrenched (one campus has an extra People Ops) but
     // this sits at the bottom of a NEW curve, so aggression is low and grace is generous.
@@ -441,7 +441,7 @@ Weaponize your buzzwords, circle back, and disrupt MegaCorp into bankruptcy. The
   },
   {
     name:'IX — The Proof of Concept',
-    enemyName:'A&O',
+    enemyName:'A&O', enemyFaction:'ao',
     // The company is regrowing on the back of the stolen blueprint: a step up from VIII — a real
     // war chest again, a People Ops on day one, three A&O research campuses to crack. Still mid-
     // curve, not finale-scale; this is the FIRST chapter of the long GRAAL arc, not its climax.
@@ -469,7 +469,7 @@ Weaponize your buzzwords, circle back, and disrupt MegaCorp into bankruptcy. The
   },
   {
     name:'X — The Acquihire',
-    enemyName:'A&O',
+    enemyName:'A&O', enemyFaction:'ao',
     // A rescue INFILTRATION: you bring NO economy and NO funding — only Nino and your carried career
     // veterans (their time to shine) muster at the entrance and punch down a long walled corridor of
     // standing guard squads (cfg.guards) to the cell at the map's heart. Free BIBA (a captive HERO,
@@ -537,7 +537,7 @@ Weaponize your buzzwords, circle back, and disrupt MegaCorp into bankruptcy. The
   },
   {
     name:'XI — The Launch',
-    enemyName:'A&O',
+    enemyName:'A&O', enemyFaction:'ao',
     // The pilgrimage to the altar. A normal economy map again (you build and assault, unlike the Ep X
     // infiltration) but the longest march yet: a guided central road walled by tech-server rock ranges
     // and coolant seas, down through six A&O campuses to the dark tower on a peninsula at the sea's
@@ -589,10 +589,10 @@ Weaponize your buzzwords, circle back, and disrupt MegaCorp into bankruptcy. The
       {x:48,y:134,amt:3500},{x:42,y:144,amt:2000},{x:54,y:144,amt:2000},    // the altar prize (peninsula)
     ],
   },
-  {name:'XII — The Continuity Farm',enemyName:'A&O',aggression:2.00,startGold:3600,startWorkers:12,startSoldiers:12,startBarracks:true,graceTime:118,waveTimer:112,crawl:{episode:'EPISODE XII',title:'THE CONTINUITY FARM',text:'You rebuilt after the flash, but the new company was never alive. It was a cap table wearing a grief mask.\n\nA&O now leases the dead into refrigerated prototype bodies, charging subscription fees for memories that used to belong to people. Their Continuity Farm hums under black ice and server heat, promising immortality with a cancellation clause.\n\nYour veterans carry names. Your memorial carries more. Crack the farm, steal the transfer lattice, and decide which ghost gets equity again....',summary:`You rebuilt after the flash, but the new company was never alive — just a cap table wearing a grief mask. A&O now leases the dead into refrigerated bodies and bills subscriptions for memories that used to belong to people. Crack the six campuses of its Continuity Farm, seize the transfer lattice, and decide which ghost gets equity again.`},objective:'A&O holds SIX continuity campuses — liquidate all six and seize the transfer lattice.',w:118,h:96,seed:12012,terrain:{biomes:['tech','ice'],temp:{axis:'diag',base:0.26,gradient:0.18,noise:0.14},freeze:0.24,seaFrac:0.14,mtnFrac:0.08,forest:0,beach:true},player:{x:8,y:88},enemies:[{x:106,y:8,defenders:7,extraBarracks:true},{x:106,y:84,defenders:7,extraBarracks:true},{x:58,y:10,defenders:6,extraBarracks:true},{x:62,y:84,defenders:6},{x:92,y:48,defenders:7,extraBarracks:true},{x:34,y:28,defenders:5}],goldNodes:[{x:6,y:90,amt:3600},{x:13,y:88,amt:3200},{x:9,y:80,amt:2800},{x:22,y:82,amt:2400},{x:55,y:52,amt:4200},{x:42,y:44,amt:3000},{x:76,y:42,amt:3000},{x:96,y:54,amt:2500},{x:110,y:12,amt:1900},{x:110,y:82,amt:1900},{x:58,y:6,amt:1900},{x:64,y:90,amt:1900}],lakes:[{x:56,y:48,r:7},{x:86,y:26,r:5},{x:30,y:66,r:4},{x:74,y:72,r:4}],rockClusters:[{x:48,y:25,n:18},{x:70,y:30,n:16},{x:88,y:62,n:18},{x:24,y:48,n:14},{x:60,y:68,n:16}],forests:[],thickets:[{x:38,y:34,w:22,h:14,density:0.72,mix:0.25,trail:'h'},{x:80,y:34,w:18,h:18,density:0.66,mix:0.15,trail:'v'}]},
+  {name:'XII — The Continuity Farm',enemyName:'A&O',enemyFaction:'ao',aggression:2.00,startGold:3600,startWorkers:12,startSoldiers:12,startBarracks:true,graceTime:118,waveTimer:112,crawl:{episode:'EPISODE XII',title:'THE CONTINUITY FARM',text:'You rebuilt after the flash, but the new company was never alive. It was a cap table wearing a grief mask.\n\nA&O now leases the dead into refrigerated prototype bodies, charging subscription fees for memories that used to belong to people. Their Continuity Farm hums under black ice and server heat, promising immortality with a cancellation clause.\n\nYour veterans carry names. Your memorial carries more. Crack the farm, steal the transfer lattice, and decide which ghost gets equity again....',summary:`You rebuilt after the flash, but the new company was never alive — just a cap table wearing a grief mask. A&O now leases the dead into refrigerated bodies and bills subscriptions for memories that used to belong to people. Crack the six campuses of its Continuity Farm, seize the transfer lattice, and decide which ghost gets equity again.`},objective:'A&O holds SIX continuity campuses — liquidate all six and seize the transfer lattice.',w:118,h:96,seed:12012,terrain:{biomes:['tech','ice'],temp:{axis:'diag',base:0.26,gradient:0.18,noise:0.14},freeze:0.24,seaFrac:0.14,mtnFrac:0.08,forest:0,beach:true},player:{x:8,y:88},enemies:[{x:106,y:8,defenders:7,extraBarracks:true},{x:106,y:84,defenders:7,extraBarracks:true},{x:58,y:10,defenders:6,extraBarracks:true},{x:62,y:84,defenders:6},{x:92,y:48,defenders:7,extraBarracks:true},{x:34,y:28,defenders:5}],goldNodes:[{x:6,y:90,amt:3600},{x:13,y:88,amt:3200},{x:9,y:80,amt:2800},{x:22,y:82,amt:2400},{x:55,y:52,amt:4200},{x:42,y:44,amt:3000},{x:76,y:42,amt:3000},{x:96,y:54,amt:2500},{x:110,y:12,amt:1900},{x:110,y:82,amt:1900},{x:58,y:6,amt:1900},{x:64,y:90,amt:1900}],lakes:[{x:56,y:48,r:7},{x:86,y:26,r:5},{x:30,y:66,r:4},{x:74,y:72,r:4}],rockClusters:[{x:48,y:25,n:18},{x:70,y:30,n:16},{x:88,y:62,n:18},{x:24,y:48,n:14},{x:60,y:68,n:16}],forests:[],thickets:[{x:38,y:34,w:22,h:14,density:0.72,mix:0.25,trail:'h'},{x:80,y:34,w:18,h:18,density:0.66,mix:0.15,trail:'v'}]},
   {
     name:'XIII — The Vesting Cliff',
-    enemyName:'A&O',
+    enemyName:'A&O', enemyFaction:'ao',
     // Penultimate Arc-2 chapter. You hold the transfer lattice from Ep XII but it is inert — bodies,
     // no souls: A&O kept the minds upstream as encrypted backups ("inventory"), files an injunction
     // calling your dead delinquent assets, and schedules a purge. You raid SEVEN backup-vault
@@ -631,5 +631,48 @@ Weaponize your buzzwords, circle back, and disrupt MegaCorp into bankruptcy. The
     rockClusters:[ {x:44,y:24,n:16},{x:72,y:30,n:16},{x:86,y:60,n:18},{x:26,y:40,n:14},{x:58,y:60,n:16},{x:100,y:44,n:14} ],
     forests:[],
     thickets:[ {x:30,y:30,w:20,h:14,density:0.70,mix:0.20,trail:'h'},{x:70,y:54,w:18,h:18,density:0.66,mix:0.18,trail:'v'} ],
+  },
+  /* ============================ VILLAINS (BIG BOSSES) ============================
+     APPENDED past the linear campaign so indices 0–12 (Episodes I–XIII) never shift — save compat,
+     the hard-coded mapIndex===6 / MAPS[7] hooks, and Madosis episode numbers all stay valid. Each is
+     a boss-duel ARENA: no enemy bases (enemies:[]), one oversized villain (cfg.villain → villains.js).
+     `isVillain` exempts them from index↔Roman validation and the linear Quarter numbering; `gateAfter`
+     /`returnTo` route the campaign (villains.js: villainGateBefore/villainNextLinear). The win
+     condition is "defeat the villain" (core.js checkWinLose → villainCheckWinLose). */
+  {
+    name:'THE CYAN NINJA',                       // isVillain → no Roman-numeral requirement
+    isVillain:true, gateAfter:6, returnTo:7, displayEp:'7.5',
+    enemyName:'THE CYAN NINJA',
+    aggression:1.0, startGold:600, startWorkers:4, startSoldiers:4, startBarracks:true,
+    graceTime:9999, waveTimer:9999,              // boss duel — no enemy waves
+    crawl:{ episode:'EPISODE 7.5', title:'THE CYAN NINJA',
+      text:'The blast still rings in the dark when a single blade of cyan light unfolds from the smoke. No company. No army. One operator, fast as rumor, paid to make sure nothing crawls out of the crater.\n\nThe cyan ninja answers to no name and moves like the network itself — there, then gone. Pin him on this scorched slab and put him down, or the next quarter never opens. He does not intend to die here. He intends to leave.',
+      summary:`Between the flash and the down round, a lone operator in cyan stands in your way — impossibly fast, paid to bury whatever survived. There is no campus to raze here, only the duel. Break him before he slips the net and vanishes into the sprawl.` },
+    w:30, h:24, seed:7050,
+    player:{ x:5, y:18 },
+    terrain:{ biomes:['tech'], seaFrac:0.04, mtnFrac:0.06, forest:0 },
+    objective:'Defeat THE CYAN NINJA — he is fast and will flee when wounded. Corner and finish him.',
+    enemies:[],                                  // boss duel — no enemy bases; the villain IS the encounter
+    villain:{ id:'cyan_ninja', x:24, y:6 },
+    lakes:[], rockClusters:[ {x:13,y:9,n:8}, {x:21,y:18,n:6} ], forests:[],
+    goldNodes:[ {x:6,y:20,amt:1400}, {x:4,y:15,amt:1200}, {x:9,y:21,amt:1200} ],
+  },
+  {
+    name:'REX',
+    isVillain:true, gateAfter:12, returnTo:12, displayEp:'15',
+    enemyName:'A&O', enemyFaction:'ao',          // → founder _ao green sheet + A&O ground treatment
+    aggression:1.0, startGold:1800, startWorkers:6, startSoldiers:8, startBarracks:true,
+    graceTime:9999, waveTimer:9999,
+    crawl:{ episode:'EPISODE 15', title:'REX',
+      text:'A&O stopped sending lawyers. It sent a building that walks.\n\nREX — five stories of black alloy and toxic light, the foreclosure made flesh. It does not negotiate the vesting cliff. It IS the cliff. Crack its core before it overclocks and goes feral, or be the next name on the wall. Bring everyone. Bring everything.',
+      summary:`A&O retires its accountants and fields REX — a five-story mech of black alloy and toxic-green light, the foreclosure made flesh. Survive the first assault, then the enrage when its core goes critical and it turns berserk. This is the biggest, longest fight of the war.` },
+    w:40, h:34, seed:15015,
+    player:{ x:6, y:28 },
+    terrain:{ biomes:['tech'], seaFrac:0.05, mtnFrac:0.06, forest:0 },
+    objective:"Destroy A&O's REX. It hits like a foreclosure and turns berserk below 40% — spread out and keep your healers alive.",
+    enemies:[],                                  // boss duel — no enemy bases; the villain IS the encounter
+    villain:{ id:'rex', x:30, y:9 },
+    lakes:[ {x:14,y:6,r:3} ], rockClusters:[ {x:12,y:12,n:10}, {x:26,y:26,n:10} ], forests:[],
+    goldNodes:[ {x:7,y:30,amt:2400}, {x:4,y:25,amt:2000}, {x:11,y:31,amt:2000}, {x:20,y:18,amt:2600} ],
   },
 ];

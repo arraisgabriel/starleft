@@ -23,7 +23,12 @@
 
 /* ---- helpers ---- */
 // current episode number (1-based). mapIndex is the loaded map (0-based); Episode N = MAPS[N-1].
-function madEpisodeNo(){ return (typeof mapIndex==='number' ? mapIndex : 0) + 1; }
+// Boss-duel arenas (appended villain maps) return 0 — a sentinel below every Madosis threshold — so
+// veteran breakdowns stay suppressed during the fight (the duel isn't also a sanity-management map).
+function madEpisodeNo(){
+  if(typeof mapIndex==='number' && typeof MAPS!=='undefined' && MAPS[mapIndex] && MAPS[mapIndex].isVillain) return 0;
+  return (typeof mapIndex==='number' ? mapIndex : 0) + 1;
+}
 
 // effective break threshold — a scarred (previously-broken) unit snaps sooner.
 function madThreshold(u){
@@ -129,7 +134,10 @@ function updateMadosis(state, u, dt){
     const thr = madThreshold(u);
     if(thr>0 && (u.madosis||0) >= thr && simRandom(state) < MADOSIS.onsetChancePerSec*dt){
       u.madEpisode = { phase:'tremor', t:0 };
-      if(!window._rbReplaying) madToast(u, '⚠ '+madName(u)+' is cracking — a Mad Dog Day begins.');
+      if(!window._rbReplaying){
+        madToast(u, '⚠ '+madName(u)+' is cracking — a Mad Dog Day begins.');
+        if(typeof TUTORIAL!=='undefined') TUTORIAL.fireContextual('madosis-live', state);   // one-time deferred coach hint
+      }
     }
     return;
   }

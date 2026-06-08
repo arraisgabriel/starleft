@@ -37,6 +37,7 @@ function scaleCfg(cfg){
   if(cfg.lostBases)    c.lostBases    = cfg.lostBases.map(pt);
   if(cfg.guards)       c.guards       = cfg.guards.map(pt);   // {x,y,n,type} — n/type preserved by pt
   if(cfg.captives)     c.captives     = cfg.captives.map(p=> Object.assign({}, p, { x:S(p.x), y:S(p.y) }, p.freeRadius!=null?{freeRadius:S(p.freeRadius)}:{}));
+  if(cfg.villain){ const vl=Array.isArray(cfg.villain)?cfg.villain:[cfg.villain]; c.villain = vl.map(v=>Object.assign({}, v, { x:S(v.x), y:S(v.y) })); }   // boss spawn points (villains.js)
   // thickets: scale only the geometry (x,y,w,h); density/mix/trail are unitless
   if(cfg.thickets)     c.thickets     = cfg.thickets.map(t=>Object.assign({},t,{x:S(t.x),y:S(t.y),w:S(t.w),h:S(t.h)}));
   return c;
@@ -202,7 +203,7 @@ function thicketReachOK(state, anchor, mustReach){
 
 function newMap(idx){
   const cfg = scaleCfg(MAPS[idx]);
-  const bases = cfg.enemies || [cfg.enemy];
+  const bases = (cfg.enemies || (cfg.enemy ? [cfg.enemy] : [])).filter(Boolean);   // villain arenas have no bases → empty, never [undefined]
   const rng = makeRng(cfg.seed*1000+7);
   const W=cfg.w, H=cfg.h;
   const tiles = new Array(W*H);
@@ -466,6 +467,9 @@ function newMap(idx){
       if(cap.sprite) u.spriteType=cap.sprite; }   // show her real sprite even while caged
     for(let y=-5;y<=6;y++)for(let x=-5;x<=6;x++){ if(inB(cap.x+x,cap.y+y)) state.explored[(cap.y+y)*W+(cap.x+x)]=1; }
   });
+
+  // ---- VILLAIN (big boss): a single oversized enemy unit on its own arena map (villains.js) ----
+  if(typeof spawnVillain==='function') spawnVillain(state);
 
   // ---- co-op: add extra human starts after enemy bases/units exist ----
   // P2 is placed from the actual spawned map state, so its start can be kept safe

@@ -74,6 +74,7 @@ window.NET = window.NET || {};
     }
     // G already came from newMap(mapIndex) on the client, so terrain is correct. Overlay dynamic state:
     const SCALAR = ['eco','players','time','waveCount','graceTime','nextId','runSalt','over',
+                    '_outcome','_fledBoss','_villainSpawned','_villainEscaped',   // boss-map outcome → client end screen
                     'enemySpawnTimer','enemyWaveTimer','enemyFortifyTimer','_recalibratedFor','_coopOrigins'];
     for(const k of SCALAR){ if(s[k]!==undefined) G[k]=s[k]; }
     if(s.campaign && typeof deserializeHubCampaign==='function') deserializeHubCampaign(s.campaign);
@@ -128,6 +129,10 @@ window.NET = window.NET || {};
       if(e.calmStage) o.cs=e.calmStage;
       if(e._rescue) o.rsc=1;
       if(e.madEpisode) o.ep = e.madEpisode.phase==='feral'?3 : e.madEpisode.phase==='defiance'?2 : 1;
+      // VILLAIN (boss): client renders the giant size, glow and boss HP bar purely from these — it
+      // never simulates the boss. villainId keys the static VILLAINS table (present on every client),
+      // so colors/abilities/phases derive locally; only these few fields cross the wire.
+      if(e.villain){ o.vil=1; o.vid=e.villainId; o.vn=e.villainName; o.bp=e.bossPhase||1; o.bsc=e.bossScale||1; o.nid=e.neonId; }
     } else if(e.kind==='echo'){
       o.fac=e.facet;   // MADOSIS rescue beacon (x/y/hp already in the base packet); facet drives its color
     } else if(e.kind==='building'){
@@ -180,6 +185,8 @@ window.NET = window.NET || {};
       e.madosis=o.mad||0; e.sanityThreshold=o.sth||0; e.scarred=!!o.scr;
       e.madDog=!!o.md; e.subdued=!!o.sub; e.calmStage=o.cs||0; e._rescue=!!o.rsc;
       e.madEpisode = o.ep ? { phase:(o.ep===3?'feral':o.ep===2?'defiance':'tremor'), t:0 } : null;
+      // VILLAIN (render-only on the client) — bossScale MUST land here or unitDrawH draws a tiny boss
+      e.villain=!!o.vil; e.villainId=o.vid||null; e.villainName=o.vn||null; e.bossPhase=o.bp||1; e.bossScale=o.bsc||1; e.neonId=o.nid||null;
     } else if(o.k==='echo'){
       e.x=o.x; e.y=o.y; e.facet=o.fac; e.r=12;       // MADOSIS rescue beacon (client render)
     } else if(o.k==='building'){

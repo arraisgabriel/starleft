@@ -1,0 +1,284 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>STARLEFT — Hero Glow Calibrator</title>
+<style>
+  :root{ --bg:#070a11; --panel:#0e131d; --line:#1d2738; --ink:#cfe0f5; --dim:#7f93b3; --gold:#ffc846; --purple:#aa5af0; }
+  *{ box-sizing:border-box; }
+  body{ margin:0; background:var(--bg); color:var(--ink); font:13px/1.5 ui-monospace,Menlo,Consolas,monospace; }
+  header{ padding:10px 16px; border-bottom:1px solid var(--line); display:flex; gap:18px; align-items:baseline; flex-wrap:wrap; }
+  header h1{ font-size:15px; margin:0; letter-spacing:.5px; }
+  header .hint{ color:var(--dim); font-size:11px; }
+  .wrap{ display:grid; grid-template-columns:minmax(420px,1fr) 360px; gap:16px; padding:16px; align-items:start; }
+  .panel{ background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:12px; }
+  canvas{ background:#04060b; border-radius:6px; display:block; image-rendering:pixelated; cursor:crosshair; width:100%; height:auto; }
+  .row{ display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin:8px 0; }
+  label{ color:var(--dim); font-size:11px; }
+  select,input[type=number]{ background:#0a0f18; color:var(--ink); border:1px solid var(--line); border-radius:5px; padding:4px 6px; font:inherit; }
+  input[type=range]{ flex:1; min-width:120px; }
+  button{ background:#142033; color:var(--ink); border:1px solid var(--line); border-radius:5px; padding:5px 10px; font:inherit; cursor:pointer; }
+  button:hover{ border-color:#39507a; }
+  button.on{ background:#1d3a5e; border-color:#3a78c0; }
+  .swatch{ width:18px; height:18px; border-radius:4px; border:1px solid #000; display:inline-block; vertical-align:middle; }
+  textarea{ width:100%; height:300px; background:#06090f; color:#bfe0c8; border:1px solid var(--line); border-radius:6px; padding:8px; font:11px/1.45 ui-monospace,monospace; resize:vertical; }
+  .val{ color:var(--ink); min-width:46px; display:inline-block; text-align:right; }
+  .frames{ display:flex; gap:3px; flex-wrap:wrap; margin-top:6px; }
+  .frames .fchip{ width:22px; height:22px; border:1px solid var(--line); border-radius:4px; font-size:10px; color:var(--dim); display:flex; align-items:center; justify-content:center; cursor:pointer; }
+  .frames .fchip.cur{ border-color:#3a78c0; color:var(--ink); background:#13243b; }
+  .frames .fchip.set{ color:var(--gold); }
+  .note{ color:var(--dim); font-size:11px; margin:6px 0; }
+  .copyMsg{ color:#7fe0a0; font-size:11px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>HERO GLOW CALIBRATOR</h1>
+  <span class="hint">Click the frame to anchor the emitter (gun / healing mechanism) for THAT frame. Scrub all frames, tune color/size, export <code>js/hero_neon_maps.js</code>.</span>
+</header>
+
+<div class="wrap">
+  <div class="panel">
+    <div class="row">
+      <label>Hero</label>
+      <select id="heroSel"></select>
+      <label>Action</label>
+      <select id="actSel"></select>
+      <label>Frame</label>
+      <input id="frameRange" type="range" min="0" max="9" value="0">
+      <span class="val" id="frameVal">0</span>
+      <button id="prevBtn">◀</button>
+      <button id="nextBtn">▶</button>
+      <button id="faceBtn">Facing: ▶ right</button>
+    </div>
+    <canvas id="frameCv" width="760" height="520"></canvas>
+    <div class="frames" id="frameStrip"></div>
+    <div class="note" id="loadNote"></div>
+  </div>
+
+  <div class="panel">
+    <div class="row"><label>Anchor</label> <span class="val" id="xyVal">x — , y —</span></div>
+    <div class="row">
+      <label>Color</label>
+      <span class="swatch" id="sw"></span>
+      <button data-col="255,200,70">gold</button>
+      <button data-col="170,82,240">purple</button>
+      <button data-col="236,242,255">white</button>
+      <button data-col="90,200,255">cyan</button>
+    </div>
+    <div class="row">
+      <label>R G B</label>
+      <input id="cr" type="number" min="0" max="255" style="width:62px">
+      <input id="cg" type="number" min="0" max="255" style="width:62px">
+      <input id="cb" type="number" min="0" max="255" style="width:62px">
+    </div>
+    <div class="row"><label>kind</label>
+      <select id="kindSel"><option>spot</option><option>bar</option><option>ring</option></select>
+      <label>sparkle</label><input id="sparkle" type="number" min="0" max="4" value="1" style="width:54px">
+    </div>
+    <div class="row"><label>rx</label><input id="rxRange" type="range" min="0.01" max="0.25" step="0.005" value="0.06"><span class="val" id="rxVal">0.060</span></div>
+    <div class="row"><label>ry</label><input id="ryRange" type="range" min="0.01" max="0.25" step="0.005" value="0.06"><span class="val" id="ryVal">0.060</span></div>
+    <div class="row"><label>idle pulse</label><input id="pulseRange" type="range" min="0.1" max="1" step="0.05" value="0.55"><span class="val" id="pulseVal">0.55</span></div>
+    <div class="row">
+      <button id="applyAll">Apply this emitter → all frames of this action</button>
+    </div>
+    <div class="note">Body auras (Nino purple / Biba white) are code-synthesized in <code>render.js heroAura()</code> — not authored here.</div>
+    <div class="row">
+      <button id="exportBtn">Build export</button>
+      <button id="copyBtn">Copy</button>
+      <span class="copyMsg" id="copyMsg"></span>
+    </div>
+    <textarea id="out" spellcheck="false"></textarea>
+  </div>
+</div>
+
+<script>
+(function(){
+  'use strict';
+  const FRAMES = 10;
+  // hero → actions → sprite file. Frame box + flip math kept identical to assets.js blitFrame.
+  const HEROES = {
+    nino: { actions:['walk','attack'], facesLeft:false, h:64 },
+    biba: { actions:['walk','heal'],  facesLeft:false, h:64 },
+  };
+  const file = (hero,act)=> 'assets/units/'+hero+'/'+act+'.png';
+
+  // seed defaults per hero (mirrors js/hero_neon_maps.js)
+  const SEED = {
+    nino: { color:[255,200,70], x:0.840, y:0.420, rx:0.060, ry:0.060, kind:'spot', sparkle:1, pulse:0.55, alpha:0.90 },
+    biba: { color:[170,82,240], x:0.740, y:0.440, rx:0.060, ry:0.060, kind:'spot', sparkle:1, pulse:0.60, alpha:0.95 },
+  };
+  // DATA[hero][action] = [ {x,y,color,kind,rx,ry,sparkle,pulse,alpha}, ... x10 ]
+  const DATA = {};
+  for(const hero in HEROES){ DATA[hero]={};
+    for(const act of HEROES[hero].actions){ const a=[]; for(let i=0;i<FRAMES;i++) a.push(Object.assign({}, SEED[hero], {color:SEED[hero].color.slice()})); DATA[hero][act]=a; }
+  }
+
+  const $=id=>document.getElementById(id);
+  const heroSel=$('heroSel'), actSel=$('actSel'), frameRange=$('frameRange'), frameVal=$('frameVal'),
+        frameCv=$('frameCv'), fcx=frameCv.getContext('2d'), out=$('out'), loadNote=$('loadNote'),
+        frameStrip=$('frameStrip'), xyVal=$('xyVal'), sw=$('sw'),
+        cr=$('cr'), cg=$('cg'), cb=$('cb'), kindSel=$('kindSel'), sparkle=$('sparkle'),
+        rxRange=$('rxRange'), rxVal=$('rxVal'), ryRange=$('ryRange'), ryVal=$('ryVal'),
+        pulseRange=$('pulseRange'), pulseVal=$('pulseVal');
+
+  let hero='nino', act='walk', frame=0, face=1, t0=null;
+  const sheets={};   // key hero/act -> {img,fw,fh,ready}
+
+  Object.keys(HEROES).forEach(h=>{ const o=document.createElement('option'); o.value=h; o.textContent=h; heroSel.appendChild(o); });
+
+  function cur(){ return DATA[hero][act][frame]; }
+
+  function loadSheet(h,a){
+    const k=h+'/'+a; if(sheets[k]) return sheets[k];
+    const s={img:new Image(), fw:0, fh:0, ready:false};
+    s.img.onload=()=>{ s.fw=s.img.width/FRAMES; s.fh=s.img.height; s.ready=true; };
+    s.img.onerror=()=>{ s.ready=false; };
+    s.img.src=file(h,a); sheets[k]=s; return s;
+  }
+
+  function frameBox(s){
+    const cw=frameCv.width, ch=frameCv.height, sc=Math.min(cw/s.fw, ch/s.fh)*0.92;
+    const dw=s.fw*sc, dh=s.fh*sc; return { dx:(cw-dw)/2, dy:(ch-dh)/2, dw, dh };
+  }
+
+  // additive glow approximation of drawMegaNeonLayer's 'spot' core (placement preview only)
+  function previewGlow(cx,cy,rad,color,pulse){
+    fcx.save(); fcx.globalCompositeOperation='lighter';
+    const a=0.30+0.30*pulse;
+    let g=fcx.createRadialGradient(cx,cy,1,cx,cy,rad*2.6);
+    g.addColorStop(0,'rgba('+color[0]+','+color[1]+','+color[2]+','+(a*0.5).toFixed(3)+')');
+    g.addColorStop(1,'rgba('+color[0]+','+color[1]+','+color[2]+',0)');
+    fcx.fillStyle=g; fcx.beginPath(); fcx.arc(cx,cy,rad*2.6,0,6.283); fcx.fill();
+    g=fcx.createRadialGradient(cx,cy,1,cx,cy,rad*1.2);
+    g.addColorStop(0,'rgba(255,250,235,'+a.toFixed(3)+')');
+    g.addColorStop(0.5,'rgba('+color[0]+','+color[1]+','+color[2]+','+(a*0.7).toFixed(3)+')');
+    g.addColorStop(1,'rgba('+color[0]+','+color[1]+','+color[2]+',0)');
+    fcx.fillStyle=g; fcx.beginPath(); fcx.arc(cx,cy,rad*1.2,0,6.283); fcx.fill();
+    fcx.restore();
+  }
+
+  function draw(){
+    fcx.clearRect(0,0,frameCv.width,frameCv.height);
+    fcx.fillStyle='#04060b'; fcx.fillRect(0,0,frameCv.width,frameCv.height);
+    const s=loadSheet(hero,act);
+    if(!s.ready){ fcx.fillStyle='#7f93b3'; fcx.fillText('loading '+file(hero,act)+' …',16,24); return; }
+    const b=frameBox(s), facesLeft=HEROES[hero].facesLeft, flip=((face<0)!==facesLeft);
+    fcx.imageSmoothingEnabled=false;
+    fcx.save();
+    if(flip){ fcx.translate(b.dx+b.dw,0); fcx.scale(-1,1); fcx.drawImage(s.img, frame*s.fw,0,s.fw,s.fh, 0,b.dy,b.dw,b.dh); }
+    else fcx.drawImage(s.img, frame*s.fw,0,s.fw,s.fh, b.dx,b.dy,b.dw,b.dh);
+    fcx.restore();
+    fcx.strokeStyle='rgba(120,160,220,.22)'; fcx.lineWidth=1; fcx.strokeRect(b.dx+.5,b.dy+.5,b.dw-1,b.dh-1);
+    // anchor (stored on the un-flipped sprite; mirror x for display when flipped)
+    const d=cur(), dispX = flip ? (1-d.x) : d.x;
+    const ax=b.dx+dispX*b.dw, ay=b.dy+d.y*b.dh, rad=d.rx*b.dw;
+    previewGlow(ax,ay,rad,d.color,d.pulse);
+    fcx.strokeStyle='rgba(255,255,255,.85)'; fcx.lineWidth=1.2;
+    fcx.beginPath(); fcx.moveTo(ax-9,ay); fcx.lineTo(ax+9,ay); fcx.moveTo(ax,ay-9); fcx.lineTo(ax,ay+9); fcx.stroke();
+    fcx.beginPath(); fcx.arc(ax,ay,3.5,0,6.283); fcx.stroke();
+  }
+
+  frameCv.addEventListener('click', ev=>{
+    const s=loadSheet(hero,act); if(!s.ready) return;
+    const r=frameCv.getBoundingClientRect();
+    const cx=(ev.clientX-r.left)*(frameCv.width/r.width), cy=(ev.clientY-r.top)*(frameCv.height/r.height);
+    const b=frameBox(s); let x=(cx-b.dx)/b.dw; const y=(cy-b.dy)/b.dh;
+    if(x<-0.05||x>1.05||y<-0.05||y>1.05) return;
+    const facesLeft=HEROES[hero].facesLeft, flip=((face<0)!==facesLeft);
+    if(flip) x=1-x;                                  // store on the un-flipped sprite
+    const d=cur(); d.x=Math.max(0,Math.min(1,x)); d.y=Math.max(0,Math.min(1,y));
+    syncUI(); draw(); buildStrip(); buildExport();
+  });
+
+  function buildActions(){
+    actSel.innerHTML=''; HEROES[hero].actions.forEach(a=>{ const o=document.createElement('option'); o.value=a; o.textContent=a; actSel.appendChild(o); });
+    act=HEROES[hero].actions[0]; actSel.value=act;
+  }
+  function buildStrip(){
+    frameStrip.innerHTML='';
+    for(let i=0;i<FRAMES;i++){ const c=document.createElement('div'); c.className='fchip'+(i===frame?' cur':'');
+      c.textContent=i; c.onclick=()=>{ frame=i; frameRange.value=i; syncUI(); draw(); buildStrip(); };
+      frameStrip.appendChild(c);
+    }
+  }
+  function syncUI(){
+    const d=cur();
+    frameVal.textContent=frame; frameRange.value=frame;
+    xyVal.textContent='x '+d.x.toFixed(3)+' , y '+d.y.toFixed(3);
+    cr.value=d.color[0]; cg.value=d.color[1]; cb.value=d.color[2];
+    sw.style.background='rgb('+d.color.join(',')+')';
+    kindSel.value=d.kind; sparkle.value=d.sparkle;
+    rxRange.value=d.rx; rxVal.textContent=(+d.rx).toFixed(3);
+    ryRange.value=d.ry; ryVal.textContent=(+d.ry).toFixed(3);
+    pulseRange.value=d.pulse; pulseVal.textContent=(+d.pulse).toFixed(2);
+    loadNote.textContent=file(hero,act)+(HEROES[hero].facesLeft?'  (facesLeft sprite)':'');
+  }
+
+  // ---- export: emit js/hero_neon_maps.js with explicit per-frame literals ----
+  function fmtGlow(d){
+    return '{ id:0, kind:'+JSON.stringify(d.kind)+', x:'+(+d.x).toFixed(3)+', y:'+(+d.y).toFixed(3)+
+           ', rx:'+(+d.rx).toFixed(3)+', ry:'+(+d.ry).toFixed(3)+', rot:0, color:['+d.color.join(',')+
+           '], alpha:'+(+d.alpha).toFixed(2)+', phase:0.50, pulse:'+(+d.pulse).toFixed(2)+', sparkle:'+(d.sparkle|0)+' }';
+  }
+  function fmtAction(hero,actn){
+    const arr=DATA[hero][actn];
+    let s='        frames: [\n';
+    for(let i=0;i<arr.length;i++) s+='          { glows:[ '+fmtGlow(arr[i])+' ] },\n';
+    s+='        ]';
+    return s;
+  }
+  function buildExport(){
+    let s='/* hero_neon_maps.js — generated by hero-glow-calibrator.html. Per-frame hero glow anchors.\n';
+    s+='   Same record shape as mega_neon_maps.js (consumed by drawMegaNeonLayer). x/y/rx/ry normalized\n';
+    s+='   to the sprite frame box. Body auras are code-synth in render.js heroAura(), not here. */\n';
+    s+='var HERO_NEON_MAPS = {\n  version: 1,\n  sprites: {\n';
+    const heroes=Object.keys(DATA);
+    heroes.forEach((h,hi)=>{
+      s+='    '+h+': {\n';
+      HEROES[h].actions.forEach((a,ai)=>{
+        s+='      '+a+': {\n'+fmtAction(h,a)+'\n      }'+(ai<HEROES[h].actions.length-1?',':'')+'\n';
+      });
+      s+='    }'+(hi<heroes.length-1?',':'')+'\n';
+    });
+    s+='  },\n};\nif(typeof window!==\'undefined\') window.HERO_NEON_MAPS = HERO_NEON_MAPS;\n';
+    out.value=s;
+  }
+
+  // ---- events ----
+  heroSel.addEventListener('change', e=>{ hero=e.target.value; buildActions(); frame=0; loadSheet(hero,act); syncUI(); draw(); buildStrip(); buildExport(); });
+  actSel.addEventListener('change', e=>{ act=e.target.value; frame=0; loadSheet(hero,act); syncUI(); draw(); buildStrip(); buildExport(); });
+  frameRange.addEventListener('input', e=>{ frame=+e.target.value; syncUI(); draw(); buildStrip(); });
+  $('prevBtn').onclick=()=>{ frame=(frame-1+FRAMES)%FRAMES; syncUI(); draw(); buildStrip(); };
+  $('nextBtn').onclick=()=>{ frame=(frame+1)%FRAMES; syncUI(); draw(); buildStrip(); };
+  $('faceBtn').onclick=e=>{ face=-face; e.target.textContent='Facing: '+(face<0?'◀ left':'▶ right'); draw(); };
+  function setColor(c){ const d=cur(); d.color=c.slice(); syncUI(); draw(); buildExport(); }
+  document.querySelectorAll('[data-col]').forEach(b=> b.onclick=()=> setColor(b.dataset.col.split(',').map(Number)) );
+  [cr,cg,cb].forEach((inp,i)=> inp.addEventListener('input', ()=>{ cur().color[i]=Math.max(0,Math.min(255,+inp.value||0)); sw.style.background='rgb('+cur().color.join(',')+')'; draw(); buildExport(); }));
+  kindSel.addEventListener('change', e=>{ cur().kind=e.target.value; buildExport(); });
+  sparkle.addEventListener('input', e=>{ cur().sparkle=Math.max(0,Math.min(4,+e.target.value||0)); buildExport(); });
+  rxRange.addEventListener('input', e=>{ cur().rx=+e.target.value; rxVal.textContent=(+e.target.value).toFixed(3); draw(); buildExport(); });
+  ryRange.addEventListener('input', e=>{ cur().ry=+e.target.value; ryVal.textContent=(+e.target.value).toFixed(3); draw(); buildExport(); });
+  pulseRange.addEventListener('input', e=>{ cur().pulse=+e.target.value; pulseVal.textContent=(+e.target.value).toFixed(2); draw(); buildExport(); });
+  $('applyAll').onclick=()=>{ const d=cur(); DATA[hero][act]=DATA[hero][act].map(()=>Object.assign({}, d, {color:d.color.slice()})); draw(); buildStrip(); buildExport(); };
+  $('exportBtn').onclick=()=>{ buildExport(); out.scrollIntoView({behavior:'smooth'}); };
+  $('copyBtn').onclick=()=>{ out.select(); try{document.execCommand('copy');}catch(_){ } if(navigator.clipboard) navigator.clipboard.writeText(out.value).catch(()=>{}); $('copyMsg').textContent='copied ✓'; setTimeout(()=>$('copyMsg').textContent='',1500); };
+  window.addEventListener('keydown', e=>{
+    if(document.activeElement && /^(INPUT|SELECT|TEXTAREA)$/.test(document.activeElement.tagName)) return;
+    const step=(e.shiftKey?0.005:0.001)*5, d=cur();
+    if(e.key==='ArrowLeft'){ d.x=Math.max(0,d.x-step); }
+    else if(e.key==='ArrowRight'){ d.x=Math.min(1,d.x+step); }
+    else if(e.key==='ArrowUp'){ d.y=Math.max(0,d.y-step); }
+    else if(e.key==='ArrowDown'){ d.y=Math.min(1,d.y+step); }
+    else return;
+    e.preventDefault(); syncUI(); draw(); buildExport();
+  });
+
+  // ---- go ----
+  function loop(ts){ if(t0==null) t0=ts; draw(); requestAnimationFrame(loop); }
+  buildActions(); loadSheet(hero,act); buildStrip(); syncUI(); buildExport(); requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>

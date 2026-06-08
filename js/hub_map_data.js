@@ -172,6 +172,17 @@ window.HUB_MAP_DATA = {
       "w": 13,
       "h": 10,
       "visual": { "megaId": "mentalhealth_mega" }
+    },
+    {
+      "id": "wake",
+      "kind": "wake",
+      "name": "The Wake",
+      "type": "hq",
+      "x": 55,
+      "y": 19,
+      "w": 6,
+      "h": 6,
+      "visual": { "type": "hq", "faction": "player", "fixedFrame": 0, "overhang": 0.72, "heightScale": 2.4 }
     }
   ],
   "rivers": [
@@ -546,38 +557,6 @@ window.HUB_MAP_DATA = {
       "biome": "grass",
       "fixedFrame": null,
       "seed": 0.8394356209980857,
-      "tags": []
-    },
-    {
-      "id": "mega_3",
-      "poiId": null,
-      "cat": "mountain",
-      "variant": 0,
-      "tx": 59,
-      "ty": 15,
-      "w": 7,
-      "h": 5,
-      "overhang": 1.38,
-      "heightScale": 1,
-      "biome": "grass",
-      "fixedFrame": null,
-      "seed": 0.17273962281892474,
-      "tags": []
-    },
-    {
-      "id": "mega_4",
-      "poiId": null,
-      "cat": "mountain",
-      "variant": 0,
-      "tx": 55,
-      "ty": 14,
-      "w": 7,
-      "h": 5,
-      "overhang": 1.38,
-      "heightScale": 1,
-      "biome": "grass",
-      "fixedFrame": null,
-      "seed": 0.27281977954380454,
       "tags": []
     },
     {

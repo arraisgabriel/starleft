@@ -9,6 +9,7 @@
                                          (rate-capped: ≤3 per speaker, ≤5 total, per rolling 30s)
      VOICE.playLore(speakerKey, sayIdx)— career life-event line              (from dialogs.js)
      VOICE.playCrawl(idx) / stopCrawl()— intro story crawl narration         (from ui.js showCrawl)
+     VOICE.playTutorial(id) / stopTutorial()— Quarter I tutorial coach line    (from tutorial.js)
    Settings (HUD toggle, persisted): isEnabled/setEnabled/toggle, getVolume/setVolume.
 
    Mobile: barks fire on a tap and crawls on a menu tap (user gestures → allowed); the first gesture
@@ -43,6 +44,7 @@ const VOICE = (function(){
   let rr = 0;
   let crawlAudio = null;
   let sceneAudio = null;          // dedicated channel for scripted-cutscene narration (its own slot, like the crawl)
+  let tutAudio = null;            // dedicated channel for the Quarter I tutorial coach (Rod narrator), its own slot
   let unlocked = false;
 
   // Bark rate-limit: chain-selecting several units (esp. same-type interns) spams their voice.
@@ -133,20 +135,37 @@ const VOICE = (function(){
       const p = a.play(); if(p && p.catch) p.catch(()=>{});   // autoplay blocked → sequencer's max-timer advances
     },
     stopScene(){ if(sceneAudio){ try { sceneAudio.pause(); } catch(e){} sceneAudio.onended=null; sceneAudio.onerror=null; sceneAudio=null; } },
+    // Quarter I tutorial coach line on its own channel (so a hint never steps on a bark/crawl). Keyed by
+    // step/contextual id. When a touch-variant id (…_touch) is missing, fall back ONCE to the base id, so
+    // input-adaptive phrasing degrades gracefully to the neutral clip. Silent no-op when audio is off/missing.
+    playTutorial(id, onended){
+      this.stopTutorial();
+      if(!enabled || id == null || typeof tutorialPath !== 'function'){ if(onended) onended(); return; }
+      const a = new Audio(); a.preload = 'auto';
+      let cb = onended; const done = ()=>{ const f=cb; cb=null; if(f) f(); };
+      const base = String(id).replace(/_touch$/, '');
+      let triedBase = (base === String(id));
+      a.onended = done;
+      a.onerror = ()=>{ if(!triedBase){ triedBase = true; try { a.src = tutorialPath(base); const p=a.play(); if(p&&p.catch) p.catch(()=>{}); } catch(e){ done(); } } else done(); };
+      a.muted = false; a.volume = volume; a.src = tutorialPath(id);
+      tutAudio = a;
+      const p = a.play(); if(p && p.catch) p.catch(()=>{});
+    },
+    stopTutorial(){ if(tutAudio){ try { tutAudio.pause(); } catch(e){} tutAudio.onended=null; tutAudio.onerror=null; tutAudio=null; } },
     unlock,
 
     /* ---- settings API (HUD) ---- */
     isEnabled(){ return enabled; },
     setEnabled(v){
       enabled = !!v;
-      if(!enabled){ chans.forEach(a=>{ try { a.pause(); } catch(e){} }); this.stopCrawl(); this.stopScene(); }
+      if(!enabled){ chans.forEach(a=>{ try { a.pause(); } catch(e){} }); this.stopCrawl(); this.stopScene(); this.stopTutorial(); }
       save();
     },
     toggle(){ this.setEnabled(!enabled); return enabled; },
     getVolume(){ return volume; },
     setVolume(v){
       volume = Math.max(0, Math.min(1, +v || 0));
-      chans.forEach(a=>{ a.volume = volume; }); if(crawlAudio) crawlAudio.volume = volume; if(sceneAudio) sceneAudio.volume = volume;
+      chans.forEach(a=>{ a.volume = volume; }); if(crawlAudio) crawlAudio.volume = volume; if(sceneAudio) sceneAudio.volume = volume; if(tutAudio) tutAudio.volume = volume;
       save();
     },
   };
