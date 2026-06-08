@@ -124,18 +124,26 @@ function reclaimOutposts(state){
 /* =====================================================================
    CAPTIVES (Episode X — the A&O prison-office)
    ===================================================================== */
-// A neutral `captive` (spawned in map.js from cfg.captives) is freed the instant no living ENEMY
-// unit remains within its freeRadius — i.e. the player has cleared the guards penning it in. A
-// `captiveHero` (Biba) is promoted to a full player hero on release: she gains her level, dossier,
-// sprite and the `hero` flag, so captureHeroes() snapshots her into the carryover and she redeploys
-// every later map like Nino. A plain captive (the intern) just rejoins the workforce.
+// A neutral `captive` (spawned in map.js from cfg.captives) is freed only when NINO — the one hero you
+// break in with — reaches the cell and stands in arm's reach. Clearing the guards is not enough: the
+// player must physically extract them, and reaching one captive frees everyone caged together (Biba +
+// the intern in the same breath). A `captiveHero` (Biba) is promoted to a full player hero on release:
+// she gains her level, dossier, sprite and the `hero` flag, so captureHeroes() snapshots her into the
+// carryover and she redeploys every later map like Nino. A plain captive (the intern) rejoins the workforce.
 function freeCaptives(state){
+  if(!state.entities.some(u=> !u.dead && u.captive)) return;   // only Episode X has captives — skip the rescuer scan everywhere else
+  // the rescuer is Nino (the lone player hero of the break-in). No Nino on the field → nobody can free them.
+  const rescuer = state.entities.find(e=> !e.dead && !e.storedIn && e.owner==='player' && e.kind==='unit'
+                    && e.hero && (e.heroId==='Nino' || e.spriteType==='nino'));
+  if(!rescuer) return;
+  const REACH = 3.0*TILE;
+  let triggered=false;
+  for(const u of state.entities){ if(u.dead || !u.captive) continue;
+    if(dist(rescuer,u) <= REACH){ triggered=true; break; } }   // Nino has reached the cell
+  if(!triggered) return;
   let any=false;
   for(const u of state.entities){
     if(u.dead || !u.captive) continue;
-    const R=(u.freeRadius||7)*TILE;
-    const stillGuarded = state.entities.some(e=> !e.dead && !e.storedIn && e.owner==='enemy' && e.kind==='unit' && dist(e,u)<R);
-    if(stillGuarded) continue;
     u.captive=false; u.owner='player'; any=true;
     spawnRing(u.x,u.y,'#8effb0');
     if(u.captiveHero){

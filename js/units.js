@@ -115,6 +115,21 @@ function commandUnits(state, wx, wy, target){
     spawnRing(target.x,target.y,'#ff6b6b');
     return;
   }
+  // Episode X — a caged captive (Biba / the intern). NEVER attackable by the player; only NINO frees
+  // them, and only by reaching the cell (freeCaptives, core.js, releases everyone the instant he is in
+  // arm's reach). Right-clicking the cell pushes the squad down to it via attack-move (so they fight
+  // through the guards) and tells the player who is actually needed.
+  if(target && target.captive){
+    const nino = units.find(u=> u.hero && (u.heroId==='Nino' || u.spriteType==='nino'));
+    const who  = target.captiveName || 'the prisoner';
+    units.forEach((u,i)=>{ resetMotion(u);
+      const tx = target.x + ((i%3)-1)*22, ty = target.y + (nino ? -TILE : TILE);
+      issueMove(state,u, tx, ty, {type:'amove', x:tx, y:ty});   // attack-move: punch through the cell ring
+    });
+    toast(nino ? ('Nino moves to free '+who+'.') : ('Only Nino can free '+who+' — bring him to the cell.'));
+    spawnRing(target.x,target.y,'#8effb0');
+    return;
+  }
   if(target && target.owner && target.owner!=='player'){
     if(state.hub && target.hubPoi && typeof hubCommandPoi==='function'){
       if(hubCommandPoi(state, units, target)) return;
@@ -849,6 +864,7 @@ function callToArms(state, foe, side, from){
 
 function damage(state, t, amt, src){
   if(t.dead||t.storedIn) return;
+  if(t.captive) return;   // imprisoned captives (Biba + the intern) are invulnerable until Nino frees them — neither friendly fire nor splash can kill them
   if(t.dmgReduce>0) amt *= (1 - t.dmgReduce);   // villains (and any future armored unit) shrug off a flat % of incoming damage
   t.hp-=amt;
   t.hitFx=0.12;

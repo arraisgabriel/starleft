@@ -65,6 +65,19 @@ function vetScalingBonus(vpi, idx){
   return Math.max(0, Math.min(VET_MAXBONUS, Math.round(vpi / VET_SCALE)));
 }
 
+/* Per-squad reinforcement for the Episode X corridor guard squads (map.js). Deliberately lighter than
+   the per-base bonus and tightly capped — a guarded corridor must stay passable for a small elite
+   squad while still tightening up for a heavy carried roster. The scale is set so Nino's own power
+   (he is always present, VPI~135) lands the small-squad case on +1 (a ~58-unit corridor), and only a
+   genuinely heavy carried roster (VPI>~180) reaches the +2 ceiling (~67) — a real two-step ramp, not
+   an all-or-nothing jump. */
+const GUARD_VET_SCALE = 120;  // VPI per +1 guard reinforcing a squad's anchor type
+const GUARD_VET_MAXBONUS = 2; // hard cap on extra guards per squad
+function guardVetBonus(vpi){
+  if(!(vpi > 0)) return 0;
+  return Math.max(0, Math.min(GUARD_VET_MAXBONUS, Math.round(vpi / GUARD_VET_SCALE)));
+}
+
 /* Mint-interval multiplier (<=1) so a heavily-veteran player also faces faster reinforcement. */
 function vetMintFactor(vpi){
   if(!(vpi > 0)) return 1;
@@ -87,5 +100,6 @@ function applyVetScalingToBase(state, base, idx, vpi){
 if(typeof window!=='undefined'){
   window.computePlayerVPI=computePlayerVPI; window.vetScalingBonus=vetScalingBonus;
   window.vetMintFactor=vetMintFactor; window.applyVetScalingToBase=applyVetScalingToBase;
+  window.guardVetBonus=guardVetBonus;
   window.typePower=typePower; window.combatPower=combatPower;
 }

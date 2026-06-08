@@ -310,7 +310,7 @@ function newMap(idx){
   clearArea(cfg.player.x,cfg.player.y,6);                  // bigger buildings need a bigger clear pad
   bases.forEach(b=> clearArea(b.x,b.y,7));                 // enemy base spans ~ax-2..ax+7 × ay..ay+6
   (cfg.lostBases||[]).forEach(b=> clearArea(b.x,b.y,4));   // abandoned outposts sit on clear ground too
-  (cfg.guards||[]).forEach(g=> clearArea(g.x,g.y,2));      // standing guard squads need clear footing
+  (cfg.guards||[]).forEach(g=> clearArea(g.x,g.y,3));      // standing guard squads (now mixed/larger) need clear footing
   (cfg.captives||[]).forEach(c=> clearArea(c.x,c.y,3));    // the prison cell at the corridor's end
   // keep gold nodes reachable: clear the footprint to passable floor (climate theme kept)
   cfg.goldNodes.forEach(g=>{ for(let y=-2;y<=2;y++)for(let x=-2;x<=2;x++){
@@ -448,21 +448,31 @@ function newMap(idx){
   });
 
   // ---- loose guard squads (Episode X corridor + the ring around the cell) ----
-  // Enemy units with NO base, flagged `guard` so the wave/cap logic in ai.js leaves them at their
-  // post (they still auto-engage when the player closes). Killing the ones around a captive frees it.
+  // Enemy units with NO base, flagged `guard` so the wave/cap logic in ai.js leaves them at their post
+  // (they still auto-engage when the player closes). A squad is either a single {type,n} (legacy) or a
+  // mixed {comp:[[type,count],...]} so each pull is a varied fight, not a wall of identical cyborgs.
+  // Dynamic difficulty: a heavier carried roster (VPI) reinforces every squad's FIRST (anchor) type —
+  // a lighter pass than the enemy bases get, since a corridor must stay passable. `scale:false` opts out.
   (cfg.guards||[]).forEach(g=>{
-    const n=g.n||3, type=g.type||'soldier';
-    for(let i=0;i<n;i++){ const u=mkUnit(state, type, 'enemy', g.x+(i%3)-1, g.y+((i/3)|0)); u.guard=true; }
+    const comp = g.comp ? g.comp.map(c=> c.slice()) : [[g.type||'soldier', g.n||3]];
+    const bonus = (g.scale!==false && typeof guardVetBonus==='function') ? guardVetBonus(state._vpi||0) : 0;
+    if(bonus>0) comp[0][1] += bonus;
+    let i=0;
+    for(const pair of comp){
+      const type=pair[0], count=pair[1]|0;
+      for(let k=0;k<count;k++){ const u=mkUnit(state, type, 'enemy', g.x+(i%3)-1, g.y+((i/3)|0)); u.guard=true; i++; }
+    }
   });
 
   // ---- captives held in the A&O prison-office (Episode X) ----
-  // Spawned NEUTRAL so neither side targets them and they don't count toward win/lose; freeCaptives()
-  // (core.js) flips one to the player once no enemy units remain within its freeRadius. A captive
-  // flagged `hero` joins the hero carryover on release (persists like Nino).
+  // Spawned NEUTRAL so neither side AUTO-targets them and they don't count toward win/lose, and flagged
+  // `captive` so they're invulnerable + uncommandable (damage()/commandUnits/updateUnit, units.js).
+  // freeCaptives() (core.js) flips them to the player once NINO reaches the cell. A captive flagged
+  // `hero` joins the hero carryover on release (persists like Nino).
   (cfg.captives||[]).forEach(cap=>{
     if(cap.hero && typeof heroIsCarried==='function' && heroIsCarried(cap.name)) return;  // already freed in a prior run → spawns at HQ instead
     const u=mkUnit(state, cap.type, 'neutral', cap.x, cap.y);
-    u.captive=true; u.freeRadius=cap.freeRadius||7;
+    u.captive=true;
     if(cap.hero){ u.captiveHero=true; u.captiveName=cap.name; u.captiveSprite=cap.sprite; u.captiveLevel=cap.level||0; u.captiveDossier=cap.dossier;
       if(cap.sprite) u.spriteType=cap.sprite; }   // show her real sprite even while caged
     for(let y=-5;y<=6;y++)for(let x=-5;x<=6;x++){ if(inB(cap.x+x,cap.y+y)) state.explored[(cap.y+y)*W+(cap.x+x)]=1; }

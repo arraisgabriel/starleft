@@ -500,25 +500,38 @@ Weaponize your buzzwords, circle back, and disrupt MegaCorp into bankruptcy. The
       dream:'to see one thing he helped build outlast the money that funded it',
       crime:'authoring the laws that made a hundred rivals simply vanish',
     } } ],
-    // BIBA — caged at the map's heart with a captive intern. Freed when every enemy unit inside her
-    // cell's freeRadius is dead (freeCaptives, core.js); on release she becomes a Level-10 Recruiter
-    // HERO and joins the hero carryover, persisting like Nino. The intern rejoins your workforce.
+    // BIBA — caged at the map's heart with a captive intern. They are INVULNERABLE while caged (no
+    // friendly fire / splash can kill them) and are freed only when NINO reaches the cell and stands in
+    // arm's reach (freeCaptives, core.js) — clearing the guards is not enough, you must walk Nino in.
+    // Reaching one frees both. On release Biba becomes a Level-10 Recruiter HERO and joins the hero
+    // carryover, persisting like Nino; the intern rejoins your workforce.
     captives:[
-      { x:44, y:130, type:'recruiter', hero:true, name:'Biba', sprite:'biba', level:10, freeRadius:14,
+      { x:44, y:130, type:'recruiter', hero:true, name:'Biba', sprite:'biba', level:10,
         dossier:{ first:'Biba', home:'the flooded arcologies of Lagos-2',
           family:'raised six younger siblings on relief credits',
           trauma:'watched her first squad triaged out of existence by an algorithm',
           dream:'to keep one team alive long enough to age',
           crime:'designing the chip A&O now kills to keep' } },
-      { x:48, y:130, type:'worker', freeRadius:12 },
+      { x:48, y:130, type:'worker' },
     ],
-    // standing guard squads of 3–4 (cfg.guards): four down the corridor, three ringing the cell.
-    // They hold their posts (ai.js excludes `guard` units from waves) and auto-engage on approach.
+    // standing guard squads (cfg.guards) — a real gauntlet now: nine MIXED-composition squads (map.js
+    // `comp:[[type,count],...]`) escalating down the corridor from raw Growth Cyborgs to ranged
+    // Consultants, fast Hustlers, enemy Lobbyist snipers, Recruiter medics and Auditor siege-walls,
+    // capped by a Founder-Mech mini-boss at the cell. They hold post (ai.js excludes `guard` from waves)
+    // and auto-engage on approach; the always-on guardVetBonus (balance.js) reinforces each squad for a
+    // heavy carried roster. The cell ring is staged north→south so the climax isn't one alpha-strike.
     guards:[
-      // four corridor squads, spaced ~24 tiles apart so they pull one group at a time
-      { x:45, y:36, n:3 }, { x:45, y:60, n:3 }, { x:45, y:84, n:3 }, { x:45, y:106, n:3 },
-      // the cell ring — staged north→south (y120/132/140) so the climax isn't a single 9-unit alpha-strike
-      { x:44, y:120, n:3 }, { x:40, y:132, n:3 }, { x:49, y:140, n:3 },
+      // ── the corridor gauntlet (pulled ~one group at a time by the walls), escalating ──
+      { x:45, y:34,  comp:[['soldier',3],['ranger',2]] },                              // 5 — melee screen + first ranged
+      { x:45, y:50,  comp:[['soldier',2],['hustler',2],['ranger',2]] },                // 6 — fast harassers arrive
+      { x:45, y:66,  comp:[['ranger',3],['soldier',2],['recruiter',1]] },              // 6 — ranged-heavy + first medic
+      { x:45, y:82,  comp:[['soldier',3],['hustler',2],['lobbyist',1]] },              // 6 — first enemy sniper
+      { x:45, y:98,  comp:[['ranger',2],['soldier',2],['auditor',1],['recruiter',1]] },// 6 — Auditor siege-wall + medic
+      { x:45, y:112, comp:[['hustler',3],['soldier',2],['lobbyist',1]] },              // 6 — fast + sniper before the cell
+      // ── the cell ring — staged north→south (y120/132/140) so it isn't a single alpha-strike ──
+      { x:44, y:120, comp:[['ranger',3],['lobbyist',1],['recruiter',1]] },             // 5 — ranged screen north of the cell
+      { x:40, y:132, comp:[['soldier',3],['auditor',1],['recruiter',1]] },             // 5 — heavy bruisers at the cell
+      { x:49, y:140, comp:[['hustler',3],['founder',1]] },                             // 4 — harassers + a Founder-Mech mini-boss
     ],
     // the abandoned A&O outpost just past the cell — reclaim it (walk a unit up) for a forward HQ to
     // build the army that cracks the arena. Your start HQ is 120 tiles north, so this is your real base.
