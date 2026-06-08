@@ -688,7 +688,8 @@ function hubApplyPoiVisual(e,p){
   if(v && v.type){
     e.hubSpriteVisual = { type:v.type, faction:v.faction, neonId:v.neonId,
       fixedFrame:v.fixedFrame||0, w:v.w||e.w, h:v.h||e.h,
-      overhang:v.overhang||1.08, heightScale:v.heightScale||1, seed:(e.id||1)*0.071 };
+      overhang:v.overhang||1.08, heightScale:v.heightScale||1,
+      stack:v.stack||1, stackOverlap:(v.stackOverlap!=null?v.stackOverlap:0.06), seed:(e.id||1)*0.071 };
   }
   if(v && v.megaId) e.hubMegaVisual=true;
   if(p && (HUB.megaSprites||[]).some(m=>m.poiId===p.id && (hubHasTag(m,'hubCondo') || hubHasTag(m,'hubUltra')))) e.hubMegaVisual=true;

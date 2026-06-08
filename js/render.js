@@ -858,10 +858,20 @@ function drawHubBuildingSpriteVisual(state,e,ox,oy){
   const dx=baseX+(baseW-dw)/2, dy=baseY+baseH-dh+2;
   const f=(v.fixedFrame!=null?Math.floor(v.fixedFrame):0), fi=((f%spr.frames)+spr.frames)%spr.frames;
   const neon=buildingNeonFrame(v.neonId || (v.type+'_'+(v.faction||factionKey(e.owner))), fi);
-  if(typeof drawMegaNeonLayer==='function') drawMegaNeonLayer(state, v, neon, dx, dy, dw, dh, 'aura');
-  ctx.drawImage(spr.img, fi*spr.fw, 0, spr.fw, spr.fh, dx, dy, dw, dh);
-  if(typeof drawMegaNeonLayer==='function') drawMegaNeonLayer(state, v, neon, dx, dy, dw, dh, 'core');
-  return dy;
+  // Optional vertical STACK: draw the sprite N times to build ONE ultra-tall tower. It stays a single
+  // entity with a single footprint, so it looks AND clicks as one. Lower segments draw last so they
+  // cover the seam of the segment above them; stackOverlap blends the join.
+  const stack=Math.max(1, Math.floor(v.stack||1)), step=dh*(1-(v.stackOverlap!=null?v.stackOverlap:0.06));
+  const topYout=dy-(stack-1)*step;
+  // draw bottom segment FIRST, each higher segment ON TOP — so the upper sprite's base hides the
+  // roof/helipad of the one below it and the stack reads as a single continuous tower.
+  for(let s=0; s<stack; s++){
+    const sy=dy-s*step;
+    if(typeof drawMegaNeonLayer==='function') drawMegaNeonLayer(state, v, neon, dx, sy, dw, dh, 'aura');
+    ctx.drawImage(spr.img, fi*spr.fw, 0, spr.fw, spr.fh, dx, sy, dw, dh);
+    if(typeof drawMegaNeonLayer==='function') drawMegaNeonLayer(state, v, neon, dx, sy, dw, dh, 'core');
+  }
+  return topYout;
 }
 
 // True when this entity belongs to the A&O alien faction on the ACTIVE map. Render-only signal
@@ -880,31 +890,51 @@ function drawHubWakeFX(state, e, ox, oy, topY){
   const baseY=(e.ty+e.h)*TILE+oy;              // ground line
   const coreY=topY+(baseY-topY)*0.35;          // glow anchor on the spire body
   ctx.save(); ctx.globalCompositeOperation='lighter';
-  // faint green A&O corona (subtle accent)
+  // green A&O aura — a soft column running the FULL height of the tall, thin spire so the whole
+  // tower reads against the dark mountains, plus a brighter pool at the base.
   const pulse=0.5+0.5*Math.sin(t*1.3 + id);
-  const cor=ctx.createRadialGradient(cx, coreY, 4, cx, coreY, w*1.15);
-  cor.addColorStop(0,'rgba(62,230,76,'+(0.05+0.04*pulse).toFixed(3)+')');
+  const colW=w*1.25;
+  const col=ctx.createLinearGradient(cx-colW, 0, cx+colW, 0);
+  col.addColorStop(0,'rgba(54,200,76,0)');
+  col.addColorStop(0.5,'rgba(74,238,96,'+(0.11+0.05*pulse).toFixed(3)+')');
+  col.addColorStop(1,'rgba(54,200,76,0)');
+  ctx.fillStyle=col; ctx.fillRect(cx-colW, topY-w*0.4, colW*2, (baseY-topY)+w*0.6);
+  const cor=ctx.createRadialGradient(cx, baseY-w*0.6, 3, cx, baseY-w*0.6, w*1.5);
+  cor.addColorStop(0,'rgba(72,236,92,'+(0.12+0.06*pulse).toFixed(3)+')');
   cor.addColorStop(1,'rgba(40,150,60,0)');
-  ctx.fillStyle=cor; ctx.beginPath(); ctx.arc(cx, coreY, w*1.15, 0, 6.283); ctx.fill();
-  // periodic lightning to the spire top — strikes more often while a write is charging
+  ctx.fillStyle=cor; ctx.beginPath(); ctx.arc(cx, baseY-w*0.6, w*1.5, 0, 6.283); ctx.fill();
+  // periodic GREEN lightning striking the spire — big, branched, frequent (more so while charging)
   const charging=(typeof CAMPAIGN!=='undefined' && CAMPAIGN.reborn && (CAMPAIGN.reborn.sessions||[]).length>0);
-  const period=charging?2.2:5.5, dur=0.34, ph=(t + id*0.7) % period;
+  const period=charging?1.5:3.2, dur=0.42, ph=(t + id*0.7) % period;
   if(ph < dur){
-    const k=1-ph/dur, flick=0.45+0.55*Math.abs(Math.sin(t*43)), a=k*flick;
-    const sky=Math.max(0, topY - w*3.4);
+    const k=1-ph/dur, flick=0.5+0.5*Math.abs(Math.sin(t*40)), a=k*flick;
+    const sky=Math.max(0, topY - w*4.4);
     const strike=Math.floor((t + id*0.7)/period);
     const rnd=(n)=>{ const s=Math.sin(id*12.9898 + strike*78.233 + n*37.719)*43758.5453; return s-Math.floor(s); };
-    const seg=7, dyStep=(topY-sky)/seg;
-    ctx.lineCap='round';
-    ctx.beginPath(); ctx.moveTo(cx, sky);
-    for(let i=1;i<seg;i++) ctx.lineTo(cx + (rnd(i)-0.5)*w*0.85*(i/seg), sky+dyStep*i);
-    ctx.lineTo(cx, topY);
-    ctx.lineWidth=5.5; ctx.strokeStyle='rgba(80,230,120,'+(0.28*a).toFixed(3)+')'; ctx.stroke();   // green outer glow (A&O)
-    ctx.lineWidth=2.0; ctx.strokeStyle='rgba(195,245,255,'+(0.9*a).toFixed(3)+')'; ctx.stroke();   // cyan-white core
-    const fl=ctx.createRadialGradient(cx, topY, 1, cx, topY, w*1.4*flick);
-    fl.addColorStop(0,'rgba(210,255,235,'+(0.5*a).toFixed(3)+')');
-    fl.addColorStop(1,'rgba(60,220,90,0)');
-    ctx.fillStyle=fl; ctx.beginPath(); ctx.arc(cx, topY, w*1.4*flick, 0, 6.283); ctx.fill();
+    const seg=8, dyStep=(topY-sky)/seg;
+    ctx.lineCap='round'; ctx.lineJoin='round';
+    const pts=[[cx,sky]];
+    for(let i=1;i<seg;i++) pts.push([cx + (rnd(i)-0.5)*w*1.0*(i/seg), sky+dyStep*i]);
+    pts.push([cx, topY]);
+    const stroke=(lw,col)=>{ ctx.beginPath(); ctx.moveTo(pts[0][0],pts[0][1]); for(let i=1;i<pts.length;i++) ctx.lineTo(pts[i][0],pts[i][1]); ctx.lineWidth=lw; ctx.strokeStyle=col; ctx.stroke(); };
+    stroke(12, 'rgba(48,210,76,'+(0.50*a).toFixed(3)+')');     // wide green halo
+    stroke(6,  'rgba(92,255,122,'+(0.72*a).toFixed(3)+')');    // green body
+    stroke(2.2,'rgba(205,255,214,'+(0.95*a).toFixed(3)+')');   // hot core
+    for(let bI=0;bI<2;bI++){                                    // a couple of forked branches
+      const j=2+(((rnd(50+bI)*(seg-3))|0)); const bx=pts[j][0], by=pts[j][1];
+      const ex=bx+(rnd(60+bI)-0.5)*w*1.2, ey=by+dyStep*(1.1+rnd(70+bI));
+      ctx.beginPath(); ctx.moveTo(bx,by); ctx.lineTo((bx+ex)/2+(rnd(80+bI)-0.5)*w*0.3,(by+ey)/2); ctx.lineTo(ex,ey);
+      ctx.lineWidth=3; ctx.strokeStyle='rgba(92,255,122,'+(0.55*a).toFixed(3)+')'; ctx.stroke();
+    }
+    const fl=ctx.createRadialGradient(cx, topY, 1, cx, topY, w*2.3*flick);
+    fl.addColorStop(0,'rgba(175,255,195,'+(0.66*a).toFixed(3)+')');
+    fl.addColorStop(0.4,'rgba(72,240,104,'+(0.40*a).toFixed(3)+')');
+    fl.addColorStop(1,'rgba(40,180,70,0)');
+    ctx.fillStyle=fl; ctx.beginPath(); ctx.arc(cx, topY, w*2.3*flick, 0, 6.283); ctx.fill();
+    const wash=ctx.createLinearGradient(cx, topY, cx, baseY);   // whole spire flares green on a strike
+    wash.addColorStop(0,'rgba(84,245,114,'+(0.22*a).toFixed(3)+')');
+    wash.addColorStop(1,'rgba(50,200,80,0)');
+    ctx.fillStyle=wash; ctx.fillRect(cx-w*0.9, topY, w*1.8, baseY-topY);
   }
   ctx.restore();
 }
@@ -1172,19 +1202,20 @@ function drawVillainGlow(state, u, anim, px, py, S, layer){
   const def=(typeof VILLAINS!=='undefined') && VILLAINS[u.villainId];
   const auraColor=(def && def.auraColor) || [120,220,255];
   const tint=villainPhaseTint(u);                              // phase-2 rage color (e.g. red), else null
-  const boost=(u.bossPhase|0)>=2 ? 1.6 : 1.0;                  // brighter in the rage phase
+  // villains glow STRONGLY by default (a boss, not a trooper); brighter still in the rage phase.
+  const boost=(u.bossPhase|0)>=2 ? 2.4 : 1.6;
   const per=villainNeonFrame(u.neonId, (u._actState||'walk'), u._heroFi);
   // reconstruct the EXACT blitFrame box (assets.js): foot-anchored, mirrored by facing
   const dh=S, dw=S*(anim.fw/anim.fh), dx=px-dw/2, dy=py-dh*0.7;
   const facesLeft=!!(DEF[u.type] && DEF[u.type].facesLeft);
   const flip=((u._face||1)<0) !== facesLeft;
   const list=[];
-  if(layer==='aura'){                                          // big soft body halo behind the sprite
-    list.push({ kind:'spot', x:0.5, y:0.46, rx:0.42, ry:0.36, rot:0,
-                color:tint||auraColor, alpha:0.55*boost, phase:(u.id||0)*0.13, pulse:1, sparkle:0 });
+  if(layer==='aura'){                                          // big soft body halo behind the sprite (always present, even with authored emitters)
+    list.push({ kind:'spot', x:0.5, y:0.50, rx:0.50, ry:0.44, rot:0,
+                color:tint||auraColor, alpha:0.45*boost, phase:(u.id||0)*0.13, pulse:1, sparkle:0 });
   } else if(!per){                                             // no authored emitters → a bright additive core so the boss still reads as glowing
-    list.push({ kind:'spot', x:0.5, y:0.44, rx:0.20, ry:0.18, rot:0,
-                color:tint||auraColor, alpha:0.40*boost, phase:(u.id||0)*0.13, pulse:1, sparkle:0 });
+    list.push({ kind:'spot', x:0.5, y:0.44, rx:0.24, ry:0.22, rot:0,
+                color:tint||auraColor, alpha:0.55*boost, phase:(u.id||0)*0.13, pulse:1, sparkle:0 });
   }
   if(per){                                                     // authored per-frame emitters (both passes), brighten on strike/cast
     let mul=boost;
@@ -1205,7 +1236,8 @@ function drawUnit(state,u,ox,oy){
   const r=u.r;
   const alt = u.air?16:0;   // flyers are drawn raised
   const vh = unitDrawH(u);   // drawn sprite height (incl. hero 15% bump) — HUD/ring scale to this, not collision r
-  const fac = aoSide(state, u.owner) ? 'ao' : null;   // A&O alien sprite set, else owner-keyed (render-only)
+  const _vdef = (u.villain && typeof VILLAINS!=='undefined') ? VILLAINS[u.villainId] : null;   // villains can force a sprite variant (cyan ninja → player set)
+  const fac = (_vdef && _vdef.spriteFaction) || (aoSide(state, u.owner) ? 'ao' : null);   // A&O alien sprite set, else owner-keyed (render-only)
 
   if(PERF.opts.spriteLod && (state.zoom||1) < SPRITE_LOD_ZOOM){
     const sType = u.spriteType || u.type;

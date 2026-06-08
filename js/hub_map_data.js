@@ -182,7 +182,7 @@ window.HUB_MAP_DATA = {
       "y": 19,
       "w": 6,
       "h": 6,
-      "visual": { "type": "hq", "faction": "player", "fixedFrame": 0, "overhang": 0.72, "heightScale": 2.4 }
+      "visual": { "type": "hq", "faction": "player", "fixedFrame": 0, "overhang": 0.46, "heightScale": 2.4, "stack": 2, "stackOverlap": 0.30 }
     }
   ],
   "rivers": [

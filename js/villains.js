@@ -36,6 +36,7 @@ const VILLAINS = {
     name:'THE CYAN NINJA',
     base:'soldier',            // Growth Cyborg sprite (melee range fits a ninja); stats overridden below
     spriteType:'soldier',      // visual sheet (a bespoke cyan recolor can replace this later)
+    spriteFaction:'player',    // render the CYAN player variant (not enemy-red) so the body's own cyan lights match the glow
     neonId:'cyanNinja', neonColor:'#50e6ff', auraColor:[80,230,255], bossScale:2.2,
     hp:7000, dmg:50, range:1.8, cd:0.42, speed:4.6, sight:11,
     dmgReduce:0.35, hpVpiScale:1/60, dmgVpiScale:1/140,   // ≈ 10.8k effective HP at VPI 0, far more vs a veteran army
