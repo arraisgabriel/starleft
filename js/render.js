@@ -174,7 +174,9 @@ function drawLaserBolt(x0,y0,x1,y1, red, w, p, charge){
 }
 
 function render(state){
-  const z=state.zoom||1, vx=state.camX, vy=state.camY;
+  // REX jump-stomp / missile impacts set state._shake; offset the camera with a quick decaying rumble (cosmetic).
+  const _sh=state._shake||0, _t=state.time||0;
+  const z=state.zoom||1, vx=state.camX + (_sh?_sh*Math.sin(_t*47):0), vy=state.camY + (_sh?_sh*Math.cos(_t*41):0);
 
   // ---- phase 1: clear whole backing store in identity/device space ----
   if(PERF.on) PERF.mark('clear');
@@ -1238,6 +1240,7 @@ function drawUnit(state,u,ox,oy){
   const vh = unitDrawH(u);   // drawn sprite height (incl. hero 15% bump) — HUD/ring scale to this, not collision r
   const _vdef = (u.villain && typeof VILLAINS!=='undefined') ? VILLAINS[u.villainId] : null;   // villains can force a sprite variant (cyan ninja → player set)
   const fac = (_vdef && _vdef.spriteFaction) || (aoSide(state, u.owner) ? 'ao' : null);   // A&O alien sprite set, else owner-keyed (render-only)
+  const jz = u._jumpZ||0;   // REX jump-stomp: lifts the sprite off the ground (shadow drawn at the foot below)
 
   if(PERF.opts.spriteLod && (state.zoom||1) < SPRITE_LOD_ZOOM){
     const sType = u.spriteType || u.type;
@@ -1253,14 +1256,19 @@ function drawUnit(state,u,ox,oy){
   const lax = u._ax==null?u.x:u._ax, lay = u._ay==null?u.y:u._ay;
   const mvx = u.x-lax, mvy = u.y-lay, md = Math.hypot(mvx,mvy);
   u._ax=u.x; u._ay=u.y;
+  if(u._ninjaAI){ (u._trailBuf||(u._trailBuf=[])).push({x:u.x,y:u.y}); if(u._trailBuf.length>7) u._trailBuf.shift(); }   // dash afterimage source (works on the client too — position-derived)
   u._walkDist = (u._walkDist||0)+md;
   if(md>0.25){ u._still=0; if(Math.abs(mvx)>0.15 && !u._actState) u._face = mvx<0?-1:1; }   // combat (_actState) → trust the authoritative facing (host/sim), don't flip from interpolated drift
   else u._still=(u._still||0)+1;
   const moving = u._netMoving || (u._still||0) < 6;   // debounce so brief stalls don't flicker to idle; _netMoving = host-authoritative locomotion (co-op client) so eased sub-threshold motion still animates
 
   ctx.save();
+  if(u._ninjaHidden){ const _nN=(_vdef&&_vdef.ninja)||{}; ctx.globalAlpha*=(_nN.hideAlpha||0.16); }   // smoke-bomb vanish: dim the whole sprite (+ glow) within this save
   // selection ring — a ground ellipse under the sprite's FEET, scaled to the sprite (no shadow)
   if(u.selected){ const fy=py-alt+vh*0.3; ctx.strokeStyle='#8effb0'; ctx.lineWidth=2; ctx.beginPath(); ctx.ellipse(px,fy,vh*0.34,vh*0.14,0,0,6.28); ctx.stroke(); }
+  // REX leap: a ground shadow at the foot that shrinks + fades as the mech rises (reads as real height)
+  if(jz>0){ const fy=py-alt+vh*0.3, k=Math.max(0,1-jz/((u.r||16)*4.5)), rad=vh*0.34*(0.45+0.55*k);
+    ctx.save(); ctx.globalAlpha=0.34*k; ctx.fillStyle='#000'; ctx.beginPath(); ctx.ellipse(px,fy,rad,rad*0.4,0,0,6.28); ctx.fill(); ctx.restore(); }
 
   // A&O alien ground-aura (render-only): faint toxic-green additive halo under the feet, drawn
   // beneath the sprite. Owner-gated (captured A&O → fac null → no aura), off under reduced-motion.
@@ -1320,11 +1328,22 @@ function drawUnit(state,u,ox,oy){
       }
     }
     u._heroFi = fi;   // frame index actually shown — so the per-frame hero glow looks up the right anchor
-    if(u.hero) drawHeroGlowLayer(state, u, useAnim, px, (py-alt)+bShift, S*bScale, 'aura');   // halo behind
-    else if(u.villain) drawVillainGlow(state, u, useAnim, px, (py-alt)+bShift, S*bScale, 'aura');
-    const dh = blitFrame(u,px,(py-alt)+bShift,useAnim,S*bScale,fi);
-    if(u.hero) drawHeroGlowLayer(state, u, useAnim, px, (py-alt)+bShift, S*bScale, 'core');   // bright core in front
-    else if(u.villain) drawVillainGlow(state, u, useAnim, px, (py-alt)+bShift, S*bScale, 'core');
+    const pyB = (py-alt)+bShift-jz;   // sprite/glow baseline, lifted by a REX leap (jz)
+    if(u.hero) drawHeroGlowLayer(state, u, useAnim, px, pyB, S*bScale, 'aura');   // halo behind
+    else if(u.villain) drawVillainGlow(state, u, useAnim, px, pyB, S*bScale, 'aura');
+    // CYAN NINJA dash afterimage: faint additive ghosts of the current frame at recent positions; ghosts
+    // coincident with the live sprite (idle) are skipped, so a streak only appears while actually dashing.
+    if(u._ninjaAI && u._trailBuf && u._trailBuf.length>1 && !(typeof megaReducedMotion==='function'&&megaReducedMotion())){
+      const buf=u._trailBuf, nb=buf.length;
+      ctx.save(); ctx.globalCompositeOperation='lighter';
+      for(let i=0;i<nb-1;i++){ const g=buf[i], gdx=u.x-g.x, gdy=u.y-g.y;
+        if(gdx*gdx+gdy*gdy < 9) continue;
+        ctx.globalAlpha=0.16*(i/nb); blitFrame(u, g.x+ox, (g.y-alt)+bShift, useAnim, S*bScale, fi); }
+      ctx.restore(); ctx.globalAlpha=1;
+    }
+    const dh = blitFrame(u,px,pyB,useAnim,S*bScale,fi);
+    if(u.hero) drawHeroGlowLayer(state, u, useAnim, px, pyB, S*bScale, 'core');   // bright core in front
+    else if(u.villain) drawVillainGlow(state, u, useAnim, px, pyB, S*bScale, 'core');
     if(u.type==='worker' && u.carrying>0){ ctx.fillStyle='#ffd86b'; ctx.beginPath(); ctx.arc(px,py-alt-dh*0.7-4,3,0,6.28); ctx.fill(); }
   } else if(u.villain){
     // defensive fallback — a villain whose bespoke sheet is missing still reads as a giant glowing mass
@@ -1458,9 +1477,57 @@ function drawPlacement(state,ox,oy){
   state.placeCandidate={tx,ty,ok};
 }
 
-/* selection-ring fx */
-let rings=[];
+/* selection-ring fx (+ cyan-ninja smoke puffs/slashes, + REX mech missiles/explosions/shockwaves — all cosmetic) */
+let rings=[], smokes=[], slashes=[], missiles=[], explosions=[], shockwaves=[];
 function spawnRing(wx,wy,color){ rings.push({x:wx,y:wy,r:6,max:26,color,t:1}); }
+// ninja smoke-bomb vanish: a DENSE, glowing cyan→blue cloud — layered soft puffs that billow out, rise and
+// fade. Deterministic (golden-angle spread, no RNG). Each puff is drawn as a soft radial gradient in drawRings.
+const SMOKE_PAL=[[200,250,255],[120,234,255],[64,200,250],[40,168,242]];   // white-cyan core → mid cyan → blue
+function spawnSmoke(wx,wy,color){
+  const reduced = (typeof megaReducedMotion==='function' && megaReducedMotion());
+  const N = reduced ? 16 : 40;
+  for(let i=0;i<N;i++){
+    const a = i*2.39996 + wx*0.011;                    // golden angle → even, non-random fill
+    const ring = Math.pow(i/N, 1.35);                  // 0 (center) → 1 (outer); skew packs the cloud DENSE at the core
+    const spd = 0.18 + ring*1.25 + (i%3)*0.16;
+    const c = SMOKE_PAL[i & 3];
+    smokes.push({
+      x: wx + Math.cos(a)*ring*7, y: wy + Math.sin(a)*ring*7,
+      vx: Math.cos(a)*spd, vy: Math.sin(a)*spd - 0.6,   // billow outward + drift UP like smoke
+      r: 9 + (i%4)*3 + ring*7, grow: 0.6 + (i%3)*0.4,   // slower growth → stays thick longer
+      cr:c[0], cg:c[1], cb:c[2], t:1, life: 1.05 + (i%5)*0.14,
+    });
+  }
+  if(!reduced) for(let i=0;i<4;i++)                    // bright central flares for the initial "poof"
+    smokes.push({ x:wx, y:wy, vx:0, vy:-0.16, r:16+i*7, grow:1.3, cr:210,cg:252,cb:255, t:1, life:0.55, flare:1 });
+}
+// ninja strike: a bright fading blade-streak from the ninja to its victim
+function spawnSlash(u,t,color){ slashes.push({x1:u.x,y1:u.y, x2:t.x,y2:t.y, color:color||'#bffcff', t:1}); }
+
+/* ---- REX mech FX — toxic-green plasma. All additive, reduced-motion-gated, decayed in drawRings. ---- */
+// a lobbed missile: parabolic arc from cannon (x0,y0) to impact (x1,y1) over `dur`, trailing green plasma.
+function spawnMissile(x0,y0,x1,y1,dur){ missiles.push({x0,y0,x1,y1,dur,t:0, arc:36+Math.hypot(x1-x0,y1-y0)*0.16, e:0}); }
+// an impact burst: bright green flash ring + a puff of plasma smoke.
+function spawnExplosion(wx,wy){
+  explosions.push({x:wx,y:wy,t:0,life:0.45,r0:9,r1:38});
+  if(typeof spawnRing==='function') spawnRing(wx,wy,'#9bff7a');
+  const reduced=(typeof megaReducedMotion==='function'&&megaReducedMotion()), N=reduced?6:12;
+  for(let i=0;i<N;i++){ const a=i*2.39996+wx*0.01, sp=0.7+(i%3)*0.45;
+    smokes.push({x:wx,y:wy, vx:Math.cos(a)*sp, vy:Math.sin(a)*sp-0.15, r:6+(i%3)*3, grow:0.95, cr:150+(i%2)*70, cg:255, cb:110, t:1, life:0.5}); }
+}
+// the earthquake: a fast, thick green double ground-ring (flattened ellipse = ground perspective).
+function spawnShockwave(wx,wy,rMax){ shockwaves.push({x:wx,y:wy,rMax,t:0,life:0.55}); }
+// thruster jet: a downward fan of bright green-white plasma exhaust.
+function spawnThruster(wx,wy,vxBias,speed){
+  for(let i=0;i<4;i++){ const a=(i-1.5)*0.42 + 1.5708;   // ~downward fan
+    smokes.push({x:wx,y:wy, vx:Math.cos(a)*speed*(0.6+0.2*i)+vxBias, vy:Math.sin(a)*speed*(0.8+0.2*i), r:5+(i%2)*2, grow:0.7, cr:205, cg:255, cb:175, t:1, life:0.4}); }
+}
+// kicked-up dust on landing: low, spreading, grey-green puffs.
+function spawnDust(wx,wy){
+  const reduced=(typeof megaReducedMotion==='function'&&megaReducedMotion()), N=reduced?7:16;
+  for(let i=0;i<N;i++){ const a=i*2.39996+wx*0.01, sp=0.85+(i%4)*0.35;
+    smokes.push({x:wx,y:wy, vx:Math.cos(a)*sp, vy:Math.sin(a)*sp*0.4-0.08, r:7+(i%3)*3, grow:1.2, cr:120, cg:150, cb:110, t:1, life:0.7}); }
+}
 function drawRings(ox,oy){
   for(const r of rings){
     ctx.strokeStyle=r.color; ctx.globalAlpha=r.t; ctx.lineWidth=2;
@@ -1468,6 +1535,73 @@ function drawRings(ox,oy){
     r.r+=0.8; r.t-=0.04;
   }
   rings=rings.filter(r=>r.t>0);
+  if(slashes.length){
+    ctx.save(); ctx.globalCompositeOperation='lighter'; ctx.lineCap='round';
+    for(const s of slashes){
+      ctx.globalAlpha=Math.max(0,s.t); ctx.strokeStyle=s.color; ctx.lineWidth=3*s.t+1;
+      ctx.shadowColor=s.color; ctx.shadowBlur=12*s.t;
+      ctx.beginPath(); ctx.moveTo(s.x1+ox,s.y1+oy); ctx.lineTo(s.x2+ox,s.y2+oy); ctx.stroke();
+      s.t-=0.10;
+    }
+    ctx.shadowBlur=0; ctx.restore(); ctx.globalAlpha=1;
+    slashes=slashes.filter(s=>s.t>0);
+  }
+  if(shockwaves.length){                                       // earthquake ground-rings (drawn under the dust)
+    ctx.save(); ctx.globalCompositeOperation='lighter';
+    for(const w of shockwaves){
+      w.t+=1/60; const p=Math.min(1,w.t/w.life), r=w.rMax*p, a=1-p;
+      ctx.strokeStyle=`rgba(150,255,110,${(a*0.9).toFixed(3)})`; ctx.lineWidth=6*(1-p)+2;
+      ctx.beginPath(); ctx.ellipse(w.x+ox,w.y+oy, r, r*0.42, 0,0,6.28); ctx.stroke();
+      ctx.strokeStyle=`rgba(225,255,195,${(a*0.5).toFixed(3)})`; ctx.lineWidth=3*(1-p)+1;
+      ctx.beginPath(); ctx.ellipse(w.x+ox,w.y+oy, r*0.66, r*0.66*0.42, 0,0,6.28); ctx.stroke();
+    }
+    ctx.restore(); ctx.globalAlpha=1;
+    shockwaves=shockwaves.filter(w=>w.t<w.life);
+  }
+  if(smokes.length){
+    ctx.save(); ctx.globalCompositeOperation='lighter';
+    for(const s of smokes){
+      const tt=Math.max(0,s.t);
+      const env = (tt>0.85 ? (1-tt)/0.15 : tt);                 // quick fade-IN (first 15%), then slow fade-out
+      const rad = s.r*(1 + s.grow*(1-tt));                      // billow: grow as it ages
+      const px=s.x+ox, py=s.y+oy;
+      const a0 = (s.flare?0.95:0.68)*env;
+      const g=ctx.createRadialGradient(px,py,0, px,py,rad);
+      g.addColorStop(0,    `rgba(${s.cr},${s.cg},${s.cb},${a0.toFixed(3)})`);
+      g.addColorStop(0.45, `rgba(${s.cr},${s.cg},${s.cb},${(a0*0.34).toFixed(3)})`);
+      g.addColorStop(1,    `rgba(${s.cr},${s.cg},${s.cb},0)`);
+      ctx.fillStyle=g;
+      ctx.beginPath(); ctx.arc(px,py,rad,0,6.28); ctx.fill();
+      s.x+=s.vx; s.y+=s.vy; s.vx*=0.96; s.vy=s.vy*0.96-0.012;   // drag + keep drifting up
+      s.t-=1/(s.life*60);
+    }
+    ctx.restore(); ctx.globalAlpha=1;
+    smokes=smokes.filter(s=>s.t>0);
+  }
+  if(missiles.length){                                         // arcing plasma missiles (head + trail)
+    ctx.save(); ctx.globalCompositeOperation='lighter';
+    for(const m of missiles){
+      m.t+=1/60; const p=Math.min(1,m.t/m.dur);
+      const x=m.x0+(m.x1-m.x0)*p, y=m.y0+(m.y1-m.y0)*p - m.arc*Math.sin(p*Math.PI);
+      m.e=(m.e||0)+1; if(m.e%2===0) smokes.push({x,y,vx:0,vy:0.25,r:5,grow:0.8,cr:150,cg:255,cb:120,t:1,life:0.4});   // plasma trail
+      const px=x+ox, py=y+oy, g=ctx.createRadialGradient(px,py,0,px,py,10);
+      g.addColorStop(0,'rgba(225,255,205,0.95)'); g.addColorStop(0.5,'rgba(120,255,90,0.5)'); g.addColorStop(1,'rgba(120,255,90,0)');
+      ctx.fillStyle=g; ctx.beginPath(); ctx.arc(px,py,10,0,6.28); ctx.fill();
+    }
+    ctx.restore(); ctx.globalAlpha=1;
+    missiles=missiles.filter(m=>m.t<m.dur);
+  }
+  if(explosions.length){                                       // impact bursts (bright green flash)
+    ctx.save(); ctx.globalCompositeOperation='lighter';
+    for(const e of explosions){
+      e.t+=1/60; const p=Math.min(1,e.t/e.life), r=e.r0+(e.r1-e.r0)*p, a=(1-p)*0.95;
+      const px=e.x+ox, py=e.y+oy, g=ctx.createRadialGradient(px,py,0,px,py,r);
+      g.addColorStop(0,`rgba(235,255,215,${a.toFixed(3)})`); g.addColorStop(0.5,`rgba(120,255,90,${(a*0.5).toFixed(3)})`); g.addColorStop(1,'rgba(60,200,70,0)');
+      ctx.fillStyle=g; ctx.beginPath(); ctx.arc(px,py,r,0,6.28); ctx.fill();
+    }
+    ctx.restore(); ctx.globalAlpha=1;
+    explosions=explosions.filter(e=>e.t<e.life);
+  }
 }
 
 /* ---- minimap ---- */

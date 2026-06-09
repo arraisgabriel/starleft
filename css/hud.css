@@ -58,26 +58,52 @@ html,body{ overscroll-behavior:none; -webkit-touch-callout:none; }
    part of #topbar (would shrink VIEW_TOP) — pointer-events:none so it never eats clicks. JS
    (refreshUI) sets the name, fill width, and per-villain color inline; the .bossbar--rage class
    (boss phase 2) swaps to red + adds the crack/shake. */
-#bossbar{ --boss-color:#50e6ff; position:fixed; top:52px; left:50%; transform:translateX(-50%);
-  width:min(560px,82vw); z-index:21; pointer-events:none; text-align:center; }
-#bossbar-name{ font-size:13px; font-weight:800; letter-spacing:2.5px; text-transform:uppercase;
-  color:var(--boss-color); text-shadow:0 0 8px currentColor, 0 1px 2px rgba(0,0,0,.9); margin-bottom:4px; }
-#bossbar-track{ position:relative; height:15px; border-radius:8px; overflow:hidden;
-  background:#10151c; border:1px solid rgba(255,255,255,.18);
-  box-shadow:0 2px 12px rgba(0,0,0,.6), inset 0 1px 2px rgba(0,0,0,.7); }
-#bossbar-fill{ height:100%; width:100%; border-radius:8px 0 0 8px;
-  background:var(--boss-color); box-shadow:0 0 12px var(--boss-color), inset 0 0 6px rgba(255,255,255,.35);
-  transition:width .25s linear; animation:bossPulse 5.5s ease-in-out infinite; }
-#bossbar-track::after{ content:''; position:absolute; inset:0; opacity:0; pointer-events:none;
+#bossbar{ --boss-color:#50e6ff; --boss-glow:color-mix(in srgb, var(--boss-color) 45%, transparent);
+  position:fixed; top:50px; left:50%; transform:translateX(-50%);
+  width:min(580px,84vw); z-index:21; pointer-events:none; text-align:center; }
+/* name + live HP% on one row (HP% echoes the Training Grounds countdown readout) */
+#bossbar-head{ display:flex; align-items:baseline; justify-content:center; gap:10px; margin-bottom:5px; }
+#bossbar-name{ font-size:13px; font-weight:800; letter-spacing:3px; text-transform:uppercase; color:#fff;
+  text-shadow:0 0 9px var(--boss-color), 0 0 20px var(--boss-glow), 0 1px 2px rgba(0,0,0,.95); }
+#bossbar-hp{ font-size:13px; font-weight:800; letter-spacing:1px; font-variant-numeric:tabular-nums;
+  color:var(--boss-color); text-shadow:0 0 9px var(--boss-color), 0 1px 2px rgba(0,0,0,.9); min-width:42px; text-align:right; }
+/* glossy capsule track with a soft, breathing boss-colored halo */
+#bossbar-track{ position:relative; height:16px; border-radius:9px; overflow:hidden;
+  background:linear-gradient(180deg,#171d26,#090d12);
+  border:1px solid color-mix(in srgb, var(--boss-color) 50%, rgba(255,255,255,.12));
+  box-shadow:0 0 16px var(--boss-glow), 0 2px 14px rgba(0,0,0,.6),
+             inset 0 1px 2px rgba(255,255,255,.10), inset 0 -3px 5px rgba(0,0,0,.6);
+  animation:bossHalo 3.2s ease-in-out infinite; }
+/* gradient fill: dark base → boss color → white-hot, with a glow, a glassy top highlight,
+   a bright leading "head" edge, and a slow sweeping sheen — inspired by the training-time bar */
+#bossbar-fill{ position:relative; height:100%; width:100%; border-radius:9px;
+  background:var(--boss-color);   /* fallback for browsers without color-mix */
+  background:linear-gradient(90deg,
+      color-mix(in srgb, var(--boss-color) 55%, #000) 0%,
+      var(--boss-color) 58%,
+      color-mix(in srgb, var(--boss-color) 50%, #fff) 100%);
+  box-shadow:0 0 16px var(--boss-color), 0 0 6px var(--boss-color),
+             inset 0 2px 3px rgba(255,255,255,.5), inset 0 -3px 6px rgba(0,0,0,.35);
+  transition:width .25s ease; }
+#bossbar-fill::before{ content:''; position:absolute; top:0; right:0; bottom:0; width:3px;   /* bright leading edge */
+  background:color-mix(in srgb, var(--boss-color) 25%, #fff);
+  box-shadow:0 0 10px 2px var(--boss-color), 0 0 5px #fff; }
+#bossbar-fill::after{ content:''; position:absolute; inset:0; pointer-events:none;   /* sweeping gloss sheen */
+  background:linear-gradient(105deg, transparent 32%, rgba(255,255,255,.55) 48% 52%, transparent 68%);
+  transform:translateX(-130%); animation:bossSheen 3.6s ease-in-out infinite; }
+/* rage (phase 2): red theme + cracked-glass overlay + shake */
+#bossbar-track::after{ content:''; position:absolute; inset:0; opacity:0; pointer-events:none; z-index:2;
   background:linear-gradient(115deg,transparent 46%,rgba(0,0,0,.65) 48% 50%,transparent 52%),
              linear-gradient(72deg,transparent 60%,rgba(0,0,0,.55) 62% 63%,transparent 65%);
   transition:opacity .3s ease; }
 #bossbar.bossbar--rage{ --boss-color:#ff5b5b; animation:bossShake .12s linear infinite; }
 #bossbar.bossbar--rage #bossbar-track::after{ opacity:1; }
-@keyframes bossPulse{ 0%,100%{ filter:brightness(1); } 50%{ filter:brightness(1.4); } }
+@keyframes bossHalo{ 0%,100%{ box-shadow:0 0 12px var(--boss-glow),0 2px 14px rgba(0,0,0,.6),inset 0 1px 2px rgba(255,255,255,.10),inset 0 -3px 5px rgba(0,0,0,.6); }
+  50%{ box-shadow:0 0 26px var(--boss-color),0 2px 14px rgba(0,0,0,.6),inset 0 1px 2px rgba(255,255,255,.13),inset 0 -3px 5px rgba(0,0,0,.6); } }
+@keyframes bossSheen{ 0%{ transform:translateX(-130%); } 55%,100%{ transform:translateX(130%); } }
 @keyframes bossShake{ 0%,100%{ transform:translateX(-50%); } 25%{ transform:translateX(calc(-50% - 1.5px)); }
   75%{ transform:translateX(calc(-50% + 1.5px)); } }
-@media (prefers-reduced-motion: reduce){ #bossbar-fill{ animation:none; } #bossbar.bossbar--rage{ animation:none; } }
+@media (prefers-reduced-motion: reduce){ #bossbar-track{ animation:none; } #bossbar-fill::after{ display:none; } #bossbar.bossbar--rage{ animation:none; } }
 /* Unified top-right menu — one button (same look as the in-game buttons) that
    toggles a dropdown holding News / Roster / Events / Save / Fullscreen.
    Lives in the top bar so it works on desktop and mobile alike. */

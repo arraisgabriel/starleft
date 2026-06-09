@@ -403,10 +403,10 @@ Weaponize your buzzwords, circle back, and disrupt MegaCorp into bankruptcy. The
       crime:'authoring the laws that made a hundred rivals simply vanish',
     } } ],
     // BIBA — caged at the map's heart with a captive intern. Freed when every enemy unit inside her
-    // cell's freeRadius is dead (freeCaptives, core.js); on release she becomes a Level-10 Recruiter
+    // cell's freeRadius is dead (freeCaptives, core.js); on release she becomes a Level-12 Recruiter
     // HERO and joins the hero carryover, persisting like Nino. The intern rejoins your workforce.
     captives:[
-      { x:44, y:130, type:'recruiter', hero:true, name:'Biba', sprite:'biba', level:10, freeRadius:14,
+      { x:44, y:130, type:'recruiter', hero:true, name:'Biba', sprite:'biba', level:12, freeRadius:14,
         dossier:{ first:'Biba', home:'the flooded arcologies of Lagos-2',
           family:'raised six younger siblings on relief credits',
           trauma:'watched her first squad triaged out of existence by an algorithm',

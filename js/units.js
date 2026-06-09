@@ -130,6 +130,21 @@ function commandUnits(state, wx, wy, target){
     spawnRing(target.x,target.y,'#8effb0');
     return;
   }
+  // focus-heal: a selected healer commanded onto a friendly unit locks onto and mends it,
+  // then reverts to auto-heal once it is full (see updateUnit's healunit handler). Non-healers
+  // in the selection escort to the target. HQ/buildings/mad-dogs/captives are handled above.
+  if(target && target.owner==='player' && target.kind==='unit' && !target.storedIn && !target.madDog){
+    const healers = units.filter(u=> u!==target && DEF[u.type] && DEF[u.type].heal>0);
+    if(healers.length){
+      healers.forEach(u=>{ resetMotion(u); u.sprinting=false; u.cmd={type:'healunit', target}; u.state='heal'; u._toHeal=false; });
+      units.filter(u=> healers.indexOf(u)<0).forEach((u,i)=>{ resetMotion(u); issueMove(state,u, target.x+((i%3)-1)*24, target.y+26); });
+      spawnRing(target.x,target.y,'#8effb0');
+      const nm=(DEF[target.type]&&DEF[target.type].name)||'ally';
+      toast(healers.length===1 ? ('Healer mending '+nm) : (healers.length+' healers mending '+nm));
+      return;
+    }
+    // no healer selected → fall through to the normal move handler (squad escorts to the ally)
+  }
   if(target && target.owner && target.owner!=='player'){
     if(state.hub && target.hubPoi && typeof hubCommandPoi==='function'){
       if(hubCommandPoi(state, units, target)) return;
@@ -233,7 +248,7 @@ function issueEnterHq(state, units, hq){
   toast(movers.length===1 ? 'Unit entering HQ.' : movers.length+' units entering HQ.');
   return true;
 }
-function storeUnitInHq(state,u,hq){
+function storeUnitInHq(state,u,hq,quiet){
   if(!state||!u||!hq||hq.dead||hq.type!=='hq') return false;
   if(u.type==='worker' && u.carrying>0){
     const eco=playerEco(state, u.ctrl || hq.ctrl || 'p1');
@@ -248,8 +263,28 @@ function storeUnitInHq(state,u,hq){
   u.selected=false;
   state.selection=state.selection.filter(e=>e!==u);
   spawnRing(hq.x,hq.y,'#8effb0');
-  toast((DEF[u.type].name||'Unit')+' stored in HQ.');
+  if(!quiet) toast((DEF[u.type].name||'Unit')+' stored in HQ.');
   refreshUI();
+  return true;
+}
+// nearest finished, friendly HQ to a unit (storeUnitInHq only accepts type==='hq', unlike nearestDeposit)
+function nearestHq(state, e){
+  let best=null,bd=1e18;
+  for(const o of state.entities){
+    if(o.dead||o.owner!==e.owner||o.kind!=='building'||o.type!=='hq'||o.constructing) continue;
+    const dx=o.x-e.x,dy=o.y-e.y,d=dx*dx+dy*dy; if(d<bd){bd=d;best=o;}
+  }
+  return best;
+}
+// Biba can't die: a downed hero medic is rushed into the nearest friendly HQ (fully patched up) instead
+// of being killed, so she's extracted at mission end with the veterans. With no HQ to flee to she simply
+// refuses to die in place (clamped to 1 HP). Returns true if she was garrisoned.
+function downHeroToHq(state, u){
+  const hq = nearestHq(state, u);
+  if(!hq){ u.hp = Math.max(1, u.hp); return false; }   // nowhere to fall back to → won't die, holds at 1 HP
+  storeUnitInHq(state, u, hq, true);                   // quiet store — we narrate the downing ourselves
+  u.hp = u.maxHp;                                       // recovered inside the HQ (and keeps hp>0 so the death loop won't re-fire)
+  if(!window._rbReplaying) toast('🚑 '+(u.heroId||u.captiveName||'Biba')+' was downed — extracted to the HQ.');
   return true;
 }
 function releaseStoredUnit(state,hq,id){
@@ -383,7 +418,7 @@ function isHostile(a,b){
 function nearestEnemy(state, e, radius){
   let best=null,bd=radius*radius; const air=canHitAir(e);
   for(const o of state.entities){
-    if(o.dead||o.storedIn||o.owner==null||!isHostile(e,o)) continue;
+    if(o.dead||o.storedIn||o.owner==null||o._untargetable||!isHostile(e,o)) continue;   // _untargetable: the ninja while smoke-bombed
     if(o.owner!=='player'&&o.owner!=='enemy') continue;
     if(o.air && !air) continue;                 // melee/no-AA units ignore flyers
     const dx=o.x-e.x,dy=o.y-e.y,d=dx*dx+dy*dy;
@@ -444,6 +479,11 @@ function spawnTrained(state,b,type){
 
 function updateUnit(state,u,dt){
   if(u.captive){ u._actState=null; u.vx=0; u.vy=0; u.path=null; return; }   // imprisoned: stands inert until freed
+  // CYAN NINJA: its movement+combat are fully owned by updateNinja (runs later this tick). Yield here so
+  // normal auto-acquire/melee-camp never touches it. Flee (low HP) drops back to the standard move handler.
+  if(u._ninjaAI && !u._fleeing) return;
+  // REX: while it's mid jump-stomp it must not walk or fire — updateMech owns those ticks.
+  if(u._mechAirborne) return;
   let cmd=u.cmd;
   const def=DEF[u.type];
   u._actState=null;   // set to 'attack' / 'mine' / 'heal' below (drives action sprites)
@@ -477,6 +517,26 @@ function updateUnit(state,u,dt){
     else { u._setupT=0; u.sieged=false; }
   }
 
+  // ---- explicit focus-heal (player commanded this healer onto a specific ally) ----
+  // Locks onto cmd.target and never auto-diverts to a closer wounded unit. When the target is
+  // gone/dead/full, clear the cmd and fall through to the auto-heal block the SAME frame
+  // ("heal once, then auto") — clearing the local `cmd` too so the auto-pick guard re-fires.
+  if(def.heal && cmd && cmd.type==='healunit'){
+    const t=cmd.target;
+    if(!t || t.dead || t.hp>=t.maxHp){ cmd=u.cmd=null; u._toHeal=false; }
+    else {
+      u._healTarget=t;
+      const reach=u.range*TILE+entRadius(t);
+      if(dist(u,t)<=reach){ u.path=null; faceTo(u,t); u._actState='heal'; u._face=t.x<u.x?-1:1;
+        const m=healMul(u), before=t.hp;
+        t.hp=Math.min(t.maxHp, before + def.heal*m*dt);
+        const restored=t.hp-before;
+        if(u.hero && restored>0) gainHealXp(u, restored/m, state); }
+      else { if(!u._toHeal||(u._healRepath||0)<=0){ issueMoveKeepCmd(state,u,t.x,t.y); u._toHeal=true; u._healRepath=0.5; } u._healRepath-=dt; followPath(state,u,dt); }
+      return;
+    }
+  }
+
   // ---- auto-heal (Recruiter / Drugztore Delivery Drone): follow & mend the most-hurt ally in sight ----
   // (a sprinting healer ignores wounded allies and keeps running with the squad)
   if(def.heal && !u.sprinting){
@@ -490,7 +550,10 @@ function updateUnit(state,u,dt){
     if(tgt && !tgt.dead && tgt.hp<tgt.maxHp){
       const reach=u.range*TILE+entRadius(tgt);
       if(dist(u,tgt)<=reach){ u.path=null; faceTo(u,tgt); u._actState='heal'; u._face=tgt.x<u.x?-1:1;
-        tgt.hp=Math.min(tgt.maxHp, tgt.hp + def.heal*dt); }
+        const m=healMul(u), before=tgt.hp;                            // hero medics (Biba) heal faster & scale with level
+        tgt.hp=Math.min(tgt.maxHp, before + def.heal*m*dt);
+        const restored=tgt.hp-before;                                 // XP credits BASE output (÷m) so leveling pace stays flat
+        if(u.hero && restored>0) gainHealXp(u, restored/m, state); }
       else { if(!u._toHeal||(u._healRepath||0)<=0){ issueMoveKeepCmd(state,u,tgt.x,tgt.y); u._toHeal=true; u._healRepath=0.5; } u._healRepath-=dt; followPath(state,u,dt); }
       return;
     } else u._toHeal=false;   // nothing to heal → fall through to move/idle (healers don't fight)
@@ -517,6 +580,7 @@ function updateUnit(state,u,dt){
   // falls through to the move handler — so it keeps running and never fights back.
   if(u.sprinting){ u.autoTarget=null; atk=null; }
   if(atk && atk.air && !canHitAir(u)){ atk=null; u.autoTarget=null; if(cmd&&cmd.type==='attack')u.cmd=null; }  // can't reach flyers
+  if(atk && atk._untargetable){ atk=null; u.autoTarget=null; if(cmd&&cmd.type==='attack')u.cmd=null; }          // lost lock — the ninja vanished in smoke
 
   if(atk){
     // a unit beginning a NEW engagement rallies nearby idle allies to join the fight
@@ -865,7 +929,7 @@ function callToArms(state, foe, side, from){
 function damage(state, t, amt, src){
   if(t.dead||t.storedIn) return;
   if(t.captive) return;   // imprisoned captives (Biba + the intern) are invulnerable until Nino frees them — neither friendly fire nor splash can kill them
-  if(t.dmgReduce>0) amt *= (1 - t.dmgReduce);   // villains (and any future armored unit) shrug off a flat % of incoming damage
+  if(t.dmgReduce>0){ const red = t._exposed ? t.dmgReduce*(t._exposeMul||0.4) : t.dmgReduce; amt *= (1 - red); }   // armored units shrug off a flat %; an EXPOSED ninja (mid-strike wind-up) takes the punish-window bonus
   t.hp-=amt;
   t.hitFx=0.12;
   t._lastHit=state.time;   // pauses veteran self-heal (vetRegen) while in/near combat

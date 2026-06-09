@@ -90,6 +90,9 @@ function update(state, dt){
   for(const e of state.entities){
     if(e.dead) continue;
     if(e.hp<=0 && e.type!=='goldmine'){
+      // Biba can't die: a downed hero medic falls back to the nearest HQ for end-of-mission extraction
+      // instead of dying — so this runs BEFORE the obituary/fallen side-effects below.
+      if(e.kind==='unit' && e.owner==='player' && typeof isHealerVet==='function' && isHealerVet(e)){ downHeroToHq(state,e); changed=true; continue; }
       if(e.owner==='player' && e.kind==='unit' && !window._rbReplaying && typeof LNS!=='undefined' && LNS.ultraEvent) LNS.ultraEvent('unitDeath', { unit:e, map:state.cfg&&state.cfg.name });   // cosmetic news — skip during rollback re-sim
       if(e.owner==='player' && e.kind==='unit' && e.lore && typeof recordFallen==='function') recordFallen(e);  // memorial + obituary
       killEntity(state,e); changed=true;

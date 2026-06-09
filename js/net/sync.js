@@ -132,7 +132,7 @@ window.NET = window.NET || {};
       // VILLAIN (boss): client renders the giant size, glow and boss HP bar purely from these — it
       // never simulates the boss. villainId keys the static VILLAINS table (present on every client),
       // so colors/abilities/phases derive locally; only these few fields cross the wire.
-      if(e.villain){ o.vil=1; o.vid=e.villainId; o.vn=e.villainName; o.bp=e.bossPhase||1; o.bsc=e.bossScale||1; o.nid=e.neonId; }
+      if(e.villain){ o.vil=1; o.vid=e.villainId; o.vn=e.villainName; o.bp=e.bossPhase||1; o.bsc=e.bossScale||1; o.nid=e.neonId; if(e._ninjaHidden) o.nh=1; if(e._jumpZ) o.jz=Math.round(e._jumpZ); }   // nh: ninja vanish dim; jz: REX leap height
     } else if(e.kind==='echo'){
       o.fac=e.facet;   // MADOSIS rescue beacon (x/y/hp already in the base packet); facet drives its color
     } else if(e.kind==='building'){
@@ -187,6 +187,9 @@ window.NET = window.NET || {};
       e.madEpisode = o.ep ? { phase:(o.ep===3?'feral':o.ep===2?'defiance':'tremor'), t:0 } : null;
       // VILLAIN (render-only on the client) — bossScale MUST land here or unitDrawH draws a tiny boss
       e.villain=!!o.vil; e.villainId=o.vid||null; e.villainName=o.vn||null; e.bossPhase=o.bp||1; e.bossScale=o.bsc||1; e.neonId=o.nid||null;
+      e._ninjaAI = e.villain && (typeof VILLAINS!=='undefined') && VILLAINS[e.villainId] && VILLAINS[e.villainId].aiKind==='ninja';   // enable the afterimage trail on the client (render-only)
+      e._ninjaHidden = !!o.nh;
+      e._jumpZ = o.jz||0;   // REX leap height (render-only on the client)
     } else if(o.k==='echo'){
       e.x=o.x; e.y=o.y; e.facet=o.fac; e.r=12;       // MADOSIS rescue beacon (client render)
     } else if(o.k==='building'){

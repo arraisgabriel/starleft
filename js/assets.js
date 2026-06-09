@@ -197,7 +197,14 @@ function unitWalk(type,owner,faction){ const e=UNIT_WALK[type]; if(!e) return nu
 const HERO_SCALE = 1.15;
 function unitDrawH(u){ const base = (UNIT_SPRITE_H[u.spriteType] || UNIT_SPRITE_H[u.type] || u.r*2);
   return base * (u.hero ? HERO_SCALE : 1) * (u.bossScale || 1); }   // villains draw 2×–5× bigger (HUD/ring/glow are vh-relative → all scale together)
-function unitHitBox(u){ const h=unitDrawH(u), alt=u.air?16:0, hw=h*0.34;
+function unitHitBox(u){ const h=unitDrawH(u), alt=u.air?16:0;
+  let hw=h*0.34;   // normal units: tight to the character inside its padded frame
+  if(u.villain){   // BOSSES draw 2×–5× big with a wide glow — make the WHOLE drawn sprite clickable, not a
+    // tiny spot. Match blitFrame's box exactly (dw = S*fw/fh, centered) + a small grab margin for the glow.
+    const anim = (typeof unitWalk==='function') ? unitWalk(u.spriteType||u.type, u.owner) : null;
+    const ar = (anim && anim.fh) ? (anim.fw/anim.fh) : 1;
+    hw = Math.max(h*0.34, h*0.5*ar*1.08);
+  }
   return { cx:u.x, hw, top:u.y-alt-h*0.7, bot:u.y-alt+h*0.3, footY:u.y-alt+h*0.3 }; }
 
 // action animations (mine / attack / heal), played in place during the action

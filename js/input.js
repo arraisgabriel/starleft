@@ -91,6 +91,13 @@ function dispatchTap(e, opts){
     netCommand(G, w.x, w.y, ent); return;
   }
 
+  // healer focus-heal: with a healer selected, tapping a friendly UNIT mends it instead of
+  // reselecting (⌘/Shift+tap above still aggregates selection — the escape hatch to select one).
+  const selHasHealer = G.selection.some(s=>!s.dead && !s.storedIn && s.owner==='player' && s.kind==='unit' && DEF[s.type] && DEF[s.type].heal>0);
+  if(friendlyFinished && ent.kind==='unit' && selHasHealer && !(G.selection.length===1 && G.selection[0]===ent)){
+    netCommand(G, w.x, w.y, ent); return;
+  }
+
   // tapping your own finished unit/building reselects it (never move-onto-friendly)
   if(friendlyFinished){
     clearSelection(); ent.selected=true; G.selection=[ent]; refreshUI(); return;
@@ -179,7 +186,10 @@ function pickEntity(state,wx,wy){
       // hit-test the whole VISIBLE sprite box (head→feet), not the small collision r
       const hb=unitHitBox(e);
       if(wx>=hb.cx-hb.hw && wx<=hb.cx+hb.hw && wy>=hb.top && wy<=hb.bot){
-        const d=Math.hypot(e.x-wx, (hb.top+hb.bot)/2-wy); if(d<bd){ bd=d; best=e; }
+        // a VILLAIN (huge boss) WINS the pick whenever its sprite is clicked — so friendly units fighting
+        // right under it can't steal the tap. You can target the boss by clicking ANYWHERE on its sprite.
+        const d=Math.hypot(e.x-wx, (hb.top+hb.bot)/2-wy) - (e.villain ? 1e7 : 0);
+        if(d<bd){ bd=d; best=e; }
       }
     }
   }

@@ -18,11 +18,16 @@ function updateBossBar(){
   if(!boss){ if(bb.style.display!=='none') bb.style.display='none'; return; }
   const def=(typeof VILLAINS!=='undefined') && VILLAINS[boss.villainId];
   bb.style.display='';
-  bb.classList.toggle('bossbar--rage', !!boss.madFlavor);   // red crack/shake only for the themed "Madosis" enrage (Rex)
-  bb.style.setProperty('--boss-color', (def && def.neonColor) || '#50e6ff');
+  // themed "Madosis" enrage (Rex phase 2): red + crack + shake. Derive from synced bossPhase + the static
+  // VILLAINS def so it's correct on a co-op CLIENT too (boss.madFlavor itself isn't synced).
+  const rage = !!boss.madFlavor || (boss.bossPhase>=2 && def && def.phases && def.phases.some(ph=>ph.madFlavor));
+  bb.classList.toggle('bossbar--rage', rage);
+  // inline --boss-color wins over the stylesheet, so set the rage RED here (else the .bossbar--rage rule can't apply)
+  bb.style.setProperty('--boss-color', rage ? '#ff5b5b' : ((def && def.neonColor) || '#50e6ff'));
   document.getElementById('bossbar-name').textContent = boss.villainName || (def && def.name) || 'BOSS';
   const frac=Math.max(0, Math.min(1, boss.maxHp ? boss.hp/boss.maxHp : 0));
   document.getElementById('bossbar-fill').style.width=(frac*100)+'%';
+  const hpEl=document.getElementById('bossbar-hp'); if(hpEl) hpEl.textContent=Math.round(frac*100)+'%';
 }
 function refreshUI(){
   if(!G) return;

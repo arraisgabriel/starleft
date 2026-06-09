@@ -503,10 +503,10 @@ Weaponize your buzzwords, circle back, and disrupt MegaCorp into bankruptcy. The
     // BIBA — caged at the map's heart with a captive intern. They are INVULNERABLE while caged (no
     // friendly fire / splash can kill them) and are freed only when NINO reaches the cell and stands in
     // arm's reach (freeCaptives, core.js) — clearing the guards is not enough, you must walk Nino in.
-    // Reaching one frees both. On release Biba becomes a Level-10 Recruiter HERO and joins the hero
+    // Reaching one frees both. On release Biba becomes a Level-12 Recruiter HERO and joins the hero
     // carryover, persisting like Nino; the intern rejoins your workforce.
     captives:[
-      { x:44, y:130, type:'recruiter', hero:true, name:'Biba', sprite:'biba', level:10,
+      { x:44, y:130, type:'recruiter', hero:true, name:'Biba', sprite:'biba', level:12,
         dossier:{ first:'Biba', home:'the flooded arcologies of Lagos-2',
           family:'raised six younger siblings on relief credits',
           trauma:'watched her first squad triaged out of existence by an algorithm',

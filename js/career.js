@@ -1,11 +1,13 @@
 /* career.js — unit career ladder, veteran persistence & self-heal.
-   Combat units earn career points by shooting the enemy; crossing a threshold raises their
-   level (1..30). Each level grants +15% damage (applied at fire time in units.js) and +33%
-   max life (baked into u.maxHp here). Level 11+ units slowly self-heal out of combat. In
-   campaign mode the top veterans carry into the next map (count grows +1 every two maps).
-   Rank renders as a 5-pip row recolored by 5-level tier. All tunables live in CAREER.
-   Called from: units.js (gainXp / vetDmgMul), core.js (vetRegen), render.js (drawStars),
-   ui.js (captureVets / careerTitle), map.js (spawnVets).
+   Combat units earn career points by shooting the enemy; hero medics (Biba) earn them by mending
+   allies. Crossing a threshold raises their level (1..30). Each level grants +15% damage (applied
+   at fire time in units.js) and +33% max life (baked into u.maxHp here); a hero medic also heals
+   2x a normal recruiter, +7% faster per level (healMul, applied at the heal tick in units.js).
+   Level 11+ units slowly self-heal out of combat. In campaign mode the top veterans carry into the
+   next map (count grows +1 every two maps). Rank renders as a 5-pip row recolored by 5-level tier.
+   All tunables live in CAREER.
+   Called from: units.js (gainXp / vetDmgMul / healMul / gainHealXp), core.js (vetRegen),
+   render.js (drawStars), ui.js (captureVets / careerTitle), map.js (spawnVets).
    Depends on globals: DEF, mkUnit, toast, ctx, mapIndex. */
 
 const CAREER = {
@@ -14,6 +16,12 @@ const CAREER = {
   dmgPerStar: 0.15,  // +15% damage / level
   hpPerStar:  0.33,  // +33% max life / level
   maxStars: 30,      // level cap
+  // hero medics (Biba) heal faster than a plain recruiter and climb the ladder by mending allies.
+  healHeroMul: 2,     // base heal rate of a hero medic vs. a normal recruiter (2x) — holds at/below healBaseLevel
+  healBaseLevel: 12,  // Biba is freed at this level; she sits at exactly healHeroMul (2x) here and scales only ABOVE it
+  healPerStar: 0.07,  // +7% heal rate per level ABOVE healBaseLevel, stacking on healHeroMul
+  healCap:     7,     // safety clamp on the total heal multiplier
+  xpPerHealHp: 0.11,  // career points per (base) HP restored to allies → ~1 XP/s of active healing
   // cumulative XP to REACH level L (L>=1). Tuned so L5≈380 ("5 stars ≈ map 5"); grows
   // quadratically so L6..30 is a long-haul prestige grind (L10≈1185, L20≈4070, L30≈8655).
   xpFor(L){ return Math.round(25*L + 17*L*(L+1)/2); },
@@ -39,8 +47,20 @@ const CAREER_TITLES = ['Associate','Junior','Mid-Level','Senior','Staff','Direct
 function isCombatVet(u){
   return u.kind==='unit' && u.type!=='worker' && (DEF[u.type].dmg||0) > 0 && !DEF[u.type].heal;
 }
+// hero medics (Biba) climb the ladder too — by mending allies. Generic recruiters/couriers do NOT.
+function isHealerVet(u){ return u.kind==='unit' && !!u.hero && DEF[u.type] && DEF[u.type].heal>0; }
+// any unit that earns career points (combat hits OR healing) — gates gainXp
+function isCareerUnit(u){ return isCombatVet(u) || isHealerVet(u); }
 
 function vetDmgMul(u){ return 1 + CAREER.dmgPerStar*(u.stars||0); }
+// heal-rate multiplier by level (mirrors vetDmgMul): base healHeroMul for hero medics, +healPerStar per
+// level ABOVE healBaseLevel (so Biba is exactly 2x at her Lv12 start and only grows past it), capped.
+// Non-hero healers (plain recruiters/couriers) get 1x and never gain stars, so they stay at their DEF rate.
+function healMul(u){
+  const base = (u.hero && DEF[u.type] && DEF[u.type].heal) ? CAREER.healHeroMul : 1;
+  const over = Math.max(0, (u.stars||0) - CAREER.healBaseLevel);   // scaling kicks in only above her starting level
+  return Math.min(CAREER.healCap, base * (1 + CAREER.healPerStar*over));
+}
 
 // rank title for a level, e.g. careerTitle(17) === 'Senior 3' (empty below level 1)
 function careerTitle(lvl){
@@ -59,9 +79,28 @@ function applyVetHp(u, fullHeal){
 
 // award career points to a player combat unit; promote across any thresholds crossed
 function gainXp(u, killed, state){
-  if(u.owner!=='player' || !isCombatVet(u)) return;
+  if(u.owner!=='player' || !isCareerUnit(u)) return;
   if(u.madDog || u.subdued) return;   // a unit mid-breakdown earns no career progress
   u.xp = (u.xp||0) + CAREER.perShot + (killed ? CAREER.perKill : 0);
+  promoteIfReady(u, state);
+}
+
+// award career points to a hero medic (Biba) for HP actually restored to allies; promote on thresholds.
+// `baseHealed` is BASE-rate HP credited (caller divides out healMul) so the leveling pace stays flat
+// regardless of how fast she heals — no level→faster-heal→more-XP runaway. Fractional XP carries frames.
+function gainHealXp(u, baseHealed, state){
+  if(u.owner!=='player' || !isHealerVet(u)) return;
+  if(u.madDog || u.subdued) return;   // a unit mid-breakdown earns no career progress
+  u._healXpAcc = (u._healXpAcc||0) + baseHealed*CAREER.xpPerHealHp;
+  if(u._healXpAcc < 1) return;        // sub-point XP carries to the next frame
+  const whole = Math.floor(u._healXpAcc); u._healXpAcc -= whole;
+  u.xp = (u.xp||0) + whole;
+  promoteIfReady(u, state);
+}
+
+// promote across any star thresholds the unit's xp now crosses: rebake HP, toast, log life-events.
+// Shared by gainXp (combat) and gainHealXp (healing) so a hero medic levels exactly like Nino.
+function promoteIfReady(u, state){
   const old = u.stars||0;
   let s = old;
   while(s < CAREER.maxStars && u.xp >= CAREER.xpFor(s+1)) s++;
