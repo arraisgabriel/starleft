@@ -3,6 +3,7 @@
    FOG OF WAR
    ===================================================================== */
 function computeFog(state){
+  if(state._sandboxReveal){ state.visible.fill(1); state.explored.fill(1); return; }   // sandbox "reveal map" (localhost test tool; flag set only by js/sandbox.js)
   if(state.hub){
     state.visible.fill(1);
     state.explored.fill(1);

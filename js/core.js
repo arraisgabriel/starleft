@@ -169,6 +169,7 @@ function freeCaptives(state){
    ===================================================================== */
 function checkWinLose(state){
   if(state.over) return;
+  if(state._sandboxNoEnd) return;   // sandbox test tool: freeze win/loss while staging a battle (localhost only; flag set only by js/sandbox.js)
   if(state.hub) return;
   if(state.extractReady) return;
   // BOSS MAPS: the named villain's fate decides the outcome and takes precedence over the normal

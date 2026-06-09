@@ -928,6 +928,7 @@ function callToArms(state, foe, side, from){
 
 function damage(state, t, amt, src){
   if(t.dead||t.storedIn) return;
+  if(t._godmode) return;   // sandbox god-mode (localhost test tool): ignore all incoming damage (flag set only by js/sandbox.js)
   if(t.captive) return;   // imprisoned captives (Biba + the intern) are invulnerable until Nino frees them — neither friendly fire nor splash can kill them
   if(t.dmgReduce>0){ const red = t._exposed ? t.dmgReduce*(t._exposeMul||0.4) : t.dmgReduce; amt *= (1 - red); }   // armored units shrug off a flat %; an EXPOSED ninja (mid-strike wind-up) takes the punish-window bonus
   t.hp-=amt;

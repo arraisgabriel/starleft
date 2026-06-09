@@ -349,9 +349,10 @@ function loop(now){
       if(window.USE_ROLLBACK && NET.rbSession){
         NET.rbStepLoop(dt);                                        // rollback co-op: fixed-tick session drives the sim on every peer
       } else if(netRole==='solo'){
-        if(PERF.on){ PERF.mark('simUpdate'); update(G,dt); PERF.lap('simUpdate'); }  // single-player: rAF drives the sim
-        else update(G,dt);
-        autoTick+=dt; if(autoTick>60){ autoTick=0; autosaveGame(); }
+        const _sbSteps=(window.SANDBOX&&SANDBOX.on)?SANDBOX.simSteps():1;   // sandbox test tool: 0 (paused) or N sub-steps for 2×/4×; normal play = 1
+        if(PERF.on){ PERF.mark('simUpdate'); for(let _s=0;_s<_sbSteps;_s++) update(G,dt); PERF.lap('simUpdate'); }  // single-player: rAF drives the sim
+        else { for(let _s=0;_s<_sbSteps;_s++) update(G,dt); }
+        if(!(window.SANDBOX&&SANDBOX.on)){ autoTick+=dt; if(autoTick>60){ autoTick=0; autosaveGame(); } }  // never autosave a god-mode sandbox over a real slot
       } else if(netRole==='host'){
         // host sim + snapshot broadcast run via the host-clock (real-time dt); the worker keeps them
         // going when this window is backgrounded and rAF stalls. rAF here just renders (below).
