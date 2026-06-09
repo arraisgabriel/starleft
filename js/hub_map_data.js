@@ -77,8 +77,8 @@ window.HUB_MAP_DATA = {
       "kind": "mdc",
       "name": "M.D.C. North-East",
       "type": "mdc",
-      "x": 91,
-      "y": 23,
+      "x": 84,
+      "y": 25,
       "w": 5,
       "h": 5,
       "visual": {
@@ -151,7 +151,7 @@ window.HUB_MAP_DATA = {
       "name": "Training Grounds",
       "type": "training",
       "x": 96,
-      "y": 24,
+      "y": 27,
       "w": 28,
       "h": 22,
       "visual": {
@@ -1133,22 +1133,6 @@ window.HUB_MAP_DATA = {
       "biome": "grass",
       "fixedFrame": null,
       "seed": 0.688550715241227,
-      "tags": []
-    },
-    {
-      "id": "mega_42",
-      "poiId": null,
-      "cat": "megabuilding",
-      "variant": 1,
-      "tx": 83,
-      "ty": 27,
-      "w": 7,
-      "h": 8,
-      "overhang": 1.3,
-      "heightScale": 1,
-      "biome": "grass",
-      "fixedFrame": 9,
-      "seed": 0.8381844184627103,
       "tags": []
     },
     {

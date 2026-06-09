@@ -747,6 +747,14 @@ function hubClearFootprint(state, x0, y0, w, h){
 function hubReconcileFacilities(state){
   if(!state || !state.hub) return;
   state.hubPois = state.hubPois || {};
+  // Drop decor megaSprites removed from the HUB layout since this save was written (e.g. the stray
+  // pyramid that overlapped the relocated NE MDC). Hub megas are entirely config-driven, so any
+  // non-POI sprite whose id is gone from HUB.megaSprites is stale. POI/condo/ULTRA-backed visuals
+  // (poiId set) and legacy unnamed decor are kept.
+  if(Array.isArray(state.megaSprites) && state.megaSprites.length){
+    const liveIds=new Set((HUB.megaSprites||[]).map(m=>m.id).filter(Boolean));
+    state.megaSprites=state.megaSprites.filter(m=> m && (m.poiId || !m.id || liveIds.has(m.id)));
+  }
   const overlaps=(ax,ay,aw,ah, bx,by,bw,bh)=> ax < bx+bw && ax+aw > bx && ay < by+bh && ay+ah > by;
   let added=false;
   for(const p of (HUB.pois||[])){
@@ -770,10 +778,41 @@ function hubReconcileFacilities(state){
     hubApplyPoiVisual(e, p);
     added=true;
   }
-  if(added){
+  // Migrate saves written before a facility was MOVED: snap any POI whose stored footprint drifted
+  // from the canonical HUB.pois layout to its current position. Older hub saves bake the old
+  // coordinates into their entities (and rebuild blocked[] around them), so without this they keep
+  // the stale — sometimes path-blocking — placement until the next fresh hub entry.
+  let moved=false;
+  for(const p of (HUB.pois||[])){
+    const e=state.hubPois[p.id] || (state.entities||[]).find(x=>x&&!x.dead&&x.hubPoi&&x.hubPoi.id===p.id);
+    if(!e) continue;                                                  // missing → handled by the inject loop above
+    const d=DEF[p.type]||{w:3,h:3}, w=p.w||d.w||3, h=p.h||d.h||3;
+    if(e.tx===p.x && e.ty===p.y && e.w===w && e.h===h){ state.hubPois[p.id]=e; continue; }   // already canonical
+    e.tx=p.x; e.ty=p.y; e.w=w; e.h=h; e.x=(p.x+w/2)*TILE; e.y=(p.y+h/2)*TILE;
+    hubClearFootprint(state, p.x-2, p.y-2, w+4, h+4);
+    hubApplyPoiVisual(e, p);
+    // mega-backed POIs (condos / ULTRA) draw a separate sprite — keep it on the footprint
+    const liveMega=(state.megaSprites||[]).find(m=>m.poiId===p.id), cfgMega=(HUB.megaSprites||[]).find(m=>m.poiId===p.id);
+    if(liveMega && cfgMega){ liveMega.tx=cfgMega.tx; liveMega.ty=cfgMega.ty; }
+    // re-anchor any locked trainees to the relocated grounds (drawHubTrainees re-snaps on _trainPlaced=false)
+    if(p.kind==='training'){
+      for(const u of (state.entities||[])){
+        if(u && !u.dead && u.kind==='unit' && u.storedIn===e.id && u.trainSlot!=null){ u._trainPlaced=false; u.x=e.x; u.y=e.y; }
+      }
+    }
+    state.hubPois[p.id]=e;
+    moved=true;
+  }
+  if(moved){
+    // recompute passability from terrain + features, then re-block every building at its current footprint
+    if(typeof baseBlocked==='function') for(let i=0;i<state.W*state.H;i++) state.blocked[i]=baseBlocked(state,i);
+    if(typeof markBuilding==='function') for(const b of (state.entities||[])){ if(b&&!b.dead&&b.kind==='building') markBuilding(state,b,true); }
+    if(typeof markFundingNode==='function') for(const b of (state.entities||[])){ if(b&&!b.dead&&b.type==='goldmine') markFundingNode(state,b); }
+  }
+  if(added || moved){
     hubEnsureMapMegas(state);
     if(typeof hubSpawnTrainees==='function') hubSpawnTrainees(state);
-  if(typeof hubSpawnHealers==='function') hubSpawnHealers(state);
+    if(typeof hubSpawnHealers==='function') hubSpawnHealers(state);
     if(typeof recomputeSupply==='function') recomputeSupply(state);
   }
 }
