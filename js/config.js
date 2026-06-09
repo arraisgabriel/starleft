@@ -198,10 +198,14 @@ const MADOSIS = {
   // --- rescue (memory anchors) ---
   rescueRescuers: ['recruiter'],           // + any hero healer (Biba); gated by def.heal
   echoFacets: ['trauma','family','dream'], // the 3 dossier memories to recover
-  echoDistBands: [4, 14, 24],              // tiles from the dog: trauma near / family mid / dream far
+  echoDistBands: [3, 7, 12],               // tiles from the dog: trauma near / family mid / dream far (tight escort)
   echoReachRange: 1.6,                     // tiles the healer must reach to trigger an echo
   calmDmgFalloff: [1.0, 0.66, 0.33, 0.0],  // dog dmg multiplier at 0/1/2/3 echoes recovered
   rescueTimeLimit: 0,                      // 0 = no limit; >0 sec = echoes fade -> rescue fails
+  // --- rescue survivability (a guarded escort, not a suicide run) ---
+  rescuerDmgTakenMul: 0.12,                // a healer mid-rescue takes only this fraction of incoming damage
+  rescuerShield: 60,                       // one-time absorb pool granted to the healer when the rescue begins
+  dogPlayerDmgMul: 0.12,                   // damage the in-rescue dog takes from the PLAYER's own units (so a clumsy guarding squad can't frag the unit being saved); enemies hurt it normally
   // --- HUB Mental Health Facility (madosis healing — panel + session) ---
   heal: { baseCost:200, costPerStar:24, fracOfMax:0.70 }, // cost = base + perStar·stars; heals up to fracOfMax·sanityThreshold over one mission
   healCap: 6,             // max units in the facility at once (mirrors HUB.trainPairCap)

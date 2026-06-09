@@ -346,6 +346,28 @@ function render(state){
     const w=Math.abs(gesture.cx-gesture.sx), h=Math.abs(gesture.cy-gesture.sy);
     ctx.fillRect(x,y,w,h); ctx.lineWidth=1.5; ctx.strokeRect(x,y,w,h);
   }
+  // ---- MADOSIS: off-screen edge arrows pointing to un-recovered memory echoes (so they're findable
+  //      even when scattered far from the dog). Screen space (CSS px); world->screen matches phase 2. ----
+  if(!state.hub){
+    const m=26, vW=viewW(), vH=viewH();
+    const L=m, R=vW-m, T=VIEW_TOP+m, B=VIEW_TOP+vH-m, cx0=vW/2, cy0=VIEW_TOP+vH/2;
+    for(const e of state.entities){
+      if(e.dead || e.kind!=='echo' || e.reached) continue;
+      const sx=(e.x-vx)*z, sy=VIEW_TOP+(e.y-vy)*z;
+      if(sx>=0 && sx<=vW && sy>=VIEW_TOP && sy<=VIEW_TOP+vH) continue;   // on-screen → beacon already shows it
+      let dx=sx-cx0, dy=sy-cy0; if(!dx && !dy) continue;
+      const sX = dx>0 ? (R-cx0)/dx : dx<0 ? (L-cx0)/dx : Infinity;
+      const sY = dy>0 ? (B-cy0)/dy : dy<0 ? (T-cy0)/dy : Infinity;
+      const s=Math.min(sX,sY), ax=cx0+dx*s, ay=cy0+dy*s;
+      const col = e.facet==='trauma' ? '#ff5b6b' : e.facet==='dream' ? '#ffd23f' : '#5aa0ff';
+      const pulse=0.7+0.3*Math.sin((state.time||0)*4+(e.id||0));
+      ctx.save(); ctx.translate(ax,ay); ctx.rotate(Math.atan2(dy,dx));
+      ctx.globalAlpha=0.92; ctx.fillStyle=col; ctx.shadowColor=col; ctx.shadowBlur=10*pulse;
+      ctx.beginPath(); ctx.moveTo(11,0); ctx.lineTo(-7,-8); ctx.lineTo(-7,8); ctx.closePath(); ctx.fill();
+      ctx.restore();
+    }
+    ctx.globalAlpha=1; ctx.shadowBlur=0;
+  }
   if(state.hub && typeof hubCameraInWasteland==='function' && hubCameraInWasteland(state)){
     ctx.fillStyle='rgba(120,20,24,0.16)';
     ctx.fillRect(0,0,viewW(),cssH);
@@ -891,21 +913,29 @@ function drawHubWakeFX(state, e, ox, oy, topY){
   const px=e.tx*TILE+ox, w=e.w*TILE;
   const cx=px+w/2;                              // spire centre x
   const baseY=(e.ty+e.h)*TILE+oy;              // ground line
-  const coreY=topY+(baseY-topY)*0.35;          // glow anchor on the spire body
+  const spanY=baseY-topY;
   ctx.save(); ctx.globalCompositeOperation='lighter';
-  // green A&O aura — a soft column running the FULL height of the tall, thin spire so the whole
-  // tower reads against the dark mountains, plus a brighter pool at the base.
+  // Soft elliptical glow that fades to transparent on EVERY side — the building block for all the
+  // wake-tower light so nothing ever shows a hard rectangle edge. (rx,ry) = ellipse radii.
+  const glow=(gx,gy,rx,ry,stops)=>{
+    if(rx<=0||ry<=0) return;
+    ctx.save();
+    ctx.translate(gx,gy); ctx.scale(rx/ry,1);          // draw a radial circle, squash to an ellipse
+    const g=ctx.createRadialGradient(0,0,0, 0,0,ry);
+    for(const s of stops) g.addColorStop(s[0],s[1]);
+    ctx.fillStyle=g; ctx.beginPath(); ctx.arc(0,0,ry,0,6.283); ctx.fill();
+    ctx.restore();
+  };
+  // green A&O aura — a soft column of light hugging the tall, thin spire (faded at the tips, not a
+  // rectangle) so the whole tower reads against the dark mountains, plus a brighter pool at the base.
   const pulse=0.5+0.5*Math.sin(t*1.3 + id);
-  const colW=w*1.25;
-  const col=ctx.createLinearGradient(cx-colW, 0, cx+colW, 0);
-  col.addColorStop(0,'rgba(54,200,76,0)');
-  col.addColorStop(0.5,'rgba(74,238,96,'+(0.11+0.05*pulse).toFixed(3)+')');
-  col.addColorStop(1,'rgba(54,200,76,0)');
-  ctx.fillStyle=col; ctx.fillRect(cx-colW, topY-w*0.4, colW*2, (baseY-topY)+w*0.6);
-  const cor=ctx.createRadialGradient(cx, baseY-w*0.6, 3, cx, baseY-w*0.6, w*1.5);
-  cor.addColorStop(0,'rgba(72,236,92,'+(0.12+0.06*pulse).toFixed(3)+')');
-  cor.addColorStop(1,'rgba(40,150,60,0)');
-  ctx.fillStyle=cor; ctx.beginPath(); ctx.arc(cx, baseY-w*0.6, w*1.5, 0, 6.283); ctx.fill();
+  glow(cx, topY+spanY*0.45, w*1.15, spanY*0.62, [
+    [0,   'rgba(74,238,96,'+(0.13+0.06*pulse).toFixed(3)+')'],
+    [0.55,'rgba(60,210,82,'+(0.05+0.03*pulse).toFixed(3)+')'],
+    [1,   'rgba(54,200,76,0)']]);
+  glow(cx, baseY-w*0.6, w*1.6, w*1.1, [
+    [0,'rgba(72,236,92,'+(0.12+0.06*pulse).toFixed(3)+')'],
+    [1,'rgba(40,150,60,0)']]);
   // periodic GREEN lightning striking the spire — big, branched, frequent (more so while charging)
   const charging=(typeof CAMPAIGN!=='undefined' && CAMPAIGN.reborn && (CAMPAIGN.reborn.sessions||[]).length>0);
   const period=charging?1.5:3.2, dur=0.42, ph=(t + id*0.7) % period;
@@ -914,6 +944,12 @@ function drawHubWakeFX(state, e, ox, oy, topY){
     const sky=Math.max(0, topY - w*4.4);
     const strike=Math.floor((t + id*0.7)/period);
     const rnd=(n)=>{ const s=Math.sin(id*12.9898 + strike*78.233 + n*37.719)*43758.5453; return s-Math.floor(s); };
+    // (1) broad, edgeless sky flash — the strike lights the whole ridgeline (like real lightning
+    //     flaring across the mountain chain), drifting a little per strike. NOT a box round the tower.
+    glow(cx + (rnd(99)-0.5)*w*2.2, sky+(topY-sky)*0.4, w*8, (topY-sky)*0.95*flick, [
+      [0,  'rgba(120,240,150,'+(0.16*a).toFixed(3)+')'],
+      [0.5,'rgba(70,210,100,'+(0.07*a).toFixed(3)+')'],
+      [1,  'rgba(40,170,70,0)']]);
     const seg=8, dyStep=(topY-sky)/seg;
     ctx.lineCap='round'; ctx.lineJoin='round';
     const pts=[[cx,sky]];
@@ -929,15 +965,17 @@ function drawHubWakeFX(state, e, ox, oy, topY){
       ctx.beginPath(); ctx.moveTo(bx,by); ctx.lineTo((bx+ex)/2+(rnd(80+bI)-0.5)*w*0.3,(by+ey)/2); ctx.lineTo(ex,ey);
       ctx.lineWidth=3; ctx.strokeStyle='rgba(92,255,122,'+(0.55*a).toFixed(3)+')'; ctx.stroke();
     }
-    const fl=ctx.createRadialGradient(cx, topY, 1, cx, topY, w*2.3*flick);
-    fl.addColorStop(0,'rgba(175,255,195,'+(0.66*a).toFixed(3)+')');
-    fl.addColorStop(0.4,'rgba(72,240,104,'+(0.40*a).toFixed(3)+')');
-    fl.addColorStop(1,'rgba(40,180,70,0)');
-    ctx.fillStyle=fl; ctx.beginPath(); ctx.arc(cx, topY, w*2.3*flick, 0, 6.283); ctx.fill();
-    const wash=ctx.createLinearGradient(cx, topY, cx, baseY);   // whole spire flares green on a strike
-    wash.addColorStop(0,'rgba(84,245,114,'+(0.22*a).toFixed(3)+')');
-    wash.addColorStop(1,'rgba(50,200,80,0)');
-    ctx.fillStyle=wash; ctx.fillRect(cx-w*0.9, topY, w*1.8, baseY-topY);
+    // (2) impact burst where the bolt meets the spire top — soft circle
+    glow(cx, topY, w*2.3*flick, w*2.3*flick, [
+      [0,  'rgba(175,255,195,'+(0.66*a).toFixed(3)+')'],
+      [0.4,'rgba(72,240,104,'+(0.40*a).toFixed(3)+')'],
+      [1,  'rgba(40,180,70,0)']]);
+    // (3) the spire body flares green on a strike — soft ellipse down the tower (replaces the old
+    //     hard-edged rectangular wash that read as an ugly green box).
+    glow(cx, topY+spanY*0.45, w*1.35, spanY*0.6, [
+      [0,  'rgba(120,250,150,'+(0.26*a).toFixed(3)+')'],
+      [0.6,'rgba(70,225,100,'+(0.11*a).toFixed(3)+')'],
+      [1,  'rgba(50,200,80,0)']]);
   }
   ctx.restore();
 }
@@ -1392,8 +1430,8 @@ function drawUnit(state,u,ox,oy){
     }
   }
   if(u.stars) drawStars(u, px, py-alt-vh*0.72-13);   // career-rank pips above the HP bar
-  // MADOSIS rescue: "memories X/3" cue above a dog being talked down
-  if(u.madDog && u._rescue){
+  // MADOSIS rescue: "memories X/3" cue above a feral dog (shown the instant it turns — its memories are already on the map)
+  if(u.madDog && u.calmStage!=null){
     ctx.fillStyle='#d9b3ff'; ctx.font='bold 10px '+GAME_FONT; ctx.textAlign='center'; ctx.textBaseline='alphabetic';
     ctx.fillText('memories '+(u.calmStage||0)+'/'+MADOSIS.echoFacets.length, px, py-alt-vh*0.72-19);
   }
@@ -1422,19 +1460,31 @@ function drawUnit(state,u,ox,oy){
   }
 }
 
-// MADOSIS rescue beacon — a pulsing memory echo (trauma=red / family=blue / dream=gold).
+// MADOSIS rescue beacon — a bright pulsing memory echo (trauma=red / family=blue / dream=gold) with a
+// ground ring + tall light column so it reads from across the map, plus a faint tether to its mad dog.
 function drawEcho(state, e, ox, oy){
   const px=e.x+ox, py=e.y+oy;
   const col = e.facet==='trauma' ? '#ff5b6b' : e.facet==='dream' ? '#ffd23f' : '#5aa0ff';
   const pulse = 0.6 + 0.4*Math.sin((state.time||0)*3 + (e.id||0));
   ctx.save();
-  ctx.strokeStyle=col; ctx.globalAlpha=0.30; ctx.lineWidth=2;
-  ctx.beginPath(); ctx.moveTo(px,py); ctx.lineTo(px, py-26-10*pulse); ctx.stroke();   // rising beacon
-  ctx.globalAlpha=0.9; ctx.shadowColor=col; ctx.shadowBlur=16*pulse; ctx.fillStyle=col;
-  ctx.beginPath(); ctx.arc(px, py, 7+3*pulse, 0, 6.28); ctx.fill();
+  // faint tether back to the dog this memory belongs to (skip if the dog isn't present this frame)
+  if(e.dogId!=null){
+    const dog=state.entities.find(d=> d.id===e.dogId && !d.dead);
+    if(dog){ ctx.globalAlpha=0.12+0.06*pulse; ctx.strokeStyle=col; ctx.lineWidth=1.5;
+      ctx.beginPath(); ctx.moveTo(px,py); ctx.lineTo(dog.x+ox, dog.y+oy-6); ctx.stroke(); }
+  }
+  // pulsing ground ring — anchors the beacon to the tile so it's findable
+  ctx.globalAlpha=0.35+0.25*pulse; ctx.strokeStyle=col; ctx.lineWidth=2;
+  ctx.beginPath(); ctx.ellipse(px, py, 13+5*pulse, 6+2.5*pulse, 0, 0, 6.28); ctx.stroke();
+  // tall light column
+  ctx.globalAlpha=0.32; ctx.lineWidth=2.5;
+  ctx.beginPath(); ctx.moveTo(px,py); ctx.lineTo(px, py-44-16*pulse); ctx.stroke();
+  // glowing core orb
+  ctx.globalAlpha=0.95; ctx.shadowColor=col; ctx.shadowBlur=22*pulse; ctx.fillStyle=col;
+  ctx.beginPath(); ctx.arc(px, py-2, 8+4*pulse, 0, 6.28); ctx.fill();
   ctx.shadowBlur=0; ctx.globalAlpha=1;
-  ctx.fillStyle='rgba(8,10,16,0.92)'; ctx.font='bold 11px '+GAME_FONT; ctx.textAlign='center'; ctx.textBaseline='middle';
-  ctx.fillText(e.facet==='trauma'?'!':e.facet==='dream'?'★':'♥', px, py+0.5);
+  ctx.fillStyle='rgba(8,10,16,0.92)'; ctx.font='bold 12px '+GAME_FONT; ctx.textAlign='center'; ctx.textBaseline='middle';
+  ctx.fillText(e.facet==='trauma'?'!':e.facet==='dream'?'★':'♥', px, py-1.5);
   ctx.restore();
 }
 
@@ -1664,7 +1714,7 @@ function renderMinimap(state){
   for(const e of state.entities){
     if(e.dead||e.storedIn) continue;
     if(e.type==='goldmine'){ const N=FEAT_SIZE, ftx=(e.ftx!=null)?e.ftx:(((e.x/TILE)|0)-(N>>1)), fty=(e.fty!=null)?e.fty:(((e.y/TILE)|0)-(N>>1)); const si=(fty+N-1)*state.W+(ftx+(N>>1)); if(state.explored[si]){ mmx.fillStyle='#b06bff'; mmx.fillRect(ftx*sx, fty*sy, Math.ceil(sx*N), Math.ceil(sy*N));} continue; }
-    if(e.kind==='echo'){ mmx.fillStyle = e.facet==='trauma'?'#ff5b6b': e.facet==='dream'?'#ffd23f':'#5aa0ff'; mmx.fillRect(e.x/TILE*sx-1.5, e.y/TILE*sy-1.5, 3, 3); continue; }   // MADOSIS rescue beacon
+    if(e.kind==='echo'){ const ez=3+1.5*(0.5+0.5*Math.sin((state.time||0)*4+(e.id||0))); mmx.fillStyle = e.facet==='trauma'?'#ff5b6b': e.facet==='dream'?'#ffd23f':'#5aa0ff'; mmx.fillRect(e.x/TILE*sx-ez/2, e.y/TILE*sy-ez/2, ez, ez); continue; }   // MADOSIS rescue beacon (pulses to draw the eye)
     if(e.madDog){ mmx.fillStyle='#ff5bff'; mmx.fillRect(e.x/TILE*sx-1.5, e.y/TILE*sy-1.5, 3, 3); continue; }   // MADOSIS feral mad dog
     if(e.owner==='enemy' && !isVisiblePix(state,e.x,e.y) && !(e.kind==='building'&&e._everSeen)) continue;
     mmx.fillStyle = e.abandoned ? '#8effb0' : isRedSide(e.owner)?'#ff6b6b': (e.ctrl==='p2'?'#ff9d3c':'#7fd6ff');

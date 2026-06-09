@@ -220,7 +220,16 @@ function loadGame(key){
 }
 
 /* ---------- "Load Game" menu ---------- */
-function openLoadMenu(){ buildLoadSlots(); showSub('loadScreen'); }
+function openLoadMenu(){
+  buildLoadSlots();
+  // "Map Selection" (jump to any Quarter) belongs only to the PRE-GAME main-menu Load panel.
+  // The SAME #loadScreen is reused by the in-game top-menu "Load" (#btn-load); there, mapScreen
+  // must stay unreachable so its ◀ Back (→ loadScreen) can't strand the player over a live game.
+  // We're at the main menu iff #startScreen is still showing beneath this overlay.
+  const mapBtn=document.getElementById('loadMapSelectBtn');
+  if(mapBtn){ const ss=document.getElementById('startScreen'); mapBtn.style.display=(ss && getComputedStyle(ss).display!=='none') ? '' : 'none'; }
+  showSub('loadScreen');
+}
 function fmtElapsed(sec){ sec=Math.max(0,sec|0); const m=(sec/60)|0, s=sec%60; return m+':'+(s<10?'0':'')+s; }
 function fmtWhen(ms){ try{ return new Date(ms).toLocaleString(); }catch(_){ return ''; } }
 function buildLoadSlots(){

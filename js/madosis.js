@@ -145,8 +145,12 @@ function updateMadosis(state, u, dt){
   const ep = u.madEpisode; ep.t += dt;
   if(ep.phase==='tremor' && ep.t >= MADOSIS.tremorDur){ ep.phase='defiance'; ep.t=0; }
   else if(ep.phase==='defiance' && ep.t >= MADOSIS.defianceDur){
-    ep.phase='feral'; ep.t=0; u.madDog=true;
-    if(!window._rbReplaying) madToast(u, '🐕 '+madName(u)+' has gone feral — put them down, or send a healer to bring them back.');
+    ep.phase='feral'; ep.t=0; u.madDog=true; u.calmStage=0;
+    if(typeof madDropEchoes==='function') madDropEchoes(state, u);   // memories surface NOW — sim state, never _rbReplaying-gated
+    if(!window._rbReplaying){
+      madToast(u, '🐕 '+madName(u)+' has gone feral — three memories surfaced. Send a Recruiter or healer to walk them back, or put them down.');
+      if(typeof spawnRing==='function') spawnRing(u.x, u.y, '#b05bff');
+    }
   }
 }
 
@@ -186,26 +190,37 @@ function madPlaceEcho(state, dog, band, idx){
 }
 
 function madSpawnEcho(state, dog, facet, tileXY){
+  // dogId (a stable primitive) — NOT a live ref: survives save/load relink and net snapshots cleanly.
   const e=mkEntity(state, 'echo', 'neutral', tileXY[0], tileXY[1], {
-    kind:'echo', facet, dog, reached:false, r:12, sight:0, hp:1, maxHp:1,
+    kind:'echo', facet, dogId:dog.id, reached:false, r:12, sight:0, hp:1, maxHp:1,
   });
   state.entities.push(e);
   return e;
+}
+
+// drop a feral dog's 3 memory echoes onto the map (idempotent — keyed off this dog's live echoes, NOT
+// the rescue flag, since echoes now surface the instant the dog turns, before any healer is committed).
+function madDropEchoes(state, dog){
+  if(!dog || dog.dead) return;
+  if(state.entities.some(e=> e.kind==='echo' && !e.dead && e.dogId===dog.id)) return;
+  if(dog.calmStage==null) dog.calmStage=0;
+  const bands=MADOSIS.echoDistBands, facets=MADOSIS.echoFacets;
+  for(let i=0;i<facets.length;i++){
+    const xy=madPlaceEcho(state, dog, (bands[i]!=null?bands[i]:8), i);
+    madSpawnEcho(state, dog, facets[i], xy);
+  }
 }
 
 // begin (or join) a rescue: first healer spawns the 3 echoes; every rescuer gets the rescue command.
 function madBeginRescue(state, healer, dog){
   if(!madCanRescue(healer) || !dog || dog.dead || !dog.madDog) return;
   if(!dog._rescue){
-    dog._rescue=true; dog.calmStage=0;
-    const bands=MADOSIS.echoDistBands, facets=MADOSIS.echoFacets;
-    for(let i=0;i<facets.length;i++){
-      const xy=madPlaceEcho(state, dog, (bands[i]!=null?bands[i]:8), i);
-      madSpawnEcho(state, dog, facets[i], xy);
-    }
+    dog._rescue=true; if(dog.calmStage==null) dog.calmStage=0;
+    if(typeof madDropEchoes==='function') madDropEchoes(state, dog);   // fallback: usually already dropped at feral onset
     if(!window._rbReplaying) madToast(dog, '🧠 Rescue: walk '+madName(dog)+'’s memories — reach all three echoes.');
   }
   if(typeof resetMotion==='function') resetMotion(healer);
+  healer._rescueShield = MADOSIS.rescuerShield||0;   // one-time absorb pool for the perilous escort
   healer.cmd={ type:'rescue', target:dog };
 }
 
@@ -225,14 +240,14 @@ function madSpeakMemory(dog, facet){
 // per-frame escort driver for a rescuing healer (called from updateUnit). Returns true if handled.
 function madRescueTick(state, healer, dt){
   const dog=healer.cmd && healer.cmd.target;
-  if(!dog || dog.dead || !dog.madDog){ healer.cmd=null; healer.state='idle'; healer._actState=null; return false; }
-  // nearest un-reached echo for this dog
+  if(!dog || dog.dead || !dog.madDog){ healer.cmd=null; healer.state='idle'; healer._actState=null; healer._rescueShield=0; return false; }
+  // nearest un-reached echo for this dog (match by dogId; the live-ref clause covers legacy in-memory echoes)
   let best=null, bd=1e18;
   for(const e of state.entities){
-    if(e.dead || e.kind!=='echo' || e.reached || e.dog!==dog) continue;
+    if(e.dead || e.kind!=='echo' || e.reached || !(e.dogId===dog.id || e.dog===dog)) continue;
     const dx=e.x-healer.x, dy=e.y-healer.y, d=dx*dx+dy*dy; if(d<bd){ bd=d; best=e; }
   }
-  if(!best){ healer.cmd=null; healer.state='idle'; return true; }   // (resolution fires on the 3rd)
+  if(!best){ healer.cmd=null; healer.state='idle'; healer._rescueShield=0; return true; }   // (resolution fires on the 3rd)
   const reach=MADOSIS.echoReachRange*TILE;
   if(Math.hypot(best.x-healer.x, best.y-healer.y) <= reach){
     best.reached=true; best.dead=true;
@@ -254,7 +269,7 @@ function madRescueTick(state, healer, dt){
 }
 
 function madCleanupEchoes(state, dog){
-  for(const e of state.entities){ if(e.kind==='echo' && e.dog===dog) e.dead=true; }
+  for(const e of state.entities){ if(e.kind==='echo' && (e.dogId===dog.id || e.dog===dog)) e.dead=true; }
 }
 
 // SUCCESS: the dog comes back — sane but fragile (subdued), permanently scarred, meter zeroed.
@@ -263,7 +278,7 @@ function madResolveRescue(state, dog, healer){
   dog.subdued=true; dog.scarred=true; dog.madosis=0;
   dog.autoTarget=null; dog.cmd=null; dog.state='idle';
   madCleanupEchoes(state, dog);
-  if(healer) healer.cmd=null;
+  if(healer){ healer.cmd=null; healer._rescueShield=0; }
   if(!window._rbReplaying){
     madToast(dog, '💜 '+madName(dog)+' is back — fragile, but yours. Get them out. The Kennel is coming.');
     if(typeof spawnRing==='function') spawnRing(dog.x, dog.y, '#b05bff');
@@ -385,6 +400,7 @@ if(typeof window!=='undefined'){
   window.mintSanityThreshold=mintSanityThreshold; window.madThreshold=madThreshold; window.madDmgMul=madDmgMul;
   window.madosisRestDecay=madosisRestDecay; window.madEpisodeNo=madEpisodeNo;
   window.madCanRescue=madCanRescue; window.madBeginRescue=madBeginRescue; window.madResolveRescue=madResolveRescue;
+  window.madDropEchoes=madDropEchoes;
   window.madRescueTick=madRescueTick; window.madCleanupEchoes=madCleanupEchoes; window.madSpawnKennel=madSpawnKennel;
   window.madRollThreshold=madRollThreshold; window.madosisBackfill=madosisBackfill;
 }

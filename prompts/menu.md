@@ -39,6 +39,8 @@ Background: SOLID FLAT PURE MAGENTA #ff00ff — absolutely no transparency, no c
 
 ## Layout (in `rts.html` + `js/ui.js`)
 - `#startScreen.menu`: full-bleed `.menu-bg`, `.menu-logo` top-left, `.menu-nav` left stack, `.menu-news` top-right, `.menu-hint` bottom — red-accent `.sc-btn` with an angular clip-path.
-- Three buttons: **New Campaign** → `startGame(0)`; **Map Selection** → `showSub('mapScreen')`; **Documentation** → `showSub('docScreen')`.
-- Sub-screens `#mapScreen` (the Quarter buttons) and `#docScreen` (controls) are modal `.overlay.submenu` panels with a Back button.
+- Nav buttons: **New Campaign** → `showDocs(true)` (Field Manual → Quarter I); **Multiplayer** → `showMpLobby()`; **Load Game** → `openLoadMenu()`. (**Sandbox** is injected by `js/sandbox.js` on localhost only.)
+- **Map Selection** is no longer a top-level nav button — it now lives inside the **Load Game** panel (`#loadScreen` `.submenu-actions`, button id `loadMapSelectBtn`). It opens the Quarter picker via `hideSub('loadScreen'); showSub('mapScreen')`, and `#mapScreen`'s ◀ Back returns to the Load panel (`hideSub('mapScreen'); showSub('loadScreen')`), then ◀ Back again to the main menu. `openLoadMenu()` HIDES that button when `#loadScreen` is opened over a live game (the in-game top-menu "Load"), so the picker stays unreachable mid-game.
+- **Documentation** has no nav button; the Field Manual (`#docScreen`) is reached only via **New Campaign** (`showDocs(true)`), whose footer continues to Quarter I.
+- Sub-screens `#mapScreen` (the Quarter buttons), `#loadScreen` (saves), and `#docScreen` (controls) are modal `.overlay.submenu` panels (all share `z-index:50`, so only ONE shows at a time — navigation hides one and shows the next).
 - Responsive: a `@media (hover:none),(max-width:760px)` block reflows everything to a centered vertical column for phones.

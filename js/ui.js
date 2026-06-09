@@ -1091,7 +1091,7 @@ function startGame(idx){
 function beginRun(idx){
   idx = idx|0;
   if(typeof MUSIC!=='undefined') MUSIC.leaveMenu();
-  ['startScreen','mapScreen','docScreen','tutorialPromptScreen'].forEach(id=>{ const el=document.getElementById(id); if(el) el.style.display='none'; });
+  ['startScreen','mapScreen','docScreen','tutorialPromptScreen','loadScreen'].forEach(id=>{ const el=document.getElementById(id); if(el) el.style.display='none'; });
   // fresh campaign / map-select replay: clear carried units so a previous run's veterans or heroes
   // don't bleed into this one (heroes persist WITHIN a run, not across a brand-new start).
   if(typeof setCarryover==='function') setCarryover([]);

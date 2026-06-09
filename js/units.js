@@ -111,6 +111,9 @@ function commandUnits(state, wx, wy, target){
       spawnRing(target.x,target.y,'#b05bff');
       return;
     }
+    // no healer selected → put the dog down. If a rescue was already underway, abandon it first so the
+    // friendly-fire reduction (dogPlayerDmgMul) lifts and the player's own squad can actually finish it.
+    if(target._rescue){ target._rescue=false; if(typeof madCleanupEchoes==='function') madCleanupEchoes(state,target); }
     units.forEach(u=> attackTarget(state,u,target));
     spawnRing(target.x,target.y,'#ff6b6b');
     return;
@@ -931,6 +934,13 @@ function damage(state, t, amt, src){
   if(t._godmode) return;   // sandbox god-mode (localhost test tool): ignore all incoming damage (flag set only by js/sandbox.js)
   if(t.captive) return;   // imprisoned captives (Biba + the intern) are invulnerable until Nino frees them — neither friendly fire nor splash can kill them
   if(t.dmgReduce>0){ const red = t._exposed ? t.dmgReduce*(t._exposeMul||0.4) : t.dmgReduce; amt *= (1 - red); }   // armored units shrug off a flat %; an EXPOSED ninja (mid-strike wind-up) takes the punish-window bonus
+  // MADOSIS rescuer survivability: a healer mid-rescue takes a fraction of incoming damage, with a one-time shield pool absorbing the rest first. Keyed off the rescue cmd so it self-clears (inert once the cmd is gone, even if _rescueShield lingers).
+  if(t.cmd && t.cmd.type==='rescue' && typeof MADOSIS!=='undefined'){
+    if(MADOSIS.rescuerDmgTakenMul!=null) amt *= MADOSIS.rescuerDmgTakenMul;
+    if(t._rescueShield>0){ const ab=Math.min(t._rescueShield, amt); t._rescueShield-=ab; amt-=ab; }
+  }
+  // MADOSIS: don't let a clumsy guarding squad kill the unit being saved — the player's OWN fire on an in-rescue dog is heavily reduced. Enemies (incl. the Kennel) hurt it normally.
+  if(t.madDog && t._rescue && src && src.owner==='player' && typeof MADOSIS!=='undefined' && MADOSIS.dogPlayerDmgMul!=null) amt *= MADOSIS.dogPlayerDmgMul;
   t.hp-=amt;
   t.hitFx=0.12;
   t._lastHit=state.time;   // pauses veteran self-heal (vetRegen) while in/near combat

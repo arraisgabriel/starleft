@@ -153,10 +153,8 @@
     </div>
     <nav class="menu-nav">
       <button class="sc-btn" onclick="showDocs(true)">New Campaign</button>
-      <button class="sc-btn" onclick="showSub('mapScreen')">Map Selection</button>
       <button class="sc-btn" id="btn-mp" onclick="showMpLobby()">Multiplayer</button>
       <button class="sc-btn" onclick="openLoadMenu()">Load Game</button>
-      <button class="sc-btn" onclick="showDocs(false)">Documentation</button>
     </nav>
     <aside class="menu-news">
       <h4>Field Tip</h4>
@@ -174,7 +172,8 @@
       <h2>Select a Quarter</h2>
       <div class="panel-label">Jump straight into any mission</div>
       <div id="mapButtons"></div>
-      <button class="sc-btn back" onclick="hideSub('mapScreen')">◀ Back</button>
+      <!-- Map Selection is reached only from the Load Game panel now, so ◀ Back returns there. -->
+      <button class="sc-btn back" onclick="hideSub('mapScreen'); showSub('loadScreen')">◀ Back</button>
     </div>
   </div>
 
@@ -318,6 +317,12 @@
       <input type="file" id="importFile" accept=".json,application/json" style="display:none;"
              onchange="importSaveFile(this.files[0]); this.value='';">
       <div class="submenu-actions">
+        <!-- Map Selection lives here (moved off the main menu). Submenu overlays share z-index:50,
+             so paint order follows DOM order and only ONE may be visible at a time — hide this panel
+             and show the Quarter picker, whose ◀ Back returns here (then ◀ Back again to the main menu).
+             openLoadMenu() HIDES this button when #loadScreen is opened over a live game (the in-game
+             top-menu "Load"), so mapScreen stays unreachable mid-game and its Back can't strand play. -->
+        <button class="sc-btn" id="loadMapSelectBtn" onclick="hideSub('loadScreen'); showSub('mapScreen')">🗺 Map Selection</button>
         <button class="sc-btn" onclick="document.getElementById('importFile').click()">⬆ Import Save File</button>
         <button class="sc-btn back" onclick="hideSub('loadScreen')">◀ Back</button>
       </div>

@@ -87,6 +87,9 @@ body.scene-dispatch #minimap-wrap { display:none !important; }
 .save-row .save-exp { flex:0 0 auto; align-self:center; }
 .save-row .save-del { flex:0 0 auto; align-self:center; }
 .submenu-actions { display:flex; gap:8px; flex-wrap:wrap; justify-content:center; }
+/* Load-panel action buttons share one row (Map Selection + Import + Back) instead of wrapping a
+   lone Back onto its own line; they shrink to fit on desktop and stack cleanly on narrow viewports. */
+#loadScreen .submenu-actions .sc-btn { flex:1 1 200px; width:auto; }
 .controls-box { font-size:13px; color:#ccaab0; line-height:1.9; text-align:left;
   background:rgba(255,255,255,.04); padding:14px 22px; border-radius:8px; border:1px solid #4f2530;}
 .controls-box b { color:#f8d0d6; }

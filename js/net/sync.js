@@ -135,6 +135,8 @@ window.NET = window.NET || {};
       if(e.villain){ o.vil=1; o.vid=e.villainId; o.vn=e.villainName; o.bp=e.bossPhase||1; o.bsc=e.bossScale||1; o.nid=e.neonId; if(e._ninjaHidden) o.nh=1; if(e._jumpZ) o.jz=Math.round(e._jumpZ); }   // nh: ninja vanish dim; jz: REX leap height
     } else if(e.kind==='echo'){
       o.fac=e.facet;   // MADOSIS rescue beacon (x/y/hp already in the base packet); facet drives its color
+      if(e.dogId!=null) o.did=e.dogId;   // which mad dog this memory belongs to (tether/arrow grouping)
+      if(e.reached) o.rc=1;              // recovered — so client arrows/visuals stop pointing at it
     } else if(e.kind==='building'){
       o.tx=e.tx; o.ty=e.ty; o.w=e.w; o.h=e.h;
       if(e.constructing){ o.cn=1; o.bp=e.buildProg; o.bt=e.buildTime; }
@@ -192,6 +194,7 @@ window.NET = window.NET || {};
       e._jumpZ = o.jz||0;   // REX leap height (render-only on the client)
     } else if(o.k==='echo'){
       e.x=o.x; e.y=o.y; e.facet=o.fac; e.r=12;       // MADOSIS rescue beacon (client render)
+      e.dogId=(o.did!=null?o.did:null); e.reached=!!o.rc;
     } else if(o.k==='building'){
       e.x=o.x; e.y=o.y;                          // buildings don't move → snap directly
       e.tx=o.tx; e.ty=o.ty; e.w=o.w; e.h=o.h; e.sight=d.sight; e.cd=e.cd||0;
