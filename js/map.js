@@ -4,6 +4,17 @@ function buildEnemyBase(state, base, idx){
   // 3×3, turret 2×2), so they're laid out side-by-side without overlap; the base
   // spans roughly ax-2..ax+7 × ay..ay+6 (clearArea below clears radius 7 around it).
   const ax=base.x, ay=base.y;
+  // `light:true` = a forward outpost, not a base: ONE weak structure + its few guards.
+  // Used by Quarter I to give a new player a fast first fight (T0-1); skips vet scaling.
+  // Flagged lightOutpost so the enemy AI never trains reinforcements out of it (ai.js).
+  if(base.light){
+    const b = mkBuilding(state,'barracks','enemy', ax, ay, true);
+    b.lightOutpost = true;
+    b.hp = Math.round(b.maxHp*0.45);   // deliberately fragile — a starter squad razes it fast
+    const n = base.defenders!=null ? base.defenders : 1;
+    for(let i=0;i<n;i++) mkUnit(state,'soldier','enemy', ax+1+(i%4), ay+4);
+    return;
+  }
   mkBuilding(state,'hq','enemy', ax, ay, true);                 // 4×3
   mkBuilding(state,'barracks','enemy', ax+4, ay, true);         // 3×3, right of HQ
   if(base.extraBarracks) mkBuilding(state,'barracks','enemy', ax+4, ay+3, true); // below the barracks
@@ -40,6 +51,18 @@ function scaleCfg(cfg){
   if(cfg.villain){ const vl=Array.isArray(cfg.villain)?cfg.villain:[cfg.villain]; c.villain = vl.map(v=>Object.assign({}, v, { x:S(v.x), y:S(v.y) })); }   // boss spawn points (villains.js)
   // thickets: scale only the geometry (x,y,w,h); density/mix/trail are unitless
   if(cfg.thickets)     c.thickets     = cfg.thickets.map(t=>Object.assign({},t,{x:S(t.x),y:S(t.y),w:S(t.w),h:S(t.h)}));
+  // T2-1 alt win verbs: the target tile + radius live in map-config tiles → scale with everything else
+  if(cfg.winCondition){ const w=Object.assign({}, cfg.winCondition);
+    if(w.to) w.to=pt(w.to); if(w.at) w.at=pt(w.at);
+    if(w.radius!=null) w.radius=w.radius*MAP_SCALE;
+    c.winCondition=w; }
+  // T3-1 New Game+: each lap raises enemy aggression — applied at cfg-derivation time so solo,
+  // host, and client (which all re-derive cfg from CAMPAIGN.ngPlus via snapshots) agree.
+  const _ng=(typeof CAMPAIGN!=='undefined' && CAMPAIGN && CAMPAIGN.ngPlus)|0;
+  if(_ng>0) c.aggression=(c.aggression||1)*(1+0.15*_ng);
+  // T2-8 scripted events: scale any spawn/at coordinates inside each event
+  if(cfg.events) c.events = cfg.events.map(ev=>{ const e=Object.assign({}, ev);
+    if(e.at) e.at=pt(e.at); return e; });
   return c;
 }
 
@@ -349,8 +372,11 @@ function newMap(idx){
     enemySpawnTimer: 16,
     enemyFortifyTimer: 10,    // periodic: rival adds base defenses as the match goes on
     // No attack waves until the grace period ends — lets the player set up first.
-    graceTime: (cfg.graceTime!=null? cfg.graceTime : (idx===0? 100 : 88)),
+    // T4-2: the difficulty grace multiplier lands HERE (a serialized scalar → co-op/rollback agree).
+    graceTime: Math.round((cfg.graceTime!=null? cfg.graceTime : (idx===0? 100 : 88)) * ((typeof DIFFICULTY!=='undefined')?(DIFFICULTY[ (typeof difficultyKey==='function')?difficultyKey():'a' ]||{grace:1}).grace:1)),
     enemyWaveTimer: (cfg.waveTimer!=null? cfg.waveTimer : (idx===0? 110 : 96)),
+    _difficulty: (typeof difficultyKey==='function')?difficultyKey():'a',   // T4-2 stamp (sim reads via diffOf)
+    _scoreMul: (typeof DIFFICULTY!=='undefined')?(DIFFICULTY[(typeof difficultyKey==='function')?difficultyKey():'a']||{score:1}).score:1,   // T3-3/T4-2 score multiplier (mutators stack onto it)
     waveCount:0,
     time:0,
     over:false,
@@ -408,9 +434,31 @@ function newMap(idx){
   // gold nodes. amount0 = starting funding (drives the glow's depletion fade); r is the
   // gather radius, widened so Interns mine from the 3x3 rock's perimeter rather than one
   // point. The 3x3 walk-under footprint is stamped after the relocation pass below.
-  cfg.goldNodes.forEach(g=>{
-    state.entities.push(mkEntity(state,'goldmine', null, g.x, g.y, {amount:g.amt, amount0:g.amt, r:Math.round(TILE*1.5)}));
-  });
+  // ---- T2-5 macro tension: home-cluster nodes are cut (ECON.homeNodeMul) so the start can't
+  // solo-fund a win, and maps with no contested mid-map node get one auto-placed at the
+  // player↔nearest-enemy midpoint (the relocation pass nudges it off blocked terrain).
+  {
+    const E=(typeof ECON!=='undefined')?ECON:null;
+    const homeBand=E?E.homeBand*MAP_SCALE:0;
+    const nodes=(cfg.goldNodes||[]).map(g=>{
+      if(E && !cfg.noEconRebalance && Math.hypot(g.x-cfg.player.x, g.y-cfg.player.y)<=homeBand)
+        return Object.assign({}, g, {amt:Math.round(g.amt*E.homeNodeMul)});
+      return g;
+    });
+    if(E && !cfg.noEconRebalance && bases.length){
+      const minD=E.contestedMinDist*MAP_SCALE;
+      const isContested=(g)=> Math.hypot(g.x-cfg.player.x,g.y-cfg.player.y)>=minD
+        && bases.every(b=> Math.hypot(g.x-b.x,g.y-b.y)>=minD);
+      if(!nodes.some(isContested)){
+        let nb=bases[0], bd=Infinity;
+        for(const b of bases){ const d=Math.hypot(b.x-cfg.player.x,b.y-cfg.player.y); if(d<bd){bd=d;nb=b;} }
+        nodes.push({ x:Math.round((cfg.player.x+nb.x)/2), y:Math.round((cfg.player.y+nb.y)/2), amt:E.contestedAmt });
+      }
+    }
+    nodes.forEach(g=>{
+      state.entities.push(mkEntity(state,'goldmine', null, g.x, g.y, {amount:g.amt, amount0:g.amt, r:Math.round(TILE*1.5)}));
+    });
+  }
 
   // ---- player start: HQ + Interns + Growth Cyborgs (+ optional People Ops) ----
   const phq = mkBuilding(state,'hq','player', cfg.player.x, cfg.player.y, true);
@@ -426,6 +474,15 @@ function newMap(idx){
   }});
   spawnVets(state);   // carry veterans from the previous campaign map (count grows every 2 maps)
   spawnHeroes(state); // named campaign heroes declared on the map (e.g. Nino on Episode VIII)
+  // T2-1 escort verb: flag the VIP the mission must deliver (a named hero, a unit type, or any fighter)
+  if(cfg.winCondition && cfg.winCondition.type==='escort'){
+    const wc=cfg.winCondition;
+    let vip=null;
+    if(wc.vipHero) vip=state.entities.find(e=>!e.dead&&e.owner==='player'&&e.hero&&e.heroId===wc.vipHero);
+    if(!vip && wc.vipType) vip=state.entities.find(e=>!e.dead&&e.owner==='player'&&e.kind==='unit'&&e.type===wc.vipType);
+    if(!vip) vip=state.entities.find(e=>!e.dead&&e.owner==='player'&&e.kind==='unit'&&e.type!=='worker');
+    if(vip) vip._vip=true;
+  }
   if(cfg.startBarracks) mkBuilding(state,'barracks','player', cfg.player.x-3, cfg.player.y, true);
 
   // dynamic difficulty: measure P1's carried career power NOW (player units are placed, enemies aren't),

@@ -247,6 +247,7 @@ function megaNeonFrame(m, fi){
 function megaRgb(c){ return Array.isArray(c) ? c : [180,120,255]; }
 function megaRgba(c,a){ const r=megaRgb(c); return 'rgba('+((r[0]||0)|0)+','+((r[1]||0)|0)+','+((r[2]||0)|0)+','+Math.max(0,Math.min(1,a)).toFixed(3)+')'; }
 function megaReducedMotion(){
+  if(window._reduceFx) return true;   // T4-3: Settings "Reduce FX" forces the prefers-reduced-motion path
   if(MEGA_REDUCED_MOTION==null) MEGA_REDUCED_MOTION = typeof matchMedia==='function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
   return MEGA_REDUCED_MOTION;
 }

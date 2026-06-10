@@ -210,11 +210,20 @@ var LNS = (function(){
     }
     return out.slice(0, need);
   }
-  function mixedItems(){
+  function mixedItems(ultraBias){
     const real=realItems.slice(0, MAX_ITEMS), ultra=ultraItems(MAX_ITEMS);
     if(!real.length) return ultra.slice(0, MAX_ITEMS);
     if(!ultra.length) return real;
     const out=[]; let u=0;
+    if(ultraBias){
+      // title screen (T0-11): the satire IS the hook — lead with ULTRA NEWS, ~2 ultra : 1 real
+      for(let i=0; out.length<MAX_ITEMS && (u<ultra.length || i<real.length); i++){
+        if(u<ultra.length) out.push(ultra[u++]);
+        if(u<ultra.length && out.length<MAX_ITEMS) out.push(ultra[u++]);
+        if(i<real.length && out.length<MAX_ITEMS) out.push(real[i]);
+      }
+      return out.slice(0, MAX_ITEMS);
+    }
     for(let i=0;i<real.length && out.length<MAX_ITEMS;i++){
       out.push(real[i]);
       if((i+1)%2===0 && out.length<MAX_ITEMS) out.push(ultra[u++ % ultra.length]);
@@ -257,8 +266,8 @@ var LNS = (function(){
     if(window.requestIdleCallback) requestIdleCallback(run, { timeout:600 }); else setTimeout(run, 60);
   }
   function renderAll(){
-    buildTicker(host('lns-menu'),   SPEED_MENU);
-    buildTicker(host('lns-ingame'), SPEED_INGAME);
+    buildTicker(host('lns-menu'),   SPEED_MENU, true);    // menu: ULTRA-first mix (T0-11)
+    buildTicker(host('lns-ingame'), SPEED_INGAME, false);
   }
   function host(id){
     const el = document.getElementById(id);
@@ -270,9 +279,9 @@ var LNS = (function(){
     // for the position:fixed menu stripe, so this skips the rebuild and keeps the tuned track.
     return (el && el.style.display!=='none' && el.getClientRects().length) ? el.querySelector('.lns-host') : null;
   }
-  function buildTicker(hostEl, speed){
+  function buildTicker(hostEl, speed, ultraBias){
     if(!hostEl) return;
-    const showItems=mixedItems();
+    const showItems=mixedItems(ultraBias);
     const html = innerHTML(showItems);
     if(!showItems.length){        // Loading / unavailable → static, no scroll
       hostEl.innerHTML = `<div class="lns-viewport"><div class="lns-static">${html}</div></div>`;

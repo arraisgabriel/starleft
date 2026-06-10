@@ -173,6 +173,11 @@ html,body{ overscroll-behavior:none; -webkit-touch-callout:none; }
   box-shadow:0 3px 14px rgba(255,46,46,.35), inset 0 0 20px rgba(255,90,90,.12); transform:translateY(-1px);}
 .cmd-btn:active { transform:translateY(0); }
 .cmd-btn.disabled { opacity:.4; cursor:not-allowed; }
+/* T2-3: armed attack-move pulses amber until the destination tap */
+.cmd-btn.amove-btn.armed{ border-left-color:#ff9a66; box-shadow:0 0 0 2px rgba(255,154,102,.55), 0 3px 14px rgba(255,120,60,.35); }
+/* T2-2: ability buttons get a gold accent so the kit reads apart from production */
+.cmd-btn.abil-btn{ border-left-color:#ffd86b; }
+.cmd-btn.abil-btn.disabled{ opacity:.45; }
 .cmd-btn .cost { font-size:10px; color:#ffd86b; }
 .cmd-btn .emoji { font-size:20px; }
 .mdc-panel{
@@ -235,7 +240,7 @@ html,body{ overscroll-behavior:none; -webkit-touch-callout:none; }
 .tc-btn.ic-clear .clr-x{ position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
   color:#ff4d4d; font-weight:800; font-size:21px; line-height:1; text-shadow:0 1px 2px rgba(0,0,0,.85); pointer-events:none; }
 #touch-controls > .tc-btn, #touch-controls .grp-chips{ flex:0 0 auto; }   /* keep tap-size in the scrollable single row */
-.grp-chips{ display:inline-flex; gap:4px; }
+.grp-chips{ display:inline-flex; gap:4px; overflow-x:auto; -webkit-overflow-scrolling:touch; max-width:46vw; }   /* T4-4: 9 chips scroll on narrow screens */
 .grp-chip{ min-width:38px; font-weight:700; font-size:15px; }
 
 /* minimap as a floating corner overlay (toggled by 🗺 on phones) */
@@ -274,9 +279,9 @@ html,body{ overscroll-behavior:none; -webkit-touch-callout:none; }
   #selinfo{ flex:0 0 auto; padding:4px 10px; }
   #selinfo h3{ font-size:13px; margin-bottom:0; }
   #selinfo .stats{ gap:8px; font-size:11px; margin:1px 0 2px; }   /* stays visible on mobile */
-  #selinfo .desc{ display:none; }
-  /* while placing a building, the description IS the point — show it on mobile */
-  #selinfo.placing .desc{ display:block; }
+  /* T4-4: a compact one-line selection summary instead of display:none — context survives touch */
+  #selinfo .desc{ display:block; font-size:10px; line-height:1.3; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:100%; }
+  #selinfo.placing .desc{ display:block; white-space:normal; }
   #commands{ width:auto; border-left:none; padding:6px;
     flex-wrap:nowrap; overflow-x:auto; -webkit-overflow-scrolling:touch; align-content:center; }
   .cmd-btn{ flex:0 0 auto; width:auto; min-width:62px; height:48px; min-height:48px;
@@ -325,7 +330,7 @@ html,body{ overscroll-behavior:none; -webkit-touch-callout:none; }
   #selinfo h3{ display:block; font-size:12px; margin:0; flex:0 1 auto; min-width:0; max-width:100%;
     white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   #selinfo .stats{ display:inline-flex; gap:8px; font-size:10px; margin:0; flex:0 0 auto; white-space:nowrap; }
-  #selinfo .desc{ display:none; }
+  #selinfo .desc{ display:inline-block; font-size:9px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:38vw; flex:0 1 auto; min-width:0; }   /* T4-4: condensed, not hidden */
   /* Dossier button: shown here (was hidden), compact, sits on the wrapped detail line */
   #sel-dossier{ display:inline-flex; align-items:center; margin:0; padding:2px 8px;
     font-size:10px; min-height:0; flex:0 0 auto; }

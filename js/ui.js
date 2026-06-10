@@ -29,10 +29,24 @@ function updateBossBar(){
   document.getElementById('bossbar-fill').style.width=(frac*100)+'%';
   const hpEl=document.getElementById('bossbar-hp'); if(hpEl) hpEl.textContent=Math.round(frac*100)+'%';
 }
+// T2-5: income/sec — a rolling ~3s delta of gold_collected (deposits + Satellite trickle).
+// Local HUD read only; pruned sample window, no sim impact.
+let _incomeSamples=[];
+function incomePerSec(eco){
+  const now=performance.now()/1000, v=eco.gold_collected||0;
+  _incomeSamples.push({t:now, v});
+  while(_incomeSamples.length>2 && now-_incomeSamples[0].t>3) _incomeSamples.shift();
+  const first=_incomeSamples[0];
+  const dt=now-first.t;
+  if(dt<0.5) return null;
+  return Math.max(0,(v-first.v)/dt);
+}
 function refreshUI(){
   if(!G) return;
   const _eco=playerEco(G, LOCAL_CTRL);              // HUD shows THIS client's own pool
   document.getElementById('gold').textContent = (G.hub && typeof CAMPAIGN!=='undefined') ? ('M3$ '+(CAMPAIGN.m3|0)) : (_eco.gold|0);
+  const _inc=document.getElementById('income');
+  if(_inc){ const r=(!G.hub && !G.over) ? incomePerSec(_eco) : null; _inc.textContent = r==null ? '' : ('+'+r.toFixed(1)+'/s'); }
   document.getElementById('supply').textContent = _eco.supply+'/'+_eco.supplyCap;
   document.getElementById('mapname').textContent = G.cfg.name;
   document.getElementById('objective').textContent = G.cfg.objective;
@@ -71,7 +85,20 @@ function refreshUI(){
     // always-visible 3-stat line (level / HP / damage) — shown on desktop AND mobile
     if(e.kind==='unit'){
       const dmg=Math.round((e.dmg||0)*vetDmgMul(e));   // reflect the career damage bonus
-      elStats.innerHTML=`<span class="st">★ Lv ${lvl}</span><span class="st">❤ ${e.hp|0}/${e.maxHp}</span><span class="st">⚔ ${dmg}</span>`;
+      // T1-5: madosis readout for units with a minted sanity threshold — same amber/red escalation as the world bar
+      let madSt='';
+      if(e.owner==='player' && typeof madThreshold==='function'){
+        const thr=madThreshold(e);
+        if(thr>0){ const fr=Math.min(1,(e.madosis||0)/thr);
+          const col=(typeof madColor==='function')?madColor(fr):(fr>0.85?'#ff5b6b':fr>0.6?'#ffb13f':'#b08cff');
+          madSt=`<span class="st" style="color:${col}" title="Madosis — trauma vs. breaking point">🧠 ${Math.round(e.madosis||0)}/${Math.round(thr)}</span>`; }
+      }
+      // T2-4: surface the counter axis — armor shrugs small-arms, pierce ignores armor
+      let counterSt='';
+      if(d.armor>0) counterSt+=`<span class="st" title="Armor — takes ${Math.round(d.armor*100)}% less damage from non-piercing attacks">🛡 ${Math.round(d.armor*100)}%</span>`;
+      if(d.pierce)  counterSt+=`<span class="st" title="Piercing — ignores enemy armor">🗡 AP</span>`;
+      if(e.sprinting) counterSt+=`<span class="st" style="color:#7fd6ff" title="Sprinting — running and ignoring fire">💨 sprinting</span>`;   // T2-6 legibility
+      elStats.innerHTML=`<span class="st">★ Lv ${lvl}</span><span class="st">❤ ${e.hp|0}/${e.maxHp}</span><span class="st">⚔ ${dmg}</span>`+counterSt+madSt;
     } else {
       const s=e.constructing? `🏗 ${(e.buildProg/e.buildTime*100)|0}%` : `❤ ${e.hp|0}/${e.maxHp}`;
       elStats.innerHTML=`<span class="st">${s}</span>`;
@@ -210,9 +237,13 @@ function cmdSig(sel){
   const xr=G.extractReady?1:0;
   const selHq=owned.find(e=>e.type==='hq'&&!e.constructing);
   const xs=(xr && selHq && typeof hqStoredUnits==='function') ? hqStoredUnits(G,selHq).length : 0;
+  // T2-2/T2-3: tactics buttons rebuild when the combat selection's stance or ability-type set changes
+  const combat=owned.filter(e=>e.kind==='unit'&&!e.storedIn&&e.type!=='worker');
+  const stSig=combat.length?(combat[0].stance||'aggr'):'-';
+  const abSig=(typeof ABILITIES!=='undefined')?[...new Set(combat.filter(u=>ABILITIES[u.type]).map(u=>u.type))].sort().join('.'):'';
   return 'h'+(has('hq')?1:0)+'b'+(has('barracks')?1:0)+'g'+(has('garage')?1:0)+'l'+(has('launchpad')?1:0)
        +'w'+(owned.some(e=>e.type==='worker')?1:0)+'G'+(hasG?1:0)
-       +'u'+(owned.some(e=>e.kind==='unit')?1:0)
+       +'u'+(owned.some(e=>e.kind==='unit')?1:0)+'c'+(combat.length?1:0)+'s'+stSig+'a'+abSig
        +'x'+xr+'X'+xs;
 }
 // Resolve a live, selected, finished building of a given type at click time
@@ -260,6 +291,28 @@ function buildCommands(sel){
     addCmd(DEF.garage.icon,'The Garage',DEF.garage.cost,()=>tryPlace(G,'garage'));
     if(hasFinished('garage')) addCmd(DEF.launchpad.icon,'Launch Pad',DEF.launchpad.cost,()=>tryPlace(G,'launchpad'));
   }
+  // ---- unit tactics (T2-2/T2-3): attack-move, stance cycle, manual ability ----
+  const combat=owned.filter(e=>e.kind==='unit'&&!e.storedIn&&e.type!=='worker');
+  if(combat.length){
+    if(combat.length>=3 && typeof TUTORIAL!=='undefined' && TUTORIAL.fireContextual) TUTORIAL.fireContextual('amove-tip', G);   // teach it the first time a real squad is selected (T2-3)
+    addCmd('⚔','Attack-Move',null,()=>{ if(typeof armAttackMove==='function') armAttackMove(true); },'amove-btn','attack-move');
+    const st=combat[0].stance||'aggr';
+    const stLbl = st==='hold'?'Hold Ground' : st==='def'?'Defensive' : 'Aggressive';
+    const stIco = st==='hold'?'🛡' : st==='def'?'🚧' : '🔥';
+    addCmd(stIco,'Stance: '+stLbl,null,()=>{
+      const next = st==='aggr'?'def' : st==='def'?'hold' : 'aggr';
+      (typeof netStance==='function'?netStance:(g,s)=>setStance(g,g.selection,s))(G,next);
+      G._cmdSig=null; refreshUI();
+    },null,'stance');
+    if(typeof ABILITIES!=='undefined'){
+      const abTypes=[...new Set(combat.filter(u=>ABILITIES[u.type]).map(u=>u.type))].slice(0,3);
+      for(const t of abTypes){
+        const spec=ABILITIES[t];
+        addCmd(spec.icon, spec.name, null, ()=>{ (typeof netAbility==='function'?netAbility:(g)=>castAbility(g,g.selection))(G); }, 'abil-btn', 'ability-'+t);
+        const btn=elCmd.lastChild; if(btn){ btn._abilType=t; btn.title=spec.hint||''; }
+      }
+    }
+  }
   // production/build buttons fill the command line; flag it so compact (mobile) layouts
   // can collapse the whole line when a unit has none — Stop now lives in #touch-controls.
   elCmd.classList.toggle('has-cmds', elCmd.children.length>0);
@@ -285,6 +338,7 @@ function buildHubCommands(sel){
   if(poi && poi.hubPoi.kind==='training') addCmd('🎯','TRAINING GROUNDS',null,()=>openTrainingMenu());
   if(poi && poi.hubPoi.kind==='mentalhealth') addCmd('🧠','MENTAL HEALTH',null,()=>openHealingMenu());
   if(poi && poi.hubPoi.kind==='wake')     addCmd('⚡','THE WAKE',null,()=>openWakeMenu());
+  if(!poi && !unit) addCmd('🕯','VETERANS & MEMORIAL',null,()=>showRoster());   // top-level in the HUB (T1-7)
   if(unit){
     const key=hubUnitKey(unit), up=(CAMPAIGN.upgrades[key]||{}), il=up.implantLevel||0;
     addCmd('🧬','Implant',HUB.implantCosts[il]==null?null:HUB.implantCosts[il],()=>hubUpgradeSelectedUnit('implant'));
@@ -315,7 +369,14 @@ function syncCmdLine(){
 function updateAffordability(){
   const kids=elCmd.children; if(!kids) return;
   const _g=(G && G.hub && typeof CAMPAIGN!=='undefined') ? CAMPAIGN.m3 : playerEco(G, LOCAL_CTRL).gold;
-  for(const b of kids){ if(b._cost!=null) b.classList.toggle('disabled', _g < b._cost); }
+  for(const b of kids){
+    if(b._cost!=null) b.classList.toggle('disabled', _g < b._cost);
+    // T2-2: ability buttons dim while every selected unit of that type is still on cooldown
+    if(b._abilType){
+      const ready=G.selection.some(u=>!u.dead && u.type===b._abilType && (u.abilCd||0)<=0);
+      b.classList.toggle('disabled', !ready);
+    }
+  }
 }
 // HQ has cost 0 in DEF (starting), but expanding should cost something:
 function tryPlaceFixed(type){
@@ -385,6 +446,7 @@ function eventToast(html,ms=9000,say){
 // Show / hide a menu sub-screen (map selection, documentation)
 function inPregameMenu(){ return !(G && running); }
 function showSub(id){ const el=document.getElementById(id); if(el) el.style.display='flex';
+  if(id==='startScreen' && typeof syncContinueButton==='function') syncContinueButton();   // refresh ▶ Continue (T0-8)
   if(typeof MUSIC!=='undefined' && inPregameMenu()) MUSIC.enterMenu();
 }
 function hideSub(id){ const el=document.getElementById(id); if(el) el.style.display='none'; }
@@ -431,6 +493,7 @@ function dossierBodyHTML(u){
     +   `<div class="dossier-headrow">`
     +     `<button class="sc-btn back dossier-back" onclick="closeDossier()">◀ Back</button>`
     +     `<div class="dossier dossier-head">${dossierHeadHTML(u)}</div>`
+    +     (typeof shareCard==='function' ? `<button class="sc-btn back dossier-share" onclick="shareCard(dossierUnit)" title="Share this personnel file as an image">⇪ Share File</button>` : '')
     +   `</div>`
     +   `<div class="dossier">${dossierFileHTML(u)}</div>`
     + `</div>`
@@ -487,6 +550,15 @@ function showRoster(){
   b.querySelectorAll('.roster-row[data-uid]').forEach(el=>{
     el.onclick=()=>{ const id=+el.dataset.uid; const u=G&&G.entities.find(e=>e.id===id&&!e.dead); if(u){ hideSub('rosterScreen'); showDossier(u); } };
   });
+  // share-card buttons (T0-6): living rows by unit id, fallen rows by memorial index
+  if(typeof shareCard==='function'){
+    b.querySelectorAll('.roster-share[data-share-uid]').forEach(el=>{
+      el.onclick=(ev)=>{ ev.stopPropagation(); const u=G&&G.entities.find(e=>e.id===+el.dataset.shareUid&&!e.dead); if(u) shareCard(u); };
+    });
+    b.querySelectorAll('.roster-share[data-share-fidx]').forEach(el=>{
+      el.onclick=(ev)=>{ ev.stopPropagation(); const f=(typeof fallenVets!=='undefined')&&fallenVets[+el.dataset.shareFidx]; if(f) shareCard(f); };
+    });
+  }
   showSub('rosterScreen');
 }
 
@@ -781,14 +853,28 @@ function buildWakeBody(body){
 
   const sum=document.createElement('div'); sum.className='hub-stat';
   sum.innerHTML = unlocked
-    ? ('Charges left <b>'+charges+' / '+cap+'</b> · In the lattice <b>'+sessions.length+' / '+(HUB.rebornSlotCap||1)+'</b> · One soul at a time.')
-    : 'The coils are cold — you don’t hold the lattice yet.';
+    ? ('The storm holds <b>'+charges+'</b> of its <b>'+cap+'</b> writes — ever. In the lattice now: <b>'+sessions.length+' / '+(HUB.rebornSlotCap||1)+'</b>. One soul at a time; the rest stay names.')
+    : '⚠ LATTICE OFFLINE — resurrection unlocks at the GRAAL.';
   body.appendChild(sum);
 
   if(!unlocked){
+    // T1-7: pre-XIII the Wake is still the MEMORIAL — every hub visit walks past the dead.
     const m=document.createElement('div'); m.className='muted';
     m.innerHTML='Take A&O’s transfer lattice and pull your dead’s backups out of the purge (Episodes XII–XIII). Then the storm has something to write.';
-    body.appendChild(m); return;
+    body.appendChild(m);
+    body.appendChild(hubMenuSection('The fallen ('+fallen.length+')'));
+    if(!fallen.length){
+      const e=document.createElement('div'); e.className='muted'; e.textContent='No one yet. Keep it that way.';
+      body.appendChild(e);
+    } else {
+      for(const f of fallen){
+        const row=document.createElement('div'); row.className='hub-stat';
+        row.innerHTML='🕯 <b>'+f.name+'</b> — '+(typeof careerTitle==='function'?careerTitle(f.lvl):'')+' · Lv '+(f.lvl||0)
+          +' · fell at '+(f.map||'the front')+' · '+(f.dreamDone?'dream fulfilled ✓':'dream unfulfilled: '+(f.dream||'unknown'));
+        body.appendChild(row);
+      }
+    }
+    return;
   }
 
   const cols=hubMenuColumns(2), colL=hubMenuColumn(true), colR=hubMenuColumn(true);
@@ -805,8 +891,14 @@ function buildWakeBody(body){
       const f=fallen[i];
       const already=(typeof rebornIsDone==='function')?rebornIsDone(f):false;
       const cost=(typeof rebornCost==='function')?rebornCost(f):0;
+      // T4-1: the choice is dream-aware — who they were and what they never finished sits ON the card
+      let dreamLine='';
+      try{ if(typeof buildDossier==='function' && typeof fallenDossierSnap==='function'){
+        const d=buildDossier({type:f.type, lore:fallenDossierSnap(f)});
+        if(d&&d.dream) dreamLine='<br><i style="color:#9fb6c8">'+(f.dreamDone?'✓ ':'✗ ')+'“'+d.dream+'”</i>'; } }catch(e){}
       return {
-        caption: trainTypeName(snap)+'<br>'+(typeof careerTitle==='function'?careerTitle(snap.stars||0):'')+' · Lv '+(snap.stars||0)+(already?' · <i>reborn</i>':''),
+        caption: trainTypeName(snap)+'<br>'+(typeof careerTitle==='function'?careerTitle(snap.stars||0):'')+' · Lv '+(snap.stars||0)
+          +' · fell at '+(f.map||'the front')+(already?' · <i>reborn</i>':'')+dreamLine,
         action: { label: already ? 'Reborn' : ('Resurrect · M3$ '+cost),
           onClick: ()=>{ if(typeof hubWakeStart==='function' && hubWakeStart(fallenStableId(f))) buildHubMenuBody(); } }
       };
@@ -957,8 +1049,8 @@ function openMdcMenu(poi){
       const cap=(typeof hubDispatchVetCap==='function')?hubDispatchVetCap():6;
       const live=(typeof hubEnlistedUnits==='function')?hubEnlistedUnits(G):[];
       const vets=live.filter(u=>!u.hero), heroes=live.filter(u=>u.hero);
-      let idx=(CAMPAIGN&&CAMPAIGN.nextMapIndex!=null)?CAMPAIGN.nextMapIndex:0;
-      if(typeof villainGateBefore==='function'){ const g=villainGateBefore(idx); if(g>=0) idx=g; }   // a gated villain is the real next deployment
+      let idx=(typeof hubNextDeployIndex==='function') ? hubNextDeployIndex()
+            : ((CAMPAIGN&&CAMPAIGN.nextMapIndex!=null)?CAMPAIGN.nextMapIndex:0);   // gate villains + finale routing (T2-7)
 
       const sum=document.createElement('div'); sum.className='hub-stat';
       sum.innerHTML='Enlisted <b>'+vets.length+' / '+cap+'</b> vets'+(heroes.length?' + <b>'+heroes.length+'</b> hero'+(heroes.length>1?'es':''):'');
@@ -1031,11 +1123,22 @@ function openUltraMenu(){
   openHubMenu({
     id:'ultra', icon:'◆', title:'ULTRA Headquarters',
     subtitle:'The company that fabricates life for everyone, everywhere',
-    signature: function(){ return 'ultra:'+(CAMPAIGN.m3|0)+'|g:'+(CAMPAIGN.gambled?1:0)+'|v:'+(CAMPAIGN.visit|0); },
+    signature: function(){ return 'ultra:'+(CAMPAIGN.m3|0)+'|g:'+(CAMPAIGN.gambled?1:0)+'|v:'+(CAMPAIGN.visit|0)+'|si:'+(CAMPAIGN.seriesInf|0); },
     build: function(body){
       const s=document.createElement('div'); s.className='hub-stat';
       s.innerHTML='Treasury <b>M3$ '+(CAMPAIGN.m3|0)+'</b> · H.U.B. visit <b>#'+(CAMPAIGN.visit|0)+'</b>';
       body.appendChild(s);
+      // T3-9: Series \u221e — the uncapped sink. Rising cost, +1% roster HP per closed round.
+      body.appendChild(hubMenuSection('Series \u221e Desk'));
+      const si=document.createElement('div'); si.className='hub-note';
+      si.textContent='Round '+((CAMPAIGN.seriesInf|0)+1)+' of \u221e. Every closed round: +1% max HP for the whole roster, forever. Current bonus: +'+(CAMPAIGN.seriesInf|0)+'%.';
+      body.appendChild(si);
+      const siFoot=document.createElement('div'); siFoot.className='hub-footer';
+      const siInfo=document.createElement('div'); siInfo.className='grow';
+      siInfo.innerHTML='Dilution is for other people.';
+      siFoot.appendChild(siInfo);
+      siFoot.appendChild(hubMenuActionBtn('\ud83d\udcc8 Close the round', (typeof seriesInfCost==='function')?seriesInfCost():300, true, ()=>{ hubBuySeriesInf(); buildHubMenuBody(); }));
+      body.appendChild(siFoot);
       body.appendChild(hubMenuSection('Speculation Kiosk'));
       const note=document.createElement('div'); note.className='hub-note';
       note.textContent = CAMPAIGN.gambled ? 'The kiosk already liquidated your optimism this visit.'
@@ -1083,6 +1186,7 @@ function docFooter(){ if(_docCampaign) startGame(0); else hideSub('docScreen'); 
 
 function startGame(idx){
   idx = idx|0;
+  if(idx===0 && typeof TELE!=='undefined') TELE.event('new_campaign');
   // Quarter I (idx 0) first asks whether the player wants the guided tutorial; the prompt's
   // Yes/No calls back into beginRun(0). Every other map starts immediately.
   if(idx===0 && typeof TUTORIAL!=='undefined'){ TUTORIAL.prompt(0); return; }
@@ -1100,13 +1204,98 @@ function beginRun(idx){
   if(typeof resetHubCampaign==='function') resetHubCampaign();
   mapIndex=idx; showCrawl(idx, ()=>{ loadMap(idx); });
 }
+/* ---- T4-2/T4-3: Settings & accessibility panel + the difficulty picker ---- */
+function _lsFlag(k){ try{ return localStorage.getItem(k)==='1'; }catch(_){ return false; } }
+function _lsSetFlag(k,v){ try{ localStorage.setItem(k, v?'1':'0'); }catch(_){ } }
+function buildDifficultyRow(elId){
+  const row=document.getElementById(elId||'difficultyRow'); if(!row || typeof DIFFICULTY==='undefined') return;
+  const cur=(typeof difficultyKey==='function')?difficultyKey():'a';
+  row.innerHTML='';
+  for(const [k,d] of Object.entries(DIFFICULTY)){
+    const b=document.createElement('button');
+    b.className='diff-btn'+(k===cur?' sel':'');
+    b.innerHTML='<b>'+d.name+'</b><span>'+d.desc+' \u00b7 score \u00d7'+d.score+'</span>';
+    b.onclick=()=>{ setDifficultyKey(k); buildDifficultyRow(elId); const sb=document.getElementById('settingsBody'); if(sb && sb.childElementCount) buildSettingsBody(); };
+    row.appendChild(b);
+  }
+}
+function buildSettingsBody(){
+  const body=document.getElementById('settingsBody'); if(!body) return;
+  const togg=(label,desc,key,onflip)=>{
+    const on=_lsFlag(key);
+    return `<label class="set-row"><input type="checkbox" data-set="${key}" ${on?'checked':''}> <b>${label}</b> <span>${desc}</span></label>`;
+  };
+  let h='';
+  h+='<div class="panel-label">Difficulty (applies at the next map load)</div><div id="settingsDiffRow" class="diff-row"></div>';
+  h+='<div class="panel-label">Accessibility</div>';
+  h+=togg('Colorblind-safe bars','HP & madosis switch to a blue \u2192 white \u2192 red ramp','starleft_colorblind');
+  h+=togg('Larger HUD text','scales the HUD typography up','starleft_bigtext');
+  h+=togg('Reduce FX','forces the reduced-motion path (fewer particles, no strobes)','starleft_reducefx');
+  h+='<div class="panel-label">Audio &amp; privacy</div>';
+  h+=`<label class="set-row"><input type="checkbox" data-aud="voice" ${ (typeof VOICE!=='undefined'&&VOICE.isEnabled())?'checked':''}> <b>Voices</b> <span>unit barks, narrator, tutorial coach</span></label>`;
+  h+=`<label class="set-row"><input type="checkbox" data-aud="music" ${ (typeof MUSIC!=='undefined'&&MUSIC.isEnabled())?'checked':''}> <b>Music &amp; ambient</b> <span>menu theme + in-mission biome beds</span></label>`;
+  h+=`<label class="set-row"><input type="checkbox" data-aud="sfx" ${ (typeof SFX!=='undefined'&&SFX.isEnabled())?'checked':''}> <b>Combat SFX</b> <span>lasers, impacts, deaths, UI clicks</span></label>`;
+  h+=`<label class="set-row"><input type="checkbox" data-aud="tele" ${ (typeof TELE!=='undefined'&&TELE.isEnabled())?'checked':''}> <b>Anonymous analytics</b> <span>cookieless funnel counts \u2014 nothing is sent unless an endpoint is configured; Do-Not-Track always wins</span></label>`;
+  body.innerHTML=h;
+  buildDifficultyRow('settingsDiffRow');
+  body.querySelectorAll('input[data-set]').forEach(inp=>{
+    inp.onchange=()=>{
+      _lsSetFlag(inp.dataset.set, inp.checked);
+      if(inp.dataset.set==='starleft_colorblind') window._colorblind=inp.checked;
+      if(inp.dataset.set==='starleft_reducefx') window._reduceFx=inp.checked;
+      if(inp.dataset.set==='starleft_bigtext') document.body.classList.toggle('big-text', inp.checked);
+    };
+  });
+  body.querySelectorAll('input[data-aud]').forEach(inp=>{
+    inp.onchange=()=>{
+      if(inp.dataset.aud==='voice' && typeof VOICE!=='undefined'){ VOICE.setEnabled(inp.checked); if(typeof syncVoiceBtn==='function') syncVoiceBtn(); }
+      if(inp.dataset.aud==='music' && typeof MUSIC!=='undefined') MUSIC.setEnabled(inp.checked);
+      if(inp.dataset.aud==='sfx'   && typeof SFX!=='undefined') SFX.setEnabled(inp.checked);
+      if(inp.dataset.aud==='tele'  && typeof TELE!=='undefined') TELE.setEnabled(inp.checked);
+    };
+  });
+}
+function showSettings(){ buildSettingsBody(); showSub('settingsScreen'); }
+
+/* ---- T3-2/T3-4: skirmish setup screen — mutator checkboxes + daily/random + the map grid ---- */
+function skirmishSelectedMutators(){
+  return [...document.querySelectorAll('#skirmish-mutators input:checked')].map(i=>i.value);
+}
+function showSkirmish(){
+  const mu=document.getElementById('skirmish-mutators');
+  if(mu && typeof MUTATORS!=='undefined' && !mu.childElementCount){
+    mu.innerHTML = Object.entries(MUTATORS).map(([k,m])=>
+      `<label class="mut-row"><input type="checkbox" value="${k}"> <b>${m.icon} ${m.name}</b> <span>${m.desc} \u00b7 score \u00d7${m.mult}</span></label>`).join('');
+  }
+  // T3-9: meta-currency as roguelite run-investment — campaign M3$ buys one-run boosts
+  const bo=document.getElementById('skirmish-boosts');
+  if(bo){
+    const m3=((typeof CAMPAIGN!=='undefined'&&CAMPAIGN&&CAMPAIGN.m3)|0);
+    bo.innerHTML=`<label class="mut-row"><input type="checkbox" value="bigger" ${m3<150?'disabled':''}> <b>\u{1F4B0} Buy a Bigger Round</b> <span>+600 starting Funding \u00b7 M3$ 150 (treasury: ${m3})</span></label>`
+      +`<label class="mut-row"><input type="checkbox" value="lobby" ${m3<200?'disabled':''}> <b>\u{1F3A9} Hire Lobbyists</b> <span>2 free Lv3 Lobbyist veterans \u00b7 M3$ 200</span></label>`;
+  }
+  const wrap=document.getElementById('skirmishMapButtons');
+  if(wrap){ wrap.innerHTML='';
+    MAPS.forEach((m,i)=>{
+      if(m.skirmish) return;                         // the transient generated-map slot
+      const sub=(m.name.split('\u2014')[1]||m.name).trim();
+      const label=m.isVillain ? ((m.villain?'Boss ':'Op ')+(m.displayEp||'')) : ('Quarter '+(i+1));
+      const b=document.createElement('button'); b.className='map-btn'+(m.isVillain?' map-btn--boss':'');
+      b.innerHTML=`<b>${label}</b><span class="mn">${sub}</span><small>vs ${m.enemyName||'rivals'}</small>`;
+      b.onclick=()=>startSkirmish(i,{ mutators:skirmishSelectedMutators() });
+      wrap.appendChild(b);
+    });
+  }
+  showSub('skirmishScreen');
+}
+
 // Build a "jump to any Quarter" row on the title screen from the MAPS list.
 function buildMapSelect(){
   const wrap=document.getElementById('mapButtons'); if(!wrap) return;
   wrap.innerHTML='';
   MAPS.forEach((m,i)=>{
     const sub=(m.name.split('—')[1]||m.name).trim();
-    const label = m.isVillain ? ('Boss '+(m.displayEp||'')) : ('Quarter '+(i+1));   // villains show their display episode, not an array-index Quarter
+    const label = m.isVillain ? ((m.villain?'Boss ':'Op ')+(m.displayEp||'')) : ('Quarter '+(i+1));   // gated maps show their display episode (boss duel vs side op), not an array-index Quarter
     const b=document.createElement('button'); b.className='map-btn'+(m.isVillain?' map-btn--boss':'');
     b.innerHTML=`<b>${label}</b><span class="mn">${sub}</span><small>vs ${m.enemyName||'rivals'}</small>`;
     b.onclick=()=>startGame(i);
@@ -1129,6 +1318,9 @@ function loadMap(idx){
   if(typeof MUSIC!=='undefined') MUSIC.leaveMenu();
   if(typeof CAMPAIGN!=='undefined') CAMPAIGN.mode='combat';
   G=newMap(idx); if(typeof resetDialogs==='function') resetDialogs(); syncHud(); clampCam(G); refreshUI(); running=true;
+  if(typeof TELE!=='undefined') TELE.event('episode_started', { idx });
+  // T0-3: sparse per-biome ambient bed while in a mission (stopped on menu/hub return)
+  if(typeof MUSIC!=='undefined' && MUSIC.playAmbient){ const tb=G.cfg&&G.cfg.terrain&&G.cfg.terrain.biomes; MUSIC.playAmbient(tb&&tb[0]); }
   if(typeof syncPauseBtn==='function') syncPauseBtn();
   if(typeof TUTORIAL!=='undefined') TUTORIAL.init(G);   // Quarter I guided tutorial (solo only; no-op otherwise)
   toast('Quarter '+(idx+1)+': '+G.cfg.name);
@@ -1209,13 +1401,14 @@ function showCrawl(idx, done){
   content.style.animation=''; content.style.animationPlayState='paused';
   scr.style.display='flex';
 
-  let finished=false, voiceTimer=null, playTimer=null, timer=null;
+  let finished=false, voiceTimer=null, playTimer=null, timer=null, _skipped=false;
   const finish=()=>{ if(finished) return; finished=true;
     clearTimeout(timer); clearTimeout(voiceTimer); clearTimeout(playTimer);
     content.style.animationPlayState='';
     if(typeof VOICE!=='undefined') VOICE.stopCrawl();     // stop narration on skip OR auto-advance
+    if(typeof TELE!=='undefined') TELE.event(_skipped?'crawl_skipped':'crawl_watched', { idx });
     scr.style.display='none'; done&&done(); };
-  document.getElementById('crawl-skip').onclick=finish;
+  document.getElementById('crawl-skip').onclick=()=>{ _skipped=true; finish(); };
 
   // Episode I plays a 5s "A long sprint ago…" introFade first; hold the scroll + voice for it.
   const introMs = idx===0 ? 5000 : 0;
@@ -1254,14 +1447,37 @@ function showCrawl(idx, done){
 
 function onVictory(){
   running=false;
+  if(typeof TELE!=='undefined') TELE.event('episode_won', { idx: (typeof mapIndex==='number'?mapIndex:0) });
+  if(typeof ACH!=='undefined'){ const _m=MAPS[mapIndex]||{};
+    ACH.fire('victory', { idx:mapIndex, villainId:_m.villain&&_m.villain.id, finale:!!_m.finale,
+      wc:_m.winCondition&&_m.winCondition.type, daily:!!(G&&G._skirmishDaily) });
+    if(G&&G._skirmishDaily) ACH.fire('daily');
+  }
   if(typeof syncPauseBtn==='function') syncPauseBtn();
   const es=document.getElementById('endScreen');
   const beaten=G.cfg.enemyName||'the competition';
-  // villain maps are APPENDED past the linear campaign, so the FINALE is the last non-villain map,
-  // not MAPS.length-1; a villain map always continues (back to its returnTo), never shows the IPO.
+  // ---- T3-2: skirmish never advances the campaign — its own cleared screen + Valuation ----
+  if(G._skirmish){
+    es.className='overlay win'; es.style.display='flex';
+    es.innerHTML=`<div class="big">\u{1F3B2}</div><h1>SKIRMISH CLEARED</h1>
+      <h2>${G._skirmishDaily?'Daily Disruption \u2014 compare Valuations':'No stakes. All bragging rights.'}</h2>
+      ${victorySummaryHTML()}
+      <div style="display:flex;gap:12px;flex-wrap:wrap;justify-content:center;">
+        <button class="btn" onclick="replaySkirmish()">\u21BB Play Again</button>
+        <button class="btn" onclick="document.getElementById('endScreen').style.display='none'; showSkirmish();">\u{1F3B2} Pick Another</button>
+        <button class="btn" style="background:linear-gradient(180deg,#566,#344);" onclick="location.reload()">\u23CF Main Menu</button>
+      </div>`;
+    return;
+  }
+  // villain maps are APPENDED past the linear campaign, so the linear end is the last non-villain
+  // map. T2-7: the campaign no longer IPOs there — an uncleared FINALE villain (REX) gates the IPO,
+  // so the war ends on its best fight; beating the finale villain (or replaying it cleared) IPOs.
   const lastEp = (typeof lastEpisodeIndex==='function') ? lastEpisodeIndex() : (MAPS.length-1);
   const isVillainMap = !!(MAPS[mapIndex] && MAPS[mapIndex].isVillain);
-  if(mapIndex < lastEp || isVillainMap){
+  const finaleWon = isVillainMap && MAPS[mapIndex].finale;
+  if(finaleWon && typeof markVillainCleared==='function') markVillainCleared(mapIndex);
+  const fvIdx = (!isVillainMap && mapIndex>=lastEp && typeof finaleVillainIndex==='function') ? finaleVillainIndex() : -1;
+  if(!finaleWon && (mapIndex < lastEp || isVillainMap || fvIdx>=0)){
     // infiltration map (Ep X, cfg.noCarryVets): no vets deployed here, so don't run the chooser and
     // don't overwrite the carryover — the roster waiting outside rejoins unchanged next quarter.
     const keepRoster = !!(G.cfg && G.cfg.noCarryVets);
@@ -1269,6 +1485,7 @@ function onVictory(){
     // next index: skip appended villains, resume at returnTo after a boss, and honor a gated villain.
     let nextIdx = (typeof villainNextLinear==='function') ? villainNextLinear(mapIndex) : Math.min(mapIndex+1, MAPS.length-1);
     if(typeof villainGateBefore==='function'){ const g=villainGateBefore(nextIdx); if(g>=0) nextIdx=g; }
+    if(fvIdx>=0) nextIdx=fvIdx;   // T2-7: the linear campaign is done — the FINALE boss is the next deployment
     const cap  = (typeof vetCarryCountFor==='function') ? vetCarryCountFor(nextIdx) : 0;
     // boss-aware headline (killed vs the ninja's escape), else the normal corporate-takeover screen
     const vdef = (G.cfg && G.cfg.villain && typeof VILLAINS!=='undefined') ? VILLAINS[(Array.isArray(G.cfg.villain)?G.cfg.villain[0]:G.cfg.villain).id] : null;
@@ -1278,11 +1495,14 @@ function onVictory(){
     else                   head=`<div class="big">📉</div><h1>ACQUIHIRED</h1><h2>${beaten} has pivoted to bankruptcy</h2>`;
     es.className='overlay win'; es.style.display='flex';
     es.innerHTML=`${head}
-      <p>Their assets are yours, their founders are "exploring new opportunities," and TechCrunch loves you.<br>
-      Funding raised this quarter: <b>💰 ${teamGoldCollected(G)|0}</b></p>
+      <p>Their assets are yours, their founders are "exploring new opportunities," and TechCrunch loves you.</p>
+      ${victorySummaryHTML()}
       ${vets.length? `<div class="carry-head">Who deploys to the next quarter? <span class="carry-count" id="carry-count"></span></div>
         <div class="carry-list" id="carry-list"></div>` : ''}
-      <button class="btn" id="nextBtn">▶ Next Quarter</button>`;
+      <div style="display:flex;gap:12px;flex-wrap:wrap;justify-content:center;">
+        <button class="btn" id="nextBtn">▶ Next Quarter</button>
+        <button class="btn" style="background:linear-gradient(180deg,#3a4656,#222b36);" onclick="showRoster()">🕯 Veterans &amp; Memorial</button>
+      </div>`;
     const proceed=(chosen)=>{ es.style.display='none'; if(!keepRoster) setCarryover(chosen);
       if(typeof captureHeroes==='function') captureHeroes(G);   // heroes auto-carry (not chooser-driven) until they die — incl. freed Biba
       G._fledBoss=false; mapIndex=nextIdx; showCrawl(mapIndex, ()=>loadMap(mapIndex)); };
@@ -1290,12 +1510,61 @@ function onVictory(){
     else { document.getElementById('nextBtn').onclick=()=>proceed([]); }
   } else {
     es.className='overlay win'; es.style.display='flex';
+    const lap=(typeof CAMPAIGN!=='undefined'&&CAMPAIGN.ngPlus)|0;
     es.innerHTML=`<div class="big">🦄</div><h1>IPO!</h1>
-      <h2>Total market domination achieved</h2>
+      <h2>Total market domination achieved${lap?` — lap ${lap+1}`:''}</h2>
+      ${victorySummaryHTML()}
       <p>${beaten} is rubble, regulators are "looking into it," and you are now the monopoly you swore to disrupt.
       The ping-pong table finally gets used. Congratulations, you played yourself — and won.</p>
-      <button class="btn" onclick="location.reload()">↻ Found a New Startup</button>`;
+      <div style="display:flex;gap:14px;flex-wrap:wrap;justify-content:center;">
+        <button class="btn" onclick="startNgPlus()">💸 Take the Money and Disrupt Again</button>
+        <button class="btn" style="background:linear-gradient(180deg,#566,#344);" onclick="location.reload()">↻ Found a New Startup</button>
+        <button class="btn" style="background:linear-gradient(180deg,#3a4656,#222b36);" onclick="showRoster()">🕯 Veterans &amp; Memorial</button>
+      </div>`;
+    if(typeof recordLedgerRun==='function') recordLedgerRun('ipo');   // T3-6: the run enters the Founder's Ledger
+    if(typeof ACH!=='undefined') ACH.fire('ipo');   // T3-5
   }
+}
+// T3-1 NEW GAME+: keep the roster, the memorial and the whole CAMPAIGN meta (M3$/condos/upgrades),
+// bump the lap counter, and lap back to Quarter I — harder (newMap scales aggression by ngPlus and
+// balance.js musters extra defenders). No resets: this is the same company, richer and more haunted.
+function startNgPlus(){
+  if(typeof ACH!=='undefined') ACH.fire('ngplus');   // T3-5: Serial Founder
+  if(typeof eligibleVets==='function' && typeof setCarryover==='function') setCarryover(eligibleVets(G)||[]);
+  if(typeof captureHeroes==='function') captureHeroes(G);
+  if(typeof CAMPAIGN!=='undefined'){
+    CAMPAIGN.ngPlus=(CAMPAIGN.ngPlus|0)+1;
+    CAMPAIGN.nextMapIndex=0;
+    CAMPAIGN.villainCleared={};        // the lap re-fights its bosses (incl. the finale)
+    CAMPAIGN.mode='combat';
+  }
+  const es=document.getElementById('endScreen'); if(es) es.style.display='none';
+  mapIndex=0; showCrawl(0, ()=>loadMap(0));
+}
+// T1-9: the "state of my company" run summary — pure reads of already-computed state.
+// Reward breakdown comes from hubRewardFor; promotions/fallen/peakSupply/unitsLost from hubStats.
+function victorySummaryHTML(){
+  if(!G || typeof hubRewardFor!=='function') return '';
+  let h='';
+  try{
+    const r=hubRewardFor(G), s=(typeof hubEnsureStats==='function')?hubEnsureStats(G):{};
+    const elapsed=(typeof fmtElapsed==='function')?fmtElapsed(G.time|0):((G.time|0)+'s');
+    const val=(typeof valuationFor==='function')?valuationFor(G):null;
+    let best=0;
+    if(val && typeof valuationBest==='function'){ best=valuationBest(G); if(typeof valuationRecord==='function') valuationRecord(G, val.points); }
+    h+=`<div class="vic-sum">`;
+    h+=`<span class="vs">⚔ kills <b>${s.unitKills||0}</b></span><span class="vs">🏚 razed <b>${s.buildingKills||0}</b></span>`
+      +`<span class="vs">🏢 HQs <b>${s.hqKills||0}</b></span><span class="vs">💰 funding <b>${teamGoldCollected(G)|0}</b></span>`
+      +`<span class="vs">⏱ <b>${elapsed}</b></span><span class="vs">👥 peak <b>${s.peakSupply||0}</b></span>`
+      +`<span class="vs">★ promoted <b>${s.promotions||0}</b></span><span class="vs">🕯 lost <b>${s.unitsLost||0}</b></span>`
+      +`<span class="vs">M3$ reward <b>+${r.total}</b></span>`;
+    if(val) h+=`<span class="vs vs-score">📈 Valuation <b>${val.label}</b>${val.points>=best&&best>0?' · new best':(best>0?' · best $'+(best/100).toFixed(1)+'B':'')}</span>`;
+    h+=`</div>`;
+    // the fallen this quarter — names, not numbers
+    const here=(typeof fallenVets!=='undefined')?fallenVets.filter(f=>f.map===(G.cfg&&G.cfg.name)):[];
+    if(here.length) h+=`<div class="vic-fallen">🕯 The Fallen this quarter: ${here.map(f=>'<b>'+f.name+'</b>').join(' · ')}</div>`;
+  }catch(e){ return ''; }
+  return h;
 }
 // victory-screen carryover chooser: pick up to `cap` veteran units to deploy next quarter
 function buildCarryChooser(listEl, countEl, vets, cap, nextBtn, proceed){
@@ -1307,8 +1576,20 @@ function buildCarryChooser(listEl, countEl, vets, cap, nextBtn, proceed){
     const teaser = (d && (v.stars||0)>=2) ? `<span class="cc-dream">“${d.dream}”</span>` : '';
     const card = document.createElement('button');
     card.className = 'carry-card' + (selected.has(v.id)?' sel':'');
+    // T1-5: the carry chooser shows each veteran's madosis load — picking a frayed mind is a choice
+    let madBar='';
+    if(typeof madThreshold==='function'){
+      const thr=madThreshold(v);
+      if(thr>0){ const fr=Math.min(1,(v.madosis||0)/thr), col=(typeof madColor==='function')?madColor(fr):'#b05bff';
+        madBar=`<span class="cc-mad" title="Madosis ${Math.round(v.madosis||0)}/${Math.round(thr)}"><i style="width:${(fr*100).toFixed(0)}%;background:${col}"></i></span>`; }
+    }
     card.innerHTML = `<span class="cc-top">${DEF[v.type].icon||''} <b>${name}</b></span>
-      <span class="cc-stat">★ Lv ${v.stars||0} · ❤ ${v.hp|0}/${v.maxHp}</span>${teaser}`;
+      <span class="cc-stat">★ Lv ${v.stars||0} · ❤ ${v.hp|0}/${v.maxHp}</span>${madBar}${teaser}`;
+    if(typeof shareCard==='function' && v.lore){   // T0-6: share this veteran's card from the victory chooser
+      const sh=document.createElement('span'); sh.className='cc-share'; sh.textContent='⇪'; sh.title='Share this file as an image';
+      sh.onclick=(ev)=>{ ev.stopPropagation(); shareCard(v); };
+      card.appendChild(sh);
+    }
     card.onclick = ()=>{
       if(selected.has(v.id)) selected.delete(v.id);
       else if(selected.size>=cap){ countEl.classList.remove('flash'); void countEl.offsetWidth; countEl.classList.add('flash'); return; }
@@ -1324,6 +1605,7 @@ function buildCarryChooser(listEl, countEl, vets, cap, nextBtn, proceed){
 
 function onDefeat(){
   running=false;
+  if(typeof TELE!=='undefined') TELE.event('episode_lost', { idx: (typeof mapIndex==='number'?mapIndex:0) });
   if(typeof syncPauseBtn==='function') syncPauseBtn();
   const es=document.getElementById('endScreen');
   es.className='overlay lose'; es.style.display='flex';
@@ -1332,7 +1614,7 @@ function onDefeat(){
     <p>Your funding is gone, your Interns have unionized, and ${G.cfg.enemyName||'the rival'} just bought your domain name.</p>
     <div style="display:flex;gap:14px;">
       <button class="btn" id="retryBtn">↻ Pivot &amp; Retry</button>
-      <button class="btn" style="background:linear-gradient(180deg,#566,#344);" onclick="location.reload()">⟲ Restart Campaign</button>
+      <button class="btn" style="background:linear-gradient(180deg,#566,#344);" onclick="if(typeof recordLedgerRun==='function')recordLedgerRun('collapse');location.reload()">⟲ Restart Campaign</button>
     </div>`;
   document.getElementById('retryBtn').onclick=()=>{ es.style.display='none'; loadMap(mapIndex); };
 }

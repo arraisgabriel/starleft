@@ -69,8 +69,36 @@
     if(netRole!=='client') return releaseStoredUnit(state, building, unitId);
     if(building && isMine(building)) MP.send('mpcmd', { k:'releaseStored', from:LOCAL_CTRL, bid:building.id, uid:unitId, seq:(NET._cmdSeq=(NET._cmdSeq||0)+1) });
   }
+  // T2-3 attack-move: same replication shape as netCommand, but always issues amove
+  function netAmove(state, wx, wy){
+    if(hubClientBlocked(state)) return;
+    const ids = state.selection.filter(e=>!e.dead && !e.storedIn && e.kind==='unit' && isMine(e)).map(e=>e.id);
+    if(!ids.length) return;
+    if(window.USE_ROLLBACK){ NET.rbEnqueue({ k:'amove', wx, wy, ids }); return; }
+    if(netRole!=='client') return commandAttackMove(state, wx, wy);
+    MP.send('mpcmd', { k:'amove', from:LOCAL_CTRL, wx, wy, ids, seq:(NET._cmdSeq=(NET._cmdSeq||0)+1) });
+  }
+  // T2-3 stances: write u.stance on the host/solo sim (selection itself stays local)
+  function netStance(state, stance){
+    if(hubClientBlocked(state)) return;
+    const ids = state.selection.filter(e=>!e.dead && e.kind==='unit' && isMine(e)).map(e=>e.id);
+    if(!ids.length) return;
+    if(window.USE_ROLLBACK){ NET.rbEnqueue({ k:'stance', stance, ids }); return; }
+    if(netRole!=='client') return setStance(state, state.selection, stance);
+    MP.send('mpcmd', { k:'stance', from:LOCAL_CTRL, stance, ids, seq:(NET._cmdSeq=(NET._cmdSeq||0)+1) });
+  }
+  // T2-2 manual abilities: host validates + replays through the same castAbility
+  function netAbility(state){
+    if(hubClientBlocked(state)) return;
+    const ids = state.selection.filter(e=>!e.dead && !e.storedIn && e.kind==='unit' && isMine(e)).map(e=>e.id);
+    if(!ids.length) return;
+    if(window.USE_ROLLBACK){ NET.rbEnqueue({ k:'ability', ids }); return; }
+    if(netRole!=='client') return castAbility(state, state.selection);
+    MP.send('mpcmd', { k:'ability', from:LOCAL_CTRL, ids, seq:(NET._cmdSeq=(NET._cmdSeq||0)+1) });
+  }
   window.netCommand=netCommand; window.netPlace=netPlace; window.netStop=netStop;
   window.netTrain=netTrain; window.netCancelTrain=netCancelTrain; window.netReleaseStored=netReleaseStored;
+  window.netAmove=netAmove; window.netStance=netStance; window.netAbility=netAbility;
 
   /* ---------------- host: validate + replay a remote command ---------------- */
   function idIndex(state){ const m=new Map(); for(const e of state.entities) if(!e.dead) m.set(e.id,e); return m; }
@@ -126,6 +154,18 @@
       if(!b||b.owner!=='player'||b.type!=='hq'||(b.ctrl||'p1')!==ctrl) return;
       if(!u||u.owner!=='player'||u.storedIn!==b.id) return;
       quiet(()=> releaseStoredUnit(G, b, cmd.uid));
+    } else if(cmd.k==='amove'){
+      const mine=(cmd.ids||[]).map(id=>byId.get(id)).filter(e=>e&&!e.dead&&!e.storedIn&&e.owner==='player'&&(e.ctrl||'p1')===ctrl);
+      if(!mine.length) return;
+      runScoped(ctrl, mine, ()=> commandAttackMove(G, cmd.wx, cmd.wy));
+    } else if(cmd.k==='stance'){
+      const mine=(cmd.ids||[]).map(id=>byId.get(id)).filter(e=>e&&!e.dead&&e.owner==='player'&&(e.ctrl||'p1')===ctrl);
+      if(!mine.length) return;
+      quiet(()=> setStance(G, mine, cmd.stance));
+    } else if(cmd.k==='ability'){
+      const mine=(cmd.ids||[]).map(id=>byId.get(id)).filter(e=>e&&!e.dead&&!e.storedIn&&e.owner==='player'&&(e.ctrl||'p1')===ctrl);
+      if(!mine.length) return;
+      quiet(()=> castAbility(G, mine));
     }
   };
 

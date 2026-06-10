@@ -71,6 +71,44 @@ const VILLAINS = {
       death:['A clean… exit.'],
     },
   },
+  // ---- T2-7 mid-tier "lieutenant" duels — the villain framework scales them to roster power
+  // (hpVpiScale) for free; both reuse existing AI kinds (ninja hit-and-run / mech area specials).
+  ao_enforcer: {
+    name:'THE A&O ENFORCER',
+    base:'soldier', spriteType:'soldier',
+    neonId:'cyanNinja', neonColor:'#7bff5b', auraColor:[120,255,110], bossScale:1.9,   // A&O toxic-green hunter
+    hp:4200, dmg:38, range:1.8, cd:0.5, speed:4.2, sight:11,
+    dmgReduce:0.28, hpVpiScale:1/70, dmgVpiScale:1/160,
+    aiKind:'ninja',
+    ninja:{ dashSpeed:13, hopLen:2.1, hopGap:0.8, lungeRange:2.4, strikeWindup:0.45, exposeMul:0.45,
+      evadeHops:3, safeDist:6, shooterR:5.5, hideDur:1.3, hideAlpha:0.18, panicRange:1.6, panicBlink:4,
+      retargetR:12, escapeAfter:10, escapeDist:10, escapeSpeed:30 },
+    fleeHpFrac:0, fleeSpeedMul:1,                       // a hunter doesn't flee — it dies on the job
+    phases:[ {at:0.45, dmgMul:1.3, cdMul:0.75, speedMul:1.1, tint:[150,255,110]} ],
+    taunts:{
+      intro:['The architect is COMPANY PROPERTY. So are you.', 'Recovery order: one healer, dead or compliant.'],
+      phase:['Escalating enforcement.', 'Your warranty just expired.'],
+      death:['Asset… unrecovered.'],
+    },
+  },
+  tower_guardian: {
+    name:'THE DARK TOWER GUARDIAN',
+    base:'founder', ao:true,
+    neonId:'rex', neonColor:'#b05bff', auraColor:[176,91,255], bossScale:2.6,   // violet lattice-warden
+    hp:9000, dmg:55, range:3.6, cd:1.4, speed:1.4, sight:10,
+    dmgReduce:0.25, hpVpiScale:1/75, dmgVpiScale:1/170,
+    abilities:[
+      {k:'stomp', cd:11, range:5.5, dmg:48, waveR:3.0, jumpDur:0.65, capFrac:0.45},
+    ],
+    phases:[ {at:0.45, dmgMul:1.5, cdMul:0.7, speedMul:1.2, tint:[255,90,200]} ],
+    flee:false,
+    taunts:{
+      intro:['THE TOWER DOES NOT CHANGE HANDS.', 'Trespass logged. Sentence: immediate.'],
+      phase:['STRUCTURAL OVERRIDE. NOTHING LEAVES.', 'The lattice hums for blood.'],
+      stomp:['FOUNDATION CHECK.', 'Settling the ground dispute.'],
+      death:['The tower… stands… without me.'],
+    },
+  },
   rex: {
     name:'REX',
     base:'founder', ao:true,   // founder mech sprite + the existing A&O _ao green recolor (set map enemyFaction:'ao')
@@ -99,8 +137,12 @@ const VILLAINS = {
 function spawnVillain(state){
   const cfg=state.cfg; if(!cfg || !cfg.villain) return;
   const list = Array.isArray(cfg.villain) ? cfg.villain : [cfg.villain];
-  for(const v of list){
-    const def = VILLAINS[v.id]; if(!def || typeof mkUnit!=='function') continue;
+  for(const v of list) spawnVillainEntry(state, v);
+}
+// one villain from a {id,x,y} entry — shared by map load and scripted mid-mission events (T2-8)
+function spawnVillainEntry(state, v){
+  {
+    const def = VILLAINS[v.id]; if(!def || typeof mkUnit!=='function') return;
     const u = mkUnit(state, def.base, 'enemy', v.x, v.y);     // pushed to state.entities; seeds DEF stats
     u.villain=true; u.villainId=v.id; u.villainName=def.name; u.guard=true;   // guard → excluded from waves/prod cap (ai.js)
     u.bossPhase=1; u.bossScale=def.bossScale; u.neonId=def.neonId;
@@ -239,7 +281,7 @@ function densestCluster(state, u, R){
 
 // per-tick upkeep: resolve scheduled missile impacts, expand the quake wave, decay screen shake.
 function mechUpkeep(state, u, dt, def){
-  if(state._shake) state._shake = Math.max(0, state._shake - dt*(state._shake>6?42:18));
+  // (screen-shake decay moved to render() so it runs on every map / path, not just boss maps)
   if(u._mechImpacts && u._mechImpacts.length){
     for(const im of u._mechImpacts){ if(im.done) continue;
       im.t -= dt;
@@ -692,6 +734,13 @@ function villainCheckWinLose(state){
 // win with a cosmetic _fledBoss flag so the end screen reads "it got away" while still advancing.
 function bossOutcome(state, kind){
   if(kind==='fled'){ state._fledBoss=true; if(typeof toast==='function' && !window._rbReplaying) toast('🌫️ The boss slipped away — but the field is yours.'); }
+  // T2-7: the FINALE boss (REX) ends the war on the spot — no extraction loop, straight to the
+  // victory flow, where onVictory's finale routing shows the IPO.
+  if(state.cfg && state.cfg.finale){
+    if(typeof markVillainCleared==='function') markVillainCleared(typeof mapIndex==='number'?mapIndex:0);
+    state.over=true; state._outcome='win'; if(!window.USE_ROLLBACK && typeof onVictory==='function') onVictory(); return;
+  }
+  if(state._skirmish){ state.over=true; state._outcome='win'; if(!window.USE_ROLLBACK && typeof onVictory==='function') onVictory(); return; }   // T3-2
   if(netRole==='solo' && typeof beginExtractionPhase==='function'){ beginExtractionPhase(state); return; }
   if(netRole==='host' && typeof window!=='undefined' && window.MP_SESSION && MP_SESSION.mode==='campaign' && typeof enterHubFromCombat==='function'){ enterHubFromCombat(state); return; }
   state.over=true; state._outcome='win'; if(!window.USE_ROLLBACK && typeof onVictory==='function') onVictory();
@@ -729,9 +778,14 @@ function lastEpisodeIndex(){ let k=MAPS.length-1; while(k>0 && MAPS[k] && MAPS[k
 function villainNextLinear(finishedIdx){
   if(typeof MAPS==='undefined') return finishedIdx+1;
   const m=MAPS[finishedIdx];
-  if(m && m.isVillain){ markVillainCleared(finishedIdx); return Math.max(0, Math.min(m.returnTo!=null?m.returnTo:finishedIdx, MAPS.length-1)); }
+  if(m && m.isVillain){ markVillainCleared(finishedIdx);
+    if(m.finale) return lastEpisodeIndex()+1;   // T2-7: the finale is past the linear track
+    return Math.max(0, Math.min(m.returnTo!=null?m.returnTo:finishedIdx, MAPS.length-1)); }
   let n=finishedIdx+1; while(MAPS[n] && MAPS[n].isVillain) n++;   // skip appended villain entries
-  return Math.min(n, lastEpisodeIndex());
+  // T2-7/T4-1: finishing the LAST linear episode advances PAST it (lastEp+1) — the post-campaign
+  // marker that unlocks The Wake (HUB.rebornUnlockIdx) and routes the hub dispatch to the finale
+  // boss (hubNextDeployIndex below). Mid-campaign indices are unchanged.
+  return Math.min(n, lastEpisodeIndex()+1);
 }
 
 // At dispatch: if an UNCLEARED villain is gated to be played right before episode `nextIdx`
@@ -743,6 +797,30 @@ function villainGateBefore(nextIdx){
   return -1;
 }
 
+// T2-7: the FINALE villain (REX) — the campaign ends on its best fight. After the last linear
+// episode the player routes here instead of the IPO; beating it (or it being already cleared)
+// unlocks the IPO. Returns the first uncleared finale villain's index, else -1.
+function finaleVillainIndex(){
+  if(typeof MAPS==='undefined') return -1;
+  for(let i=0;i<MAPS.length;i++){ const v=MAPS[i]; if(v && v.isVillain && v.finale && !villainIsCleared(i)) return i; }
+  return -1;
+}
+
+// The ACTUAL next deployment from the H.U.B.: the linear next episode, an uncleared gate villain
+// that interrupts it, or — past the last episode — the FINALE boss (replaying the last episode if
+// everything is already cleared). One source of truth for the MDC brief + dispatch (T2-7).
+function hubNextDeployIndex(){
+  const lastEp=lastEpisodeIndex();
+  const raw=(typeof CAMPAIGN!=='undefined' && CAMPAIGN && CAMPAIGN.nextMapIndex!=null)?CAMPAIGN.nextMapIndex:0;
+  let idx=Math.max(0, Math.min(raw, MAPS.length-1));
+  if(idx>lastEp || (MAPS[idx] && MAPS[idx].isVillain)){
+    const fv=finaleVillainIndex();
+    return fv>=0 ? fv : lastEp;
+  }
+  const g=villainGateBefore(idx);
+  return g>=0 ? g : idx;
+}
+
 /* expose for core.js / hub.js / ui.js / map.js (classic-script shared scope) and the console. */
 if(typeof window!=='undefined'){
   window.VILLAINS=VILLAINS; window.spawnVillain=spawnVillain; window.updateVillain=updateVillain; window.updateNinja=updateNinja; window.ninjaUnstick=ninjaUnstick; window.startNinjaEscape=startNinjaEscape;
@@ -751,4 +829,5 @@ if(typeof window!=='undefined'){
   window.villainCheckWinLose=villainCheckWinLose; window.bossOutcome=bossOutcome; window.bossDefeatChecks=bossDefeatChecks;
   window.villainIsCleared=villainIsCleared; window.markVillainCleared=markVillainCleared;
   window.villainNextLinear=villainNextLinear; window.villainGateBefore=villainGateBefore; window.lastEpisodeIndex=lastEpisodeIndex;
+  window.finaleVillainIndex=finaleVillainIndex; window.hubNextDeployIndex=hubNextDeployIndex;
 }

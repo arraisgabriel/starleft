@@ -173,8 +173,10 @@ function economyArmyValue(api, idx) {
   return Math.min(affordable, supplyCeil) * cvType(api, 'soldier', 0);
 }
 
+let _gateApi = null;   // the last bootstrapped api — powerGate reads MAPS[idx] through it
 function powerProfile(idx, profile) {
   const { api, st } = buildState(idx, profile);
+  _gateApi = api;
   let field = 0;
   for (const e of st.entities) {
     if (e.dead || e.owner!=='player' || e.kind!=='unit') continue;
@@ -218,6 +220,18 @@ function powerGate(idx) {
   const fails = [], notes = [];
   const t = profs.typical, f = profs.fresh, v = profs.invested;
   const swing = v.ratio / Math.max(0.01, f.ratio);
+
+  // NON-RAZE missions (boss arenas via cfg.villain; survive/escort/reachAndHold via cfg.winCondition):
+  // the player-army-vs-enemy-BASE ratio this model computes is not the win condition — their pressure
+  // lives in boss stats / wave timers / guards the model can't see. The ratio stays ADVISORY only.
+  // (The shipped boss maps 13/14 predate this and never passed the raze-model gate either.)
+  const m = (_gateApi && _gateApi.MAPS[idx]) || {};
+  const nonRaze = !!(m.villain || (m.winCondition && m.winCondition.type && m.winCondition.type !== 'razeAll'));
+  if (nonRaze) {
+    notes.push(`non-raze mission (${m.villain ? 'boss arena' : m.winCondition.type}) — power ratio is advisory; tune via boss stats / waves / timers and play-test`);
+    notes.push(`carryover swing ${swing.toFixed(2)}× · typical ratio ${t.ratio.toFixed(2)} (raze-model numbers, for reference only)`);
+    return { profs, fails, notes };
+  }
 
   // HARD FAILS — genuine bugs, judged against the shipping envelope (not an absolute number):
   if (t.ratio < WINNABLE_FLOOR)

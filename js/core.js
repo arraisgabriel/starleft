@@ -8,6 +8,11 @@ function update(state, dt){
   if(typeof updateRebornProduction==='function') updateRebornProduction(dt);   // The Wake clock — charges in HUB & missions
   if(typeof updateSprint==='function') updateSprint(state, dt);   // decay the tap window / ramp accel
   recomputeSupply(state);
+  // run-summary stat (T1-9/T3-3): track the army's high-water mark
+  if(!state.hub && typeof hubEnsureStats==='function'){
+    const _sup=(state.eco&&state.eco.p1&&state.eco.p1.supply)||0, _hs=hubEnsureStats(state);
+    if(_sup>(_hs.peakSupply||0)) _hs.peakSupply=_sup;
+  }
   if(state.extractReady && typeof updateExtraction==='function') updateExtraction(state, dt);
 
   // ---- production for player & enemy buildings ----
@@ -60,6 +65,20 @@ function update(state, dt){
   // ---- enemy AI ----
   if(!state.hub && !(state.extractReady && netRole==='solo')) enemyAI(state,dt);
 
+  // ---- T2-8: scripted mid-mission beats — cfg.events [{atTime,…}] fire once each, in order.
+  // Host/solo only (this whole update path is); clients see results via snapshots. Deterministic:
+  // keyed to state.time, no RNG; the fired-set is plain serialized state so saves/rollback agree.
+  if(!state.hub && !state.over && state.cfg && state.cfg.events && state.cfg.events.length){
+    state._eventsFired = state._eventsFired || {};
+    for(let i=0;i<state.cfg.events.length;i++){
+      if(state._eventsFired[i]) continue;
+      const ev=state.cfg.events[i];
+      if((state.time||0) < (ev.atTime||0)) continue;
+      state._eventsFired[i]=1;
+      runMapEvent(state, ev);
+    }
+  }
+
   // ---- reclaim abandoned outposts (a player unit walking up flips them) ----
   if(!state.hub) reclaimOutposts(state);
 
@@ -94,6 +113,7 @@ function update(state, dt){
       // instead of dying — so this runs BEFORE the obituary/fallen side-effects below.
       if(e.kind==='unit' && e.owner==='player' && typeof isHealerVet==='function' && isHealerVet(e)){ downHeroToHq(state,e); changed=true; continue; }
       if(e.owner==='player' && e.kind==='unit' && !window._rbReplaying && typeof LNS!=='undefined' && LNS.ultraEvent) LNS.ultraEvent('unitDeath', { unit:e, map:state.cfg&&state.cfg.name });   // cosmetic news — skip during rollback re-sim
+      if(e.owner==='player' && e.kind==='unit' && typeof hubEnsureStats==='function') hubEnsureStats(state).unitsLost=(hubEnsureStats(state).unitsLost||0)+1;   // run-summary / score (T1-9/T3-3)
       if(e.owner==='player' && e.kind==='unit' && e.lore && typeof recordFallen==='function') recordFallen(e);  // memorial + obituary
       killEntity(state,e); changed=true;
     }
@@ -103,6 +123,37 @@ function update(state, dt){
 
   checkWinLose(state);
 }
+/* =====================================================================
+   SCRIPTED MAP EVENTS (T2-8) — authored pacing on top of the procedural AI.
+   Each cfg.events entry: { atTime:sec, …one or more actions… }:
+     toast:'…'                — one-time message (cosmetic; skipped in rollback resim)
+     objective:'…'            — replace the HUD objective line
+     aggression:N             — set cfg.aggression from here on (waves/production read it live)
+     spawnSquad:{at:{x,y}, comp:[['soldier',4],…], guard?:true}  — drop an enemy squad
+     villain:{id:'…', x, y}   — spawn a mini-boss (reuses spawnVillainEntry)
+   Coordinates are unscaled map tiles; scaleCfg already scaled ev.at — squad/villain x/y are
+   given via ev.at for that reason.
+   ===================================================================== */
+function runMapEvent(state, ev){
+  try{
+    if(ev.aggression!=null) state.cfg.aggression=ev.aggression;
+    if(ev.objective){ state.cfg.objective=ev.objective; state._objBase=ev.objective; }
+    if(ev.spawnSquad && typeof mkUnit==='function'){
+      const at=ev.at||ev.spawnSquad.at||state.cfg.player; let i=0;
+      for(const pair of (ev.spawnSquad.comp||[['soldier',4]])){
+        const type=pair[0], n=pair[1]|0;
+        for(let k=0;k<n;k++){ const u=mkUnit(state, type, 'enemy', (at.x|0)+(i%4)-1, (at.y|0)+((i/4)|0)); if(ev.spawnSquad.guard) u.guard=true; i++; }
+      }
+    }
+    if(ev.villain && typeof spawnVillainEntry==='function'){
+      const at=ev.at||ev.villain;
+      spawnVillainEntry(state, { id:ev.villain.id||ev.villain, x:(at.x!=null?at.x:ev.villain.x), y:(at.y!=null?at.y:ev.villain.y) });
+    }
+    if(ev.toast && !window._rbReplaying && typeof eventToast==='function') eventToast('📡 '+ev.toast, 10000);
+    if(!window._rbReplaying && typeof refreshUI==='function') refreshUI();
+  }catch(e){ console.warn('[events] map event failed', e); }
+}
+
 /* =====================================================================
    ABANDONED OUTPOSTS
    ===================================================================== */
@@ -157,6 +208,7 @@ function freeCaptives(state){
       u.lore={ seed:(u.id||0)+1, events:[], fixed:u.captiveDossier||{ name:u.captiveName } };
       applyVetHp(u, true);
       toast('🦸 '+u.captiveName+' is free — the GRAAL\'s architect joins you.');
+      if(typeof ACH!=='undefined' && !window._rbReplaying) ACH.fire('architect');   // T3-5
     } else {
       toast('🔓 Prisoner freed — they get back to work.');
     }
@@ -175,6 +227,32 @@ function checkWinLose(state){
   // BOSS MAPS: the named villain's fate decides the outcome and takes precedence over the normal
   // "no enemy buildings = win" rule (a boss arena may have NO enemy buildings → would insta-win).
   if(state.cfg && state.cfg.villain && typeof villainCheckWinLose==='function'){ if(villainCheckWinLose(state)) return; }
+  // ---- T2-1: second & third win verbs. cfg.winCondition branches BEFORE the razeAll default;
+  // a missing/unknown winCondition is razeAll, so legacy maps and old saves are untouched.
+  // Runs on host/solo only (this function is never called on clients — they get `over` via snapshot).
+  // ---- T4-5 duel: last founder standing. A side is OUT when it has no HQ-or-rebuild path
+  // and no fielded force — same recovery logic as the solo lose check, per controller.
+  if(state._pvp){
+    const sideUp=(ctrl)=>{
+      const hasHq=state.entities.some(e=>!e.dead&&e.owner==='player'&&(e.ctrl||'p1')===ctrl&&e.type==='hq');
+      const canRebuild=state.entities.some(e=>!e.dead&&!e.storedIn&&e.owner==='player'&&(e.ctrl||'p1')===ctrl&&e.type==='worker');
+      const hasAny=state.entities.some(e=>!e.dead&&e.owner==='player'&&(e.ctrl||'p1')===ctrl&&(e.kind==='unit'||e.kind==='building'));
+      return hasAny && (hasHq||canRebuild);
+    };
+    const p1=sideUp('p1'), p2=sideUp('p2');
+    if(!p1 || !p2){
+      state.over=true;
+      state._pvpWinner = (!p1 && !p2) ? null : (!p2 ? 'p1' : 'p2');
+      state._outcome = (state._pvpWinner===(typeof LOCAL_CTRL!=='undefined'?LOCAL_CTRL:'p1')) ? 'win' : 'lose';
+      if(!window.USE_ROLLBACK){
+        if(state._pvpWinner===(typeof LOCAL_CTRL!=='undefined'?LOCAL_CTRL:'p1')){ state._skirmish=true; onVictory(); }
+        else onDefeat();
+      }
+    }
+    return;   // a duel never uses the razeAll / AI-faction checks
+  }
+  const wc = state.cfg && state.cfg.winCondition;
+  if(wc && wc.type && wc.type!=='razeAll'){ if(checkAltWin(state, wc)) return; }
   const enemyBuildings = state.entities.some(e=>e.owner==='enemy'&&e.kind==='building'&&!e.dead);
   const playerHas = state.entities.some(e=>e.owner==='player'&&!e.dead&&(e.kind==='building'||e.kind==='unit'));
   const playerHq = state.entities.some(e=>e.owner==='player'&&e.type==='hq'&&!e.dead);
@@ -183,6 +261,7 @@ function checkWinLose(state){
   // and an intern trapped inside a just-destroyed HQ (no room to spill out) doesn't count.
   const canRecoverHq = state.entities.some(e=>e.owner==='player'&&e.type==='worker'&&!e.dead&&!e.storedIn);
   if(!enemyBuildings){
+    if(state._skirmish){ state.over=true; state._outcome='win'; if(!window.USE_ROLLBACK) onVictory(); return; }   // T3-2: skirmish ends here, no extraction/hub
     if(netRole==='solo' && typeof beginExtractionPhase==='function'){ beginExtractionPhase(state); return; }
     if(netRole==='host' && typeof window!=='undefined' && window.MP_SESSION && MP_SESSION.mode==='campaign' && typeof enterHubFromCombat==='function'){
       enterHubFromCombat(state); return;
@@ -191,4 +270,62 @@ function checkWinLose(state){
   }
   if(!playerHq && !canRecoverHq){ state.over=true; state._outcome='lose'; if(!window.USE_ROLLBACK) onDefeat(); return; }
   if(!playerHas){ state.over=true; state._outcome='lose'; if(!window.USE_ROLLBACK) onDefeat(); return; }
+}
+
+/* =====================================================================
+   ALT WIN VERBS (T2-1) — cfg.winCondition drives the mission's victory:
+     {type:'survive', forSec:N, protect:'hq'?}          — outlast the clock while the protected building lives
+     {type:'escort',  to:{x,y}, radius?:T}              — get a VIP (map.js flags u._vip) to the target tile
+     {type:'reachAndHold', at:{x,y}, radius?:T, holdSec:N} — hold the zone for N continuous seconds
+   Coordinates are in UNSCALED map-config tiles (scaleCfg multiplies them like everything else).
+   Returns true when it decided the outcome (win or escort-lose). All state used here is either
+   cfg (deterministic) or plain serialized fields (_holdT), so saves/rollback stay consistent.
+   ===================================================================== */
+function winTargetPx(wc){
+  const t=wc.to||wc.at; if(!t) return null;
+  return { x:(t.x+0.5)*TILE, y:(t.y+0.5)*TILE, r:(wc.radius!=null?wc.radius:2.2)*TILE };
+}
+function altWinTriggered(state){
+  if(state._skirmish){ state.over=true; state._outcome='win'; if(!window.USE_ROLLBACK) onVictory(); return; }   // T3-2
+  if(netRole==='solo' && typeof beginExtractionPhase==='function'){ beginExtractionPhase(state); return; }
+  if(netRole==='host' && typeof window!=='undefined' && window.MP_SESSION && MP_SESSION.mode==='campaign' && typeof enterHubFromCombat==='function'){
+    enterHubFromCombat(state); return;
+  }
+  state.over=true; state._outcome='win'; if(!window.USE_ROLLBACK) onVictory();
+}
+function checkAltWin(state, wc){
+  if(wc.type==='survive'){
+    const forSec=wc.forSec||300;
+    const prot = wc.protect==='none' ? true
+      : state.entities.some(e=>e.owner==='player'&&e.type===(wc.protect||'hq')&&!e.dead);
+    if(!prot){ state.over=true; state._outcome='lose'; if(!window.USE_ROLLBACK) onDefeat(); return true; }
+    if(state._objBase==null) state._objBase=state.cfg.objective||'Survive.';
+    state.cfg.objective = state._objBase+'  ⏳ '+Math.max(0, forSec-(state.time|0))+'s';
+    if(state.time>=forSec){ altWinTriggered(state); return true; }
+    return false;   // clock still running — the normal lose checks below still apply
+  }
+  if(wc.type==='escort'){
+    const tgt=winTargetPx(wc); if(!tgt) return false;
+    const vips=state.entities.filter(e=>e._vip && e.kind==='unit');
+    const alive=vips.filter(e=>!e.dead);
+    if(vips.length && !alive.length){ state.over=true; state._outcome='lose'; if(!window.USE_ROLLBACK) onDefeat(); return true; }
+    for(const v of alive){ if(!v.storedIn && Math.hypot(v.x-tgt.x, v.y-tgt.y)<=tgt.r){ altWinTriggered(state); return true; } }
+    return false;
+  }
+  if(wc.type==='reachAndHold'){
+    const tgt=winTargetPx(wc); if(!tgt) return false;
+    const holdSec=wc.holdSec||45;
+    const present=state.entities.some(e=>e.owner==='player'&&e.kind==='unit'&&!e.dead&&!e.storedIn
+      && Math.hypot(e.x-tgt.x,e.y-tgt.y)<=tgt.r);
+    // fixed-ish step: checkWinLose runs once per update tick; use the same dt-free approximation
+    // as other timers by accumulating real elapsed time via state.time deltas.
+    if(state._holdPrevT==null) state._holdPrevT=state.time;
+    const dt=Math.max(0, state.time-state._holdPrevT); state._holdPrevT=state.time;
+    state._holdT = present ? (state._holdT||0)+dt : Math.max(0,(state._holdT||0)-dt*0.5);
+    if(state._objBase==null) state._objBase=state.cfg.objective||'Hold the position.';
+    state.cfg.objective = state._objBase+'  ⏳ '+Math.max(0, Math.ceil(holdSec-(state._holdT||0)))+'s'+(present?'':' — move in!');
+    if((state._holdT||0)>=holdSec){ altWinTriggered(state); return true; }
+    return false;
+  }
+  return false;   // unknown verb → fall through to razeAll
 }

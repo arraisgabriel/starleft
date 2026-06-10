@@ -75,6 +75,7 @@ window.NET = window.NET || {};
     // G already came from newMap(mapIndex) on the client, so terrain is correct. Overlay dynamic state:
     const SCALAR = ['eco','players','time','waveCount','graceTime','nextId','runSalt','over',
                     '_outcome','_fledBoss','_villainSpawned','_villainEscaped',   // boss-map outcome → client end screen
+                    '_pvp','_pvpWinner',                                          // duel verdict (T4-5)
                     'enemySpawnTimer','enemyWaveTimer','enemyFortifyTimer','_recalibratedFor','_coopOrigins'];
     for(const k of SCALAR){ if(s[k]!==undefined) G[k]=s[k]; }
     if(s.campaign && typeof deserializeHubCampaign==='function') deserializeHubCampaign(s.campaign);
@@ -117,6 +118,7 @@ window.NET = window.NET || {};
       if(e.sieged) o.sg=1;
       if(e.captive) o.cap=1;
       if(e.sprinting) o.spr=1;
+      if(e._vip) o.vip=1;   // escort-objective VIP (T2-1) — client draws the gold marker from it
       if(e.storedIn) o.si=e.storedIn;
       if(e.cmd && e.cmd.target && !e.cmd.target.dead) o.tg=e.cmd.target.id;   // chase/attack render
       if(e.shootFx && e.shootFx.t>0){ o.sf=1; o.sfx=Math.round(e.shootFx.x*10)/10; o.sfy=Math.round(e.shootFx.y*10)/10; }  // ranged shot endpoint while LIVE → client rebuilds the laser-bolt transient (start derived from synced type/pos/_face). t>0 gate: the expired shootFx object lingers on the host, so without it o.sf would fire forever → client re-loops the beam.
@@ -151,8 +153,20 @@ window.NET = window.NET || {};
   }
   function unpackInto(e, o, snapTime){
     if(snapTime==null) snapTime = (typeof G!=='undefined' && G && G.time) || 0;
+    // stamp the host id on entities created from a compact snap — without it a mid-match spawn
+    // never matches `incoming.get(e.id)` again and gets spliced+recreated every snapshot
+    // (breaking transient preservation, selection, and the removal=death FX hook above).
+    if(e.id==null && o.id!=null) e.id=o.id;
     if(o.gm){ e.type='goldmine'; e.owner=null; e.x=o.x; e.y=o.y; e.amount=o.amt; e.amount0=o.a0;
               e.ftx=o.ftx; e.fty=o.fty; e.r=o.r; e.dead=false; return; }
+    // T0-4 client path: floating numbers derive from snapshot hp-deltas (the client never runs damage()).
+    // Known entity only (first sighting has no delta); constructing buildings "heal" as they raise → skip.
+    const _oldHp = e.hp;
+    if(_oldHp!=null && Number.isFinite(_oldHp) && o.hp!=null && typeof spawnFloater==='function' && o.k!=='echo'){
+      const dHp = o.hp - _oldHp;
+      if(dHp <= -1) spawnFloater(G, e, -dHp, o.hp<=0?'crit':'dmg');
+      else if(dHp >= 1 && o.k==='unit') spawnFloater(G, e, dHp, 'heal');
+    }
     const d=DEF[o.t]||{};
     e.type=o.t; e.owner=o.o; e.kind=o.k; e.ctrl=o.c; e.hp=o.hp; e.maxHp=o.mh; e.dead=false;
     if(o.k==='unit'){
@@ -177,7 +191,7 @@ window.NET = window.NET || {};
       if(o.ast!=null){ if(o.ast!==e._lastAst){ e._actStamp=(G.time||0)-(snapTime-o.ast); e._lastAst=o.ast; } }
       else e._lastAst=null;
       e.carrying=o.cr||0; e.stars=o.st||0; e.spriteType=o.sp||null;
-      e.hero=!!o.h; e.sieged=!!o.sg; e.captive=!!o.cap; e.sprinting=!!o.spr;
+      e.hero=!!o.h; e.sieged=!!o.sg; e.captive=!!o.cap; e.sprinting=!!o.spr; e._vip=!!o.vip;
       if(o.si!=null) e.storedIn=o.si; else delete e.storedIn;
       e._tgtId = o.tg!=null ? o.tg : null;
       // ranged shot muzzle-flash: rebuild the transient so the laser-bolt render pass draws
@@ -256,18 +270,21 @@ window.NET = window.NET || {};
     // list; a keyframe (snap.key) or legacy snap is a full self-healing set (missing = dead).
     const isDelta = !!snap.delta && !snap.key;
     // merge entities by id (preserves per-entity render transients: _ax/_ay/hitFx/_walkDist)
+    // An entity vanishing from the stream = it died on the host → fire the local death FX (T0-2;
+    // cosmetic, fog/off-screen-culled inside deathFx; goldmine depletion is not a "death").
+    const _clientDeathFx = (e)=>{ if(typeof deathFx==='function' && e && e.type!=='goldmine' && !e.storedIn) deathFx(G,e); };
     const incoming = new Map(snap.ents.map(o=>[o.id,o]));
     const byId = new Map();
     for(let i=G.entities.length-1;i>=0;i--){
       const e=G.entities[i], o=incoming.get(e.id);
       if(o){ unpackInto(e,o,snap.time); byId.set(e.id,e); incoming.delete(e.id); }
       else if(isDelta){ byId.set(e.id,e); }            // delta: absent → unchanged, keep & index it
-      else { G.entities.splice(i,1); }                 // full snap: gone on the host → remove on the client
+      else { _clientDeathFx(e); G.entities.splice(i,1); }   // full snap: gone on the host → remove on the client
     }
     for(const o of incoming.values()){ const e={selected:false}; unpackInto(e,o,snap.time); G.entities.push(e); byId.set(e.id,e); }
     if(isDelta && snap.gone && snap.gone.length){       // delta: explicit removals
       const goneSet=new Set(snap.gone);
-      for(let i=G.entities.length-1;i>=0;i--){ if(goneSet.has(G.entities[i].id)){ G.entities[i].selected=false; G.entities.splice(i,1); } }
+      for(let i=G.entities.length-1;i>=0;i--){ if(goneSet.has(G.entities[i].id)){ _clientDeathFx(G.entities[i]); G.entities[i].selected=false; G.entities.splice(i,1); } }
     }
     // resolve unit target refs so chase/attack rendering works (host sent target as an id)
     for(const e of G.entities){ if(e._tgtId!=null){ const t=byId.get(e._tgtId); e.cmd = t?{type:'attack',target:t}:null; e._tgtId=null; } }

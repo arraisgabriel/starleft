@@ -23,3 +23,5 @@ __pycache__/
 node_modules/
 *.playwright-cli/
 *docs/perf*
+dist/
+

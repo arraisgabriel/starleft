@@ -136,9 +136,20 @@ for (let i = 0; i < MAPS.length; i++) {
   if (Number.isFinite(W) && Number.isFinite(H)) {
     if (!m.player) err(i, 'missing `player` start'); else checkPt('player', m.player);
     const bases = Array.isArray(m.enemies) ? m.enemies : (m.enemy ? [m.enemy] : []);
-    // VILLAIN arenas have NO enemy bases by design — the boss is the encounter (cfg.villain → villains.js)
+    // VILLAIN arenas have NO enemy bases by design — the boss is the encounter (cfg.villain → villains.js).
+    // Appended SIDE MISSIONS reuse the isVillain gating but win by an alt verb instead of a boss
+    // (cfg.winCondition: survive / escort / reachAndHold — core.js checkAltWin), so either suffices.
     if (!bases.length && !m.isVillain) err(i, 'no enemy bases (need `enemies:[...]` or `enemy:{...}`)');
-    else if (m.isVillain && !m.villain) err(i, 'villain map needs a `villain:{ id, x, y }` block');
+    else if (m.isVillain && !m.villain && !m.winCondition) err(i, 'gated map needs a `villain:{ id, x, y }` block or a `winCondition:{type,…}`');
+    if (m.winCondition){
+      const wc = m.winCondition, types = ['survive', 'escort', 'reachAndHold', 'razeAll'];
+      if (!types.includes(wc.type)) err(i, `winCondition.type "${wc.type}" unknown (expected ${types.join('|')})`);
+      if (wc.type === 'escort' && !wc.to) err(i, 'escort winCondition needs `to:{x,y}`');
+      if (wc.type === 'reachAndHold' && !wc.at) err(i, 'reachAndHold winCondition needs `at:{x,y}`');
+      if (wc.to) checkPt('winCondition.to', wc.to);
+      if (wc.at) checkPt('winCondition.at', wc.at);
+      if (wc.type === 'survive' && !(wc.forSec > 0)) err(i, 'survive winCondition needs `forSec` > 0');
+    }
     checkList('enemies', bases);
     if (!Array.isArray(m.goldNodes) || !m.goldNodes.length) err(i, 'no `goldNodes`');
     else { checkList('goldNodes', m.goldNodes); m.goldNodes.forEach((g, k) => { if (!Number.isFinite(g.amt)) err(i, `goldNodes[${k}] missing numeric \`amt\``); }); }

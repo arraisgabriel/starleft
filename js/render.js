@@ -174,9 +174,67 @@ function drawLaserBolt(x0,y0,x1,y1, red, w, p, charge){
   ctx.restore();
 }
 
+// T2-1: the alt-win objective beacon — a tall gold pulse at the survive/escort/hold target, plus a
+// gold ring under the escort VIP. Cosmetic; reads the (already-scaled) cfg, so it works on clients.
+function drawWinObjective(state,ox,oy){
+  const wc=state.cfg && state.cfg.winCondition; if(!wc || state.over) return;
+  const t=(wc.to||wc.at);
+  const tm=state.time||0, pulse=0.6+0.4*Math.sin(tm*2.6);
+  if(t){
+    const x=(t.x+0.5)*TILE+ox, y=(t.y+0.5)*TILE+oy, R=(wc.radius!=null?wc.radius:2.2)*TILE;
+    ctx.save();
+    ctx.globalAlpha=0.28+0.18*pulse; ctx.strokeStyle='#ffd86b'; ctx.lineWidth=2.5;
+    ctx.beginPath(); ctx.ellipse(x,y,R,R*0.42,0,0,6.28); ctx.stroke();
+    ctx.globalAlpha=0.16+0.1*pulse;
+    ctx.beginPath(); ctx.ellipse(x,y,R*0.62,R*0.62*0.42,0,0,6.28); ctx.stroke();
+    ctx.globalAlpha=0.5; ctx.lineWidth=2;
+    ctx.beginPath(); ctx.moveTo(x,y); ctx.lineTo(x,y-60-14*pulse); ctx.stroke();
+    ctx.globalAlpha=0.95; ctx.fillStyle='#ffd86b'; ctx.font='bold 12px '+GAME_FONT; ctx.textAlign='center';
+    ctx.fillText(wc.type==='escort'?'⮕ DELIVER HERE':'◈ HOLD', x, y-66-14*pulse);
+    ctx.restore(); ctx.globalAlpha=1;
+  }
+  if(wc.type==='escort'){
+    for(const e of state.entities){
+      if(!e._vip || e.dead || e.storedIn) continue;
+      const vh=(typeof unitDrawH==='function')?unitDrawH(e):24;
+      ctx.save(); ctx.globalAlpha=0.55+0.3*pulse; ctx.strokeStyle='#ffd86b'; ctx.lineWidth=2;
+      ctx.beginPath(); ctx.ellipse(e.x+ox, e.y+oy+vh*0.3, vh*0.42, vh*0.17, 0,0,6.28); ctx.stroke();
+      ctx.fillStyle='#ffd86b'; ctx.font='bold 10px '+GAME_FONT; ctx.textAlign='center';
+      ctx.fillText('VIP', e.x+ox, e.y+oy-vh*0.95);
+      ctx.restore();
+    }
+  }
+}
+
+// T1-3: the healer tether — additive purple beam with a white traveling orb and a soft green
+// restore-pulse on the patient. Deterministic from state.time (no RNG; safe to draw anywhere).
+function drawHealBeam(state, h, t, ox, oy){
+  const start=(typeof muzzleWorld==='function')?muzzleWorld(h):{x:h.x,y:h.y-12};
+  const x0=start.x+ox, y0=start.y+oy, x1=t.x+ox, y1=(t.y-((typeof unitDrawH==='function')?unitDrawH(t)*0.35:10))+oy;
+  const tm=state.time||0;
+  ctx.save(); ctx.globalCompositeOperation='lighter'; ctx.lineCap='round';
+  // soft outer tether + bright core
+  ctx.globalAlpha=0.35; ctx.strokeStyle='#b48cff'; ctx.lineWidth=4.5; ctx.shadowColor='#b48cff'; ctx.shadowBlur=10;
+  ctx.beginPath(); ctx.moveTo(x0,y0); ctx.lineTo(x1,y1); ctx.stroke();
+  ctx.globalAlpha=0.7; ctx.strokeStyle='#efe2ff'; ctx.lineWidth=1.6; ctx.shadowBlur=0;
+  ctx.beginPath(); ctx.moveTo(x0,y0); ctx.lineTo(x1,y1); ctx.stroke();
+  // traveling orb (healer → patient)
+  const p=(tm*1.6+(h.id||0)*0.37)%1, qx=x0+(x1-x0)*p, qy=y0+(y1-y0)*p;
+  const og=ctx.createRadialGradient(qx,qy,0,qx,qy,7);
+  og.addColorStop(0,'rgba(255,255,255,0.9)'); og.addColorStop(0.5,'rgba(190,140,255,0.5)'); og.addColorStop(1,'rgba(190,140,255,0)');
+  ctx.globalAlpha=1; ctx.fillStyle=og; ctx.beginPath(); ctx.arc(qx,qy,7,0,6.28); ctx.fill();
+  // green restore-pulse on the patient
+  const pr=0.5+0.5*Math.sin(tm*6+(t.id||0));
+  ctx.globalAlpha=0.30+0.25*pr; ctx.strokeStyle='#7dffa8'; ctx.lineWidth=1.5;
+  ctx.beginPath(); ctx.ellipse(x1, t.y+oy, 10+3*pr, 4.5+1.5*pr, 0, 0, 6.28); ctx.stroke();
+  ctx.restore(); ctx.globalAlpha=1;
+}
+
 function render(state){
-  // REX jump-stomp / missile impacts set state._shake; offset the camera with a quick decaying rumble (cosmetic).
+  // REX jump-stomp / missile impacts / death FX set state._shake; offset the camera with a quick
+  // decaying rumble (cosmetic). Decays HERE (render rate) so it works on every map and on clients.
   const _sh=state._shake||0, _t=state.time||0;
+  if(_sh) state._shake = Math.max(0, _sh - (1/60)*(_sh>6?42:18));
   const z=state.zoom||1, vx=state.camX + (_sh?_sh*Math.sin(_t*47):0), vy=state.camY + (_sh?_sh*Math.cos(_t*41):0);
 
   // ---- phase 1: clear whole backing store in identity/device space ----
@@ -313,9 +371,35 @@ function render(state){
     const start = e.kind==='building' ? buildingMuzzle(e) : muzzleWorld(e);
     const charge = (e.type==='auditor' && e.sieged);
     const w = 2.2 * (e.kind==='building' ? 1.35 : unitDrawH(e)/64) * muzzleW(e);   // big mechs read larger
+    // T0-3: a FRESH bolt (first frame, before the decay below) fires the laser SFX — works on all
+    // three net paths because clients rebuild shootFx with t=SHOOTFX_LIFE from snapshots.
+    if(sf.t===SHOOTFX_LIFE && typeof SFX!=='undefined') SFX.laser(e);
     const p = Math.min(1, Math.max(0, 1 - sf.t/SHOOTFX_LIFE));
     drawLaserBolt(start.x+ox, start.y+oy, sf.x+ox, sf.y+oy, isRedSide(e.owner), w, p, charge);
     sf.t-=1/60;
+  }
+
+  // ---- heal beams (T1-3): a purple/white tether from each ACTIVE healer to its patient, with a
+  //      traveling orb + a soft green pulse on the target. Cosmetic; capped + culled. The target
+  //      comes from sim state on host/solo and from the snapshot cmd-ref (or a local nearest-wounded
+  //      fallback) on clients, which never simulate. ----
+  {
+    let _beams=0;
+    for(const e of state.entities){
+      if(_beams>=8) break;
+      if(e.dead||e.storedIn||e.kind!=='unit'||e._actState!=='heal') continue;
+      if(e.owner==='enemy' && !isVisiblePix(state,e.x,e.y)) continue;
+      let t=e._healTarget || (e.cmd && e.cmd.target);
+      if(!t || t.dead || t.hp>=t.maxHp){
+        t=null; const def=DEF[e.type]||{}, R=((def.range||4)*TILE+26); let bd=R*R;   // client fallback: nearest wounded ally
+        for(const o of state.entities){ if(o.dead||o.storedIn||o.owner!==e.owner||o.kind!=='unit'||o===e||o.hp>=o.maxHp) continue;
+          const dx=o.x-e.x,dy=o.y-e.y,dd=dx*dx+dy*dy; if(dd<bd){bd=dd;t=o;} }
+      }
+      if(!t) continue;
+      if(!entOnScreen(state,e,TILE*3) && !entOnScreen(state,t,TILE*3)) continue;
+      drawHealBeam(state, e, t, ox, oy);
+      _beams++;
+    }
   }
 
   // ---- fog overlay ----
@@ -328,6 +412,12 @@ function render(state){
 
   // ---- selection ring effects ----
   drawRings(ox,oy);
+
+  // ---- floating damage/heal numbers (T0-4) — additive, above the sprites ----
+  drawFloaters(state,ox,oy);
+
+  // ---- alt-win objective beacon + escort VIP marker (T2-1) — gold, fog-independent (it's YOUR objective) ----
+  drawWinObjective(state,ox,oy);
 
   // ---- in-world unit dialog boxes — drawn last in world space, above every sprite ----
   if(typeof drawDialogs==='function') drawDialogs(state);
@@ -1295,7 +1385,7 @@ function drawUnit(state,u,ox,oy){
   const lax = u._ax==null?u.x:u._ax, lay = u._ay==null?u.y:u._ay;
   const mvx = u.x-lax, mvy = u.y-lay, md = Math.hypot(mvx,mvy);
   u._ax=u.x; u._ay=u.y;
-  if(u._ninjaAI){ (u._trailBuf||(u._trailBuf=[])).push({x:u.x,y:u.y}); if(u._trailBuf.length>7) u._trailBuf.shift(); }   // dash afterimage source (works on the client too — position-derived)
+  if(u._ninjaAI || u.sprinting){ (u._trailBuf||(u._trailBuf=[])).push({x:u.x,y:u.y}); if(u._trailBuf.length>7) u._trailBuf.shift(); }   // dash/sprint afterimage source (works on the client too — position-derived; T2-6 makes Sprint legible)
   u._walkDist = (u._walkDist||0)+md;
   if(md>0.25){ u._still=0; if(Math.abs(mvx)>0.15 && !u._actState) u._face = mvx<0?-1:1; }   // combat (_actState) → trust the authoritative facing (host/sim), don't flip from interpolated drift
   else u._still=(u._still||0)+1;
@@ -1304,7 +1394,18 @@ function drawUnit(state,u,ox,oy){
   ctx.save();
   if(u._ninjaHidden){ const _nN=(_vdef&&_vdef.ninja)||{}; ctx.globalAlpha*=(_nN.hideAlpha||0.16); }   // smoke-bomb vanish: dim the whole sprite (+ glow) within this save
   // selection ring — a ground ellipse under the sprite's FEET, scaled to the sprite (no shadow)
-  if(u.selected){ const fy=py-alt+vh*0.3; ctx.strokeStyle='#8effb0'; ctx.lineWidth=2; ctx.beginPath(); ctx.ellipse(px,fy,vh*0.34,vh*0.14,0,0,6.28); ctx.stroke(); }
+  if(u.selected){
+    const fy=py-alt+vh*0.3, rx=vh*0.34, ry=vh*0.14;
+    ctx.strokeStyle='#8effb0'; ctx.lineWidth=2; ctx.beginPath(); ctx.ellipse(px,fy,rx,ry,0,0,6.28); ctx.stroke();
+    // T1-2: cooldown sweep on the ring (SELECTED units only) — a golden arc refills as the shot
+    // comes back; the plain green ring above = ready. Reads "when can I shoot again?" at a glance.
+    const _cdef=DEF[u.type]||{};
+    if(_cdef.dmg>0 && (u.cd||0)>0 && (_cdef.cd||0)>=0.25){
+      const tot=u._bossCd||_cdef.cd, f=Math.max(0,Math.min(1,1-(u.cd/tot)));
+      ctx.strokeStyle='rgba(255,216,107,0.95)'; ctx.lineWidth=2.5;
+      ctx.beginPath(); ctx.ellipse(px,fy,rx,ry,0,-1.5708,-1.5708+6.2832*f); ctx.stroke();
+    }
+  }
   // REX leap: a ground shadow at the foot that shrinks + fades as the mech rises (reads as real height)
   if(jz>0){ const fy=py-alt+vh*0.3, k=Math.max(0,1-jz/((u.r||16)*4.5)), rad=vh*0.34*(0.45+0.55*k);
     ctx.save(); ctx.globalAlpha=0.34*k; ctx.fillStyle='#000'; ctx.beginPath(); ctx.ellipse(px,fy,rad,rad*0.4,0,0,6.28); ctx.fill(); ctx.restore(); }
@@ -1370,9 +1471,10 @@ function drawUnit(state,u,ox,oy){
     const pyB = (py-alt)+bShift-jz;   // sprite/glow baseline, lifted by a REX leap (jz)
     if(u.hero) drawHeroGlowLayer(state, u, useAnim, px, pyB, S*bScale, 'aura');   // halo behind
     else if(u.villain) drawVillainGlow(state, u, useAnim, px, pyB, S*bScale, 'aura');
-    // CYAN NINJA dash afterimage: faint additive ghosts of the current frame at recent positions; ghosts
-    // coincident with the live sprite (idle) are skipped, so a streak only appears while actually dashing.
-    if(u._ninjaAI && u._trailBuf && u._trailBuf.length>1 && !(typeof megaReducedMotion==='function'&&megaReducedMotion())){
+    // CYAN NINJA dash / SPRINT afterimage (T2-6): faint additive ghosts of the current frame at recent
+    // positions; ghosts coincident with the live sprite (idle) are skipped, so a streak only appears
+    // while actually moving fast — which makes a sprinting squad read as sprinting at a glance.
+    if((u._ninjaAI || u.sprinting) && u._trailBuf && u._trailBuf.length>1 && !(typeof megaReducedMotion==='function'&&megaReducedMotion())){
       const buf=u._trailBuf, nb=buf.length;
       ctx.save(); ctx.globalCompositeOperation='lighter';
       for(let i=0;i<nb-1;i++){ const g=buf[i], gdx=u.x-g.x, gdy=u.y-g.y;
@@ -1421,12 +1523,18 @@ function drawUnit(state,u,ox,oy){
   if(u.hp<u.maxHp || u.selected){
     barAt(px-vh*0.3, py-alt-vh*0.72-6, vh*0.6, 4, u.hp/u.maxHp, hpColor(u.hp/u.maxHp));
   }
-  // MADOSIS: a purple sanity bar just under the hp bar as a unit nears / suffers an episode
+  // MADOSIS (T1-5): a managed-tension bar under the hp bar — always readable on a SELECTED unit
+  // with a minted threshold, escalating purple → amber (>0.6) → red (>0.85) with a calm ~2Hz pulse
+  // near the edge (static under prefers-reduced-motion). Pure draw of already-computed state.
   if(u.owner==='player' && typeof madThreshold==='function'){
     const thr=madThreshold(u);
-    if(u.madEpisode || u.madDog || (thr>0 && (u.madosis||0) >= thr*0.8)){
+    if(u.madEpisode || u.madDog || (thr>0 && ((u.madosis||0) >= thr*0.6 || u.selected))){
       const frac = u.madDog ? 1 : (thr>0 ? Math.min(1,(u.madosis||0)/thr) : 1);
-      barAt(px-vh*0.3, py-alt-vh*0.72-1, vh*0.6, 3, frac, '#b05bff');
+      const col = madColor(frac);
+      const _rm=(typeof megaReducedMotion==='function'&&megaReducedMotion());
+      if(frac>0.85 && !_rm) ctx.globalAlpha=0.7+0.3*Math.sin((state.time||0)*12.57);   // ~2Hz, not a strobe
+      barAt(px-vh*0.3, py-alt-vh*0.72-1, vh*0.6, 3, frac, col);
+      ctx.globalAlpha=1;
     }
   }
   if(u.stars) drawStars(u, px, py-alt-vh*0.72-13);   // career-rank pips above the HP bar
@@ -1448,10 +1556,18 @@ function drawUnit(state,u,ox,oy){
     ctx.fillStyle=ctrlColor(u.ctrl); ctx.strokeStyle='rgba(0,0,0,.55)'; ctx.lineWidth=1;
     ctx.beginPath(); ctx.arc(px - vh*0.30, py-alt+vh*0.30, 3, 0, 6.28); ctx.fill(); ctx.stroke();
   }
-  if(u.hitFx>0){ ctx.fillStyle='rgba(255,80,80,'+(u.hitFx*3)+')'; ctx.beginPath(); ctx.arc(px,py-vh*0.2,vh*0.38,0,6.28); ctx.fill(); u.hitFx-=1/60; }
+  // hit flash (T1-2): brighter + slightly longer (~0.18s, set in damage()); killing blows pop a
+  // 1-frame white core (set via u._dieFlash) so the last hit reads distinctly.
+  if(u.hitFx>0){
+    ctx.fillStyle='rgba(255,96,80,'+Math.min(0.8,u.hitFx*4)+')'; ctx.beginPath(); ctx.arc(px,py-vh*0.2,vh*0.38,0,6.28); ctx.fill();
+    if(u._dieFlash){ ctx.fillStyle='rgba(255,255,255,'+Math.min(0.9,u.hitFx*5)+')'; ctx.beginPath(); ctx.arc(px,py-vh*0.2,vh*0.30,0,6.28); ctx.fill(); }
+    u.hitFx-=1/60;
+  }
   // MADOSIS: feral mad dogs pulse a hostile purple aura; rescued (subdued) units a faint calm one
+  // (calm ~1Hz pulse; static under prefers-reduced-motion — photosensitivity, T1-5)
   if(u.madDog){
-    ctx.save(); ctx.globalAlpha=0.5+0.3*Math.sin((state.time||0)*6);
+    const _rm=(typeof megaReducedMotion==='function'&&megaReducedMotion());
+    ctx.save(); ctx.globalAlpha=_rm?0.6:0.5+0.3*Math.sin((state.time||0)*6);
     ctx.strokeStyle='#b05bff'; ctx.lineWidth=2;
     ctx.beginPath(); ctx.arc(px,py-vh*0.2,vh*0.44,0,6.28); ctx.stroke(); ctx.restore();
   } else if(u.subdued){
@@ -1530,6 +1646,47 @@ function drawPlacement(state,ox,oy){
 
 /* selection-ring fx (+ cyan-ninja smoke puffs/slashes, + REX mech missiles/explosions/shockwaves — all cosmetic) */
 let rings=[], smokes=[], slashes=[], missiles=[], explosions=[], shockwaves=[];
+
+/* ---- floating combat numbers (T0-4): pooled, merged per-target, additive, capped.
+   Module-local (never on G) → save/rollback/net untouched. Spawned from damage()/heal ticks on
+   host/solo (gated !_rbReplaying) and from snapshot hp-deltas on co-op clients (js/net/sync.js). ---- */
+let floaters=[];
+const FLOATER_CAP=24, FLOATER_LIFE=0.8;
+function spawnFloater(state, tgt, amt, kind){   // kind: 'dmg' | 'crit' (killing blow) | 'heal'
+  if(!state || state.hub || !tgt || amt<=0) return;
+  const z=state.zoom||1, m=TILE*2;
+  if(tgt.x<state.camX-m || tgt.x>state.camX+viewW()/z+m ||
+     tgt.y<state.camY-m || tgt.y>state.camY+viewH()/z+m) return;          // off-screen cull
+  if(tgt.owner==='enemy' && !isVisiblePix(state,tgt.x,tgt.y)) return;     // fog cull
+  // merge into a live floater on the same target (heal ticks/bursts read as ONE rising number)
+  for(const f of floaters){
+    if(f.tid===tgt.id && f.kind===kind && f.t<FLOATER_LIFE*0.45){ f.amt+=amt; if(kind==='heal') f.t=Math.max(0,f.t-0.05); return; }
+  }
+  if(floaters.length>=FLOATER_CAP) floaters.shift();
+  const top = tgt.kind==='building' ? (tgt.h||2)*TILE*0.6 : ((typeof unitDrawH==='function')?unitDrawH(tgt)*0.8:(tgt.r||10)*2);
+  floaters.push({tid:tgt.id, x:tgt.x+( (tgt.id||0)%5-2 )*2, y:tgt.y-top, amt, kind, t:0});
+  // T0-3: a NEW floater = a damage/heal event actually shown → pair it with sound (rate-limited in SFX)
+  if(typeof SFX!=='undefined'){ if(kind==='heal') SFX.heal(); else SFX.impact(); }
+}
+function drawFloaters(state, ox, oy){
+  if(!floaters.length) return;
+  const z=state.zoom||1, s=1/z;
+  ctx.save(); ctx.globalCompositeOperation='lighter'; ctx.textAlign='center'; ctx.textBaseline='middle';
+  for(const f of floaters){
+    f.t+=1/60;
+    const p=f.t/FLOATER_LIFE; if(p>=1) continue;
+    const a=(p<0.12? p/0.12 : 1-(p-0.12)/0.88);
+    const n=Math.max(1,Math.round(f.amt));
+    const crit=f.kind==='crit';
+    const size=(crit?13:10)*s;
+    ctx.font=(crit?'bold ':'')+size.toFixed(1)+'px '+GAME_FONT;
+    ctx.globalAlpha=Math.min(0.85,a)* (f.kind==='dmg'?0.75:1);
+    ctx.fillStyle = f.kind==='heal' ? '#7dffa8' : crit ? '#ffe9b0' : '#ffb09a';
+    ctx.fillText((f.kind==='heal'?'+':'−')+n, f.x+ox, f.y+oy - 16*p*s);
+  }
+  ctx.restore(); ctx.globalAlpha=1;
+  floaters=floaters.filter(f=>f.t<FLOATER_LIFE);
+}
 function spawnRing(wx,wy,color){ rings.push({x:wx,y:wy,r:6,max:26,color,t:1}); }
 // ninja smoke-bomb vanish: a DENSE, glowing cyan→blue cloud — layered soft puffs that billow out, rise and
 // fade. Deterministic (golden-angle spread, no RNG). Each puff is drawn as a soft radial gradient in drawRings.
@@ -1566,8 +1723,80 @@ function spawnExplosion(wx,wy){
   for(let i=0;i<N;i++){ const a=i*2.39996+wx*0.01, sp=0.7+(i%3)*0.45;
     smokes.push({x:wx,y:wy, vx:Math.cos(a)*sp, vy:Math.sin(a)*sp-0.15, r:6+(i%3)*3, grow:0.95, cr:150+(i%2)*70, cg:255, cb:110, t:1, life:0.5}); }
 }
+
+/* ---- death FX (T0-2): owner-colored bursts on every unit/building kill. Cosmetic only —
+   never touches sim state. Callers gate with !window._rbReplaying (host/solo); the client
+   fires it from snapshot entity-removals in js/net/sync.js. ---- */
+// is the entity within (or near) the camera view? Shared cull for cosmetic FX spawns.
+function entOnScreen(state, e, m){
+  m = m==null ? TILE*2 : m; const z=state.zoom||1;
+  return !(e.x<state.camX-m || e.x>state.camX+viewW()/z+m || e.y<state.camY-m || e.y>state.camY+viewH()/z+m);
+}
+// side palette: player red, enemy blue, A&O toxic green (render-time faction, matches sprite recolor)
+function deathFxColor(state, e){
+  if(e.owner==='player') return [255,96,84];
+  if(aoSide(state, e.owner)) return [150,255,110];
+  return [90,170,255];
+}
+// colored flash burst (delay lets building razes stagger); reuses the explosions/smokes pools
+function spawnBurst(wx,wy,rgb,scale,delay){
+  explosions.push({x:wx,y:wy,t:-(delay||0),life:0.45,r0:9*(scale||1),r1:38*(scale||1),cr:rgb[0],cg:rgb[1],cb:rgb[2]});
+}
+function deathFx(state, e){
+  if(!state || state.hub) return;
+  if(e.kind!=='unit' && e.kind!=='building') return;
+  if(e.type==='goldmine' || e.captive) return;
+  // off-screen cull (big maps): only spawn when the death is in (or near) the camera view
+  const z=state.zoom||1, m=TILE*4;
+  if(e.x < state.camX-m || e.x > state.camX+viewW()/z+m ||
+     e.y < state.camY-m || e.y > state.camY+viewH()/z+m) return;
+  // fog cull: an enemy dying in the dark stays unseen
+  if(e.owner==='enemy' && !isVisiblePix(state,e.x,e.y)) return;
+  const reduced=(typeof megaReducedMotion==='function'&&megaReducedMotion());
+  if(smokes.length>240) return;   // hard particle cap on mass deaths
+  const rgb=deathFxColor(state,e);
+  const col='rgb('+rgb[0]+','+rgb[1]+','+rgb[2]+')';
+  if(e.kind==='building'){
+    const fw=(e.w||2), fh=(e.h||2), foot=Math.max(fw,fh);
+    const hq=(e.type==='hq');
+    const N = reduced ? 2 : Math.min(7, 2+foot*(hq?2:1));   // staggered bursts across the footprint
+    for(let i=0;i<N;i++){
+      const a=i*2.39996+e.x*0.013, rr=(i/N)*foot*TILE*0.45;
+      spawnBurst(e.x+Math.cos(a)*rr, e.y+Math.sin(a)*rr*0.6, rgb, hq?1.5:1.0, i*0.09);
+    }
+    // debris + lingering dark smoke column
+    const D=reduced?4:Math.min(14, 5+foot*3);
+    for(let i=0;i<D;i++){ const a=i*2.39996+e.y*0.011, sp=0.6+(i%4)*0.4;
+      smokes.push({x:e.x+(Math.cos(a)*foot*TILE*0.3), y:e.y+(Math.sin(a)*foot*TILE*0.2),
+        vx:Math.cos(a)*sp, vy:Math.sin(a)*sp*0.5-0.35, r:8+(i%3)*5, grow:1.25,
+        cr:i%3?96:rgb[0], cg:i%3?100:rgb[1], cb:i%3?108:rgb[2], t:1, life:1.1+(i%3)*0.5}); }
+    spawnShockwaveC(e.x, e.y, foot*TILE*(hq?1.6:1.0), col);
+    state._shake=Math.max(state._shake||0, Math.min(12, hq?12:3+foot*2));
+  } else {
+    const vh=(typeof unitDrawH==='function') ? unitDrawH(e) : (e.r||10)*2;
+    const big = vh>=84 || e.villain;   // founder/bomber/boss tier
+    if(big){
+      spawnBurst(e.x,e.y,rgb,1.2,0); spawnBurst(e.x,e.y,rgb,0.7,0.12);
+      spawnShockwaveC(e.x,e.y, 3.0*TILE, col);
+      const N=reduced?4:10;
+      for(let i=0;i<N;i++){ const a=i*2.39996+e.x*0.01, sp=0.7+(i%3)*0.45;
+        smokes.push({x:e.x,y:e.y, vx:Math.cos(a)*sp, vy:Math.sin(a)*sp-0.2, r:7+(i%3)*3, grow:1.0, cr:rgb[0], cg:rgb[1], cb:rgb[2], t:1, life:0.7}); }
+      state._shake=Math.max(state._shake||0, 8);
+    } else {
+      spawnRing(e.x,e.y,col);
+      spawnBurst(e.x,e.y,rgb,0.55,0);
+      const N=reduced?2:5;
+      for(let i=0;i<N;i++){ const a=i*2.39996+e.x*0.01, sp=0.5+(i%3)*0.35;
+        smokes.push({x:e.x,y:e.y, vx:Math.cos(a)*sp, vy:Math.sin(a)*sp-0.18, r:5+(i%2)*3, grow:0.9, cr:rgb[0], cg:rgb[1], cb:rgb[2], t:1, life:0.45}); }
+      state._shake=Math.max(state._shake||0, 2);
+    }
+  }
+  if(typeof SFX!=='undefined') SFX.death(e);
+}
 // the earthquake: a fast, thick green double ground-ring (flattened ellipse = ground perspective).
 function spawnShockwave(wx,wy,rMax){ shockwaves.push({x:wx,y:wy,rMax,t:0,life:0.55}); }
+// owner-colored variant for death FX (rgb string e.g. 'rgb(255,96,84)')
+function spawnShockwaveC(wx,wy,rMax,col){ const w={x:wx,y:wy,rMax,t:0,life:0.55}; if(col){ const m=col.match(/(\d+),\s*(\d+),\s*(\d+)/); if(m){ w.cr=+m[1]; w.cg=+m[2]; w.cb=+m[3]; } } shockwaves.push(w); }
 // thruster jet: a downward fan of bright green-white plasma exhaust.
 function spawnThruster(wx,wy,vxBias,speed){
   for(let i=0;i<4;i++){ const a=(i-1.5)*0.42 + 1.5708;   // ~downward fan
@@ -1601,9 +1830,10 @@ function drawRings(ox,oy){
     ctx.save(); ctx.globalCompositeOperation='lighter';
     for(const w of shockwaves){
       w.t+=1/60; const p=Math.min(1,w.t/w.life), r=w.rMax*p, a=1-p;
-      ctx.strokeStyle=`rgba(150,255,110,${(a*0.9).toFixed(3)})`; ctx.lineWidth=6*(1-p)+2;
+      const cr=w.cr!=null?w.cr:150, cg=w.cg!=null?w.cg:255, cb=w.cb!=null?w.cb:110;
+      ctx.strokeStyle=`rgba(${cr},${cg},${cb},${(a*0.9).toFixed(3)})`; ctx.lineWidth=6*(1-p)+2;
       ctx.beginPath(); ctx.ellipse(w.x+ox,w.y+oy, r, r*0.42, 0,0,6.28); ctx.stroke();
-      ctx.strokeStyle=`rgba(225,255,195,${(a*0.5).toFixed(3)})`; ctx.lineWidth=3*(1-p)+1;
+      ctx.strokeStyle=`rgba(${Math.min(255,cr+75)},${Math.min(255,cg+40)},${Math.min(255,cb+85)},${(a*0.5).toFixed(3)})`; ctx.lineWidth=3*(1-p)+1;
       ctx.beginPath(); ctx.ellipse(w.x+ox,w.y+oy, r*0.66, r*0.66*0.42, 0,0,6.28); ctx.stroke();
     }
     ctx.restore(); ctx.globalAlpha=1;
@@ -1642,12 +1872,16 @@ function drawRings(ox,oy){
     ctx.restore(); ctx.globalAlpha=1;
     missiles=missiles.filter(m=>m.t<m.dur);
   }
-  if(explosions.length){                                       // impact bursts (bright green flash)
+  if(explosions.length){                                       // impact bursts (bright green flash; death FX recolor via cr/cg/cb, negative t = stagger delay)
     ctx.save(); ctx.globalCompositeOperation='lighter';
     for(const e of explosions){
-      e.t+=1/60; const p=Math.min(1,e.t/e.life), r=e.r0+(e.r1-e.r0)*p, a=(1-p)*0.95;
+      e.t+=1/60; if(e.t<0) continue;
+      const p=Math.min(1,e.t/e.life), r=e.r0+(e.r1-e.r0)*p, a=(1-p)*0.95;
+      const cr=e.cr!=null?e.cr:120, cg=e.cg!=null?e.cg:255, cb=e.cb!=null?e.cb:90;
       const px=e.x+ox, py=e.y+oy, g=ctx.createRadialGradient(px,py,0,px,py,r);
-      g.addColorStop(0,`rgba(235,255,215,${a.toFixed(3)})`); g.addColorStop(0.5,`rgba(120,255,90,${(a*0.5).toFixed(3)})`); g.addColorStop(1,'rgba(60,200,70,0)');
+      g.addColorStop(0,`rgba(${Math.min(255,cr+115)},${Math.min(255,cg+60)},${Math.min(255,cb+125)},${a.toFixed(3)})`);
+      g.addColorStop(0.5,`rgba(${cr},${cg},${cb},${(a*0.5).toFixed(3)})`);
+      g.addColorStop(1,`rgba(${Math.round(cr*0.5)},${Math.round(cg*0.78)},${Math.round(cb*0.78)},0)`);
       ctx.fillStyle=g; ctx.beginPath(); ctx.arc(px,py,r,0,6.28); ctx.fill();
     }
     ctx.restore(); ctx.globalAlpha=1;
@@ -1736,7 +1970,15 @@ function barAt(x,y,w,h,frac,color){
   ctx.fillStyle='#1a2533'; ctx.fillRect(x,y,w,h);
   ctx.fillStyle=color; ctx.fillRect(x,y,w*frac,h);
 }
-function hpColor(f){ return f>0.5?'#4cd964': f>0.25?'#ffcc33':'#ff5b5b'; }
+// T4-3: colorblind-safe ramp (blue→white→red survives deuteranopia) toggled in Settings
+function hpColor(f){
+  if(window._colorblind) return f>0.5?'#4ca6ff': f>0.25?'#e8ecf2':'#ff5b5b';
+  return f>0.5?'#4cd964': f>0.25?'#ffcc33':'#ff5b5b';
+}
+function madColor(fr){
+  if(window._colorblind) return fr>0.85?'#ff5b5b': fr>0.6?'#e8ecf2':'#4ca6ff';
+  return fr>0.85?'#ff5b6b': fr>0.6?'#ffb13f':'#b05bff';
+}
 function shade(hex,amt){
   const c=hex.replace('#',''); let r=parseInt(c.substr(0,2),16),g=parseInt(c.substr(2,2),16),b=parseInt(c.substr(4,2),16);
   r=Math.max(0,Math.min(255,r+amt)); g=Math.max(0,Math.min(255,g+amt)); b=Math.max(0,Math.min(255,b+amt));

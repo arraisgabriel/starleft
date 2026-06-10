@@ -75,15 +75,17 @@
     return code;
   }
 
-  function mpHostStart(mapIndex, mode){
+  function mpHostStart(mapIndex, mode, extra){
     if(S.role!=='host') return;
-    S.mode = mode || S.mode; S.mapIndex = mapIndex|0; S.started=true;
+    if(typeof TELE!=='undefined') TELE.event('coop_session', { role:'host', mode: mode||S.mode });
+    S.mode = mode || S.mode; S.mapIndex = mapIndex|0; S.started=true; S.duelSeed=(extra&&extra.duelSeed)!=null?extra.duelSeed:null;
     pendingPlayers = 2; LOCAL_CTRL='p1'; netRole='host';
     // fresh roster for skirmish; campaign keeps the carried veterans (p1's campaign progression)
     if(S.mode!=='campaign'){ if(typeof setCarryover==='function') setCarryover([]);
       if(typeof resetHeroes==='function') resetHeroes(); if(typeof resetFallen==='function') resetFallen(); }
     mapIndex = S.mapIndex;
     G = newMap(S.mapIndex);                          // both player bases spawn (pendingPlayers=2)
+    if(S.mode==='duel'){ G._pvp=true; }              // T4-5: founders are hostile (isHostile splits by ctrl)
     if(typeof resetDialogs==='function') resetDialogs();
     if(typeof syncHud==='function') syncHud();
     if(typeof clampCam==='function') clampCam(G);
@@ -105,7 +107,7 @@
     if(typeof startHostClock==='function') startHostClock();   // keep the host simulating + broadcasting off-focus
     // tell the joiner to build the same map, then ship the authoritative dynamic state
     NET.mpLog && NET.mpLog('info','starting host-authoritative co-op — map '+S.mapIndex+', sending mpstart + full snapshot');
-    MP.send('mpstart', { mapIndex:S.mapIndex, mode:S.mode });
+    MP.send('mpstart', { mapIndex:S.mapIndex, mode:S.mode, duelSeed:S.duelSeed });
     NET.tick = 0; NET._sAcc = 0; NET._kAcc = 0;
     NET._baseline = new Map(); NET._lastEcoStr = null; NET._sinceSend = 0;   // reset Phase 4 delta baseline / eco signature for the new map
     NET.sendFull(S.peerId);
@@ -136,7 +138,7 @@
       MP.send('mphello', { profile:S.me, role:'join' }, peerId);   // send our handle back
       ui('Peers');
     });
-    MP.on('mpstart', (msg)=> beginClientMatch(msg.mapIndex|0, msg.mode));
+    MP.on('mpstart', (msg)=> beginClientMatch(msg.mapIndex|0, msg.mode, msg));
     MP.on('rbstart', (msg)=> beginClientRollback(msg));   // rollback co-op join
     MP.on('mphub', (msg)=> beginClientHub(msg));
     MP.on('mppause', (msg)=> applyHostPause(!!(msg && msg.paused)));
@@ -230,11 +232,17 @@
     }).catch((e)=>{ NET.mpLog && NET.mpLog('err','rollback join failed: '+((e&&e.message)||e)); console.error('[rb] join failed', e); }));
   }
 
-  function beginClientMatch(idx, mode){
+  function beginClientMatch(idx, mode, msg){
     NET.mpLog && NET.mpLog('info','mpstart received (map '+idx+') — building map, awaiting host snapshot');
+    if(typeof TELE!=='undefined') TELE.event('coop_session', { role:'join', mode: mode||S.mode });
     S.started=true; S.mode=mode||S.mode; S.mapIndex=idx;
+    // T4-5 duel: install the seed-rolled arena at the SAME transient slot before building terrain
+    if(S.mode==='duel' && msg && msg.duelSeed!=null && typeof installDuelConfig==='function'){
+      const slot=installDuelConfig(msg.duelSeed); idx=slot; S.mapIndex=slot;
+    }
     netRole='client'; pendingPlayers=2; mapIndex=idx;
     G = newMap(idx);                                 // regenerate identical terrain + pads (deterministic)
+    if(S.mode==='duel') G._pvp=true;
     running = false;                                  // hold until the host's full snapshot lands
     NET._lastAppliedTick = -1;                        // fresh out-of-order baseline for the new match
     if(NET.resetWatchdog) NET.resetWatchdog();        // start the host-liveness clock fresh for this match

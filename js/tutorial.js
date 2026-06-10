@@ -77,13 +77,24 @@ const TUTORIAL = (function(){
      ===================================================================== */
   const STEPS = [
     { id:'tut-look',
-      text:'Welcome to the grind, founder. Drag to look around, pinch or scroll to zoom, and tap one of your people to select them.',
+      text:'Welcome to the grind, founder. Drag to look around, pinch or scroll to zoom, and tap one of your fighters to select them.',
       objective:'Tutorial — get your bearings: pan, zoom, select a unit.',
       when:()=> (G.selection||[]).length>0, beat:0.4 },
 
+    // FIGHT FIRST (T0-1): the squad you start with hits the weak DISRUPTR outpost before any chores.
+    { id:'tut-strike', touchVoice:true, hintS:6,
+      text:{ mouse:'DISRUPTR INC. parked an outpost on your lawn. Select your Growth Cyborgs and right-click it — burn it down.',
+             touch:'DISRUPTR INC. parked an outpost on your lawn. Tap a Growth Cyborg, then tap the outpost — burn it down.' },
+      objective:'Tutorial — first blood: attack the DISRUPTR outpost.',
+      hint:'Tap or click one of your Growth Cyborgs (the armed ones), then tap the glowing enemy structure.',
+      focus:()=> { const b=nearestEnemyBldg(); return b?{entity:b}:null; },
+      enter:()=>{ mem.eb0 = enemyBuildings().length; },
+      when:()=> enemyBuildings().length < (mem.eb0||1)
+             || pUnits().some(u=>u.type!=='worker' && ((u.cmd && u.cmd.type==='attack') || (u.autoTarget && !u.autoTarget.dead))) },
+
     { id:'tut-mine', touchVoice:true,
-      text:{ mouse:'Funding is everything. Select an Intern, then right-click a glowing Funding crystal to put them to work.',
-             touch:'Funding is everything. Tap an Intern, then tap a glowing Funding crystal to put them to work.' },
+      text:{ mouse:'That’s the job. Now sustain it — Funding pays for everything. Select an Intern, then right-click a glowing Funding crystal.',
+             touch:'That’s the job. Now sustain it — Funding pays for everything. Tap an Intern, then tap a glowing Funding crystal.' },
       objective:'Tutorial — mine Funding: send an Intern to a crystal.',
       focus:()=> { const m=nearestGold(); return m?{entity:m}:null; },
       enter:()=>{ mem.gold0 = eco().gold_collected||0; },
@@ -119,17 +130,10 @@ const TUTORIAL = (function(){
       when:()=> { const b=pBuild('barracks')[0]; return armyCount() > (mem.army0||0) || (b && (b.prodQueue||[]).length>0); } },
 
     { id:'tut-army', touchVoice:true,
-      text:{ mouse:'Gather your forces. Shift-drag a box around your fighters to select them, then click open ground to move out.',
-             touch:'Gather your forces. Tap the ▭ Select-box button and drag around your fighters, then tap open ground to move out.' },
+      text:{ mouse:'Gather your forces. Shift-drag a box around your fighters (or just press F2 to grab the whole army), then click open ground to move out.',
+             touch:'Gather your forces. Tap the ▭ Select-box button and drag around your fighters (or ⛶ selects everyone), then tap open ground to move out.' },
       objective:'Tutorial — select your army and move out.',
       when:()=> pUnits().some(u=>u.type!=='worker' && u.cmd && u.cmd.type==='move') },
-
-    { id:'tut-attack', touchVoice:true,
-      text:{ mouse:'There they are — DISRUPTR INC. Right-click an enemy to attack. Your units fight back on their own once engaged.',
-             touch:'There they are — DISRUPTR INC. Tap an enemy to attack. Your units fight back on their own once engaged.' },
-      objective:'Tutorial — attack the enemy.',
-      focus:()=> { const b=nearestEnemyBldg(); return b?{entity:b}:null; },
-      when:()=> pUnits().some(u=>u.cmd && u.cmd.type==='attack') },
 
     { id:'tut-turret',
       text:'Hold what you take. Select an Intern and build a Legal Team turret by your base — it auto-fires on anything that comes close.',
@@ -138,15 +142,18 @@ const TUTORIAL = (function(){
       when:()=> pBuild('turret').length>0 },
 
     { id:'tut-raze',
-      text:'Break them. Push onto a DISRUPTR INC. building and tear it down — raze every one to win the quarter.',
+      text:'Break them. Push onto a DISRUPTR INC. base and tear another building down — raze every one to win the quarter.',
       objective:'Tutorial — destroy a DISRUPTR INC. building.',
       focus:()=> { const b=nearestEnemyBldg(); return b?{entity:b}:null; },
-      when:()=> enemyBuildings().length < enemyBldgStart || G.extractReady },
+      enter:()=>{ mem.eb0 = enemyBuildings().length; },
+      when:()=> enemyBuildings().length < (mem.eb0||1) || G.extractReady },
 
+    // brief flavor beat only (T0-9): madosis is taught just-in-time by the 'madosis-live'
+    // contextual the first time a breakdown actually begins — not lectured here.
     { id:'tut-madosis',
-      text:'One more thing. Your veterans carry trauma — madosis. It stays quiet now, but in later quarters a cracked mind can turn feral. Keep a healer close and rest your people between fights.',
-      objective:'Tutorial — veterans carry trauma (madosis). It matters in later quarters.',
-      holdMs:11000 },
+      text:'One more thing — your veterans carry trauma. You’ll learn what that costs when it happens.',
+      objective:'Tutorial — veterans carry trauma (madosis).',
+      holdMs:3000 },
 
     { id:'tut-extract', touchVoice:true,
       text:{ mouse:'Clearing the map won’t fly you home. When the dust settles, right-click your HQ with a survivor to garrison, then hit Extraction.',
@@ -168,11 +175,41 @@ const TUTORIAL = (function(){
       text:'A Recruiter doesn’t fight — it heals. Tuck one behind your line and the whole squad lasts about twice as long.' },
     { id:'tut-c-group',   when:()=> hasGroup(),
       text:'Control group bound. Tap its number to reselect that squad in a snap — double-tap to jump the camera to them.' },
+    // T2-6: sprint-kiting taught the first time the player is genuinely being chased (2+ enemies
+    // hunting one unit) while they have a fighting force to bait them into.
+    { id:'sprint-kite', when:(s)=>{
+        if((s.time||0)<60) return false;
+        const counts={}; let chased=false;
+        for(const e of s.entities){
+          if(e.dead||e.storedIn||e.owner!=='enemy'||e.kind!=='unit') continue;
+          const t=e.autoTarget||((e.cmd&&e.cmd.type==='attack')?e.cmd.target:null);
+          if(!t||t.dead||t.owner!=='player'||t.kind!=='unit') continue;
+          counts[t.id]=(counts[t.id]||0)+1;
+          if(counts[t.id]>=2){ chased=true; break; }
+        }
+        return chased && armyCount()>=2;
+      },
+      text:'You\'re being chased — double-tap the ground repeatedly to SPRINT, and loop them past your turrets or army into the crossfire.' },
   ];
   const CONTEXTUAL_MAP = {}; CONTEXTUAL.forEach(c=>CONTEXTUAL_MAP[c.id]=c);
   // deferred hint fired from madosis.js the first time a breakdown actually begins (later episodes)
   CONTEXTUAL_MAP['madosis-live'] = { id:'madosis-live',
     text:'There it is — madosis. That veteran’s mind is cracking. A Recruiter or healer hero can talk them back; otherwise you’ll have to put them down. Keep your people rested.' };
+  // personhood discovery (T0-5): fired from dialogs.js the first time a single combat unit is selected
+  CONTEXTUAL_MAP['dossier-discover'] = { id:'dossier-discover',
+    text:'Every one of your people has a name and a story. Select one and open their file from the info panel — and try to bring them home.' };
+  // attack-move discovery (T2-3): fired from ui.js the first time 3+ combat units are selected
+  CONTEXTUAL_MAP['amove-tip'] = { id:'amove-tip',
+    text:{ mouse:'Press A then click the ground to ADVANCE AND FIGHT — your squad engages everything on the way instead of marching past it.',
+           touch:'Tap the ⚔ Attack-Move button, then tap the ground — your squad advances and engages everything on the way.' } };
+  // headcount/supply (T2-5): fired from tryTrain the first time the cap actually blocks a hire
+  CONTEXTUAL_MAP['supply-cap'] = { id:'supply-cap',
+    text:'Headcount is your hiring ceiling. Every Open-Plan HQ houses 24 and a Satellite Office 8 — build one forward to expand AND grow the cap.' };
+  // advanced-unit necessity (T2-6): fired from the sim the first time each mechanic surfaces
+  CONTEXTUAL_MAP['antiair-needed'] = { id:'antiair-needed',
+    text:'Enemy AIR inbound — ground rifles can\'t touch it. Field Auditors 📊, Founder Mechs 🦄 or Buzzword Bombers 🛩️ — they\'re your only anti-air.' };
+  CONTEXTUAL_MAP['auditor-siege'] = { id:'auditor-siege',
+    text:'Your Auditor just SIEGED — rooted, but massive range and splash. Park it behind your line to out-range turrets; it can\'t fire point-blank, so screen it.' };
 
   /* =====================================================================
      DOM coach panel + highlight
@@ -251,11 +288,13 @@ const TUTORIAL = (function(){
     const scr = $('tutorialPromptScreen');
     if(!scr){ requested = false; if(typeof beginRun==='function') beginRun(promptIdx); return; }
     ['startScreen','mapScreen','docScreen'].forEach(id=>{ const el=$(id); if(el) el.style.display='none'; });
+    if(typeof buildDifficultyRow==='function') buildDifficultyRow('difficultyRow');   // T4-2: pick the lap's difficulty here
     scr.style.display = 'flex';
     if(typeof MUSIC!=='undefined' && MUSIC.enterMenu) MUSIC.enterMenu();
   }
   function choosePrompt(yes){
     requested = !!yes;
+    if(typeof TELE!=='undefined') TELE.event('tutorial_optin', { accepted: !!yes });
     if(yes){ try { localStorage.setItem(LS_KEY, JSON.stringify({ contextualSeen, accepted:true })); } catch(e){} }
     const scr = $('tutorialPromptScreen'); if(scr) scr.style.display='none';
     if(typeof beginRun==='function') beginRun(promptIdx);
@@ -275,8 +314,9 @@ const TUTORIAL = (function(){
     _advance(state);
   }
 
+  let hintFired = false;   // one guiding toast per stalled step (T0-1 stall detection)
   function _show(step, state){
-    stepT = 0; advT = 0;
+    stepT = 0; advT = 0; hintFired = false;
     for(const k in mem) delete mem[k];
     if(step.enter){ try { step.enter(state); } catch(e){} }
     worldFocus = step.focus ? (step.focus(state) || null) : null;
@@ -302,19 +342,30 @@ const TUTORIAL = (function(){
   }
 
   function update(state, dt){
-    if(!active || !state || state.over) return;
-    if(state.hub){ end(); return; }   // reached the H.U.B. (extraction done) — tear down cleanly
+    if(!state || state.over) return;
+    if(state.hub){ if(active) end(); return; }   // reached the H.U.B. (extraction done) — tear down cleanly
+    // one-time contextual pop-ups fire in SOLO whether or not the guided tutorial is running —
+    // they teach mechanics at the moment they surface (madosis-live already worked this way).
+    if(typeof netRole==='undefined' || netRole==='solo')
+      for(const c of CONTEXTUAL){ if(!contextualSeen[c.id] && c.when(state)) fireContextual(c.id, state); }
+    if(!active) return;
     // keep the arrow glued to the (reflowing) button
     if(domKey) reflow();
-    // optional one-time contextual pop-ups
-    for(const c of CONTEXTUAL){ if(!contextualSeen[c.id] && c.when(state)) fireContextual(c.id, state); }
     const step = STEPS[stepIdx]; if(!step) return;
     stepT += dt;
     let done;
     if(step.holdMs!=null) done = (stepT*1000 >= step.holdMs);
     else done = step.when ? !!step.when(state) : false;
     if(done){ advT += dt; if(advT >= (step.beat!=null ? step.beat : 0.55)) _advance(state); }
-    else advT = 0;
+    else {
+      advT = 0;
+      // stall detection (T0-1): one guiding nudge per step if there's no progress for a while
+      if(!hintFired && step.holdMs==null && stepT > (step.hintS!=null ? step.hintS : 9)){
+        hintFired = true;
+        const h = step.hint || copy(step);
+        if(h && typeof toast==='function') toast('💡 '+h, 6000);
+      }
+    }
   }
 
   function fireContextual(id, state){

@@ -102,8 +102,8 @@ const DEF = {
               flavor:'"Recruiting" department. Turns Funding into Growth Cyborgs and Consultants.' },
   turret:   { name:'Legal Team',   icon:'⚖️', kind:'building', w:2,h:2, hp:550,  cost:100, build:14,  sight:7, supply:0,  color:'#7a8aa8',
               dmg:14, range:6.0, cd:0.7, flavor:'Fires cease-and-desist letters at anything that trespasses on your IP.' },
-  outpost:  { name:'Satellite Office', icon:'📡', kind:'building', w:3,h:3, hp:650, cost:175, build:16, sight:5, supply:0, color:'#5a6b8a',
-              deposit:true, trickle:2, flavor:'A scrappy forward branch — Interns drop Funding here instead of trekking back to HQ, and its rig slowly auto-extracts a little on its own. Cheaper and flimsier than a second HQ.' },
+  outpost:  { name:'Satellite Office', icon:'📡', kind:'building', w:3,h:3, hp:650, cost:175, build:16, sight:5, supply:8, color:'#5a6b8a',
+              deposit:true, trickle:3.5, flavor:'A scrappy forward branch — Interns deposit here, its rig auto-extracts Funding, and it houses +8 Headcount. The mid-game expansion pivot: cheaper and flimsier than a second HQ.' },   // T2-5: supply + fatter trickle make the forward branch a real tradeoff
   condo:    { name:'Unit Condo', icon:'🏙️', kind:'building', w:5,h:4, hp:1200, cost:0, build:1, sight:6, supply:0, color:'#4b6b8f',
               flavor:'A vertical dormitory for employees who survived quarterly planning.' },
   mdc:      { name:'Mission Dispatch Center M.D.C.', icon:'🛰️', kind:'building', w:3,h:3, hp:900, cost:0, build:1, sight:6, supply:0, color:'#5a6b8a',
@@ -123,18 +123,22 @@ const DEF = {
   hustler:  { name:'Hustler', icon:'🛹', kind:'unit', hp:70, cost:70, build:11, sight:7, supply:1, speed:3.5, dmg:10, range:1.6, cd:0.7, r:9,
               splash:14, splashR:1.2, flavor:'Moves fast and breaks things. Cheap, fast, harasses your economy.' },
   lobbyist: { name:'Lobbyist', icon:'🎩', kind:'unit', hp:70, cost:196, build:20, sight:9, supply:2, speed:2.2, dmg:36, range:7.5, cd:2.3, r:9,
-              flavor:'Buys senators wholesale. One devastating long-range shot, then a long reload.' },
+              pierce:true,   // T2-4: regulation ignores armor — the counter to vehicles/mechs
+              flavor:'Buys senators wholesale. One devastating armor-piercing shot, then a long reload.' },
   /* ---- The Garage (Factory) tier ---- */
   foodtruck:{ name:'Food Truck', icon:'🚚', kind:'unit', hp:110, cost:90, build:15, sight:6, supply:2, speed:3.6, dmg:11, range:3.0, cd:1.0, r:11, vehicle:true,
               splash:9, splashR:1.4, flavor:'Free cold brew & napalm. A flame cone shreds clustered enemies.' },
   auditor:  { name:'Auditor', icon:'📊', kind:'unit', hp:200, cost:175, build:28, sight:8, supply:3, speed:1.8, dmg:18, range:5.0, cd:1.4, r:12, vehicle:true, antiAir:true,
+              armor:0.25, pierce:true,   // T2-4: armored chassis; the due-diligence cannon punches through armor
               siege:{dmg:42,range:9,splashR:1.6,setup:1.2}, flavor:'Deploys spreadsheets into a long-range due-diligence cannon. Sieges when enemies are near.' },
   /* ---- Launch Pad (Starport) tier ---- */
   founder:  { name:'Founder Mech', icon:'🦄', kind:'unit', hp:600, cost:599, build:45, sight:8, supply:6, speed:1.6, dmg:45, range:3.5, cd:1.5, r:16, vehicle:true,
-              splash:20, splashR:1.3, antiAir:true, flavor:'A visionary in a 12-ft exosuit. Hits anything, ground or air.' },
+              armor:0.30,   // T2-4: exosuit plating shrugs off small-arms — bring piercing
+              splash:20, splashR:1.3, antiAir:true, flavor:'A visionary in a 12-ft exosuit. Armored; hits anything, ground or air.' },
   courier:  { name:'Drugztore Delivery Drone', icon:'🛸', kind:'unit', hp:120, cost:90, build:16, sight:7, supply:2, speed:3.0, dmg:0, range:4.0, cd:1.0, r:10, air:true, action:'heal',
               heal:7, flavor:'Same-day delivery of medkits and morale. Flies over everything.' },
   bomber:   { name:'Buzzword Bomber', icon:'🛩️', kind:'unit', hp:480, cost:630, build:50, sight:9, supply:6, speed:1.7, dmg:26, range:6.0, cd:0.9, r:16, air:true, antiAir:true, facesLeft:true,
+              armor:0.20,   // T2-4: armored hull
               flavor:'Capital airship. Rains cyan ordnance on the campus below.' },
 
   /* ---- production buildings ---- */
@@ -211,6 +215,31 @@ const MADOSIS = {
   healCap: 6,             // max units in the facility at once (mirrors HUB.trainPairCap)
 };
 
+/* ---- T4-2: difficulty selector — one multiplier wherever the knobs already live.
+   Persisted in localStorage; stamped onto state._difficulty at map load so co-op/rollback
+   peers share the HOST's choice (sim-side reads go through diffOf(state)). ---- */
+const DIFFICULTY = {
+  boot: { name:'Bootstrap', desc:'forgiving \u2014 longer grace, gentler waves', aggr:0.8,  grace:1.4,  mint:1.25, vetCap:0, score:0.8 },
+  a:    { name:'Series A',  desc:'the intended campaign',                        aggr:1.0,  grace:1.0,  mint:1.0,  vetCap:0, score:1.0 },
+  uni:  { name:'Unicorn',   desc:'hard \u2014 faster, denser, less grace',      aggr:1.25, grace:0.7,  mint:0.85, vetCap:1, score:1.25 },
+  burn: { name:'Burn Rate', desc:'brutal \u2014 no mercy, no grace',            aggr:1.5,  grace:0.45, mint:0.7,  vetCap:2, score:1.5 },
+};
+function difficultyKey(){ try{ const k=localStorage.getItem('starleft_difficulty'); return DIFFICULTY[k]?k:'a'; }catch(_){ return 'a'; } }
+function setDifficultyKey(k){ try{ if(DIFFICULTY[k]) localStorage.setItem('starleft_difficulty', k); }catch(_){} }
+// sim-side read: ALWAYS from the state stamp (set in newMap), so all peers agree
+function diffOf(state){ return DIFFICULTY[(state && state._difficulty)||'a'] || DIFFICULTY.a; }
+
+/* ---- T2-5: macro-tension economy knobs (applied in map.js newMap) ----
+   Home-cluster funding is cut so it funds roughly ONE army cycle — expanding to the contested
+   mid-map nodes (or a Satellite Office branch) becomes the real macro decision. A high-value
+   contested node is auto-placed at the player↔enemy midpoint on maps that lack one. */
+const ECON = {
+  homeNodeMul: 0.55,      // home-cluster node amounts × this (nodes within homeBand of the start)
+  homeBand: 16,           // unscaled tiles from the player start that count as "home"
+  contestedAmt: 3600,     // the auto-placed no-man's-land node's funding
+  contestedMinDist: 18,   // a node ≥ this far (unscaled tiles) from BOTH starts counts as contested
+};
+
 // Kennel death-squad: spawned when a mad dog is rescued, sized to the units guarding it.
 const KENNEL = {
   size: 10,
@@ -222,7 +251,16 @@ const KENNEL = {
 };
 
 /* =====================================================================
-   MAP DEFINITIONS  (two maps, played in sequence)
+   MAP DEFINITIONS
+   Grace-time guideline (T2-9, documented so new maps stay on the curve):
+     graceTime ≈ 60 + diag, where diag = √(w² + h²) in UNSCALED tiles —
+     bigger maps earn proportionally more peace. Quarter I doubles it
+     (tutorial), infiltration maps (no economy) add ~+20, boss arenas
+     ignore it. waveTimer tracks graceTime − ~5s.
+   Optional pressure knobs: `enemyAir:true` lets the rival also field
+   Buzzword Bombers after grace (requires anti-air to answer — T2-6);
+   `events:[{atTime,…}]` are scripted beats (T2-8, core.js runMapEvent);
+   `winCondition:{type:'survive'|'escort'|'reachAndHold',…}` (T2-1).
    ===================================================================== */
 const MAPS = [
   {
@@ -244,8 +282,11 @@ The board is watching. Synergy awaits....`,
     // tutorial map: long peace so new players can learn the mechanics without dying —
     // no enemy waves invade the base until ~3 minutes in.
     graceTime:180, waveTimer:180,
-    enemies:[ {x:40,y:6, defenders:2}, {x:30,y:24, defenders:2} ],
-    objective:'DISRUPTR INC. now holds TWO outposts. Mine Funding, scale your team, and raze both.',
+    // fight-first onboarding (T0-1): start with a small squad and a weak DISRUPTR forward
+    // outpost (one structure, one guard) a short march away — first blood inside a minute.
+    startSoldiers:3,
+    enemies:[ {x:13,y:27, defenders:1, light:true}, {x:40,y:6, defenders:2}, {x:30,y:24, defenders:2} ],
+    objective:'DISRUPTR INC. parked a forward outpost on your lawn. Crush it, then raze their two bases — three positions in all.',
     lakes:[ {x:20,y:20,r:4}, {x:30,y:28,r:3} ],
     rockClusters:[ {x:15,y:14,n:14}, {x:34,y:22,n:12}, {x:24,y:8,n:10} ],
     forests:[ {x:10,y:20,n:30}, {x:38,y:30,n:26}, {x:25,y:34,n:20} ],
@@ -481,7 +522,7 @@ Weaponize your buzzwords, circle back, and disrupt MegaCorp into bankruptcy. The
     // (lostBases), and only THEN bootstrap an economy off the arena gold to liquidate the three A&O
     // campuses below. Career units carry like any map; the always-on vetScaling (js/balance.js)
     // musters proportionate extra base defenders for the power you bring, so no hand-rebalance here.
-    aggression:1.5,
+    aggression:1.6,   // T2-9: Arc-2 ramps monotonically 1.2 → 1.4 → 1.6 → 1.8 → 2.0 → 2.2
     startGold:0, startWorkers:0, startSoldiers:0, startBarracks:false,   // infiltration: no funding, no workers, no factory — just the crew
     graceTime:130, waveTimer:120,
     crawl:{ episode:'EPISODE X', title:'THE ACQUIHIRE',
@@ -561,7 +602,7 @@ Weaponize your buzzwords, circle back, and disrupt MegaCorp into bankruptcy. The
     // edge. The carried roster + Nino/Biba arrive by CARRYOVER only (no cfg.heroes here — dead heroes
     // stay dead, matching the contextual crawl). Career units are the spearhead again; the always-on
     // vetScaling (js/balance.js) musters proportionate base defenders for the power you bring.
-    aggression:1.6,
+    aggression:1.8,   // T2-9: Arc-2 ramps monotonically 1.2 → 1.4 → 1.6 → 1.8 → 2.0 → 2.2
     startGold:1100, startWorkers:7, startSoldiers:5, startBarracks:true,
     graceTime:120, waveTimer:116,
     crawl:{ episode:'EPISODE XI', title:'THE LAUNCH',
@@ -618,9 +659,10 @@ Weaponize your buzzwords, circle back, and disrupt MegaCorp into bankruptcy. The
     // still only write one home"); the Reborn-Cyborg unit/death-reset is SEPARATE code work, not this
     // map. Carried roster + Nino/Biba arrive by carryover (no cfg.heroes) → contextual crawl vars.
     // aggression eased to 1.6 (below Ep XII's 2.0): with SEVEN vault campuses the difficulty is the
-    // sprawl, not per-base ferocity — same judgement as the Ep VII finale (1.7 at eight bases). This
-    // also keeps the carryover swing on the shipping curve beside Ep XI/XII.
-    aggression:1.6,
+    // T2-9: the campaign's hardest conventional fight — Arc 2 peaks HERE (1.2 → … → 2.0 → 2.2).
+    // Seven vault campuses AND per-base ferocity: a maxed carried roster meets a real finale, with
+    // the Arc-2 vetScaling cap (balance.js) mustering bigger garrisons against it.
+    aggression:2.2,
     startGold:3600, startWorkers:12, startSoldiers:12, startBarracks:true,
     graceTime:120, waveTimer:112,
     crawl:{ episode:'EPISODE XIII', title:'THE VESTING CLIFF',
@@ -676,7 +718,9 @@ Weaponize your buzzwords, circle back, and disrupt MegaCorp into bankruptcy. The
   },
   {
     name:'REX',
-    isVillain:true, gateAfter:12, returnTo:12, displayEp:'15',
+    // T2-7: REX is the TRUE FINALE — the campaign routes THROUGH him after Episode XIII and the
+    // IPO only shows once he falls (finale routing in ui.js onVictory / villains.js finaleVillainIndex).
+    isVillain:true, finale:true, displayEp:'FINALE',
     enemyName:'A&O', enemyFaction:'ao',          // → founder _ao green sheet + A&O ground treatment
     aggression:1.0, startGold:1800, startWorkers:6, startSoldiers:8, startBarracks:true,
     graceTime:9999, waveTimer:9999,
@@ -691,5 +735,125 @@ Weaponize your buzzwords, circle back, and disrupt MegaCorp into bankruptcy. The
     villain:{ id:'rex', x:30, y:9 },
     lakes:[ {x:14,y:6,r:3} ], rockClusters:[ {x:12,y:12,n:10}, {x:26,y:26,n:10} ], forests:[],
     goldNodes:[ {x:7,y:30,amt:2400}, {x:4,y:25,amt:2000}, {x:11,y:31,amt:2000}, {x:20,y:18,amt:2600} ],
+  },
+
+  /* ---- T2-1/T2-7/T2-8/T2-9 APPENDED ARC-2 SIDE MISSIONS ----
+     Gated interludes (isVillain exempts them from linear numbering; returnTo routes the campaign,
+     villains.js). Each one exercises a different win verb (core.js checkAltWin) or lieutenant duel,
+     so the quarter-to-quarter rhythm stops being raze-raze-raze. All A&O (world-bible Arc-2 canon). */
+  {
+    name:'THE LAND GRAB',                        // reachAndHold (T2-1) — between VIII and IX
+    isVillain:true, gateAfter:7, returnTo:8, displayEp:'8.5',
+    enemyName:'A&O', enemyFaction:'ao',
+    aggression:1.3, startGold:450, startWorkers:4, startSoldiers:4, startBarracks:true,
+    graceTime:60, waveTimer:70,
+    crawl:{ episode:'EPISODE 8.5', title:'THE LAND GRAB',
+      text:'Rebuilding needs more than grief and an org chart. It needs bandwidth.\n\nThe old Conglomerate uplink ridge still stands over the crater, transmitting nothing to no one. Whoever holds it owns every byte in and out of the wasteland — and A&O has already dispatched claim drones with the paperwork pre-signed.\n\nPlant your people on the ridge and do not move. Possession is nine tenths of the lawsuit....',
+      summary:'The crater\'s only uplink ridge is unclaimed, and A&O\'s claim bots are inbound. Take the high ground and hold it long enough for your filing to clear — lose your grip and the wasteland goes dark for good.' },
+    objective:'Seize the uplink ridge and HOLD it against A&O — keep units in the zone until your claim clears.',
+    winCondition:{ type:'reachAndHold', at:{x:44,y:10}, radius:3, holdSec:75 },
+    w:52, h:44, seed:8508,
+    player:{ x:6, y:38 },
+    terrain:{ biomes:['tech','grass'], temp:{axis:'diag', base:0.45, gradient:0.2, noise:0.18}, seaFrac:0.08, mtnFrac:0.10, forest:0.04 },
+    enemies:[ {x:44,y:34, defenders:4, extraBarracks:true} ],
+    events:[
+      { atTime:90,  toast:'A&O has escalated the claim dispute — reinforcements filed.', aggression:1.6 },
+      { atTime:150, spawnSquad:{ comp:[['soldier',3],['ranger',2]] }, at:{x:44,y:22}, toast:'Claim bots inbound on the ridge!' },
+    ],
+    lakes:[ {x:24,y:24,r:4} ],
+    rockClusters:[ {x:30,y:12,n:14}, {x:18,y:8,n:10} ],
+    forests:[ {x:12,y:28,n:20} ],
+    goldNodes:[ {x:4,y:34,amt:1500},{x:9,y:41,amt:1500},{x:26,y:36,amt:2200},{x:38,y:18,amt:2600} ],
+  },
+  {
+    name:'THE RECOVERY AGENT',                   // ao_enforcer lieutenant duel (T2-7) — between IX and X
+    isVillain:true, gateAfter:8, returnTo:9, displayEp:'9.5',
+    enemyName:'A&O', enemyFaction:'ao',
+    aggression:1.0, startGold:600, startWorkers:4, startSoldiers:5, startBarracks:true,
+    graceTime:9999, waveTimer:9999,              // boss duel — no enemy waves
+    crawl:{ episode:'EPISODE 9.5', title:'THE RECOVERY AGENT',
+      text:'Somebody at A&O read your prototype filings, cross-referenced the break-in reports, and drew the obvious line: you are going after the architect.\n\nSo they sent the asset-recovery department. One agent, green as server light, retained on commission to make sure the only person who can finish the GRAAL stays exactly where the fund parked her.\n\nHe is between you and the prison-office. He has never once come home without the asset....',
+      summary:'A&O knows where you\'re headed next, and it sent its asset-recovery agent to close the route. One hunter, fast and patient, between you and the architect. Put him down or the rescue dies before it starts.' },
+    objective:'Put down THE A&O ENFORCER — he is fast, he hunts your healers, and he does not flee.',
+    w:30, h:24, seed:9509,
+    player:{ x:5, y:18 },
+    terrain:{ biomes:['tech'], seaFrac:0.04, mtnFrac:0.06, forest:0 },
+    enemies:[],
+    villain:{ id:'ao_enforcer', x:24, y:6 },
+    lakes:[], rockClusters:[ {x:14,y:10,n:8}, {x:22,y:17,n:6} ], forests:[],
+    goldNodes:[ {x:6,y:20,amt:1400}, {x:4,y:15,amt:1200}, {x:9,y:21,amt:1200} ],
+  },
+  {
+    name:'THE EXTRACTION CLAUSE',                // Biba escort (T2-1) + corridor infiltration (T2-8) — between X and XI
+    isVillain:true, gateAfter:9, returnTo:10, displayEp:'10.5',
+    enemyName:'A&O', enemyFaction:'ao',
+    aggression:1.4, startGold:0, startWorkers:0, startSoldiers:5, startBarracks:false,
+    graceTime:9999, waveTimer:9999,              // corridor run — pressure comes from guards + scripted beats, not waves
+    noEconRebalance:true,                        // no economy at all — the T2-5 rebalance has nothing to touch
+    crawl:{ episode:'EPISODE 10.5', title:'THE EXTRACTION CLAUSE',
+      text:'You broke the architect out of the open-plan prison. A&O\'s lawyers call that "involuntary offboarding," and the perimeter is already locking down.\n\nBIBA knows every coil of the GRAAL by heart, which makes her the most valuable severance package in the wasteland. Walk her up the service corridor to the extraction line. Every camera between here and the fence has her face.\n\nNo funding. No reinforcements. Just the squad you came in with, and a promise you intend to keep....',
+      summary:'The architect is out of her cell — now get her out of the building. Walk BIBA up A&O\'s locked-down service corridor to the extraction line with only the squad you brought. They know she\'s missing.' },
+    objective:'Escort BIBA through A&O\'s corridor to the extraction line at the north fence — if she falls, the GRAAL dies with her.',
+    winCondition:{ type:'escort', vipHero:'Biba', to:{x:17,y:4}, radius:3 },
+    w:34, h:88, seed:10510,
+    player:{ x:17, y:82 },
+    terrain:{ biomes:['tech'], seaFrac:0.03, mtnFrac:0.10, forest:0 },
+    enemies:[ {x:6,y:8, defenders:3, light:true} ],   // one checkpoint shack near the fence — not a base economy
+    guards:[
+      { x:17, y:64, comp:[['soldier',3],['ranger',2]] },
+      { x:10, y:46, comp:[['ranger',3],['hustler',2]] },
+      { x:24, y:46, comp:[['soldier',3],['hustler',1]] },
+      { x:17, y:26, comp:[['soldier',2],['ranger',2],['lobbyist',1]] },
+    ],
+    events:[
+      { atTime:75,  toast:'Perimeter alert — A&O retrieval teams converging on the corridor.', spawnSquad:{ comp:[['hustler',3]] }, at:{x:17,y:70} },
+      { atTime:170, toast:'They found her trail. MOVE.', spawnSquad:{ comp:[['soldier',3],['ranger',2]] }, at:{x:17,y:40} },
+    ],
+    thickets:[ {x:4,y:30,w:11,h:22,density:0.74,mix:0.2,trail:'v'}, {x:20,y:52,w:10,h:18,density:0.7,mix:0.3,trail:'v'} ],
+    lakes:[], rockClusters:[ {x:8,y:18,n:10}, {x:26,y:70,n:10} ], forests:[],
+    goldNodes:[ {x:5,y:84,amt:1200} ],
+  },
+  {
+    name:'THE GROUNDS DISPUTE',                  // tower_guardian lieutenant duel (T2-7, win-by-boss per T2-1) — between XI and XII
+    isVillain:true, gateAfter:10, returnTo:11, displayEp:'11.5',
+    enemyName:'A&O', enemyFaction:'ao',
+    aggression:1.0, startGold:900, startWorkers:5, startSoldiers:6, startBarracks:true,
+    graceTime:9999, waveTimer:9999,              // boss duel — no enemy waves
+    crawl:{ episode:'EPISODE 11.5', title:'THE GROUNDS DISPUTE',
+      text:'The Dark Tower is yours on paper. The foundation disagrees.\n\nSomething A&O bolted into the bedrock has unmoored itself — a warden core in a five-meter chassis, violet light bleeding from the seams, walking the perimeter it was built to keep. It does not recognize the transfer of title. It does not recognize anything anymore.\n\nThe tower writes the dying into fresh metal. First, evict the metal that refuses to die....',
+      summary:'You hold the Dark Tower, but its buried warden has unbolted itself from the foundations and contests the deed. A five-meter chassis with violet light in its seams walks your new perimeter. Evict it.' },
+    objective:'Destroy A&O\'s DARK TOWER GUARDIAN — it quakes the ground when it lands, so spread your line.',
+    w:38, h:30, seed:11511,
+    player:{ x:6, y:24 },
+    terrain:{ biomes:['tech'], seaFrac:0.05, mtnFrac:0.08, forest:0 },
+    enemies:[],
+    villain:{ id:'tower_guardian', x:29, y:8 },
+    lakes:[ {x:13,y:7,r:3} ], rockClusters:[ {x:11,y:12,n:10}, {x:25,y:23,n:10} ], forests:[],
+    goldNodes:[ {x:7,y:26,amt:2200}, {x:4,y:21,amt:1800}, {x:11,y:27,amt:1800}, {x:19,y:15,amt:2400} ],
+  },
+  {
+    name:'THE BRIDGE ROUND',                     // starved-economy survive (T2-1 + T2-9 "down round" map) — between XII and XIII
+    isVillain:true, gateAfter:11, returnTo:12, displayEp:'12.5',
+    enemyName:'A&O', enemyFaction:'ao',
+    aggression:2.0, startGold:250, startWorkers:4, startSoldiers:6, startBarracks:true,
+    graceTime:45, waveTimer:55,
+    noEconRebalance:true,                        // ALREADY starved by design — keep the two lean nodes as authored
+    crawl:{ episode:'EPISODE 12.5', title:'THE BRIDGE ROUND',
+      text:'You cracked the Continuity Farm and walked out with the transfer lattice in a refrigerated truck. A&O\'s response cleared legal review in eleven minutes.\n\nAn emergency injunction, served by everything the fund can field: repossess the lattice, bill the survivors. Your lawyers say they can stall the order until the markets open. Until then there is no funding, no reinforcement, and nowhere to run with a machine that heavy.\n\nIt\'s called a bridge round: you spend everything you have left to still exist next quarter....',
+      summary:'The stolen transfer lattice is yours — and A&O\'s emergency injunction says otherwise. No reinforcements, two lean crystal seams, and every repo crew the fund can field. Survive until the markets open.' },
+    objective:'SURVIVE A&O\'s injunction — hold out until the order lapses. Lose your HQ and the lattice goes back to the fund.',
+    winCondition:{ type:'survive', forSec:330, protect:'hq' },
+    w:56, h:46, seed:12512,
+    player:{ x:27, y:24 },
+    terrain:{ biomes:['ice','tech'], temp:{axis:'y', base:0.30, gradient:0.16, noise:0.14}, freeze:0.26, seaFrac:0.10, mtnFrac:0.09, forest:0 },
+    enemies:[ {x:6,y:6, defenders:5, extraBarracks:true}, {x:48,y:38, defenders:5, extraBarracks:true} ],
+    events:[
+      { atTime:120, toast:'A&O has doubled the recovery bounty — heavier crews inbound.', aggression:2.2 },
+      { atTime:240, toast:'Final escalation: the fund is liquidating its patience.', spawnSquad:{ comp:[['soldier',4],['lobbyist',2]] }, at:{x:48,y:24} },
+    ],
+    lakes:[ {x:14,y:30,r:4}, {x:40,y:12,r:4} ],
+    rockClusters:[ {x:20,y:12,n:14}, {x:36,y:30,n:14} ],
+    forests:[],
+    goldNodes:[ {x:23,y:28,amt:1600}, {x:31,y:20,amt:1600} ],
   },
 ];

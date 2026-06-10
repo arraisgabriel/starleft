@@ -59,10 +59,21 @@ function typePower(type, stars){
 }
 function combatPower(u){ return u ? typePower(u.type, u.stars||0) : 0; }
 
-/* Pure: extra enemy soldiers per base for a given VPI. idx is reserved for future per-arc tuning. */
+/* Pure: extra enemy soldiers per base for a given VPI.
+   T2-9 per-arc tuning (the formerly-reserved idx): Arc 2 (Ep VIII+, idx>=7) raises the per-base
+   cap and tightens the VPI step so a maxed carried roster faces bases that actually muster more —
+   the campaign RE-escalates instead of plateauing. Headroom is raised AT SPAWN (deterministic, no
+   continuous rescaling → no degenerate stalling, no co-op/rollback drift). */
 function vetScalingBonus(vpi, idx){
-  if(!(vpi > 0)) return 0;
-  return Math.max(0, Math.min(VET_MAXBONUS, Math.round(vpi / VET_SCALE)));
+  // T3-1 New Game+: every lap adds a flat per-base bonus alongside the VPI term (capped below).
+  const ng = (typeof CAMPAIGN!=='undefined' && CAMPAIGN && CAMPAIGN.ngPlus)|0;
+  // T4-2: harder difficulties raise the per-base ceiling (stamped on G at map load)
+  const dcap = (typeof diffOf==='function' && typeof G!=='undefined' && G) ? (diffOf(G).vetCap||0) : 0;
+  if(!(vpi > 0) && !ng && !dcap) return 0;
+  const arc2 = (idx|0) >= 7;
+  const cap  = (arc2 ? VET_MAXBONUS + 3 : VET_MAXBONUS) + Math.min(3, ng) + dcap;  // NG+/difficulty raise the ceiling too
+  const scale= arc2 ? VET_SCALE * 0.8 : VET_SCALE;         // Arc 2 reaches the bonus sooner
+  return Math.max(0, Math.min(cap, Math.round((vpi||0) / scale) + 2*Math.min(3, ng)));
 }
 
 /* Per-squad reinforcement for the Episode X corridor guard squads (map.js). Deliberately lighter than
@@ -84,6 +95,12 @@ function vetMintFactor(vpi){
   const t = Math.min(1, vpi / VET_MINT_VPI);
   return 1 - VET_MINT_MAX * t;
 }
+/* T2-9: VPI also raises the enemy's standing-army ceiling a little (ai.js multiplies its cap by
+   this), so a veteran-heavy roster sees larger/faster waves — capped at +30% (never a wall). */
+function vetWaveCapFactor(vpi){
+  if(!(vpi > 0)) return 1;
+  return 1 + Math.min(0.30, vpi / 600);
+}
 
 /* Add the bonus defenders to one freshly-built enemy base. Called from buildEnemyBase with the
    base origin and the VPI computed once for the map. Mirrors buildEnemyBase's own muster placement. */
@@ -99,7 +116,8 @@ function applyVetScalingToBase(state, base, idx, vpi){
 // expose (harmless under classic-script shared scope; explicit for the headless sim's sandbox)
 if(typeof window!=='undefined'){
   window.computePlayerVPI=computePlayerVPI; window.vetScalingBonus=vetScalingBonus;
-  window.vetMintFactor=vetMintFactor; window.applyVetScalingToBase=applyVetScalingToBase;
+  window.vetMintFactor=vetMintFactor; window.vetWaveCapFactor=vetWaveCapFactor;
+  window.applyVetScalingToBase=applyVetScalingToBase;
   window.guardVetBonus=guardVetBonus;
   window.typePower=typePower; window.combatPower=combatPower;
 }

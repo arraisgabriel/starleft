@@ -71,6 +71,17 @@
         if(!b || b.owner!=='player' || b.type!=='hq' || (b.ctrl||'p1')!==ctrl) return;
         if(!u || u.owner!=='player' || u.storedIn!==b.id) return;
         if(typeof releaseStoredUnit==='function') quietApply(()=> releaseStoredUnit(state, b, cmd.uid));
+      } else if(cmd.k === 'amove'){
+        const sel = (cmd.ids||[]).map(id=>byId.get(id)).filter(e=>e&&!e.dead&&!e.storedIn&&e.owner==='player'&&(e.ctrl||'p1')===ctrl);
+        if(!sel.length) return;
+        state.selection = sel;
+        if(typeof commandAttackMove==='function') quietApply(()=> commandAttackMove(state, cmd.wx, cmd.wy));
+      } else if(cmd.k === 'stance'){
+        const sel = (cmd.ids||[]).map(id=>byId.get(id)).filter(e=>e&&!e.dead&&e.owner==='player'&&(e.ctrl||'p1')===ctrl);
+        if(sel.length && typeof setStance==='function') quietApply(()=> setStance(state, sel, cmd.stance));
+      } else if(cmd.k === 'ability'){
+        const sel = (cmd.ids||[]).map(id=>byId.get(id)).filter(e=>e&&!e.dead&&!e.storedIn&&e.owner==='player'&&(e.ctrl||'p1')===ctrl);
+        if(sel.length && typeof castAbility==='function') quietApply(()=> castAbility(state, sel));
       }
     } finally { state.selection = saveSel; state._cmdCtrl = saveCtrl; }
   }

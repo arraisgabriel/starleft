@@ -66,8 +66,8 @@
       o.textContent='Quarter '+(i+1)+' — '+((m.name.split('—')[1]||m.name).trim()); sel.appendChild(o); });
   }
   window.mpUiSetMode = function(mode){ UI.mode=mode;
-    ['skirmish','campaign'].forEach(m=>{ const b=$('mp-mode-'+m); if(b) b.classList.toggle('on', m===mode); });
-    const mp=$('mp-map-pick'); if(mp) mp.disabled = (mode==='campaign');   // campaign always starts at Quarter 1
+    ['skirmish','campaign','duel'].forEach(m=>{ const b=$('mp-mode-'+m); if(b) b.classList.toggle('on', m===mode); });
+    const mp=$('mp-map-pick'); if(mp) mp.disabled = (mode==='campaign' || mode==='duel');   // campaign starts at Quarter 1; duel rolls its own arena (T4-5)
   };
 
   window.mpUiOpenRoom = function(opts){
@@ -117,7 +117,16 @@
   window.mpUiEnterGame = function(){ if(typeof MUSIC!=='undefined') MUSIC.leaveMenu(); ['mpScreen','mpRoomScreen','startScreen','mapScreen','loadScreen'].forEach(hideSub); };
   window.mpUiSyncing = function(){ setConn('Syncing battlefield…','wait'); const w=$('mp-wait'); if(w) w.textContent='Host started — syncing…'; };
   window.mpUiPeerDropped = function(){ toast('🔌 Co-founder dropped — you’re holding their base'); renderPeers(); };
-  window.mpUiClientGameOver = function(){ running=false; toast('Match over'); };
+  window.mpUiClientGameOver = function(){
+    running=false;
+    // T4-5: duel verdict for the guest — the host syncs _pvpWinner via the snapshot scalars
+    if(G && G._pvp && G._pvpWinner!==undefined){
+      const won = G._pvpWinner===LOCAL_CTRL;
+      if(typeof onVictory==='function' && won){ G._skirmish=true; onVictory(); return; }   // skirmish-style cleared screen
+      if(typeof onDefeat==='function' && !won){ onDefeat(); return; }
+    }
+    toast('Match over');
+  };
 
   function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
   function renderPeers(){
@@ -146,6 +155,12 @@
 
   /* ---------- room buttons ---------- */
   window.mpHostStartClick = function(){
+    if(UI.mode==='duel'){   // T4-5: roll a fresh arena, install it locally, ship the seed to the guest
+      const seed=(Math.random()*1e9)>>>0;
+      const idx=(typeof installDuelConfig==='function')?installDuelConfig(seed):0;
+      if(typeof mpHostStart==='function') mpHostStart(idx, 'duel', { duelSeed:seed });
+      return;
+    }
     const idx = UI.mode==='campaign' ? 0 : (parseInt(($('mp-map-pick')||{}).value,10)||0);
     if(typeof mpHostStart==='function') mpHostStart(idx, UI.mode);
   };

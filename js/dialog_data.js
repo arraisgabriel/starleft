@@ -1109,8 +1109,44 @@ const LORE_SAY_FALLBACK = {
       "First nickname that isn't an insult.",
       "One quiet night. I'll take it."
     ]
+  },
+  "grief": {
+    "neg": [
+      "{relName}… no. Not another one.",
+      "I was right next to them.",
+      "Say the name. Somebody say the name.",
+      "We bag them. We bill the quarter. We move.",
+      "Their dream just became overhead."
+    ],
+    "neutral": [
+      "Another name for the Wake.",
+      "I'll tell {home}. Somebody has to.",
+      "Keep shooting. Grieve on the flight out."
+    ],
+    "pos": [
+      "They got further than most of us will.",
+      "Carry the dream. That's the job now."
+    ]
   }
 };
+
+/* ---- Dossier-aware selection barks (T0-5/T1-6): TEXT-ONLY templated lines a dossier'd unit
+   sometimes speaks instead of its type pool (~30%, dialogs.js sayUnitSelected). Filled through
+   buildDossier's d.fill — {me}/{home}/{dream}/{trauma}/{relName} resolve to THIS unit's story.
+   No voice clips (templated → no index-keyed audio), so the lore-forge LORE_SAY contract is
+   untouched. Append-only. ---- */
+const DOSSIER_SELECT_LINES = [
+  "Back in {home} they said I'd amount to nothing.",
+  "{me}. From {home}. Still standing.",
+  "Every paycheck goes back to {home}.",
+  "Ask me about {home} when this is over.",
+  "I still dream about it: {dream}.",
+  "One more quarter and maybe — {dream}.",
+  "Don't ask about {trauma}. Just point.",
+  "{relName} thinks I file reports for a living.",
+  "If I don't make it, tell {relName} I tried.",
+  "The company owns my hours, not my name.",
+];
 
 /* ---- Scripted-cutscene lines (NOT life-events; played in order via VOICE.playScene + the
    cutscene sequencer, js/cutscene.js). NINO_FLASH_LINES is Nino's mandatory monologue in the

@@ -4,6 +4,19 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <title>STARLEFT — Mini RTS</title>
+<!-- Open Graph / Twitter cards (T0-7): absolute URLs for link scrapers; in-game runtime paths stay relative -->
+<meta name="description" content="A no-build browser RTS where you run a startup, crush rival megacorps, become the monopoly — then everyone nukes each other. Free. Co-op.">
+<meta property="og:title" content="STARLEFT — Run a startup. Become the monopoly. Get nuked.">
+<meta property="og:description" content="A no-build browser RTS where you run a startup, crush rival megacorps, become the monopoly — then everyone nukes each other. Free. Co-op.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://starleft.vercel.app/rts.html">
+<meta property="og:image" content="https://starleft.vercel.app/assets/og/og-card.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="STARLEFT — Run a startup. Become the monopoly. Get nuked.">
+<meta name="twitter:description" content="Free no-build browser RTS — 13-episode campaign, permadeath dossiers, serverless co-op.">
+<meta name="twitter:image" content="https://starleft.vercel.app/assets/og/og-card.png">
 <link rel="icon" href="favicon.ico" sizes="any">
 <link rel="icon" type="image/png" sizes="32x32" href="assets/favicon/favicon-32x32.png">
 <link rel="icon" type="image/png" sizes="16x16" href="assets/favicon/favicon-16x16.png">
@@ -21,7 +34,7 @@
 
 
   <div id="topbar">
-    <div class="stat" title="Venture Funding — spend it on Interns, hires and buildings">💰 <span id="gold">0</span> <span class="lbl">Funding</span></div>
+    <div class="stat" title="Venture Funding — spend it on Interns, hires and buildings">💰 <span id="gold">0</span> <span id="income" class="lbl" title="Income per second (rolling)"></span> <span class="lbl">Funding</span></div>
     <div class="stat" title="Headcount vs capacity — build more Open-Plan HQs to hire more">👥 <span id="supply">0/0</span> <span class="lbl">Headcount</span></div>
     <div class="lbl">Episode <span id="mapname">—</span></div>
     <div id="objective">Disrupt the competition.</div>
@@ -35,9 +48,12 @@
         <button class="tc-btn" id="btn-roster" title="Veterans &amp; Memorial">Roster</button>
         <button class="tc-btn" id="btn-events" title="Notifications log">Events<span id="events-badge" class="tc-badge" style="display:none;">0</span></button>
         <button class="tc-btn" id="btn-voice" title="Toggle unit &amp; narrator voices">🔊 Voices</button>
+        <button class="tc-btn" id="btn-docs" title="Field Manual (controls &amp; mechanics)">Field Manual</button>
+        <button class="tc-btn" id="btn-settings" title="Settings &amp; accessibility">\u2699 Settings</button>
         <button class="tc-btn" id="btn-save" title="Save game (⌘/Ctrl+S)">Save</button>
         <button class="tc-btn" id="btn-load" title="Load game">Load</button>
         <button class="tc-btn" id="btn-fs" title="Toggle fullscreen">Fullscreen</button>
+        <button class="tc-btn" id="btn-invite" onclick="mpQuickInvite()" title="Co-found my startup — share a co-op invite link">🤝 Invite a Friend</button>
         <button class="tc-btn" id="btn-netq" title="Toggle connection quality panel">Network Signal</button>
         <button class="tc-btn" id="btn-mpdebug" onclick="mpUiToggleDebug()" title="Multiplayer debug log">🐞 MP Debug</button>
       </div>
@@ -102,6 +118,11 @@
         <button class="tc-btn grp-chip" data-g="2" title="Group 2 (tap recall, hold set)">2</button>
         <button class="tc-btn grp-chip" data-g="3" title="Group 3 (tap recall, hold set)">3</button>
         <button class="tc-btn grp-chip" data-g="4" title="Group 4 (tap recall, hold set)">4</button>
+        <button class="tc-btn grp-chip" data-g="5" title="Group 5 (tap recall, hold set)">5</button>
+        <button class="tc-btn grp-chip" data-g="6" title="Group 6 (tap recall, hold set)">6</button>
+        <button class="tc-btn grp-chip" data-g="7" title="Group 7 (tap recall, hold set)">7</button>
+        <button class="tc-btn grp-chip" data-g="8" title="Group 8 (tap recall, hold set)">8</button>
+        <button class="tc-btn grp-chip" data-g="9" title="Group 9 (tap recall, hold set)">9</button>
       </span>
     </div>
   </div>
@@ -124,7 +145,7 @@
   <!-- Audio unlock / boot gate -->
   <div class="overlay boot-gate" id="bootGate">
     <div class="boot-actions">
-      <button class="boot-simulate" id="btn-simulate" type="button">Simulate ?</button>
+      <button class="boot-simulate" id="btn-simulate" type="button">Simulate ▶</button>
       <button class="boot-sound-toggle" id="btn-boot-sound" type="button" aria-label="Disable music" title="Disable music">♪</button>
     </div>
   </div>
@@ -152,9 +173,13 @@
       <div class="logo-text">STARLEFT<small>DISRUPT · SCALE · CONQUER</small></div>
     </div>
     <nav class="menu-nav">
-      <button class="sc-btn" onclick="showDocs(true)">New Campaign</button>
+      <button class="sc-btn" id="btn-continue" onclick="continueGame()" style="display:none;">▶ Continue<small id="btn-continue-sub"></small></button>
+      <button class="sc-btn" onclick="startGame(0)">New Campaign</button>
       <button class="sc-btn" id="btn-mp" onclick="showMpLobby()">Multiplayer</button>
+      <button class="sc-btn" onclick="showSkirmish()">Skirmish</button>
       <button class="sc-btn" onclick="openLoadMenu()">Load Game</button>
+      <button class="sc-btn" onclick="showDocs(false)">Field Manual</button>
+      <button class="sc-btn" onclick="showSettings()">Settings</button>
     </nav>
     <aside class="menu-news">
       <h4>Field Tip</h4>
@@ -174,6 +199,33 @@
       <div id="mapButtons"></div>
       <!-- Map Selection is reached only from the Load Game panel now, so ◀ Back returns there. -->
       <button class="sc-btn back" onclick="hideSub('mapScreen'); showSub('loadScreen')">◀ Back</button>
+    </div>
+  </div>
+
+  <!-- Settings & accessibility (T4-2/T4-3): difficulty, colorblind bars, big text, reduce FX, audio, telemetry -->
+  <div class="overlay submenu" id="settingsScreen" style="display:none;">
+    <div class="submenu-panel">
+      <h2>Settings</h2>
+      <div id="settingsBody" class="settings-body"></div>
+      <button class="sc-btn back" onclick="hideSub('settingsScreen')">◀ Back</button>
+    </div>
+  </div>
+
+  <!-- Skirmish setup (T3-2 dailies/randoms + T3-4 mutators); the campaign is untouched -->
+  <div class="overlay submenu" id="skirmishScreen" style="display:none;">
+    <div class="submenu-panel">
+      <h2>Skirmish</h2>
+      <div class="panel-label">No campaign stakes — a daily seed everyone shares, random rolls, stackable mutators</div>
+      <div id="skirmish-mutators" class="skirmish-muts"></div>
+      <div class="panel-label" style="margin-top:6px;">Run investment — spend campaign M3$ on this run (T3-9)</div>
+      <div id="skirmish-boosts" class="skirmish-muts"></div>
+      <div class="submenu-actions">
+        <button class="sc-btn" onclick="startDailySkirmish()">📅 Daily Disruption</button>
+        <button class="sc-btn" onclick="startRandomSkirmish()">🎲 Random Skirmish</button>
+      </div>
+      <div class="panel-label" style="margin-top:10px;">…or replay any quarter as a skirmish</div>
+      <div id="skirmishMapButtons"></div>
+      <button class="sc-btn back" onclick="hideSub('skirmishScreen')">◀ Back</button>
     </div>
   </div>
 
@@ -264,6 +316,7 @@
                 <span>Mode</span>
                 <button class="mp-mode on" id="mp-mode-skirmish" onclick="mpUiSetMode('skirmish')">Skirmish</button>
                 <button class="mp-mode" id="mp-mode-campaign" onclick="mpUiSetMode('campaign')">Campaign</button>
+                <button class="mp-mode" id="mp-mode-duel" onclick="mpUiSetMode('duel')">⚔ Duel (PvP)</button>
               </div>
               <div class="mp-map-row"><label>Quarter</label><select id="mp-map-pick"></select></div>
               <button class="sc-btn" id="mp-start" onclick="mpHostStartClick()" disabled>▶ Start Match</button>
@@ -381,10 +434,11 @@
         <b>The hustle:</b> Mine <b>Funding</b> 💰, hire an army of Interns &amp; Growth Cyborgs, and disrupt two rival empires into bankruptcy.<br>
         <b>Tap / click</b> — select your unit, or command it: tap an enemy to attack, a gold mine to mine, ground to move, an unfinished building to send an Intern<br>
         <b>Drag</b> — pan the map &nbsp;•&nbsp; <b>Pinch</b> (or mouse <span class="key">wheel</span> / on-screen <span class="key">＋－</span>) — zoom &nbsp;•&nbsp; <b>Minimap</b> — tap to jump<br>
-        <b>Units box-select</b> — <span class="key">Shift</span>+drag, or tap the <span class="key">▭</span> button then drag &nbsp;•&nbsp; desktop also: <span class="key">WASD</span>/<span class="key">arrows</span> &amp; screen-edge scroll, right-click to command<br>
+        <b>Units box-select</b> — <span class="key">Shift</span>+drag, or tap the <span class="key">▭</span> button then drag &nbsp;•&nbsp; <span class="key">F2</span> selects the whole army &nbsp;•&nbsp; <span class="key">A</span>+click = attack-move &nbsp;•&nbsp; desktop also: <span class="key">WASD</span>/<span class="key">arrows</span> &amp; screen-edge scroll, right-click to command<br>
         <b>Build</b> — select an <b>Intern</b>, tap a build button, then tap a spot &nbsp;•&nbsp; <span class="key">Esc</span> or the <span class="key">✕</span> button cancels placement<br>
-        <b>Control groups</b> — <span class="key">Ctrl</span>/<span class="key">⌘</span>+<span class="key">1-9</span> (or hold a <span class="key">1-4</span> chip) to set; tap <span class="key">1-9</span> / a chip to reselect (double-tap to jump there)
+        <b>Control groups</b> — <span class="key">Ctrl</span>/<span class="key">⌘</span>+<span class="key">1-9</span> (or hold a <span class="key">1-9</span> chip) to set; tap <span class="key">1-9</span> / a chip to reselect (double-tap to jump there)
       </div>
+      <div id="doc-tips" class="doc-tips"></div><!-- mechanics tips (js/tips.js MECH_TIPS) — moved here from the menu carousel (T0-11) -->
       <button class="sc-btn back" id="docFooterBtn" onclick="docFooter()">◀ Back</button>
     </div>
   </div>
@@ -397,6 +451,8 @@
         New to the grind? Rod will walk you through the basics — mining, hiring, building, fighting,
         and getting your team out alive. You can <b>Skip</b> at any time.
       </div>
+      <div class="panel-label">Difficulty</div>
+      <div id="difficultyRow" class="diff-row"></div>
       <button class="sc-btn" onclick="TUTORIAL.choosePrompt(true)"><span class="ic">▶</span> Show me the ropes</button>
       <button class="sc-btn back" onclick="TUTORIAL.choosePrompt(false)">⊘ I know what I'm doing</button>
     </div>
@@ -428,12 +484,15 @@
      config FIRST (constants/DEF/MAPS); main LAST (the only file with top-level executing
      code: event listeners + RAF loop). See js/<file>.js headers. -->
 <script src="js/config.js"></script>
+<script src="js/telemetry.js"></script><!-- cookieless funnel events (T0-10): consent + DNT gated, endpoint empty by default → sends nothing -->
+<script src="js/achievements.js"></script><!-- startup-satire achievements (T3-5): localStorage-only, ACH.fire(event) hooks -->
 <script src="js/perf.js"></script><!-- render benchmark + instrumentation harness; OFF (zero hot-loop cost) unless ?perf=1 -->
 <script src="js/quality.js"></script><!-- adaptive render-quality controller (QUAL); inert at full FPS, degrades dpr only under sustained load -->
 <script src="js/tips.js"></script>
 <script src="js/assets.js"></script>
 <script src="js/muzzle_data.js"></script>
 <script src="js/music.js"></script>
+<script src="js/sfx.js"></script><!-- combat/UI WebAudio one-shots (T0-3): pooled, rate-limited, missing-file-safe; clips from _dev/gen/gen_sfx.py -->
 <script src="js/state.js"></script>
 <script src="js/mega_neon_maps.js"></script>
 <script src="js/building_neon_maps.js"></script>
@@ -450,6 +509,9 @@
 <script src="js/lore_data.js"></script>
 <script src="js/dialog_data.js"></script>
 <script src="js/lore.js"></script>
+<script src="js/sharecard.js"></script><!-- veteran/memorial share-card PNG (T0-6): offscreen card render + share/clipboard/download ladder -->
+<script src="js/fallen_scene.js"></script><!-- "Fallen" memorial interstitial (T1-1): solo-gated 2.6s beat on a Lv2+ veteran death -->
+
 <script src="js/madosis.js"></script><!-- Madosis (madness/sanity) runtime: meter, episodes, mad-dog rescue, Kennel; balance in config.js MADOSIS/KENNEL -->
 <script src="js/villains.js"></script><!-- VILLAINS (big bosses): spawn/driver/abilities/phases, boss win condition, campaign gating; balance in VILLAINS table -->
 <script src="js/villain_neon_maps.js"></script><!-- per-frame villain glow anchors (authored later via the calibrator); aura works without it -->
@@ -485,6 +547,8 @@
 <script src="js/net/voice-chat.js"></script>
 <script src="js/net/features.js"></script>
 <script src="js/perf_scenarios.js"></script><!-- perf harness deterministic worst-case scenes (test-only; needs loadMap/newHubMap/mkUnit) -->
+<script src="js/mutators.js"></script><!-- skirmish-only run modifiers (T3-4): deterministic hooks + the Valuation multiplier -->
+<script src="js/skirmish_gen.js"></script><!-- solo skirmish + daily/random seed-rolled maps (T3-2); transient MAPS slot, never saved -->
 <script src="js/tutorial.js"></script><!-- Quarter I guided tutorial (solo, purely local/cosmetic): coach panel + world focus + Rod voice; hooks in ui/core/render/madosis -->
 <script src="js/main.js"></script>
 <script src="js/sandbox.js"></script><!-- LOCALHOST-ONLY in-game battle test tool ("🧪 Sandbox" on the title menu): map loader + free unit/building placement, god-mode/reveal/freeze-end/funding, sim-speed scrub. Inert (and absent) on the deployed build. Sets the SANDBOX/_godmode/_sandboxReveal/_sandboxNoEnd flags read by main/units/render/core. -->

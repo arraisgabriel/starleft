@@ -37,6 +37,10 @@
     const el=captionEl(); if(el) el.classList.remove('show');
     if(typeof VOICE!=='undefined' && VOICE.stopScene) VOICE.stopScene();
     if(typeof refreshUI==='function') refreshUI();
+    // T1-7: the Ep VII flash monologue resolves onto the MEMORIAL — the canonical moment the
+    // whole roster joins it. Auto-open once, right after Nino's last line fades.
+    if(state.hub && typeof fallenVets!=='undefined' && fallenVets.length && typeof showRoster==='function')
+      setTimeout(()=>{ try{ showRoster(); }catch(e){} }, 700);
   }
 
   // Begin the cutscene; falls back to simply framing the hub if there's nothing (or no speaker) to play.

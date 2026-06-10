@@ -36,6 +36,14 @@ function sayUnitSelected(u){
   // falls back to their unit type's pool.
   const heroPool = (u.hero && u.heroId && typeof HERO_SELECT_LINES!=='undefined') ? HERO_SELECT_LINES[u.heroId] : null;
   const usedHero = !!(heroPool && heroPool.length);
+  // T0-5/T1-6: a unit with a dossier sometimes speaks from its OWN backstory instead of the type
+  // pool (~30%) — text-only (templated lines have no voice clip), so the bark stays silent audio-wise.
+  if(!usedHero && u.lore && typeof DOSSIER_SELECT_LINES!=='undefined' && DOSSIER_SELECT_LINES.length
+     && typeof buildDossier==='function' && Math.random()<0.30){
+    const d=buildDossier(u);
+    pushDialog(u, d.fill(DOSSIER_SELECT_LINES[(Math.random()*DOSSIER_SELECT_LINES.length)|0]), { type:'select', tone:'neutral' });
+    return;
+  }
   const pool = usedHero ? heroPool : ((typeof SELECT_LINES!=='undefined' && SELECT_LINES[u.type]) || null);
   if(!pool || !pool.length) return;
   const line = _pickLine(u, pool);
@@ -61,6 +69,10 @@ function onSelectionRefresh(sel){
   const u = sel[0];
   if(u.id === _lastSel.id) return;                 // same unit still selected → no re-bark
   _lastSel.id = u.id;
+  // T0-5 personhood: mint the lightweight identity on FIRST selection (deterministic seed; the full
+  // dossier prose still unlocks at Lv2). Clients never mutate sim state — they read it from snapshots.
+  if(u.type!=='worker' && typeof netRole!=='undefined' && netRole!=='client' && typeof ensureDossier==='function') ensureDossier(u);
+  if(u.type!=='worker' && typeof TUTORIAL!=='undefined' && TUTORIAL.fireContextual) TUTORIAL.fireContextual('dossier-discover', G);
   sayUnitSelected(u);
 }
 

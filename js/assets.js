@@ -27,6 +27,8 @@ function lorePath(voice, idx){      return VOICE_BASE + 'lore/'  + voice      + 
 function crawlPath(mapIdx){         return VOICE_BASE + 'crawl/ep_' + String(mapIdx).padStart(2,'0') + '.mp3'; }
 function scenePath(id){             return VOICE_BASE + 'scene/' + id + '.mp3'; }   // scripted-cutscene lines (e.g. Nino's Ep VII flash monologue), keyed by an explicit line id
 function tutorialPath(id){          return VOICE_BASE + 'tutorial/' + id + '.mp3'; } // Quarter I tutorial coach lines (Rod-clone narrator), keyed by step/contextual id
+const SFX_BASE = AUDIO_BASE + 'sfx/';
+function sfxPath(name){ return SFX_BASE + name + '.wav'; }                 // combat/UI one-shots + amb_<biome> drones (js/sfx.js / music.js)
 const MUSIC_MAIN = MUSIC_BASE + 'cyberpunk-rts-theme-main.mp3';
 const MUSIC_MENU_LOOP = MUSIC_BASE + 'cyberpunk-rts-theme-menu-loop.mp3';
 const MUSIC_FLASH = MUSIC_BASE + 'gorillaz-the-sad-god.mp3';   // Episode VII "the flash" cinematic cue (bomb drop → hub)

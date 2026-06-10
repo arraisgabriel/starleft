@@ -55,6 +55,33 @@
     toast('Invite sent');
   };
 
+  /* ---------- T3-8: one-tap "Invite a friend" from the in-game top menu ----------
+     Shares the #mp=CODE invite link for the CURRENT room, or spins a room up first when solo.
+     The link previews as the rich OG card (T0-7), so a pasted invite looks like an invitation. */
+  function _shareInvite(code){
+    const link = mpInviteLink(code);
+    const text = 'Co-found my startup — drop into STARLEFT co-op: ';
+    const copy = ()=>{
+      if(navigator.clipboard && navigator.clipboard.writeText)
+        navigator.clipboard.writeText(text+link).then(()=>toast('📋 Invite link copied — send it to a co-founder')).catch(()=>toast(link));
+      else toast(link);
+    };
+    if(navigator.share) navigator.share({ title:'STARLEFT co-op', text, url:link }).catch((e)=>{ if(!e || e.name!=='AbortError') copy(); });
+    else copy();
+  }
+  window.mpQuickInvite = function(){
+    const code = window.MP_SESSION && MP_SESSION.code;
+    if(code){ _shareInvite(code); return; }
+    whenMP(()=>{
+      if(typeof mpAvailable==='function' && !mpAvailable()){ toast('Multiplayer unavailable on this network'); return; }
+      const go=()=>{
+        if(typeof mpCreateRoom==='function') mpCreateRoom();
+        setTimeout(()=>{ const c=window.MP_SESSION && MP_SESSION.code; if(c) _shareInvite(c); else toast('Create a room, then tap Invite again'); }, 400);
+      };
+      if(typeof mpUiEnsureHandleThen==='function') mpUiEnsureHandleThen(go); else go();
+    });
+  };
+
   /* ---------- QR rendering for the invite link (vendored qrcode-generator) ---------- */
   window.mpRenderQR = async function(el, text){
     if(!el) return;

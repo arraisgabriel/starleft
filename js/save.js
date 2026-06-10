@@ -167,7 +167,7 @@ function listSaves(){
     if(!key || key.indexOf(SAVE_PREFIX)!==0) continue;
     let d; try{ d=JSON.parse(localStorage.getItem(key)); }catch(_){ continue; }
     if(!isSaveBlob(d) || !saveVersionOk(d)) continue;
-    out.push({key, auto:key===AUTO_KEY, mapName:d.mapName || (d.cfg&&d.cfg.name) || 'Quarter', gameTime:d.gameTime||d.time||0, savedAt:d.savedAt||0, mapIndex:saveMapIndex(d)});
+    out.push({key, auto:key===AUTO_KEY, mapName:d.mapName || (d.cfg&&d.cfg.name) || 'Quarter', gameTime:d.gameTime||d.time||0, savedAt:d.savedAt||0, mapIndex:saveMapIndex(d), hub:saveIsHubMap(d)});
   }
   out.sort((a,b)=> b.savedAt-a.savedAt);     // most recently saved first (autosave included in order)
   return out;
@@ -180,6 +180,7 @@ function enforceCap(){
 /* ---------- public: save / autosave / load ---------- */
 function saveGame(){
   if(netRole!=='solo'){ toast('Saving is disabled in co-op'); return; }
+  if(G && G._skirmish){ toast('Skirmish runs aren\'t saved — the campaign is untouched'); return; }
   if(!(G && running && !G.over)){ toast('Can only save during a match'); return; }
   try{
     const payload=serializeGame(), now=payload.savedAt;
@@ -194,6 +195,7 @@ function saveGame(){
 }
 function autosaveGame(){
   if(netRole!=='solo') return;                    // never autosave a co-op (half-applied) state
+  if(G && G._skirmish) return;                    // skirmish never overwrites the campaign autosave (T3-2)
   if(!(G && running && !G.over)) return;
   try{ const p=serializeGame(); if(typeof fallenVets!=='undefined' && fallenVets) p.fallen=fallenVets; localStorage.setItem(AUTO_KEY, JSON.stringify(p)); }catch(_){}
 }
@@ -219,6 +221,30 @@ function loadGame(key){
   toast('Loaded: '+(d.mapName||'game'));
 }
 
+/* ---------- "▶ Continue" (T0-8): one-click resume of the most recent autosave ---------- */
+// Episode-aware label for a save: map index → the crawl's episode/title; hub saves read as the H.U.B.
+function saveEpisodeLabel(idx, isHub){
+  if(isHub) return 'H.U.B. — between quarters';
+  const m = MAPS[idx], cr = m && m.crawl;
+  return cr ? (cr.episode + ' — ' + cr.title) : ((m && m.name) || 'Quarter');
+}
+function continueGame(){ loadGame(AUTO_KEY); }
+// Show/hide + label the main-menu Continue button from the autosave (legacy autosaves without a
+// clean map index fall back to the raw map name; storage empty/disabled hides the button).
+function syncContinueButton(){
+  const btn=document.getElementById('btn-continue'); if(!btn) return;
+  let d=null;
+  try{ d=JSON.parse(localStorage.getItem(AUTO_KEY)); }catch(_){ d=null; }
+  if(!isSaveBlob(d) || !saveVersionOk(d)){ btn.style.display='none'; return; }
+  const sub=document.getElementById('btn-continue-sub');
+  if(sub){
+    let lbl;
+    try{ lbl=saveEpisodeLabel(saveMapIndex(d), saveIsHubMap(d)); }catch(_){ lbl=d.mapName||'Quarter'; }
+    sub.textContent = lbl + ' · ' + fmtElapsed(d.gameTime||0) + ' in';
+  }
+  btn.style.display='';
+}
+
 /* ---------- "Load Game" menu ---------- */
 function openLoadMenu(){
   buildLoadSlots();
@@ -239,9 +265,10 @@ function buildLoadSlots(){
   if(!saves.length){ wrap.innerHTML='<div class="panel-label">No saved games yet</div>'; return; }
   saves.forEach(s=>{
     const row=document.createElement('div'); row.className='save-row';
+    let ep=''; try{ ep=saveEpisodeLabel(s.mapIndex, s.hub); }catch(_){ ep=''; }
     row.innerHTML=`<button class="map-btn save-load" title="Load this save">
-        <b>${s.auto?'★ ':''}${s.mapName||'Quarter'}</b>
-        <span class="mn">elapsed ${fmtElapsed(s.gameTime)}</span>
+        <b>${s.auto?'★ Autosave — ':''}${ep||s.mapName||'Quarter'}</b>
+        <span class="mn">${s.mapName||''} · elapsed ${fmtElapsed(s.gameTime)}</span>
         <small>${fmtWhen(s.savedAt)}</small>
       </button>
       <button class="tc-btn save-exp" title="Export to file">⬇</button>

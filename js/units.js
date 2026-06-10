@@ -71,6 +71,87 @@ function issueMove(state, unit, wx, wy, cmd){
 }
 
 /* =====================================================================
+   MANUAL ACTIVE ABILITIES (T2-2) — one per combat unit, every effect reuses
+   tech that already exists (buffs, splash damage, siege, cooldowns, quakes).
+   u.abilCd is sim state (serialized; missing on legacy saves = ready).
+   ===================================================================== */
+const ABILITIES = {
+  soldier:  { name:'Overclock',      icon:'⚡', cd:15, hint:'+50% damage for 4s' },
+  ranger:   { name:'Focus Shot',     icon:'🎯', cd:12, hint:'next shot deals double damage' },
+  hustler:  { name:'Caffeine Dash',  icon:'☕', cd:10, hint:'sprint burst for 2s' },
+  lobbyist: { name:'Lobby Blitz',    icon:'🎩', cd:10, hint:'instantly reload for an extra shot' },
+  foodtruck:{ name:'Napalm Special', icon:'🔥', cd:12, hint:'flame nova around the truck' },
+  auditor:  { name:'Siege Protocol', icon:'📐', cd:2,  hint:'toggle manual siege lock' },
+  founder:  { name:'Stomp',          icon:'💥', cd:14, hint:'ground quake around the mech' },
+  bomber:   { name:'Payload Drop',   icon:'🪂', cd:12, hint:'instantly reload the racks' },
+};
+// execute each selected unit's ability if it's off cooldown. Deterministic, sim-mutating —
+// always reach this through netAbility (js/net/commands.js) so host/solo/rollback agree.
+function castAbility(state, units){
+  let any=false;
+  for(const u of (units||[])){
+    if(!u || u.dead || u.storedIn || u.kind!=='unit' || u.owner!=='player') continue;
+    const spec=ABILITIES[u.type]; if(!spec) continue;
+    if((u.abilCd||0)>0) continue;
+    const fxOk = !window._rbReplaying;
+    switch(u.type){
+      case 'soldier':  u.buff={ dmgMul:1.5, regenMul:1, until:state.time+4 }; break;             // vetBuff() multiplies dmg
+      case 'ranger':   u._focusShot=true; break;
+      case 'hustler':  u._dashT=2.0; break;                                                       // followPath speed mult
+      case 'lobbyist':
+      case 'bomber':   u.cd=0; break;                                                             // instant reload
+      case 'foodtruck':{
+        const R=2.4*TILE;
+        for(const o of state.entities){ if(o.dead||o.storedIn||!isHostile(u,o)) continue;
+          if(o.owner!=='player'&&o.owner!=='enemy') continue;
+          if(o.air) continue;
+          if(dist(o,u)<=R) damage(state,o,24,u); }
+        if(fxOk && typeof spawnShockwaveC==='function') spawnShockwaveC(u.x,u.y,R,'rgb(255,150,60)');
+        break;
+      }
+      case 'auditor':  u._siegeLock=!u._siegeLock; if(!u._siegeLock){ u.sieged=false; u._setupT=0; } break;
+      case 'founder':{
+        const R=2.6*TILE;
+        for(const o of state.entities){ if(o.dead||o.storedIn||!isHostile(u,o)) continue;
+          if(o.owner!=='player'&&o.owner!=='enemy') continue;
+          if(o.air) continue;
+          if(dist(o,u)<=R) damage(state,o,30,u); }
+        if(fxOk){ if(typeof spawnShockwaveC==='function') spawnShockwaveC(u.x,u.y,R,'rgb(190,140,255)');
+          state._shake=Math.max(state._shake||0,6); }
+        break;
+      }
+      default: continue;
+    }
+    u.abilCd=spec.cd; u._abilCastT=state.time;   // glow/feedback timestamp (render reuses villain idiom)
+    any=true;
+  }
+  if(any && !window._rbReplaying){ if(typeof refreshUI==='function') refreshUI(); }
+  return any;
+}
+
+// T2-3: attack-move the current selection to (wx,wy) — units advance and engage anything en route.
+// The amove handler + auto-acquire respect already exist; this just issues the order with formation.
+function commandAttackMove(state, wx, wy){
+  const units=state.selection.filter(e=>!e.dead && !e.storedIn && e.kind==='unit' && e.owner==='player'
+    && ((netRole==='solo') || (e.ctrl||'p1')===actingCtrl(state)));
+  if(!units.length) return;
+  const cols=Math.ceil(Math.sqrt(units.length));
+  units.forEach((u,i)=>{ resetMotion(u);
+    const tx=wx+((i%cols)-(cols-1)/2)*26, ty=wy+((Math.floor(i/cols))-(cols-1)/2)*26;
+    issueMove(state,u,tx,ty,{type:'amove',x:tx,y:ty}); });
+  if(!window._rbReplaying){ spawnRing(wx,wy,'#ff9a66'); }
+  return true;
+}
+// T2-3: write a stance onto units (sim field; undefined = legacy aggressive)
+function setStance(state, units, stance){
+  for(const u of (units||[])){
+    if(!u || u.dead || u.kind!=='unit' || u.owner!=='player') continue;
+    u.stance = (stance==='aggr') ? undefined : stance;   // keep saves clean: default stays absent
+    if(stance==='hold'){ u.path=null; u.dest=null; if(u.cmd && u.cmd.type==='move') u.cmd=null; }
+  }
+}
+
+/* =====================================================================
    COMMANDS (right-click context)
    ===================================================================== */
 function commandUnits(state, wx, wy, target){
@@ -90,7 +171,11 @@ function commandUnits(state, wx, wy, target){
     return;
   }
 
-  if(target && target.owner==='player' && target.type==='hq' && !target.constructing){
+  // T4-5 duel: the rival founder's units/buildings are COMMAND TARGETS, not friendlies —
+  // any of their entities routes straight to the attack branch below.
+  const _pvpFoe = state._pvp && target && target.owner==='player' && units.length
+    && (target.ctrl||'p1')!==(units[0].ctrl||'p1');
+  if(target && !_pvpFoe && target.owner==='player' && target.type==='hq' && !target.constructing){
     if(issueEnterHq(state, units, target)) return;
   }
 
@@ -136,7 +221,7 @@ function commandUnits(state, wx, wy, target){
   // focus-heal: a selected healer commanded onto a friendly unit locks onto and mends it,
   // then reverts to auto-heal once it is full (see updateUnit's healunit handler). Non-healers
   // in the selection escort to the target. HQ/buildings/mad-dogs/captives are handled above.
-  if(target && target.owner==='player' && target.kind==='unit' && !target.storedIn && !target.madDog){
+  if(target && !_pvpFoe && target.owner==='player' && target.kind==='unit' && !target.storedIn && !target.madDog){
     const healers = units.filter(u=> u!==target && DEF[u.type] && DEF[u.type].heal>0);
     if(healers.length){
       healers.forEach(u=>{ resetMotion(u); u.sprinting=false; u.cmd={type:'healunit', target}; u.state='heal'; u._toHeal=false; });
@@ -148,11 +233,11 @@ function commandUnits(state, wx, wy, target){
     }
     // no healer selected → fall through to the normal move handler (squad escorts to the ally)
   }
-  if(target && target.owner && target.owner!=='player'){
+  if(target && target.owner && (target.owner!=='player' || _pvpFoe)){
     if(state.hub && target.hubPoi && typeof hubCommandPoi==='function'){
       if(hubCommandPoi(state, units, target)) return;
     }
-    // attack
+    // attack (incl. the rival founder's assets in a duel)
     units.forEach(u=> attackTarget(state,u,target));
     spawnRing(target.x,target.y,'#ff6b6b');
     return;
@@ -319,7 +404,9 @@ function tryTrain(state, building, type){
   const eco=playerEco(state, building.ctrl);          // train from the producing player's pool
   if(eco.gold < d.cost){ toast('Not enough gold'); return; }
   if(d.supply && eco.supply + (state.queuedSupply||0) + d.supply > eco.supplyCap){
-    toast('Not enough supply — build a Command Center'); return;
+    toast('Headcount full — build another Open-Plan HQ or a Satellite Office');
+    if(typeof TUTORIAL!=='undefined' && TUTORIAL.fireContextual) TUTORIAL.fireContextual('supply-cap', state);   // teach supply the moment it bites (T2-5)
+    return;
   }
   eco.gold -= d.cost;
   building.prodQueue.push(type);
@@ -416,6 +503,10 @@ function canHitAir(e){ const d=DEF[e.type]||{}; return !!d.antiAir; }
 function isHostile(a,b){
   if(!a||!b||a===b) return false;
   if(a.madDog||b.madDog) return true;
+  // T4-5 duel: in a PvP match the two FOUNDERS are hostile — split by controller, not owner.
+  // Reads serialized state (G._pvp), so host/rollback replay identically.
+  if(typeof G!=='undefined' && G && G._pvp && a.owner==='player' && b.owner==='player')
+    return (a.ctrl||'p1')!==(b.ctrl||'p1');
   return a.owner!==b.owner;
 }
 function nearestEnemy(state, e, radius){
@@ -477,11 +568,16 @@ function spawnTrained(state,b,type){
   const u=mkUnit(state,type,b.owner,placed[0],placed[1]);  // mkUnit already pushes to entities
   if(b.owner==='player') u.ctrl = b.ctrl || 'p1';          // trained units inherit the producing player's tag
   if(b.rally){ if(b.owner==='player'){ issueMove(state,u,b.rally.x,b.rally.y,{type:'amove',x:b.rally.x,y:b.rally.y}); } }
+  if(b.owner==='player' && !window._rbReplaying && typeof SFX!=='undefined') SFX.train();   // T0-3: train-ready cue
+  if(b.owner==='enemy' && DEF[type] && DEF[type].air && !window._rbReplaying
+     && typeof TUTORIAL!=='undefined' && TUTORIAL.fireContextual) TUTORIAL.fireContextual('antiair-needed', state);   // T2-6: teach anti-air the moment enemy air exists
   recomputeSupply(state);
 }
 
 function updateUnit(state,u,dt){
   if(u.captive){ u._actState=null; u.vx=0; u.vy=0; u.path=null; return; }   // imprisoned: stands inert until freed
+  if(u.abilCd>0) u.abilCd=Math.max(0, u.abilCd-dt);     // T2-2: manual-ability cooldown (sim state; legacy saves → undefined = ready)
+  if(u._dashT>0) u._dashT=Math.max(0, u._dashT-dt);     // Caffeine Dash burst window
   // CYAN NINJA: its movement+combat are fully owned by updateNinja (runs later this tick). Yield here so
   // normal auto-acquire/melee-camp never touches it. Flee (low HP) drops back to the standard move handler.
   if(u._ninjaAI && !u._fleeing) return;
@@ -511,22 +607,34 @@ function updateUnit(state,u,dt){
     cmd=u.cmd;                                 // madRescueTick may have cleared the cmd
   }
 
-  // ---- siege auto-deploy (Auditor): set up when enemies near & not moving ----
+  // ---- siege deploy (Auditor): auto when enemies near & not moving, or MANUALLY LOCKED via the
+  // ability button (T2-2). A move order always breaks siege (and drops the manual lock).
   if(def.siege){
     const sg=def.siege;
     const moving = cmd && (cmd.type==='move'||cmd.type==='hold'); // move or Stop/hold breaks siege
-    const foe = nearestEnemy(state,u, sg.range*TILE);
-    if(foe && !moving){ u._setupT=(u._setupT||0)+dt; if(u._setupT>=sg.setup) u.sieged=true; }
-    else { u._setupT=0; u.sieged=false; }
+    const _siegeOn=()=>{ if(!window._rbReplaying){ if(typeof SFX!=='undefined') SFX.siege();
+      if(u.owner==='player' && typeof ACH!=='undefined') ACH.fire('siege');   // T3-5
+      if(u.owner==='player' && typeof TUTORIAL!=='undefined' && TUTORIAL.fireContextual) TUTORIAL.fireContextual('auditor-siege', state); } };
+    if(u._siegeLock){
+      if(moving){ u._siegeLock=false; u.sieged=false; u._setupT=0; }
+      else if(!u.sieged){ u._setupT=(u._setupT||0)+dt;
+        if(u._setupT>=sg.setup){ _siegeOn(); u.sieged=true; } }
+    } else {
+      const foe = nearestEnemy(state,u, sg.range*TILE);
+      if(foe && !moving){ u._setupT=(u._setupT||0)+dt;
+        if(u._setupT>=sg.setup){ if(!u.sieged) _siegeOn(); u.sieged=true; } }
+      else { u._setupT=0; u.sieged=false; }
+    }
   }
 
   // ---- explicit focus-heal (player commanded this healer onto a specific ally) ----
-  // Locks onto cmd.target and never auto-diverts to a closer wounded unit. When the target is
-  // gone/dead/full, clear the cmd and fall through to the auto-heal block the SAME frame
-  // ("heal once, then auto") — clearing the local `cmd` too so the auto-pick guard re-fires.
+  // STICKY PRIORITY (T1-4): the locked target stays top priority while wounded, but when it's
+  // FULL the healer keeps the lock and tops off others (auto-heal below also accepts a 'healunit'
+  // cmd) instead of fully reverting. A dead/gone target still clears the lock.
   if(def.heal && cmd && cmd.type==='healunit'){
     const t=cmd.target;
-    if(!t || t.dead || t.hp>=t.maxHp){ cmd=u.cmd=null; u._toHeal=false; }
+    if(!t || t.dead){ cmd=u.cmd=null; u._toHeal=false; }
+    else if(t.hp>=t.maxHp){ u._toHeal=false; /* lock kept; fall through to triage and top off others */ }
     else {
       u._healTarget=t;
       const reach=u.range*TILE+entRadius(t);
@@ -534,19 +642,31 @@ function updateUnit(state,u,dt){
         const m=healMul(u), before=t.hp;
         t.hp=Math.min(t.maxHp, before + def.heal*m*dt);
         const restored=t.hp-before;
+        if(restored>0 && !window._rbReplaying && typeof spawnFloater==='function') spawnFloater(state,t,restored,'heal');
         if(u.hero && restored>0) gainHealXp(u, restored/m, state); }
       else { if(!u._toHeal||(u._healRepath||0)<=0){ issueMoveKeepCmd(state,u,t.x,t.y); u._toHeal=true; u._healRepath=0.5; } u._healRepath-=dt; followPath(state,u,dt); }
       return;
     }
   }
 
-  // ---- auto-heal (Recruiter / Drugztore Delivery Drone): follow & mend the most-hurt ally in sight ----
+  // ---- auto-heal (Recruiter / Drugztore Delivery Drone): TRIAGE, not nearest (T1-4) ----
+  // Score = missing-HP fraction, weighted up for veterans (stars) and heroes; distance only breaks
+  // ties. Deterministic (no RNG) so host/rollback replay identically. A small hysteresis keeps the
+  // current patient unless someone is clearly more urgent — no flip-flopping between equal wounds.
   // (a sprinting healer ignores wounded allies and keeps running with the squad)
   if(def.heal && !u.sprinting){
-    if(!cmd || cmd.type==='amove' || cmd.type==='move' || u.state==='idle'){
-      let best=null,bd=(u.sight*TILE)**2;
+    if(!cmd || cmd.type==='amove' || cmd.type==='move' || cmd.type==='healunit' || u.state==='idle'){
+      const R2=(u.sight*TILE)**2;
+      const score=(o)=> (1-o.hp/o.maxHp) * (1 + 0.12*(o.stars||0) + (o.hero?0.5:0));
+      let best=null,bs=0,bd=Infinity;
       for(const o of state.entities){ if(o.dead||o.storedIn||o.owner!==u.owner||o.kind!=='unit'||o===u)continue; if(o.hp>=o.maxHp)continue;
-        const dx=o.x-u.x,dy=o.y-u.y,dd=dx*dx+dy*dy; if(dd<bd){bd=dd;best=o;} }
+        const dx=o.x-u.x,dy=o.y-u.y,dd=dx*dx+dy*dy; if(dd>R2)continue;
+        const s=score(o);
+        if(s>bs+1e-9 || (Math.abs(s-bs)<=1e-9 && dd<bd)){ bs=s; bd=dd; best=o; } }
+      const cur=u._healTarget;
+      if(cur && !cur.dead && !cur.storedIn && cur.hp<cur.maxHp && best && best!==cur){
+        if(score(best) < score(cur)+0.15) best=cur;   // hysteresis: stay on the current patient
+      }
       u._healTarget=best;
     }
     const tgt=u._healTarget;
@@ -556,6 +676,7 @@ function updateUnit(state,u,dt){
         const m=healMul(u), before=tgt.hp;                            // hero medics (Biba) heal faster & scale with level
         tgt.hp=Math.min(tgt.maxHp, before + def.heal*m*dt);
         const restored=tgt.hp-before;                                 // XP credits BASE output (÷m) so leveling pace stays flat
+        if(restored>0 && !window._rbReplaying && typeof spawnFloater==='function') spawnFloater(state,tgt,restored,'heal');
         if(u.hero && restored>0) gainHealXp(u, restored/m, state); }
       else { if(!u._toHeal||(u._healRepath||0)<=0){ issueMoveKeepCmd(state,u,tgt.x,tgt.y); u._toHeal=true; u._healRepath=0.5; } u._healRepath-=dt; followPath(state,u,dt); }
       return;
@@ -564,8 +685,11 @@ function updateUnit(state,u,dt){
 
   // ---- auto-acquire for any combat unit (not workers, not healers) ----
   // (a balking/subdued MADOSIS unit doesn't fight; a feral mad dog DOES — cmd was cleared above)
+  // T2-3 stances: 'hold' only acquires what it can hit WITHOUT moving; 'def'/default acquire normally
+  // (the chase branch below is where the stances differ). u.stance undefined = legacy aggressive.
   if(def.dmg>0 && u.type!=='worker' && !madBalk && !u.subdued && (!cmd || cmd.type==='amove')){
-    const acqR=(def.siege && u.sieged ? def.siege.range : u.sight*0.9)*TILE;
+    const acqR=(u.stance==='hold' ? u.range
+               : (def.siege && u.sieged ? def.siege.range : u.sight*0.9))*TILE;
     const aggro = nearestEnemy(state,u,acqR);
     if(aggro){ u.autoTarget=aggro; } else if(u.autoTarget&&u.autoTarget.dead) u.autoTarget=null;
   }
@@ -599,7 +723,9 @@ function updateUnit(state,u,dt){
       u.path=null;
       faceTo(u,atk);
       u._actState='attack'; u._face = atk.x<u.x?-1:1;
-      if(u.cd<=0){ applyHit(state,u,atk,aDmg,aSplash,aSplashR);
+      if(u.cd<=0){
+        if(u._focusShot){ aDmg*=2; u._focusShot=false; }   // T2-2 Focus Shot: the buffered double-damage round
+        applyHit(state,u,atk,aDmg,aSplash,aSplashR);
         gainXp(u, atk.hp<=0, state);   // career points for the shot / killing blow
         u.cd = u._bossCd || def.cd;   // villains fire at their tuned (phase-aware) cooldown
         u._actStamp = state.time;   // timestamps the strike so the swing/shot frame lands on it
@@ -607,6 +733,13 @@ function updateUnit(state,u,dt){
       }
     } else if(def.siege && u.sieged){
       // rooted while sieged — hold fire until the target re-enters range
+    } else if(u.stance==='hold' && !(cmd && cmd.type==='attack')){
+      // T2-3 HOLD: never chase an auto-acquired/retaliation target — stand fast, shoot what arrives.
+      // (an EXPLICIT attack order still moves; Stop/hold-position is about auto-behavior)
+      if(u.autoTarget && dist(u,u.autoTarget) > reach) u.autoTarget=null;
+    } else if(u.stance==='def' && !(cmd && cmd.type==='attack') && d > u.sight*TILE){
+      // T2-3 DEFENSIVE: chase, but break off once the target flees beyond sight — clean disengage.
+      u.autoTarget=null; u._reTarget=null; u._engagedId=null;
     } else {
       // chase
       if(!u.path || u._reTarget!==atk.id || (u._chaseTimer||0)<=0){
@@ -665,6 +798,7 @@ function updateUnit(state,u,dt){
       b.buildProg += dt;
       b.hp = Math.min(b.maxHp, (b.buildProg/b.buildTime)*b.maxHp);
       if(b.buildProg>=b.buildTime){ b.constructing=false; b.hp=b.maxHp; u.cmd=null; u.state='idle';
+        if(!window._rbReplaying && typeof SFX!=='undefined') SFX.built();   // T0-3: build-complete cue
         recomputeSupply(state); toast(DEF[b.type].name+' complete'); refreshUI(); }
     } else {
       // (re)path to the nearest reachable tile next to the site; re-path on a
@@ -720,7 +854,8 @@ function faceTo(u,t){ u.dir=Math.atan2(t.y-u.y,t.x-u.x); }
 // returns true when arrived
 function followPath(state,u,dt){
   // Sprint accelerates the run a little (up to SPRINT_MAX_BONUS over base) while active.
-  const sm=(u.sprinting && state.sprint && state.sprint.active) ? state.sprint.mul : 1;
+  // Caffeine Dash (T2-2 ability) stacks its own short burst on top.
+  const sm=((u.sprinting && state.sprint && state.sprint.active) ? state.sprint.mul : 1) * ((u._dashT||0)>0 ? 1.7 : 1);
   if(!u.path){
     if(u.dest){ // direct
       const dx=u.dest.x-u.x, dy=u.dest.y-u.y, d=Math.hypot(dx,dy);
@@ -933,6 +1068,11 @@ function damage(state, t, amt, src){
   if(t.dead||t.storedIn) return;
   if(t._godmode) return;   // sandbox god-mode (localhost test tool): ignore all incoming damage (flag set only by js/sandbox.js)
   if(t.captive) return;   // imprisoned captives (Biba + the intern) are invulnerable until Nino frees them — neither friendly fire nor splash can kill them
+  // T2-4 counter axis: DEF-driven armor (vehicles/mechs shrug off a flat % of small-arms) unless the
+  // attacker PIERCES. Pure deterministic math — identical on host/solo/rollback. The per-entity
+  // dmgReduce below (ninja/bosses, with the expose window) is a separate hand-tuned layer.
+  const _tdef=DEF[t.type];
+  if(_tdef && _tdef.armor>0 && !(src && DEF[src.type] && DEF[src.type].pierce)) amt *= (1 - _tdef.armor);
   if(t.dmgReduce>0){ const red = t._exposed ? t.dmgReduce*(t._exposeMul||0.4) : t.dmgReduce; amt *= (1 - red); }   // armored units shrug off a flat %; an EXPOSED ninja (mid-strike wind-up) takes the punish-window bonus
   // MADOSIS rescuer survivability: a healer mid-rescue takes a fraction of incoming damage, with a one-time shield pool absorbing the rest first. Keyed off the rescue cmd so it self-clears (inert once the cmd is gone, even if _rescueShield lingers).
   if(t.cmd && t.cmd.type==='rescue' && typeof MADOSIS!=='undefined'){
@@ -942,8 +1082,27 @@ function damage(state, t, amt, src){
   // MADOSIS: don't let a clumsy guarding squad kill the unit being saved — the player's OWN fire on an in-rescue dog is heavily reduced. Enemies (incl. the Kennel) hurt it normally.
   if(t.madDog && t._rescue && src && src.owner==='player' && typeof MADOSIS!=='undefined' && MADOSIS.dogPlayerDmgMul!=null) amt *= MADOSIS.dogPlayerDmgMul;
   t.hp-=amt;
-  t.hitFx=0.12;
+  t.hitFx=0.18;            // T1-2: long enough to actually catch (was 0.12)
   t._lastHit=state.time;   // pauses veteran self-heal (vetRegen) while in/near combat
+  // ---- cosmetic combat feedback (T0-4/T1-2): floating number, killing-blow white core,
+  // heavy-hitter micro-shake, satirical multi-kill toast. Gated for rollback resim; co-op
+  // clients derive theirs from snapshot hp-deltas (sync.js).
+  const _killed = t.hp<=0 && (t.hp+amt)>0;
+  if(_killed) t._dieFlash=true;   // 1-frame white core on the killing blow (render.js)
+  if(_killed && t.madDog && src && src.owner==='player' && typeof ACH!=='undefined' && !window._rbReplaying) ACH.fire('putdown');   // T3-5
+  if(!window._rbReplaying){
+    if(typeof spawnFloater==='function') spawnFloater(state, t, amt, _killed?'crit':'dmg');
+    if(src && (src.type==='founder' || src.type==='bomber' || (src.type==='auditor' && src.sieged))
+       && typeof entOnScreen==='function' && entOnScreen(state,t))
+      state._shake=Math.max(state._shake||0, _killed?3:1.5);   // alpha-strikers thump (well under REX's 15)
+    if(_killed && src && src.owner==='player' && t.owner==='enemy' && typeof toast==='function'){
+      const ks=(window._killStreaks||(window._killStreaks={})), now=state.time;
+      let s=ks[src.id]; if(!s || (now-s.t)>1.4) s=ks[src.id]={n:0,t:now,fired:0};
+      s.n++; s.t=now;
+      if(s.n>=6 && s.fired<6){ s.fired=6; toast('📉 MASS RIF — '+s.n+' roles made redundant in one swing'); if(typeof ACH!=='undefined') ACH.fire('rif',{n:s.n}); }
+      else if(s.n>=3 && s.fired<3){ s.fired=3; toast('💼 LAYOFF SPREE — '+s.n+' headcount eliminated'); }
+    }
+  }
   // RETALIATE: any unit attacked by an enemy fights back, unless it's already
   // engaging a live target or busy on an explicit gather/build order. A SPRINTING
   // unit ignores the hit — it neither acquires the attacker nor rallies neighbours.
@@ -961,6 +1120,12 @@ function killEntity(state,e){
   if(typeof hubRecordKill==='function') hubRecordKill(state,e);
   if(e.kind==='building' && e.type==='hq') releaseAllStoredUnits(state,e);
   e.dead=true;
+  // death FX (cosmetic): owner-colored burst + shake. Gated so a rollback resim can't re-spawn it;
+  // co-op clients fire theirs from snapshot removals (js/net/sync.js), not from local sim.
+  if(!window._rbReplaying && typeof deathFx==='function') deathFx(state,e);
+  if(!window._rbReplaying && e.kind==='building' && e.type==='hq' && e.owner==='enemy' && typeof ACH!=='undefined') ACH.fire('hq-raze');   // T3-5
+  if(!window._rbReplaying && e.kind==='building' && e.type==='hq' && e.owner==='enemy' && typeof toast==='function')
+    toast('📉 Rival HQ razed — '+(state.cfg&&state.cfg.enemyName?state.cfg.enemyName:'the competitor')+' has been acquihired.');
   if(e.kind==='building') markBuilding(state,e,false);
   // MADOSIS: a dog that dies mid-rescue drops its memory echoes.
   if(e.kind==='unit' && (e.madDog || e._rescue) && typeof madCleanupEchoes==='function') madCleanupEchoes(state,e);

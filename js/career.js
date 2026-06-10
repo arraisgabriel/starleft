@@ -73,7 +73,8 @@ function careerTitle(lvl){
 // (re)bake maxHp from base + level, preserving current HP ratio (or full-heal on request)
 function applyVetHp(u, fullHeal){
   const base = DEF[u.type].hp, ratio = fullHeal ? 1 : (u.maxHp ? u.hp/u.maxHp : 1);
-  u.maxHp = Math.round(base * (1 + CAREER.hpPerStar*(u.stars||0)) * (u.hubHpMul||1) * (u.reborn?REBORN.hpMul:1));
+  const seriesInf = 1 + 0.01*((typeof CAMPAIGN!=='undefined' && CAMPAIGN && CAMPAIGN.seriesInf)||0);   // T3-9 "Series \u221e" global roster buff
+  u.maxHp = Math.round(base * (1 + CAREER.hpPerStar*(u.stars||0)) * (u.hubHpMul||1) * (u.reborn?REBORN.hpMul:1) * seriesInf);
   u.hp = Math.round(u.maxHp * ratio);
 }
 
@@ -82,6 +83,9 @@ function gainXp(u, killed, state){
   if(u.owner!=='player' || !isCareerUnit(u)) return;
   if(u.madDog || u.subdued) return;   // a unit mid-breakdown earns no career progress
   u.xp = (u.xp||0) + CAREER.perShot + (killed ? CAREER.perKill : 0);
+  // T0-5 personhood: a first KILL mints the lightweight identity (name + hometown) right away —
+  // the full dossier prose still arrives with the Lv2 promotion. Deterministic + idempotent.
+  if(killed && typeof ensureDossier==='function') ensureDossier(u);
   promoteIfReady(u, state);
 }
 
@@ -106,6 +110,9 @@ function promoteIfReady(u, state){
   while(s < CAREER.maxStars && u.xp >= CAREER.xpFor(s+1)) s++;
   if(s === old) return;
   u.stars = s; applyVetHp(u, false);
+  if(typeof ACH!=='undefined' && !window._rbReplaying) ACH.fire('promote',{stars:s});   // T3-5
+  if(state && typeof hubEnsureStats==='function'){ const _hs=hubEnsureStats(state); _hs.promotions=(_hs.promotions||0)+(s-old); }   // run summary (T1-9)
+  if(s>=1 && typeof ensureDossier==='function') ensureDossier(u);   // T0-5: identity exists from Lv1 (prose still gates at Lv2)
   if(!window._rbReplaying) toast('★ Promotion! '+careerTitle(s)+' '+DEF[u.type].name);   // stat changes are serialized; the toast is cosmetic → skip during rollback re-sim
   // career v3: dossier is born at level 2, then a backstory-connected life-event at each new level
   if(typeof rollLifeEvent==='function'){
@@ -136,6 +143,7 @@ function promoteIfReady(u, state){
 
 // out-of-combat self-heal for high-level veterans (called every frame from core.js)
 function vetRegen(u, state, dt){
+  if(state && state._noRegen) return;   // T3-4 'Sudden Death' mutator (skirmish-only)
   const lvl = u.stars||0;
   if(lvl < CAREER.healStart || u.hp<=0 || u.hp>=u.maxHp) return;
   if(state.time - (u._lastHit||-1e9) < CAREER.healCombatGap) return;   // still in/near combat
@@ -271,6 +279,7 @@ function crawlVars(){
     party:       joinNames(capNames([nino,biba].filter(Boolean).concat(vetNames),5)),
     fallen:      joinNames(capNames(fallenNames,4)),
     fallenCount: fallenNames.length,
+    dreamFulfilled: (typeof window!=='undefined' && window._lastDreamFulfilled) || '',   // T1-9: the last vet to fulfill their dream
     // future memory variables drop in here as one more key
   };
 }

@@ -1,7 +1,29 @@
-/* tips.js — static pool of gameplay tips. Shown (random + rotating) in the
-   main-menu "Field Tip" panel via pickTip()/startTipRotation() in ui.js.
-   Plain strings (light HTML allowed). Loaded before ui.js. | STARLEFT */
+/* tips.js — menu "Field Tip" carousel + Field-Manual mechanics tips.
+   GAME_TIPS feeds the MAIN-MENU panel via pickTip()/startTipRotation() (ui.js): satire-first —
+   the sharpest barks and crawl pull-quotes, because the title screen sells the VOICE of the game,
+   not a control manual (T0-11). The mechanic tips live in MECH_TIPS and render inside the Field
+   Manual (#docScreen), the in-game help surface. Plain strings (light HTML allowed). | STARLEFT */
 const GAME_TIPS = [
+  "“There is no exit strategy but victory.”",
+  "“My equity vests right after I die.” — a Growth Cyborg, probably",
+  "“We're not a family. Families can't lay you off.”",
+  "“Move fast and break things. The things were people.”",
+  "“The board is watching. Synergy awaits.”",
+  "“Unpaid, unkillable, unionized — pick two.” — Intern handbook, p.1",
+  "“I outlasted it. The thing I built is still standing.”",
+  "“The runway ends. The grind doesn't.”",
+  "“Disrupt them into bankruptcy — it's called wellness.”",
+  "“Your veterans carry names. Your memorial carries more.”",
+  "“Free cold brew is not compensation.” — strike flyer, The Garage",
+  "“It's not a layoff. It's a graduation.” — DISRUPTR INC. HR",
+  "“Immortality with a cancellation clause.” — A&O Continuity Farm",
+  "“Every quarter ends. Some of us ship.”",
+  "“A cap table wearing a grief mask.”",
+  "“We pivoted to weapons. The metrics improved.”",
+];
+
+/* mechanics tips — shown inside the Field Manual (#doc-tips), not on the title screen */
+const MECH_TIPS = [
   "<b>Commanding:</b> tap a unit to select it, then tap an enemy to attack, a crystal to mine, or the ground to move. Drag to pan, pinch (or the +/− buttons) to zoom.",
   "<b>Grab an army fast:</b> Shift-drag a selection box — or tap the ▭ Select-box button, then drag — to scoop up every unit inside it at once.",
   "<b>Control groups:</b> bind a squad with Ctrl/⌘ + 1–9, then tap that number to reselect it. Double-tap the number to snap the camera straight to them.",
@@ -28,3 +50,11 @@ const GAME_TIPS = [
   "<b>Take cover in your HQ 🏢:</b> select units and right-click your own Open-Plan HQ to tuck them safely <i>inside</i> — hidden and out of harm's way. To bring them back, select the HQ and tap the ↩ Release button on each stored unit. Great for sheltering wounded veterans or hiding a reserve.",
   "<b>Finished a map? Board the HQ. 🛩️</b> Clearing the objective doesn't whisk you home — to extract back to the H.U.B. you must command a surviving unit <i>into</i> your Open-Plan HQ 🏢 (right-click it). A Buzzword Bomber then flies in to lift the team out, so always keep an HQ standing and at least one unit alive.",
 ];
+
+// render the mechanics tips inside the Field Manual (scripts load at the end of <body>, DOM is ready)
+(function(){
+  const host = document.getElementById('doc-tips');
+  if(!host) return;
+  host.innerHTML = '<h3 class="doc-tips-head">Field Tips</h3>' +
+    MECH_TIPS.map(t=>'<div class="doc-tip">'+t+'</div>').join('');
+})();

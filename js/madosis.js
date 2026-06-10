@@ -76,6 +76,7 @@ function mintSanityThreshold(u){
 // add madosis points to one unit; returns true if this push crosses its effective threshold.
 function addMadosis(u, amount, reason){
   if(!u || u.dead || u.owner!=='player' || !(amount>0)) return false;
+  if(typeof G!=='undefined' && G && G._madosisMul) amount *= G._madosisMul;   // T3-4 'Sanity Collapse' mutator (skirmish-only; serialized state)
   if(u.hero) amount *= MADOSIS.heroAccrualMul;   // heroes are steadier — trauma weighs on them less
   const before = u.madosis||0;
   u.madosis = before + amount;
@@ -92,12 +93,27 @@ function madosisEvent(state, key, ctx){
   const pts = MADOSIS.events[key]; if(!(pts>0)) return;
   const src = ctx && (ctx.dead || ctx.b || ctx.src) || null;   // the triggering entity (excluded)
   const R = MADOSIS.vetDeathRadius>0 ? MADOSIS.vetDeathRadius*TILE : 0;
+  let griever=null;   // T1-6: the most-frayed nearby survivor reacts out loud to a comrade's death
   for(const u of state.entities){
     if(u.dead || u.storedIn || u.owner!=='player' || u.kind!=='unit' || u===src) continue;
     if(u.subdued || u.madDog) continue;                 // already broken / being saved
     if(!u.sanityThreshold) continue;                    // not yet level 2 → no mind to break
     if(R && src && typeof dist==='function' && dist(u,src) > R) continue;
     addMadosis(u, pts, key);                             // onset itself is rolled in updateMadosis
+    if(!griever || (u.madosis||0) > (griever.madosis||0)) griever=u;
+  }
+  // grief bark (T1-6): the invisible trauma accrual gets a voice — cosmetic, text-only, skipped
+  // during rollback resim like the other madosis toasts.
+  if(griever && (key==='vetDeath' || key==='heroDeath') && !window._rbReplaying
+     && typeof loreSayFallback==='function' && typeof pushDialog==='function'){
+    const thr=(typeof madThreshold==='function')?madThreshold(griever):(griever.sanityThreshold||1);
+    const line=loreSayFallback('grief', (griever.madosis||0)/Math.max(1,thr) > 0.6 ? 'neg' : 'neutral');
+    if(line){
+      let txt=line;
+      try{ if(griever.lore && typeof buildDossier==='function') txt=buildDossier(griever).fill(line); }
+      catch(e){ txt=line.replace(/\{relName\}/g,'them').replace(/\{home\}/g,'home'); }
+      pushDialog(griever, txt, { type:'lore', tone:'grief' });
+    }
   }
 }
 
@@ -274,6 +290,7 @@ function madCleanupEchoes(state, dog){
 
 // SUCCESS: the dog comes back — sane but fragile (subdued), permanently scarred, meter zeroed.
 function madResolveRescue(state, dog, healer){
+  if(typeof ACH!=='undefined' && !window._rbReplaying) ACH.fire('rescue');   // T3-5
   dog.madDog=false; dog.madEpisode=null; dog._rescue=false; dog.calmStage=null;
   dog.subdued=true; dog.scarred=true; dog.madosis=0;
   dog.autoTarget=null; dog.cmd=null; dog.state='idle';

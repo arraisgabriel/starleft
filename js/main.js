@@ -141,6 +141,7 @@ addEventListener('keydown', e=>{
   // and on macOS its keyup never fires while ⌘ is held, which would leave 's' stuck panning down.
   if(!e.metaKey && !e.ctrlKey && !e.altKey) keys[e.key.toLowerCase()]=true;
   if(e.key==='Escape'){
+    if(typeof armAmove!=='undefined' && armAmove){ armAttackMove(false); return; }    // disarm attack-move first
     if(typeof hubMenuOpen==='function' && hubMenuOpen()){ closeHubMenu(); return; }   // first: close an open HUB facility menu
     if(G&&G.placing){ G.placing=null; refreshUI(); }     // then: cancel building placement
     else if(G&&G.selection.length){ clearSelection(); refreshUI(); }  // then: deselect so you can pick others
@@ -149,6 +150,15 @@ addEventListener('keydown', e=>{
   // save game (⌘/Ctrl+S) — block the browser's native Save dialog
   if((e.key==='s'||e.key==='S') && (e.metaKey||e.ctrlKey)){
     e.preventDefault(); saveGame(); return;
+  }
+  // T4-4: F2 = select the whole army (the desktop "Select Army" helper; ⛶ covers touch)
+  if(e.key==='F2' && G && !G.over){ e.preventDefault(); if(typeof selectAllArmy==='function'){ selectAllArmy(); } return; }
+  // T2-3: A arms attack-move — the next click/tap orders the selection to advance-and-engage
+  if((e.key==='a'||e.key==='A') && !e.metaKey && !e.ctrlKey && !e.altKey && G && !G.over && !G.hub){
+    if(G.selection.some(s=>!s.dead && !s.storedIn && s.kind==='unit' && s.owner==='player' && s.type!=='worker')){
+      if(typeof armAttackMove==='function') armAttackMove();
+      return;
+    }
   }
   // control groups — digit keys 0..9 (top row or numpad), read via e.code so Shift's
   // symbol remap doesn't matter. ASSIGN = Shift+digit: Chrome reserves Ctrl/⌘+1-9 for
@@ -254,6 +264,8 @@ function wireTouchControls(){
     if(typeof openLoadMenu==='function') openLoadMenu();
   });
   on('btn-roster', ()=>{ if(typeof showRoster==='function') showRoster(); });
+  on('btn-docs', ()=>{ if(typeof showDocs==='function') showDocs(false); });   // Field Manual on demand (T0-1)
+  on('btn-settings', ()=>{ if(typeof showSettings==='function') showSettings(); });   // T4-3
   on('btn-events', ()=>{ if(typeof showEvents==='function') showEvents(); });
   on('btn-voice', ()=>{ if(typeof VOICE!=='undefined'){ VOICE.toggle(); syncVoiceBtn(); } });
   on('btn-netq', ()=>{ if(typeof mpToggleNetQuality==='function') mpToggleNetQuality(); });
@@ -316,6 +328,7 @@ function wireBootGate(){
     setTimeout(()=>{ gate.style.display='none'; }, 360);
     if(typeof MUSIC!=='undefined') MUSIC.startNow();
     if(typeof LNS!=='undefined' && LNS.relayout) LNS.relayout();
+    if(typeof TELE!=='undefined'){ TELE.event('session_start'); TELE.event('menu_shown'); }
   }, { once:true });
 }
 wireTouchControls();
@@ -331,6 +344,20 @@ if(document.fonts && document.fonts.ready){
   }).catch(()=>{});
 }
 wireBootGate();
+// T4-3: apply persisted accessibility flags at boot (Settings panel toggles them live)
+try{
+  window._colorblind = localStorage.getItem('starleft_colorblind')==='1';
+  window._reduceFx   = localStorage.getItem('starleft_reducefx')==='1';
+  document.body.classList.toggle('big-text', localStorage.getItem('starleft_bigtext')==='1');
+}catch(_){ }
+// T4-3: a tab-close/switch autosaves a live solo game (sandbox & skirmish excluded)
+function _unloadAutosave(){
+  if(typeof netRole!=='undefined' && netRole==='solo' && G && running && !G.over
+     && !(window.SANDBOX && SANDBOX.on) && !G._skirmish && typeof autosaveGame==='function') autosaveGame();
+}
+document.addEventListener('visibilitychange', ()=>{ if(document.visibilityState==='hidden') _unloadAutosave(); });
+window.addEventListener('pagehide', _unloadAutosave);
+if(typeof syncContinueButton==='function') syncContinueButton();   // ▶ Continue from the latest autosave (T0-8)
 if(typeof mpCheckInviteHash==='function') mpCheckInviteHash();   // #mp=CODE invite link → auto-join co-op
 /* =====================================================================
    MAIN LOOP

@@ -13,7 +13,8 @@ const MUSIC = (function(){
   }catch(_){}
   const save = ()=>{ try{ localStorage.setItem(LS_KEY, JSON.stringify({ enabled, volume })); }catch(_){} };
 
-  let mainAudio=null, loopAudio=null, cineAudio=null;
+  let mainAudio=null, loopAudio=null, cineAudio=null, ambAudio=null, ambKey=null;
+  const AMB_VOL = 0.4;   // ambient beds sit far under the menu theme — sparse, not a soundtrack
   // Web-Audio feedback-delay echo for the cinematic cue's finale (intensifies, then "resounds" after the source stops)
   let echoCtx=null, echoSrc=null, echoDelay=null, echoFb=null, echoWet=null, echoDry=null, echoTimer=null, echoActive=false;
   let inMenu=false, started=false, pendingStart=false, initDone=false, startTimer=null;
@@ -158,8 +159,23 @@ const MUSIC = (function(){
       }
       if(cineAudio){ try{ cineAudio.pause(); cineAudio.currentTime=0; }catch(_){} cineAudio=null; }
     },
+    // ---- in-mission ambient drone (T0-3): one sparse loop per biome, assets/audio/sfx/amb_<biome>.wav.
+    // Quiet by design ("the corporate grind has no soundtrack") — just kills the dead air. Missing
+    // file → silent no-op. Respects the music mute toggle + volume.
+    playAmbient(biome){
+      const key = 'amb_' + (biome||'grass');
+      if(ambAudio && ambKey===key && !ambAudio.paused) return;
+      this.stopAmbient();
+      if(!enabled || typeof sfxPath!=='function') return;
+      ambKey = key;
+      ambAudio = makeAudio(sfxPath(key), true);
+      ambAudio.volume = volume * AMB_VOL;
+      const p = ambAudio.play(); if(p && p.catch) p.catch(()=>{});   // autoplay-blocked → stays silent
+    },
+    stopAmbient(){ if(ambAudio){ try{ ambAudio.pause(); }catch(_){} ambAudio=null; ambKey=null; } },
     enterMenu(){
       this.stopCinematic();
+      this.stopAmbient();
       inMenu=true;
       if(!initDone) return;
       if(!started || pendingStart) scheduleStart(started ? 0 : START_DELAY_MS);
@@ -175,7 +191,7 @@ const MUSIC = (function(){
     isEnabled(){ return enabled; },
     setEnabled(v){
       enabled=!!v; save();
-      if(!enabled){ pauseAll(false); this.stopCinematic(); killEcho(); }   // mute: kill any ringing echo immediately
+      if(!enabled){ pauseAll(false); this.stopCinematic(); this.stopAmbient(); killEcho(); }   // mute: kill any ringing echo immediately
       else if(inMenu && !bootGateOpen()) this.enterMenu();
     },
     toggle(){ this.setEnabled(!enabled); return enabled; },
@@ -185,6 +201,7 @@ const MUSIC = (function(){
       if(mainAudio) mainAudio.volume=volume;
       if(loopAudio) loopAudio.volume=volume;
       if(cineAudio) cineAudio.volume=volume;
+      if(ambAudio) ambAudio.volume=volume*AMB_VOL;
       save();
     },
   };

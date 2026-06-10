@@ -7,7 +7,8 @@ function enemyAI(state,dt){
   // keyed on runSalt) — prerequisite for the rollback determinism experiment (js/net/determinism.js). The
   // determinism harness overrides runSalt to force an identical seed across runs. Cosmetic/lore rng is separate.
   if(typeof seedSim==='function' && state._simSeeded!==state.runSalt){ seedSim(state, state.runSalt||1); state._simSeeded=state.runSalt; }
-  const aggr = state.cfg.aggression || (state.cfg.enemy && state.cfg.enemy.aggression) || 1;
+  const _d = (typeof diffOf==='function') ? diffOf(state) : {aggr:1, mint:1};   // T4-2 difficulty (state-stamped)
+  const aggr = (state.cfg.aggression || (state.cfg.enemy && state.cfg.enemy.aggression) || 1) * (_d.aggr||1);
   const grace = state.time < state.graceTime;   // early-game peace: enemy builds up but won't attack yet
   if(!grace && !state._graceWarned){ state._graceWarned=true;
     toast('📣 '+(state.cfg.enemyName||'The rival')+' just closed a funding round — incoming!'); }
@@ -15,7 +16,7 @@ function enemyAI(state,dt){
   // `guard` units (Episode X corridor/cell squads) are excluded: they don't count toward the
   // production cap and are never swept into a wave, so they hold their post instead of marching off.
   const enemyUnits = state.entities.filter(e=>e.owner==='enemy'&&e.kind==='unit'&&!e.dead&&!e.storedIn&&!e.guard);
-  const enemyBarracks = state.entities.filter(e=>e.owner==='enemy'&&e.type==='barracks'&&!e.dead&&!e.constructing);
+  const enemyBarracks = state.entities.filter(e=>e.owner==='enemy'&&e.type==='barracks'&&!e.dead&&!e.constructing&&!e.lightOutpost);   // light outposts (T0-1 first-fight target) never reinforce
   // smaller standing force early, ramps up to a fixed ceiling (so a massed
   // player army can eventually overwhelm them instead of being out-scaled forever)
   // scale the enemy army by how many bases still stand — multi-base maps field a
@@ -32,14 +33,23 @@ function enemyAI(state,dt){
   // co-op: each extra human raises the enemy ceiling (sub-linear via coopFactor in balance.js); 1 player → ×1
   const pf = (typeof coopFactor==='function') ? coopFactor(state.players) : 1;
   if(pf>1){ hardCap = Math.round(hardCap*pf); cap = Math.min(hardCap, Math.round(cap*pf)); }
+  // T2-9: a veteran-heavy carried roster (VPI) raises the standing-army ceiling up to +30%,
+  // so Arc-2 waves are larger against a maxed roster (computed once at map load; deterministic).
+  const wf = (typeof vetWaveCapFactor==='function') ? vetWaveCapFactor(state._vpi||0) : 1;
+  if(wf>1){ hardCap = Math.round(hardCap*wf); cap = Math.min(hardCap, Math.round(cap*wf)); }
 
   const enemyGarages = state.entities.filter(e=>e.owner==='enemy'&&e.type==='garage'&&!e.dead&&!e.constructing);
   state.enemySpawnTimer-=dt;
   if(state.enemySpawnTimer<=0 && enemyUnits.length<cap && (enemyBarracks.length||enemyGarages.length)){
     // slow trickle during grace, slower replacement afterwards (so a player
     // assault that kills units faster than they respawn can break the base)
-    state.enemySpawnTimer = grace? 18 : Math.max(5, (12/aggr)/pf);   // faster reinforcement with more players
-    if(enemyGarages.length && !grace && simRandom(state)<0.25){
+    state.enemySpawnTimer = (grace? 18 : Math.max(5, (12/aggr)/pf)) * (_d.mint||1);   // faster reinforcement with more players; T4-2 mint factor
+    if(state.cfg.enemyAir && !grace && enemyBarracks.length && simRandom(state)<0.15){
+      // T2-6: maps flagged enemyAir field the odd Buzzword Bomber — brute-force ground armies
+      // can't answer it; the player needs Auditors/Founders/Bombers (def.antiAir) on the field.
+      const b=enemyBarracks[(simRandom(state)*enemyBarracks.length)|0];
+      spawnTrained(state,b,'bomber');
+    } else if(enemyGarages.length && !grace && simRandom(state)<0.25){
       // a vehicle rolls out of the rival's garage
       const b=enemyGarages[(simRandom(state)*enemyGarages.length)|0];
       spawnTrained(state,b, simRandom(state)<0.3?'auditor':'foodtruck');

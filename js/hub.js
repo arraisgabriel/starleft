@@ -82,6 +82,7 @@ function hubDefaultCampaign(){
     training:{ staged:[], sessions:[] },
     healing:{ staged:[], sessions:[] },
     reborn:{ sessions:[], done:[] },
+    ngPlus:0,             // T3-1: New-Game+ lap counter (legacy saves default 0 via Object.assign)
     visit:0,
     gambled:false,
     lastReward:null,
@@ -157,8 +158,23 @@ function hubBuildRosterFromCombat(state){
 }
 
 function hubEnsureStats(state){
-  return state.hubStats || (state.hubStats={unitKills:0, buildingKills:0, hqKills:0});
+  // legacy saves carry only the kill fields — the ||0 reads below treat missing ones as zero
+  return state.hubStats || (state.hubStats={unitKills:0, buildingKills:0, hqKills:0, unitsLost:0, promotions:0, peakSupply:0});
 }
+// T3-3: themed run score. Stable formula so persisted bests stay comparable; state._scoreMul
+// is the mutator/difficulty multiplier hook (default 1).
+function valuationFor(state){
+  const s=hubEnsureStats(state);
+  const funding=teamGoldCollected(state)|0;
+  const raw = funding + (s.unitKills||0)*40 + Math.max(0,(s.buildingKills||0)-(s.hqKills||0))*250 + (s.hqKills||0)*1000
+            - (s.unitsLost||0)*120 - Math.floor(state.time||0)*2;
+  const pts = Math.max(0, Math.round(raw * (state._scoreMul||1)));
+  return { points:pts, label:'$'+(pts/100).toFixed(1)+'B' };
+}
+// persisted per-map/seed best (localStorage; orthogonal to the save files)
+function valuationBestKey(state){ return 'starleft_best_' + (state._skirmishSeed!=null ? 's'+state._skirmishSeed : 'ep'+(typeof mapIndex==='number'?mapIndex:0)); }
+function valuationBest(state){ try{ return +localStorage.getItem(valuationBestKey(state))||0; }catch(_){ return 0; } }
+function valuationRecord(state, pts){ try{ if(pts>valuationBest(state)) localStorage.setItem(valuationBestKey(state), String(pts)); }catch(_){} }
 function hubRecordKill(state, victim){
   if(!state || !victim || victim.owner!=='enemy') return;
   const s=hubEnsureStats(state);
@@ -373,6 +389,13 @@ function enterHubFromCombat(state){
     if(typeof captureHeroes==='function') captureHeroes(state);
   }
   CAMPAIGN.mode='hub'; CAMPAIGN.visit++; CAMPAIGN.gambled=false; CAMPAIGN.dispatch={mdcId:null, staged:[]};
+  if(typeof TELE!=='undefined') TELE.event('hub_entered', { visit: CAMPAIGN.visit });
+  // T4-1: the moment The Wake comes online (post-XIII) gets its narrative beat — once
+  if(typeof rebornUnlocked==='function' && rebornUnlocked() && !CAMPAIGN._wakeAnnounced){
+    CAMPAIGN._wakeAnnounced=true;
+    if(typeof eventToast==='function') eventToast('⚡ <b>LATTICE ONLINE.</b> The stolen coils hum over the Wake. You can bring <b>ONE</b> of them back — the storm holds three writes, ever. Walk to The Wake and choose.', 16000);
+  }
+  if(typeof MUSIC!=='undefined' && MUSIC.stopAmbient) MUSIC.stopAmbient();   // mission ambient ends at the hub
   G=newHubMap();
   mapIndex = Math.max(0, Math.min(CAMPAIGN.nextMapIndex, MAPS.length-1));
   if(typeof resetDialogs==='function') resetDialogs();
@@ -388,9 +411,12 @@ function enterHubFromCombat(state){
 // carry nobody forward. Path-independent — called from the solo nuke detonation AND the co-op host
 // hub entry. recordFallen dedups by id, so calling it here is safe even if death-cleanup also records.
 function epSevenFlashAftermath(state){
+  window._massMemorialize=true;   // the flash takes EVERYONE — suppress the per-death interstitial (T1-1)
   for(const u of (state.entities||[])){
     if(u && u.owner==='player' && u.lore && typeof recordFallen==='function') recordFallen(u);
   }
+  window._massMemorialize=false;
+  if(typeof ACH!=='undefined') ACH.fire('flash');   // T3-5: Down Round
   CAMPAIGN.roster=[];
   if(typeof setCarryover==='function') setCarryover([]);   // no veterans carry to Episode VIII
   if(typeof resetHeroes==='function') resetHeroes();        // (no heroes exist before Ep VIII; defensive)
@@ -405,6 +431,7 @@ function enterHubFlashAftermath(state){
   CAMPAIGN.m3 += reward.total; CAMPAIGN.lastReward=reward;     // you DID liquidate THE CONGLOMERATE — meta merit survives the flash
   CAMPAIGN.mode='hub'; CAMPAIGN.visit++; CAMPAIGN.gambled=false; CAMPAIGN.dispatch={mdcId:null, staged:[]};
   if(typeof MUSIC!=='undefined' && MUSIC.stopCinematic) MUSIC.stopCinematic();   // the flash track ends as the hub map loads
+  if(typeof MUSIC!=='undefined' && MUSIC.stopAmbient) MUSIC.stopAmbient();
   G=newHubMap();
   mapIndex=Math.max(0, Math.min(CAMPAIGN.nextMapIndex, MAPS.length-1));   // → Episode VIII
   if(typeof resetDialogs==='function') resetDialogs();
@@ -933,7 +960,8 @@ function hubMdcForStoredUnit(state,u){
   return mdcs.find(e=>(e.storedUnits||[]).includes(u.id)) || null;
 }
 function hubDispatchVetCap(){
-  const idx=(CAMPAIGN&&CAMPAIGN.nextMapIndex!=null) ? CAMPAIGN.nextMapIndex : mapIndex;
+  const idx=(typeof hubNextDeployIndex==='function') ? hubNextDeployIndex()
+          : ((CAMPAIGN&&CAMPAIGN.nextMapIndex!=null) ? CAMPAIGN.nextMapIndex : mapIndex);
   return (typeof vetCarryCountFor==='function') ? vetCarryCountFor(idx) : 6;
 }
 function hubDispatchFullMessage(cap){
@@ -1041,8 +1069,9 @@ function hubDispatchNextEpisode(){
   if(typeof madosisRestDecay==='function') madosisRestDecay(new Set(live.map(u=>hubUnitKey(u))));
   setCarryover(vets.slice(0,cap)); captureHeroes({entities:heroes});
   CAMPAIGN.mode='combat';
-  let idx=Math.max(0, Math.min(CAMPAIGN.nextMapIndex, MAPS.length-1));
-  if(typeof villainGateBefore==='function'){ const g=villainGateBefore(idx); if(g>=0) idx=g; }   // an uncleared villain gates this episode → fight it first
+  // gate villains interrupt; past the last episode the FINALE boss is the deployment (T2-7)
+  let idx=(typeof hubNextDeployIndex==='function') ? hubNextDeployIndex()
+        : Math.max(0, Math.min(CAMPAIGN.nextMapIndex, MAPS.length-1));
   mapIndex=idx;
   hubStartDispatchFlight(G, 0);                 // dur refined by showCrawl once narration length is known
   showCrawl(idx, ()=>{ endDispatchFlight(G); loadMap(idx); });
@@ -1096,9 +1125,25 @@ function hubGamble(){
   if(CAMPAIGN.gambled){ toast('The kiosk already liquidated your optimism.'); return; }
   if(!hubSpend(HUB.gambleStake)) return;
   CAMPAIGN.gambled=true;
-  const win=((CAMPAIGN.visit*37 + CAMPAIGN.m3)%3)===0;
+  // T3-9: genuinely random (seeded RNG, fresh stream per pull) — the old (visit*37+m3)%3 check was
+  // deterministic, so the kiosk could be gamed by adjusting the treasury before pulling.
+  if(CAMPAIGN._gambleSeed==null) CAMPAIGN._gambleSeed=(Math.random()*1e9)>>>0;
+  CAMPAIGN._gambleSeed=(Math.imul(CAMPAIGN._gambleSeed,1664525)+1013904223)>>>0;
+  const win=(CAMPAIGN._gambleSeed/4294967296) < (1/3);
   if(win){ CAMPAIGN.m3+=260; toast('Speculation paid out: M3$260'); }
   else toast('Speculation failed. The market calls it learning.');
+  refreshUI();
+}
+// T3-9: "Series \u221e" — the uncapped M3$ sink. Each rank: +1% max HP for the whole roster, rising cost.
+function seriesInfCost(){ const r=(CAMPAIGN.seriesInf||0); return Math.round(300*Math.pow(1.35, r)); }
+function hubBuySeriesInf(){
+  if(!hubCanAct()){ toast('Only the host can raise at ULTRA.'); return; }
+  if(!hubSpend(seriesInfCost())) return;
+  CAMPAIGN.seriesInf=(CAMPAIGN.seriesInf||0)+1;
+  // re-bake every live player unit's HP so the rank lands immediately
+  if(typeof G!=='undefined' && G && typeof applyVetHp==='function')
+    for(const u of G.entities){ if(!u.dead && u.owner==='player' && u.kind==='unit') applyVetHp(u,false); }
+  toast('\ud83d\udcc8 Series \u221e round '+CAMPAIGN.seriesInf+' closed — roster +1% HP (now +'+CAMPAIGN.seriesInf+'%)');
   refreshUI();
 }
 function hubShowCondo(id){ const c=CAMPAIGN.condos[id]; toast('Condo level '+(c.level||0)+' — residents: '+(c.residents||[]).length); }
@@ -1445,6 +1490,7 @@ function updateRebornProduction(dt){
 // A write finishes: permanent record, add the Reborn to the roster, spawn it live if we're in the HUB.
 function hubWakeComplete(state, ses){
   if(!CAMPAIGN.reborn) CAMPAIGN.reborn={sessions:[],done:[]};
+  if(typeof ACH!=='undefined') ACH.fire('reborn');   // T3-5: Ghost Equity
   if(!(CAMPAIGN.reborn.done||[]).includes(ses.fid)) CAMPAIGN.reborn.done.push(ses.fid);
   const key=rebornRosterKey(ses);
   CAMPAIGN.roster=(CAMPAIGN.roster||[]).filter(r=>r.key!==key);   // idempotent
@@ -1645,6 +1691,29 @@ function drawHubOverlays(state){
   }
   ctx.stroke();
   ctx.restore();
+  drawWakeMemorial(state);
+}
+// T1-7: the fallen's names hover faintly beside The Wake tower — every hub visit walks past the
+// dead (and reads what the resurrection economy is FOR). Newest first, capped; pure cosmetic.
+function drawWakeMemorial(state){
+  const wake=state.hubPois && state.hubPois.wake;
+  if(!wake || typeof fallenVets==='undefined' || !fallenVets.length) return;
+  const cx=((wake.tx||0)+(wake.w||2)/2)*TILE, topY=(wake.ty||0)*TILE;
+  const t=state.time||0, N=Math.min(8, fallenVets.length);
+  ctx.save(); ctx.textAlign='center'; ctx.textBaseline='alphabetic';
+  ctx.fillStyle='#9fb6c8';
+  ctx.font='600 10px '+GAME_FONT;
+  ctx.globalAlpha=0.85;
+  ctx.fillText('THE WAKE — '+fallenVets.length+' name'+(fallenVets.length===1?'':'s'), cx, topY-12-N*13);
+  for(let i=0;i<N;i++){
+    const f=fallenVets[fallenVets.length-1-i];   // newest first, rising up the tower
+    const fl=0.55+0.18*Math.sin(t*1.2+i*1.9);    // candle-flicker, slow
+    ctx.globalAlpha=fl*(1-i*0.07);
+    ctx.fillStyle = f.dreamDone ? '#ffd86b' : '#c9d8e6';
+    ctx.font='10px '+GAME_FONT;
+    ctx.fillText('🕯 '+f.name, cx, topY-i*13);
+  }
+  ctx.restore(); ctx.globalAlpha=1;
 }
 function hubCameraInWasteland(state){
   if(!state||!state.hub) return false;

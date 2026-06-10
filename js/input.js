@@ -14,11 +14,23 @@ const gesture={ mode:'none',   // 'none'|'tap'|'pan'|'box'|'pinch'
   id:null, sx:0,sy:0, cx:0,cy:0, moved:false, shift:false,
   startCamX:0, startCamY:0, lastDist:0 };
 let armBoxSelect=false;         // armed by the on-screen "Select box" button (touch)
+let armAmove=false;             // T2-3: armed attack-move — the next tap issues an amove order
 let lastPointerWasMouse=true;   // gates desktop-only edge-scroll
 const MOVE_THRESH=5;            // px before a press counts as a drag (not a tap)
 
 function isGamePaused(){
   return !!(G && !G.over && !running);
+}
+
+// T2-3: arm/disarm attack-move (A key or the ⚔ command button); crosshair cursor while armed
+function armAttackMove(on){
+  armAmove = (on===undefined) ? !armAmove : !!on;
+  updateAmoveCursor();
+  if(armAmove && typeof toast==='function') toast('⚔ Attack-move: tap a destination', 2500);
+}
+function updateAmoveCursor(){
+  if(typeof cv!=='undefined' && cv && cv.style) cv.style.cursor = armAmove ? 'crosshair' : '';
+  const b=document.querySelector('.cmd-btn.amove-btn'); if(b) b.classList.toggle('armed', armAmove);
 }
 
 // screen (CSS px) -> world, generalised for zoom. devicePixelRatio cancels out
@@ -71,6 +83,13 @@ function dispatchTap(e, opts){
   }
 
   const ent=pickEntity(G,w.x,w.y);
+
+  // T2-3 armed attack-move: the next tap/click anywhere issues an amove there (A key or ⚔ button).
+  if(armAmove){
+    armAmove=false; if(typeof updateAmoveCursor==='function') updateAmoveCursor();
+    if(typeof netAmove==='function') netAmove(G, w.x, w.y);
+    return;
+  }
 
   // desktop right-click bonus alias — behaves exactly like the old right-click command
   if(opts.forceCommand){

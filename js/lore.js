@@ -185,7 +185,22 @@ function applyEventFx(u, fx, state){
   if(fx.t==='fine'){ if(state && u.owner==='player'){ const eco=playerEco(state, u.ctrl); eco.gold = Math.max(0,(eco.gold||0)-(fx.gold||0)); } return; }
   if(fx.t==='buff' || fx.t==='capstone'){
     u.buff = { dmgMul:fx.dmg||1, regenMul:fx.regen||1, until:(state?state.time:0)+(fx.dur||LIFE_FX.buffDur) };
-    if(fx.t==='capstone') u.dreamDone = true;
+    if(fx.t==='capstone' && !u.dreamDone){
+      u.dreamDone = true;
+      // T1-9: dream fulfillment is the per-unit emotional climax — make it LAND. Held toast +
+      // gold-accent bubble + a crawl token so the next episode's opening can reference it.
+      if(!window._rbReplaying){
+        try{
+          const d=buildDossier(u);
+          const line='I outlasted it. The thing I built is still standing.';
+          if(typeof eventToast==='function') eventToast(`🏆 <b>${d.full}</b> just fulfilled their dream — ${_loCap(d.dream)}`, 14000, line);
+          if(typeof pushDialog==='function') pushDialog(u, line, {type:'lore', tone:'pos'});
+          window._lastDreamFulfilled = d.full;   // read by crawlVars() as {dreamFulfilled}
+          if(typeof ACH!=='undefined') ACH.fire('dream');   // T3-5
+          if(typeof LNS!=='undefined' && LNS.ultraEvent) LNS.ultraEvent('dreamFulfilled', { unit:u });
+        }catch(e){}
+      }
+    }
   }
 }
 // active temp-buff multipliers (identity once expired) — read by the combat & regen hooks
@@ -218,6 +233,8 @@ function recordFallen(u){
                     reborn:false });   // f.reborn === "this fallen has been resurrected" (distinct from a unit's u.reborn)
   if(typeof eventToast==='function')
     eventToast(`🕯 <b>${d.full}</b> has fallen — ${u.dreamDone?'their dream fulfilled':'dream unfulfilled: '+_loCap(d.dream)}.`, 10000);
+  if(typeof fallenSceneMaybe==='function') fallenSceneMaybe(u);   // T1-1: brief solo memorial beat (gates live inside)
+  if(typeof ACH!=='undefined' && !window._rbReplaying) ACH.fire('fallen',{count:fallenVets.length});   // T3-5
 }
 // ---- The Wake: stable identity + dossier reconstruction for fallen records ----
 // A stable id used to dedup resurrection across save/load + rollback. Prefer the frozen lore seed
@@ -253,6 +270,15 @@ function dossierHeadHTML(u){
 function dossierFileHTML(u){
   const d = buildDossier(u), def = DEF[u.type], lvl = u.stars||0;
   let h = '';
+  // T0-5: identity (name + hometown) exists from the first selection/kill, but the FULL personnel
+  // prose stays the Lv2 "getting to know them" beat — below that, the file reads as sealed.
+  if(!d.hero && lvl < 2){
+    h += `<div class="dk">Personnel file</div><div class="dossier-prose">`;
+    h += `<p>${d.first} ${d.last}, of ${_loCap(d.home)}. That much HR will confirm.</p>`;
+    h += `<p class="assess">Full file sealed — clearance unlocks at Level 2. Keep them alive long enough to read it.</p></div>`;
+    h += `<div class="dk">Service record</div><ol class="dossier-log"><li>No entries yet.</li></ol>`;
+    return h;
+  }
   // narrative prose: one deterministically-chosen paragraph per lore area, slots resolved here
   // ({rank}/{unit}/{lvl} only exist at render time; {me}/{home}/{trauma}/{dream}/{crime}/{family} via d.fill)
   if(d.paras){
@@ -274,6 +300,59 @@ function dossierHTML(u){
   return `<div class="dossier">${dossierHeadHTML(u)}${dossierFileHTML(u)}</div>`;
 }
 
+/* =====================================================================
+   T3-6: THE FOUNDER'S LEDGER — cross-run hall of fame. Its OWN localStorage key
+   (starleft_ledger), never touched by the save loader → save-compat-safe by
+   construction. Appended on IPO and on campaign collapse; capped.
+   ===================================================================== */
+const LEDGER_KEY='starleft_ledger', LEDGER_CAP=20;
+function ledgerLoad(){
+  try{ const d=JSON.parse(localStorage.getItem(LEDGER_KEY)||'{}');
+    return { runs:Array.isArray(d.runs)?d.runs:[], stats:(d.stats&&typeof d.stats==='object')?d.stats:{} };
+  }catch(_){ return { runs:[], stats:{} }; }
+}
+function recordLedgerRun(outcome){
+  try{
+    const led=ledgerLoad();
+    const survivors=((typeof G!=='undefined'&&G)?G.entities:[])
+      .filter(e=>!e.dead&&e.owner==='player'&&e.kind==='unit'&&e.lore)
+      .map(u=>{ const d=buildDossier(u); return { name:d.full, type:u.type, lvl:u.stars||0, dream:d.dream, dreamDone:!!u.dreamDone }; });
+    const fallen=fallenVets.map(f=>({ name:f.name, type:f.type, lvl:f.lvl||0, dream:f.dream, dreamDone:!!f.dreamDone, map:f.map }));
+    led.runs.unshift({ at:Date.now(), outcome, ngPlus:(typeof CAMPAIGN!=='undefined'&&CAMPAIGN&&CAMPAIGN.ngPlus)|0,
+                       survivors:survivors.slice(0,24), fallen:fallen.slice(0,40) });
+    while(led.runs.length>LEDGER_CAP) led.runs.pop();
+    const s=led.stats;
+    s.runsRecorded=(s.runsRecorded||0)+1;
+    if(outcome==='ipo') s.campaignsCompleted=(s.campaignsCompleted||0)+1;
+    s.totalFallen=(s.totalFallen||0)+fallen.length;
+    s.dreamsFulfilled=(s.dreamsFulfilled||0)+survivors.concat(fallen).filter(x=>x.dreamDone).length;
+    const top=survivors.concat(fallen).reduce((a,b)=>(b.lvl||0)>((a&&a.lvl)||0)?b:a, s.longestLived||null);
+    if(top && top.name) s.longestLived={ name:top.name, lvl:top.lvl||0, type:top.type };
+    localStorage.setItem(LEDGER_KEY, JSON.stringify(led));
+  }catch(_){}
+}
+function ledgerHTML(){
+  const led=ledgerLoad(), s=led.stats||{};
+  if(!led.runs.length && !s.runsRecorded) return '';
+  let h=`<div class="ledger"><h3>📒 Founder's Ledger — lifetime</h3>`;
+  h+=`<div class="ledger-stats">`
+    +`<span class="vs">IPOs <b>${s.campaignsCompleted||0}</b></span>`
+    +`<span class="vs">runs <b>${s.runsRecorded||0}</b></span>`
+    +`<span class="vs">🕯 total fallen <b>${s.totalFallen||0}</b></span>`
+    +`<span class="vs">dreams fulfilled <b>${s.dreamsFulfilled||0}</b></span>`
+    +(s.longestLived?`<span class="vs">longest-lived <b>${s.longestLived.name}</b> · Lv ${s.longestLived.lvl}</span>`:'')
+    +`</div>`;
+  for(const r of led.runs.slice(0,5)){
+    const when=(()=>{ try{ return new Date(r.at).toLocaleDateString(); }catch(_){ return ''; } })();
+    h+=`<div class="ledger-run"><b>${r.outcome==='ipo'?'🦄 IPO':'💸 collapse'}</b>${r.ngPlus?` · lap ${r.ngPlus+1}`:''} · ${when}`
+      +` — ${r.survivors.length} survived, ${r.fallen.length} fell`
+      +(r.survivors[0]?` · led by <b>${r.survivors[0].name}</b>`:(r.fallen[0]?` · remembered for <b>${r.fallen[0].name}</b>`:''))
+      +`</div>`;
+  }
+  h+=`</div>`;
+  return h;
+}
+
 function rosterHTML(){
   const living = (typeof G!=='undefined'&&G?G.entities:[])
     .filter(e=>!e.dead && e.owner==='player' && e.lore)
@@ -282,12 +361,16 @@ function rosterHTML(){
   h += `<div class="roster-col"><h3>Active Veterans (${living.length})</h3>`;
   if(!living.length) h += `<div class="muted">No veterans yet — units earn a dossier at level 2.</div>`;
   for(const u of living){ const d=buildDossier(u), def=DEF[u.type];
-    h += `<button class="roster-row" data-uid="${u.id}">${def.icon||''} <b>${d.full}</b><span class="rr-sub">${careerTitle(u.stars||0)} ${def.name} · Lv ${u.stars||0}</span></button>`; }
+    h += `<div class="roster-rowwrap"><button class="roster-row" data-uid="${u.id}">${def.icon||''} <b>${d.full}</b><span class="rr-sub">${careerTitle(u.stars||0)} ${def.name} · Lv ${u.stars||0}</span></button>`
+       + `<button class="roster-share" data-share-uid="${u.id}" title="Share this file as an image">⇪</button></div>`; }
   h += `</div>`;
   h += `<div class="roster-col"><h3>The Fallen (${fallenVets.length})</h3>`;
   if(!fallenVets.length) h += `<div class="muted">None yet — keep them alive.</div>`;
-  for(const f of fallenVets){ const def=DEF[f.type];
-    h += `<div class="roster-row fallen">${def?def.icon:''} <b>${f.name}</b><span class="rr-sub">${careerTitle(f.lvl)} ${def?def.name:f.type} · Lv ${f.lvl} · fell at ${f.map||'the front'} · ${f.dreamDone?'dream fulfilled ✓':'dream unfulfilled'}</span></div>`; }
+  fallenVets.forEach((f, fi)=>{ const def=DEF[f.type];
+    h += `<div class="roster-rowwrap"><div class="roster-row fallen">${def?def.icon:''} <b>${f.name}</b><span class="rr-sub">${careerTitle(f.lvl)} ${def?def.name:f.type} · Lv ${f.lvl} · fell at ${f.map||'the front'} · ${f.dreamDone?'dream fulfilled ✓':'dream unfulfilled'}</span></div>`
+       + `<button class="roster-share" data-share-fidx="${fi}" title="Pour one out — share their memorial card">⇪</button></div>`; });
   h += `</div></div>`;
+  h += ledgerHTML();              // T3-6: lifetime hall-of-fame strip under the live roster
+  if(typeof achievementsHTML==='function') h += achievementsHTML();   // T3-5: themed achievements tab
   return h;
 }
