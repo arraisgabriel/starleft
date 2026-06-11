@@ -261,6 +261,8 @@ const KENNEL = {
    Buzzword Bombers after grace (requires anti-air to answer — T2-6);
    `events:[{atTime,…}]` are scripted beats (T2-8, core.js runMapEvent);
    `winCondition:{type:'survive'|'escort'|'reachAndHold',…}` (T2-1).
+   `objective` shows in the top bar at every viewport size — keep it
+   ≤ ~220 chars so it stays ≤2 wrapped lines on short/landscape screens.
    ===================================================================== */
 const MAPS = [
   {

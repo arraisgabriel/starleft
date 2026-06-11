@@ -48,7 +48,9 @@ function refreshUI(){
   const _inc=document.getElementById('income');
   if(_inc){ const r=(!G.hub && !G.over) ? incomePerSec(_eco) : null; _inc.textContent = r==null ? '' : ('+'+r.toFixed(1)+'/s'); }
   document.getElementById('supply').textContent = _eco.supply+'/'+_eco.supplyCap;
-  document.getElementById('mapname').textContent = G.cfg.name;
+  const _mn=document.getElementById('mapname');
+  _mn.textContent = G.cfg.name;
+  if(_mn.parentElement && _mn.parentElement.title!==G.cfg.name) _mn.parentElement.title = G.cfg.name;   // hover recovery when short viewports ellipsize the label
   document.getElementById('objective').textContent = G.cfg.objective;
   updateBossBar();
 

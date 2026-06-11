@@ -80,6 +80,7 @@ function syncHud(){
   const tb=document.getElementById('topbar'), bp=document.getElementById('bottom');
   if(tb) VIEW_TOP = Math.ceil(tb.getBoundingClientRect().height || tb.offsetHeight || 0);
   if(bp) VIEW_BOT = Math.ceil(bp.getBoundingClientRect().height || bp.offsetHeight || 0);
+  if(document.documentElement) document.documentElement.style.setProperty('--hud-top-h', VIEW_TOP+'px');
   if(document.documentElement) document.documentElement.style.setProperty('--hud-bottom-h', VIEW_BOT+'px');
   const news=document.getElementById('lns-ingame');   // live-news ticker reserves a band above the bottom HUD when shown
   if(news && news.offsetHeight) VIEW_BOT += news.offsetHeight;
@@ -91,8 +92,9 @@ function syncHud(){
 // late custom-font reflow, command-button wrapping, and media-query breakpoints —
 // any of which leaves --hud-bottom-h stale so the fixed LNS stripe drifts onto the
 // bottom HUD. A ResizeObserver re-syncs AFTER every layout pass, whatever caused it.
-// No feedback loop: syncHud() only writes --hud-bottom-h (moves #lns-ingame's
-// position, not its size) and reads cv — it never resizes an observed element.
+// No feedback loop: syncHud() only writes --hud-top-h / --hud-bottom-h, which
+// reposition NON-observed fixed overlays (#bossbar, #btn-minimap, the minimap
+// overlay, #tutorialCoach / #lns-ingame) — it never resizes an observed element.
 function initHudObservers(){
   if(typeof ResizeObserver!=='function') return;
   let pending=false;

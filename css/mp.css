@@ -179,7 +179,7 @@
 #netq-panel{
   position:absolute;
   right:12px;
-  top:44px;
+  top:calc(100% - 2px);   /* hangs just below the (possibly multi-row) #topbar; 46px bar → 44px, same as before */
   z-index:6;
   display:flex;
   gap:8px;

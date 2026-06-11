@@ -25,6 +25,7 @@ canvas { display:block; image-rendering:auto; }
 :root{
   --top-h:46px; --bot-h:150px;
   --lns-menu-h:clamp(32px,5.05vh,48px);   /* main-menu live-news "lower third" stripe height */
+  --hud-top-h:calc(var(--top-h) + var(--safe-t));  /* pre-measure fallback; synced from #topbar by render.js (already includes safe-t — never add it again) */
   --hud-bottom-h:150px;                    /* synced from #bottom by render.js */
   --safe-b:env(safe-area-inset-bottom,0px);
   --safe-t:env(safe-area-inset-top,0px);
@@ -32,13 +33,14 @@ canvas { display:block; image-rendering:auto; }
 /* the canvas owns all pan/pinch gestures — stop the browser hijacking them */
 #cv, #minimap{ touch-action:none; }
 html,body{ overscroll-behavior:none; -webkit-touch-callout:none; }
-#topbar{ padding-top:var(--safe-t); }       /* 0 on desktop; clears notches on phones */
-#bottom{ padding-bottom:var(--safe-b); }
+#bottom{ padding-bottom:var(--safe-b); }    /* 0 on desktop; clears the home bar on phones */
 
 /* ---------- HUD ---------- */
 #topbar {
-  position:fixed; top:0; left:0; right:0; height:46px;
-  display:flex; align-items:center; gap:24px; padding:0 18px;
+  position:fixed; top:0; left:0; right:0;
+  height:auto; min-height:var(--top-h);   /* grows when the objective wraps; syncHud()'s ResizeObserver re-syncs VIEW_TOP */
+  display:flex; align-items:center; gap:24px;
+  padding:4px 18px; padding-top:calc(4px + var(--safe-t));   /* longhand AFTER shorthand keeps the notch inset alive */
   background:linear-gradient(180deg,rgba(38,20,24,.95),rgba(30,15,17,.88));
   border-bottom:1px solid #522a32; box-shadow:0 2px 10px rgba(0,0,0,.5);
   /* >#bottom(20) & #lns-ingame(21): #topbar forms a stacking context, so its dropdown
@@ -51,7 +53,10 @@ html,body{ overscroll-behavior:none; -webkit-touch-callout:none; }
 .stat .ico { width:16px; height:16px; border-radius:3px; display:inline-block; }
 .ico.gold { background:linear-gradient(135deg,#ffe27a,#f0a500); box-shadow:0 0 6px #f0a50080;}
 .ico.sup  { background:linear-gradient(135deg,#ffb0a0,#d64141); box-shadow:0 0 6px #d6414180;}
-#objective { margin-left:auto; font-size:13px; color:#ccaab0; font-weight:500; max-width:46%; }
+#objective { margin-left:auto; font-size:13px; color:#ccaab0; font-weight:500; max-width:46%; line-height:1.35; }
+/* stats + episode label never flex-squeeze into multi-line; #objective wraps instead and the
+   (height:auto) bar grows — syncHud()'s ResizeObserver re-syncs VIEW_TOP */
+#topbar .stat, #topbar > .lbl { flex:0 0 auto; }
 
 /* ---------- Boss (VILLAIN) HP bar ----------
    Floating, map-wide while a villain lives. position:fixed so it overlays the canvas WITHOUT being
@@ -59,7 +64,7 @@ html,body{ overscroll-behavior:none; -webkit-touch-callout:none; }
    (refreshUI) sets the name, fill width, and per-villain color inline; the .bossbar--rage class
    (boss phase 2) swaps to red + adds the crack/shake. */
 #bossbar{ --boss-color:#50e6ff; --boss-glow:color-mix(in srgb, var(--boss-color) 45%, transparent);
-  position:fixed; top:50px; left:50%; transform:translateX(-50%);
+  position:fixed; top:calc(var(--hud-top-h) + 4px); left:50%; transform:translateX(-50%);
   width:min(580px,84vw); z-index:21; pointer-events:none; text-align:center; }
 /* name + live HP% on one row (HP% echoes the Training Grounds countdown readout) */
 #bossbar-head{ display:flex; align-items:baseline; justify-content:center; gap:10px; margin-bottom:5px; }
@@ -245,7 +250,7 @@ html,body{ overscroll-behavior:none; -webkit-touch-callout:none; }
 
 /* minimap as a floating corner overlay (toggled by 🗺 on phones) */
 #minimap-wrap.as-overlay{ display:flex !important; position:fixed; z-index:26;
-  top:calc(var(--top-h) + 8px + var(--safe-t)); right:8px; width:auto; padding:5px;
+  top:calc(var(--hud-top-h) + 8px); right:8px; width:auto; padding:5px;
   background:rgba(20,10,12,.92); border:1px solid #522a32; border-radius:6px; }
 #minimap-wrap.as-overlay #minimap{ width:118px; height:auto; }
 
@@ -266,6 +271,7 @@ html,body{ overscroll-behavior:none; -webkit-touch-callout:none; }
    (placed last so it overrides the desktop/tablet rules above) ---- */
 @media (hover:none), (max-width:640px){
   #topbar{ height:auto; min-height:var(--top-h); gap:10px; padding:4px 10px;
+    padding-top:calc(4px + var(--safe-t));   /* keep the notch inset (shorthand above resets it) */
     font-size:12px; flex-wrap:wrap; }
   #topbar .lbl{ display:none; }
   /* keep the menu button on row 1 (pushed hard-right) and let the objective wrap below it
@@ -346,14 +352,34 @@ html,body{ overscroll-behavior:none; -webkit-touch-callout:none; }
 
   /* minimap toggle becomes a floating corner button (reuses #btn-minimap → .as-overlay) */
   #btn-minimap{ position:fixed; z-index:27; right:8px;
-    top:calc(var(--top-h) + 6px + var(--safe-t));
+    top:calc(var(--hud-top-h) + 6px);
     width:44px; height:44px; min-width:44px; min-height:44px; }
-  #minimap-wrap.as-overlay{ top:calc(var(--top-h) + 58px + var(--safe-t)); }  /* bloom under the 🗺 */
+  #minimap-wrap.as-overlay{ top:calc(var(--hud-top-h) + 58px); }  /* bloom under the 🗺 */
 
   /* Stop lives in the touch-controls row here too — drop the in-panel copy and let the
      command row vanish for non-builder units (only the intern keeps a 2nd line). */
   .cmd-btn.cmd-stop{ display:none; }
   #commands:not(.has-cmds){ display:none; }
+}
+
+/* ---- Short viewports (≤600px tall): two-row top bar, ALL info kept ----
+   Row 1: funding + headcount + episode + menu (hard right); Row 2: full-width
+   objective. Mirrors the hover:none reflow but does NOT hide the labels, so
+   desktop-mode phones / short desktop windows keep full information. Placed
+   after the touch + wide-short blocks so it wins their #topbar overlaps; on
+   true touch devices the earlier `#topbar .lbl{display:none}` still applies
+   (display is never set here). ResizeObserver re-syncs VIEW_TOP as it grows. */
+@media (max-height:600px){
+  #topbar{ height:auto; min-height:0; flex-wrap:wrap; gap:4px 14px;
+    padding:3px 10px; padding-top:calc(3px + var(--safe-t)); font-size:12px; }
+  /* episode label: single line; ellipsizes only under extreme squeeze (info-preserving) */
+  #topbar > .lbl{ flex:0 1 auto; min-width:0; white-space:nowrap;
+    overflow:hidden; text-overflow:ellipsis; }
+  #top-menu{ order:1; margin-left:auto; }
+  #objective{ order:2; flex-basis:100%; max-width:100%; margin-left:0;
+    font-size:11px; line-height:1.3; }
+  /* the 13-button menu dropdown otherwise runs off the bottom of a short screen */
+  #topmenu-panel{ max-height:calc(100vh - var(--hud-top-h) - 16px); overflow-y:auto; }
 }
 
 /* ---- Desktop / wide-landscape HUB idle: when nothing is selected, slim the bottom bar
@@ -441,14 +467,14 @@ html,body{ overscroll-behavior:none; -webkit-touch-callout:none; }
 
 /* Narrow / touch: #bottom grows and wraps, so dock the coach UNDER #topbar instead and widen it. */
 @media (hover:none), (max-width:640px){
-  #tutorialCoach{ bottom:auto; top:calc(46px + var(--safe-t) + 8px);
+  #tutorialCoach{ bottom:auto; top:calc(var(--hud-top-h) + 8px);
     width:calc(100vw - 16px); padding:10px 12px; gap:10px; }
   #tutorialCoach .tut-text{ font-size:13px; }
   #tutorialCoach .tut-portrait{ width:36px; height:36px; font-size:19px; }
 }
 /* Short landscape phones: keep it compact and out of the thin play band. */
 @media (orientation:landscape) and (max-height:480px){
-  #tutorialCoach{ top:calc(46px + var(--safe-t) + 4px); padding:8px 10px; width:min(560px,calc(100vw - 16px)); }
+  #tutorialCoach{ top:calc(var(--hud-top-h) + 4px); padding:8px 10px; width:min(560px,calc(100vw - 16px)); }
   #tutorialCoach .tut-text{ font-size:12px; line-height:1.25; }
   #tutorialCoach .tut-portrait{ display:none; }
 }
