@@ -113,7 +113,12 @@ function update(state, dt){
       // instead of dying — so this runs BEFORE the obituary/fallen side-effects below.
       if(e.kind==='unit' && e.owner==='player' && typeof isHealerVet==='function' && isHealerVet(e)){ downHeroToHq(state,e); changed=true; continue; }
       if(e.owner==='player' && e.kind==='unit' && !window._rbReplaying && typeof LNS!=='undefined' && LNS.ultraEvent) LNS.ultraEvent('unitDeath', { unit:e, map:state.cfg&&state.cfg.name });   // cosmetic news — skip during rollback re-sim
-      if(e.owner==='player' && e.kind==='unit' && typeof hubEnsureStats==='function') hubEnsureStats(state).unitsLost=(hubEnsureStats(state).unitsLost||0)+1;   // run-summary / score (T1-9/T3-3)
+      if(e.owner==='player' && e.kind==='unit' && typeof hubEnsureStats==='function'){   // run-summary / score (T1-9/T3-3)
+        const _hs=hubEnsureStats(state);
+        _hs.unitsLost=(_hs.unitsLost||0)+1;
+        if(e.hero) _hs.heroDeaths=(_hs.heroDeaths||0)+1;                       // quests: heroesAlive
+        if(e.hero || (e.stars||0)>=2) _hs.vetDeaths=(_hs.vetDeaths||0)+1;      // quests: noVetDeaths ("no new names on the wall")
+      }
       if(e.owner==='player' && e.kind==='unit' && e.lore && typeof recordFallen==='function') recordFallen(e);  // memorial + obituary
       killEntity(state,e); changed=true;
     }
@@ -224,6 +229,18 @@ function checkWinLose(state){
   if(state._sandboxNoEnd) return;   // sandbox test tool: freeze win/loss while staging a battle (localhost only; flag set only by js/sandbox.js)
   if(state.hub) return;
   if(state.extractReady) return;
+  // ---- QUEST MAPS: cfg.quests declares the objectives; victory = all required quests done
+  // (or a winsAlone quest). Defeat = a required quest failed (escort VIP dead / protected
+  // building razed) or the standard no-HQ/no-force checks. Maps WITHOUT cfg.quests fall
+  // through to the legacy chain below (villain / _pvp / winCondition / razeAll) — zero
+  // regression for hub, skirmish, sandbox, mutator and legacy/custom cfgs.
+  if(state.cfg && state.cfg.quests && state.cfg.quests.length && !state._pvp && typeof questsTick==='function'){
+    questsTick(state);   // lazy-ensure + evaluate (host/solo only by construction — clients never run update())
+    if(questsAnyRequiredFailed(state)){ state.over=true; state._outcome='lose'; if(!window.USE_ROLLBACK) onDefeat(); return; }
+    if(questsAllRequiredDone(state) || questsAnyWinsAloneDone(state)){ questsDeclareVictory(state); return; }
+    standardDefeatChecks(state);
+    return;   // no razeAll default on a quest map — the quest list is the win condition
+  }
   // BOSS MAPS: the named villain's fate decides the outcome and takes precedence over the normal
   // "no enemy buildings = win" rule (a boss arena may have NO enemy buildings → would insta-win).
   if(state.cfg && state.cfg.villain && typeof villainCheckWinLose==='function'){ if(villainCheckWinLose(state)) return; }
@@ -254,12 +271,6 @@ function checkWinLose(state){
   const wc = state.cfg && state.cfg.winCondition;
   if(wc && wc.type && wc.type!=='razeAll'){ if(checkAltWin(state, wc)) return; }
   const enemyBuildings = state.entities.some(e=>e.owner==='enemy'&&e.kind==='building'&&!e.dead);
-  const playerHas = state.entities.some(e=>e.owner==='player'&&!e.dead&&(e.kind==='building'||e.kind==='unit'));
-  const playerHq = state.entities.some(e=>e.owner==='player'&&e.type==='hq'&&!e.dead);
-  // Only an intern can build a new HQ — and only inside an HQ can you extract/leave the map.
-  // So recovery requires a living, free intern; banked gold alone cannot rebuild without one,
-  // and an intern trapped inside a just-destroyed HQ (no room to spill out) doesn't count.
-  const canRecoverHq = state.entities.some(e=>e.owner==='player'&&e.type==='worker'&&!e.dead&&!e.storedIn);
   if(!enemyBuildings){
     if(state._skirmish){ state.over=true; state._outcome='win'; if(!window.USE_ROLLBACK) onVictory(); return; }   // T3-2: skirmish ends here, no extraction/hub
     if(netRole==='solo' && typeof beginExtractionPhase==='function'){ beginExtractionPhase(state); return; }
@@ -268,8 +279,23 @@ function checkWinLose(state){
     }
     state.over=true; state._outcome='win'; if(!window.USE_ROLLBACK) onVictory(); return;   // rollback: `over`/`_outcome` are serialized predicate; the loop fires the screen on the confirmed tick
   }
-  if(!playerHq && !canRecoverHq){ state.over=true; state._outcome='lose'; if(!window.USE_ROLLBACK) onDefeat(); return; }
-  if(!playerHas){ state.over=true; state._outcome='lose'; if(!window.USE_ROLLBACK) onDefeat(); return; }
+  standardDefeatChecks(state);
+}
+
+// Player-loss conditions shared by the quest branch and the razeAll default (villains.js
+// bossDefeatChecks is the same predicate). Only an intern can build a new HQ — and only inside
+// an HQ can you extract/leave the map. So recovery requires a living, free intern; banked gold
+// alone cannot rebuild without one, and an intern trapped inside a just-destroyed HQ (no room
+// to spill out) doesn't count.
+function standardDefeatChecks(state){
+  const playerHq = state.entities.some(e=>e.owner==='player'&&e.type==='hq'&&!e.dead);
+  const canRecoverHq = state.entities.some(e=>e.owner==='player'&&e.type==='worker'&&!e.dead&&!e.storedIn);
+  const playerHas = state.entities.some(e=>e.owner==='player'&&!e.dead&&(e.kind==='building'||e.kind==='unit'));
+  if((!playerHq && !canRecoverHq) || !playerHas){
+    state.over=true; state._outcome='lose'; if(!window.USE_ROLLBACK) onDefeat();
+    return true;
+  }
+  return false;
 }
 
 /* =====================================================================
@@ -293,38 +319,62 @@ function altWinTriggered(state){
   }
   state.over=true; state._outcome='win'; if(!window.USE_ROLLBACK) onVictory();
 }
+/* Pure-ish evaluators — ONE body of logic shared by the quest types (js/quests.js survive/escort/
+   reachAndHold) and the quest-less checkAltWin fallback below (still needed forever: mutators
+   inject winCondition into skirmish cfgs). They return 'run' | 'win' | 'lose' and never set
+   over/outcome themselves. */
+function evalSurvive(state, wc){
+  const forSec=wc.forSec||300;
+  const prot = wc.protect==='none' ? true
+    : state.entities.some(e=>e.owner==='player'&&e.type===(wc.protect||'hq')&&!e.dead);
+  if(!prot) return 'lose';
+  if(state.time>=forSec) return 'win';
+  return 'run';
+}
+function evalEscort(state, wc){
+  const tgt=winTargetPx(wc); if(!tgt) return 'run';
+  const vips=state.entities.filter(e=>e._vip && e.kind==='unit');
+  const alive=vips.filter(e=>!e.dead);
+  if(vips.length && !alive.length) return 'lose';
+  for(const v of alive){ if(!v.storedIn && Math.hypot(v.x-tgt.x, v.y-tgt.y)<=tgt.r) return 'win'; }
+  return 'run';
+}
+// The hold accumulator is the CALLER's serialized state (legacy: state._holdT/_holdPrevT;
+// quest: q.t/q.prevT) — passed in and handed back so both paths stay save/rollback-consistent.
+// fixed-ish step: checkWinLose runs once per update tick; accumulate real elapsed time via
+// state.time deltas (dt-free approximation like other timers). Absence decays at half speed.
+function evalReachAndHold(state, wc, t, prevT){
+  const tgt=winTargetPx(wc); if(!tgt) return {r:'run', t:t||0, prevT, present:false};
+  const holdSec=wc.holdSec||45;
+  const present=state.entities.some(e=>e.owner==='player'&&e.kind==='unit'&&!e.dead&&!e.storedIn
+    && Math.hypot(e.x-tgt.x,e.y-tgt.y)<=tgt.r);
+  if(prevT==null) prevT=state.time;
+  const dt=Math.max(0, state.time-prevT); prevT=state.time;
+  t = present ? (t||0)+dt : Math.max(0,(t||0)-dt*0.5);
+  return { r:(t>=holdSec?'win':'run'), t, prevT, present };
+}
 function checkAltWin(state, wc){
   if(wc.type==='survive'){
-    const forSec=wc.forSec||300;
-    const prot = wc.protect==='none' ? true
-      : state.entities.some(e=>e.owner==='player'&&e.type===(wc.protect||'hq')&&!e.dead);
-    if(!prot){ state.over=true; state._outcome='lose'; if(!window.USE_ROLLBACK) onDefeat(); return true; }
+    const r=evalSurvive(state, wc);
+    if(r==='lose'){ state.over=true; state._outcome='lose'; if(!window.USE_ROLLBACK) onDefeat(); return true; }
     if(state._objBase==null) state._objBase=state.cfg.objective||'Survive.';
-    state.cfg.objective = state._objBase+'  ⏳ '+Math.max(0, forSec-(state.time|0))+'s';
-    if(state.time>=forSec){ altWinTriggered(state); return true; }
+    state.cfg.objective = state._objBase+'  ⏳ '+Math.max(0, (wc.forSec||300)-(state.time|0))+'s';
+    if(r==='win'){ altWinTriggered(state); return true; }
     return false;   // clock still running — the normal lose checks below still apply
   }
   if(wc.type==='escort'){
-    const tgt=winTargetPx(wc); if(!tgt) return false;
-    const vips=state.entities.filter(e=>e._vip && e.kind==='unit');
-    const alive=vips.filter(e=>!e.dead);
-    if(vips.length && !alive.length){ state.over=true; state._outcome='lose'; if(!window.USE_ROLLBACK) onDefeat(); return true; }
-    for(const v of alive){ if(!v.storedIn && Math.hypot(v.x-tgt.x, v.y-tgt.y)<=tgt.r){ altWinTriggered(state); return true; } }
+    const r=evalEscort(state, wc);
+    if(r==='lose'){ state.over=true; state._outcome='lose'; if(!window.USE_ROLLBACK) onDefeat(); return true; }
+    if(r==='win'){ altWinTriggered(state); return true; }
     return false;
   }
   if(wc.type==='reachAndHold'){
-    const tgt=winTargetPx(wc); if(!tgt) return false;
     const holdSec=wc.holdSec||45;
-    const present=state.entities.some(e=>e.owner==='player'&&e.kind==='unit'&&!e.dead&&!e.storedIn
-      && Math.hypot(e.x-tgt.x,e.y-tgt.y)<=tgt.r);
-    // fixed-ish step: checkWinLose runs once per update tick; use the same dt-free approximation
-    // as other timers by accumulating real elapsed time via state.time deltas.
-    if(state._holdPrevT==null) state._holdPrevT=state.time;
-    const dt=Math.max(0, state.time-state._holdPrevT); state._holdPrevT=state.time;
-    state._holdT = present ? (state._holdT||0)+dt : Math.max(0,(state._holdT||0)-dt*0.5);
+    const res=evalReachAndHold(state, wc, state._holdT||0, state._holdPrevT);
+    state._holdT=res.t; state._holdPrevT=res.prevT;
     if(state._objBase==null) state._objBase=state.cfg.objective||'Hold the position.';
-    state.cfg.objective = state._objBase+'  ⏳ '+Math.max(0, Math.ceil(holdSec-(state._holdT||0)))+'s'+(present?'':' — move in!');
-    if((state._holdT||0)>=holdSec){ altWinTriggered(state); return true; }
+    state.cfg.objective = state._objBase+'  ⏳ '+Math.max(0, Math.ceil(holdSec-(state._holdT||0)))+'s'+(res.present?'':' — move in!');
+    if(res.r==='win'){ altWinTriggered(state); return true; }
     return false;
   }
   return false;   // unknown verb → fall through to razeAll

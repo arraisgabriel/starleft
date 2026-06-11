@@ -89,6 +89,11 @@ function startSkirmish(cfgOrIdx, opts){
   }
   ['startScreen','mapScreen','loadScreen','skirmishScreen','endScreen'].forEach(id=>{ const el=document.getElementById(id); if(el) el.style.display='none'; });
   mapIndex=idx;
+  // asset gate (js/loader.js + ui.js): skirmish has no crawl, so the loading screen IS the
+  // loading window. Tags are computed AFTER the transient slot install above so they read the
+  // real generated config; everything below loadMap mutates the fresh G → it moves into enter().
+  LOADER.beginMission(missionTags(idx));
+  gateMission(idx, ()=>{
   loadMap(idx);
   G._skirmish=true;
   G._skirmishSeed=(opts.seed!=null)?opts.seed:null;
@@ -106,6 +111,7 @@ function startSkirmish(cfgOrIdx, opts){
   }catch(e){}
   if(typeof TELE!=='undefined') TELE.event('skirmish_started', { daily:!!opts.daily, muts:(opts.mutators||[]).length });
   toast(opts.daily ? ('📅 Daily Disruption — seed '+opts.seed) : 'Skirmish — no campaign stakes, all bragging rights');
+  });
 }
 function _skirmishMuts(m){ return m || (typeof skirmishSelectedMutators==='function' ? skirmishSelectedMutators() : []); }
 function startDailySkirmish(mutators){ const seed=dateToSeed(); startSkirmish(rollSkirmishConfig(seed), { seed, daily:true, mutators:_skirmishMuts(mutators) }); }

@@ -289,6 +289,21 @@ function wireTouchControls(){
     document.addEventListener('click', e=>{ if(!wrap.contains(e.target)) close(); });
     document.addEventListener('keydown', e=>{ if(e.key==='Escape') close(); });
   })();
+  // objectives chip: toggles the quest dropdown (mirrors wireTopMenu; inert in legacy .plain mode —
+  // rows aren't actions, so the panel stays open while playing and its counters keep ticking)
+  (function wireQuestChip(){
+    const wrap=document.getElementById('obj-wrap');
+    const btn=document.getElementById('obj-chip');
+    const panel=document.getElementById('quest-panel');
+    if(!wrap||!btn||!panel) return;
+    const close=()=>{ panel.style.display='none'; btn.classList.remove('open'); btn.setAttribute('aria-expanded','false'); };
+    const open =()=>{ panel.style.display='flex'; btn.classList.add('open');    btn.setAttribute('aria-expanded','true');  };
+    btn.addEventListener('click', e=>{ e.stopPropagation();
+      if(btn.classList.contains('plain')) return;
+      (panel.style.display==='flex')?close():open(); });
+    document.addEventListener('click', e=>{ if(!wrap.contains(e.target)) close(); });
+    document.addEventListener('keydown', e=>{ if(e.key==='Escape') close(); });
+  })();
   on('btn-minimap', ()=>{ const mw=document.getElementById('minimap-wrap'); if(mw) mw.classList.toggle('as-overlay'); });
   // control-group chips: tap = recall, long-press = assign
   document.querySelectorAll('.grp-chip').forEach(el=>{

@@ -216,9 +216,18 @@ function loadGame(key){
   ['startScreen','mapScreen','docScreen','crawlScreen','endScreen','loadScreen']
     .forEach(id=>{ const el=document.getElementById(id); if(el) el.style.display='none'; });
   if(typeof resetInputState==='function') resetInputState();
-  if(typeof resetDialogs==='function') resetDialogs(); syncHud(); clampCam(G); computeFog(G); refreshUI(); running=true;
-  if(typeof syncPauseBtn==='function') syncPauseBtn();
-  toast('Loaded: '+(d.mapName||'game'));
+  if(typeof resetDialogs==='function') resetDialogs(); syncHud(); clampCam(G); computeFog(G); refreshUI();
+  // asset gate (js/loader.js + ui.js): hold the world view until this map's critical sprites
+  // settle — the opaque overlay hides any procedural flash. Deserialization above stayed
+  // fully synchronous and byte-identical; only the trailing running=true moved behind the gate.
+  running=false;
+  let _isHub=false; try{ _isHub=saveIsHubMap(d); }catch(_){}
+  LOADER.beginMission(_isHub ? missionTagsHub() : missionTags(mapIndex));
+  gateMission(mapIndex, ()=>{
+    running=true;
+    if(typeof syncPauseBtn==='function') syncPauseBtn();
+    toast('Loaded: '+(d.mapName||'game'));
+  });
 }
 
 /* ---------- "▶ Continue" (T0-8): one-click resume of the most recent autosave ---------- */

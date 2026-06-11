@@ -14,7 +14,7 @@ const HUB_PANO_IMG = new Image();
 let HUB_PANO_READY = false;
 HUB_PANO_IMG.onload  = ()=>{ HUB_PANO_READY = true; };
 HUB_PANO_IMG.onerror = ()=>{ HUB_PANO_READY = false; };
-HUB_PANO_IMG.src = ASSET_BASE + 'scenes/hub/hub_panoramic.png';
+LOADER.register(HUB_PANO_IMG, ASSET_BASE + 'scenes/hub/hub_panoramic.png', { tag:'scene:hubpano', tier:LOADER.T_AMBIENT, weight:4 });
 
 const HUB_LOAD_DURATION = 20;   // seconds the bomber takes to cross — sets the scene length
 
@@ -297,5 +297,19 @@ function drawHubLoadingScene(state, opts){
   drawHubPanoTower(state, fit);
   drawHubPanoDrones(state, fit);
   if(!(opts && opts.noBomber)) drawHubPanoBomber(state, fit);   // Ep VII flash intro reuses this scene without the bomber
+  // asset-loading telemetry: from 60% in, if the hub's sprite set hasn't settled (the panorama
+  // is also the hub's loading window — js/hub.js extends the phase exit), show a minimal strip
+  // in the scene's own idiom. Canvas, not DOM: the HUD is hidden under body.scene-hubload.
+  const f=state && state.extractFlight;
+  if(f && f.phase==='panorama' && typeof LOADER!=='undefined' && !LOADER.missionReady()
+     && f.t > (typeof HUB_LOAD_DURATION!=='undefined'?HUB_LOAD_DURATION:20)*0.6){
+    const p=LOADER.missionProgress(), w=160, x=24, y=fit.vh-28;
+    ctx.globalAlpha=0.55;
+    ctx.fillStyle='rgba(255,255,255,.12)'; ctx.fillRect(x,y,w,3);
+    ctx.fillStyle='#ff4545'; ctx.fillRect(x,y,w*Math.min(1,p.frac),3);
+    ctx.font='10px monospace'; ctx.fillStyle='#ffb9be'; ctx.textAlign='left';
+    ctx.fillText('ESTABLISHING UPLINK · '+((p.frac*100)|0)+'%', x, y-6);
+    ctx.globalAlpha=1;
+  }
   ctx.setTransform(1,0,0,1,0,0);
 }

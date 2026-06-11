@@ -5,16 +5,18 @@
    To move/rename art, change ONLY these helpers. (Loaded after config.js.)
    ===================================================================== */
 const ASSET_BASE      = 'assets/';
-const ATLAS_TILESET   = ASSET_BASE + 'atlas/tileset.png';
-const ATLAS_BUILDINGS = ASSET_BASE + 'atlas/buildings.png';
+// Sprite sheets ship as WebP (~86% smaller than the PNG masters — the difference between a
+// 15s and a 4s loading gate on mobile). Converted by _dev/gen/optimize_assets.py @ q85.
+const ATLAS_TILESET   = ASSET_BASE + 'atlas/tileset.webp';
+const ATLAS_BUILDINGS = ASSET_BASE + 'atlas/buildings.webp';
 const RESOURCE_CRYSTAL = ASSET_BASE + 'resource/crystal.png'; // Funding crystal node (optional; procedural fallback if absent)
 // standalone building sheet: name garage|launchpad , faction player|enemy
-function buildingSheet(name, faction){ return ASSET_BASE + 'buildings/' + name + '_' + faction + '.png'; }
+function buildingSheet(name, faction){ return ASSET_BASE + 'buildings/' + name + '_' + faction + '.webp'; }
 // unit sheet: type worker|soldier|... , action walk|mine|attack|heal , enemy bool
-function unitSheet(type, action, enemy){ return ASSET_BASE + 'units/' + type + '/' + action + (enemy ? '_enemy' : '') + '.png'; }
+function unitSheet(type, action, enemy){ return ASSET_BASE + 'units/' + type + '/' + action + (enemy ? '_enemy' : '') + '.webp'; }
 // faction-keyed variant: player → no suffix, enemy → _enemy, ao → _ao (A&O alien recolor;
 // see _dev/gen/recolor_ao.py). Keeps unitSheet's boolean signature intact for existing callers.
-function unitSheetFac(type, action, faction){ return ASSET_BASE + 'units/' + type + '/' + action + (faction && faction!=='player' ? '_'+faction : '') + '.png'; }
+function unitSheetFac(type, action, faction){ return ASSET_BASE + 'units/' + type + '/' + action + (faction && faction!=='player' ? '_'+faction : '') + '.webp'; }
 
 /* ---- Voice audio (locally TTS-generated; see _dev/gen/ + js/voice.js) ----
    Optional like every other asset: VOICE plays a clip if present and silently no-ops if missing.
@@ -46,7 +48,7 @@ const ATLAS_IMG = new Image();
 let ATLAS_READY = false;
 ATLAS_IMG.onload = ()=>{ ATLAS_READY = true; };
 ATLAS_IMG.onerror = ()=>{ ATLAS_READY = false; };
-ATLAS_IMG.src = ATLAS_TILESET;
+LOADER.register(ATLAS_IMG, ATLAS_TILESET, { tag:'atlas:tileset', tier:LOADER.T_CRITICAL, weight:2 });
 const ATLAS_CELL = 128;                                  // px per cell (3 cols × 7 rows, no gutter)
 const SLOT_COL = { floor:0, rock:1, tree:2 };
 function atlasRect(biome, slot){ const c=SLOT_COL[slot]||0; return [c*ATLAS_CELL, biome*ATLAS_CELL, ATLAS_CELL, ATLAS_CELL]; }
@@ -62,12 +64,12 @@ function spriteFor(biome, slot){
    features, cut from the originals by _dev/gen/slice_features.py). 2 cols (rock,tree) ×
    7 biome rows (ATLAS_BIOMES order) of FEAT_CELL px. Optional: drawFeatureSprite falls
    back to the opaque tileset cell, then procedural, if this PNG is missing. ---- */
-const ATLAS_FEATURES = ASSET_BASE + 'atlas/features.png';
+const ATLAS_FEATURES = ASSET_BASE + 'atlas/features.webp';
 const FEAT_IMG = new Image();
 let FEAT_READY = false;
 FEAT_IMG.onload = ()=>{ FEAT_READY = true; };
 FEAT_IMG.onerror = ()=>{ FEAT_READY = false; };
-FEAT_IMG.src = ATLAS_FEATURES;
+LOADER.register(FEAT_IMG, ATLAS_FEATURES, { tag:'atlas:features', tier:LOADER.T_CRITICAL, weight:2, optional:true });
 const FEAT_CELL = 256;
 const FEAT_COL = { rock:0, tree:1 };
 const FEAT_ROW = {}; ATLAS_BIOMES.forEach((b,i)=>{ FEAT_ROW[b]=i; });
@@ -84,12 +86,12 @@ function featSpriteFor(biome, slot){
    Could be generated with the Gemini image-pro API. Layout: WATER_CELL px cells, 7 biome rows
    (ATLAS_BIOMES order). Columns by slot: depth 0..2 (shore->mid->deep), caustic 3.. (flow frames),
    molten 11.. (lava-crack frames). water.js calls waterSpriteFor(biome,'depth',depthCell). ---- */
-const ATLAS_WATER = ASSET_BASE + 'atlas/water.png';
+const ATLAS_WATER = ASSET_BASE + 'atlas/water.webp';
 const WATER_IMG = new Image();
 let WATER_READY = false;
 WATER_IMG.onload = ()=>{ WATER_READY = true; };
 WATER_IMG.onerror = ()=>{ WATER_READY = false; };
-WATER_IMG.src = ATLAS_WATER;
+LOADER.register(WATER_IMG, ATLAS_WATER, { tag:'atlas:water', tier:LOADER.T_CRITICAL, weight:2, optional:true });
 const WATER_CELL = 128;
 const WATER_SLOT_COL = { depth:0, caustic:3, molten:11 };       // base column per slot
 const WATER_ROW = {}; ATLAS_BIOMES.forEach((b,i)=>{ WATER_ROW[b]=i; });
@@ -116,7 +118,8 @@ function loadBuildingStrip(type, faction){
   const nf = BUILDING_FRAME_COUNT[type] || BUILDING_FRAMES;
   a.img.onload  = ()=>{ a.fw = a.img.naturalWidth/nf; a.fh = a.img.naturalHeight; a.ready = true; };
   a.img.onerror = ()=>{ a.ready=false; };
-  a.img.src = buildingSheet(type, faction);
+  LOADER.register(a.img, buildingSheet(type, faction),
+    { tag:'bld:'+type+':'+faction, tier:faction==='ao'?LOADER.T_AMBIENT:LOADER.T_GAMEPLAY, weight:3, optional:faction==='ao' });
   return a;
 }
 const BUILDING_ANIM = {};
@@ -132,7 +135,7 @@ const PLAYER_IS_RED = true;
 function isRedSide(owner){ const human=owner==='player'; return PLAYER_IS_RED ? human : !human; }
 function factionKey(owner){ return isRedSide(owner) ? 'enemy' : 'player'; }
 
-function loadImg(src){ const i=new Image(); i.src=src; return i; }
+function loadImg(src, opts){ return LOADER.image(src, opts || { tag:'misc:'+src, tier:LOADER.T_GAMEPLAY, optional:true }); }
 // returns {img, fw, fh, frames} for an entity's building strip (faction-keyed), or null.
 // faction overrides the owner-derived set (e.g. 'ao' for A&O enemies) but gracefully falls
 // back to the factionKey(owner) set when that strip is missing/not-ready.
@@ -143,7 +146,7 @@ function buildingSprite(type,owner,faction){
 }
 
 // Funding resource crystal — optional generated sprite; null until present (then drawGoldmine blits it under the animated glow/shine).
-const CRYSTAL_IMG = loadImg(RESOURCE_CRYSTAL);
+const CRYSTAL_IMG = loadImg(RESOURCE_CRYSTAL, { tag:'res:crystal', tier:LOADER.T_CRITICAL, weight:1, optional:true });
 function crystalSprite(){ return (CRYSTAL_IMG.complete && CRYSTAL_IMG.naturalWidth) ? CRYSTAL_IMG : null; }
 
 /* ---- Unit animations (sliced from green-screen sprite strips) ----
@@ -155,17 +158,27 @@ function crystalSprite(){ return (CRYSTAL_IMG.complete && CRYSTAL_IMG.naturalWid
 const UNIT_FRAMES = 10;                 // frames per walk/action strip (5×2 grid → 10)
 // Load a horizontal N-frame strip (frame i at x=i*fw). New unit art is a uniform
 // UNIT_FRAMES-wide strip, so frames are auto-derived as width/UNIT_FRAMES.
-function loadWalk(src, fw, fh, frames){
+function loadWalk(src, fw, fh, frames, meta){
   const a = { img:new Image(), ready:false, fw:fw||0, fh:fh||0, frames:frames||null };
   a.img.onload=()=>{ if(!a.frames){ const n=UNIT_FRAMES; a.fw=a.img.width/n; a.fh=a.img.height;
       a.frames=[]; for(let i=0;i<n;i++) a.frames.push([i*a.fw,0,a.fw,a.fh]); } a.ready=true; };
-  a.img.onerror=()=>{ a.ready=false; }; a.img.src=src;
+  a.img.onerror=()=>{ a.ready=false; };
+  LOADER.register(a.img, src, meta || { tag:'unit:'+src, tier:LOADER.T_GAMEPLAY, weight:4 });
   return a;
 }
 // a faction set of auto-derived 10-frame strips for a unit's walk/action sheet. 'ao' is the
 // optional A&O alien recolor (black + toxic green); absent _ao files just stay !ready and the
 // lookups fall back to the owner-keyed set (see unitWalk/actionAnim + _dev/gen/recolor_ao.py).
-function walkPair(type, act){ return { player:loadWalk(unitSheet(type,act,false)), enemy:loadWalk(unitSheet(type,act,true)), ao:loadWalk(unitSheetFac(type,act,'ao')) }; }
+function walkPair(type, act){
+  const meta = (fac)=>({ tag:'unit:'+type+':'+act+':'+fac, weight:4,
+    // walk strips are the frame-one look of every unit → gameplay tier; action strips play
+    // seconds later and the _ao recolors are optional → ambient tier, single retry.
+    tier:(act==='walk' && fac!=='ao') ? LOADER.T_GAMEPLAY : LOADER.T_AMBIENT,
+    optional:fac==='ao' });
+  return { player:loadWalk(unitSheet(type,act,false),0,0,null,meta('player')),
+           enemy: loadWalk(unitSheet(type,act,true), 0,0,null,meta('enemy')),
+           ao:    loadWalk(unitSheetFac(type,act,'ao'),0,0,null,meta('ao')) };
+}
 // per-type walk sets keyed by owner (player cyan / enemy red). Missing/!ready →
 // null → procedural vector fallback (shown only until the art loads).
 const UNIT_WALK = {

@@ -21,7 +21,10 @@ const MUSIC = (function(){
 
   function makeAudio(src, loop){
     const a = new Audio();
-    a.preload = 'auto';
+    // 'none', not 'auto': the menu themes are several MB and used to start downloading at
+    // boot, competing with the critical sprite queue (js/loader.js) on mobile. play() —
+    // already gesture-delayed — triggers the fetch; mp3s stream, so the cost is one RTT.
+    a.preload = 'none';
     a.src = src;
     a.loop = !!loop;
     a.volume = volume;

@@ -168,6 +168,12 @@ body.big-text #toast{ font-size:15px; }
 .vic-sum .vs-score{ border-color:#7a6a32; color:#ffd86b; }
 .vic-fallen{ font-size:12px; color:#c9a0a8; max-width:640px; margin:0 auto 8px; }
 .vic-fallen b{ color:#ffd9dd; }
+/* bonus-objective line items under the run summary: earned = gold 🏅, missed = grayed */
+.vic-quests{ max-width:640px; margin:0 auto 8px; display:flex; flex-direction:column; gap:3px; }
+.vic-quests .vq{ font-size:12px; color:#ffd86b; }
+.vic-quests .vq b{ color:#fff; }
+.vic-quests .vq.miss{ color:#6f7a84; }
+.vic-quests .vq.miss span{ font-style:italic; }
 #toast {
   position:fixed; top:60px; left:50%; transform:translateX(-50%);
   background:rgba(44,20,24,.95); border:1px solid #753a48; padding:9px 20px; border-radius:20px;
@@ -529,6 +535,10 @@ body.hub-menu-open #bottom{ display:none; }              /* syncHud() then drops
 .mdc-brief-sum{ color:#e9d4c0; font-size:clamp(14px,1.4vw,16px); line-height:1.6; max-width:62ch; }
 .mdc-brief-obj{ margin-top:2px; padding-top:12px; border-top:1px solid #5a2f3a; color:#cfe9ff; font-size:13px; line-height:1.5; }
 .mdc-brief-obj span{ display:inline-block; margin-right:8px; color:#ffd86b; letter-spacing:2px; font-size:11px; }
+/* quest briefing rows: only the FIRST row carries the divider; bonus rows go gold with their M3$ upside */
+.mdc-brief-obj + .mdc-brief-obj{ padding-top:4px; border-top:none; margin-top:0; }
+.mdc-brief-bonus{ color:#d8c08a; }
+.mdc-brief-bonus b{ color:#ffd86b; }
 .hub-stat{ color:#e7c8a0; font-size:14px; letter-spacing:.4px; }
 .hub-stat b{ color:#ffd86b; }
 .hub-note{ color:#9e8088; font-size:13px; font-style:italic; line-height:1.5; max-width:680px; }
@@ -540,3 +550,56 @@ body.hub-menu-open #bottom{ display:none; }              /* syncHud() then drops
 .hub-footer .grow{ flex:1; min-width:160px; color:#cfe9ff; font-size:13px; }
 .sc-btn.hub-action{ width:auto; min-width:240px; justify-content:center; text-align:center; clip-path:none; }
 .sc-btn.disabled{ opacity:.4; pointer-events:none; }
+
+/* ---------- Asset loading gate (#loadGate) + crawl progress chip ----------
+   Shown between picking a map and revealing the world (ui.js gateMission) while
+   js/loader.js streams the map's critical sprites. Pure CSS by design — the gate
+   exists precisely for the missing-asset state, so it may depend on no images.
+   Visual language cloned from the boot gate (menu.css): devastated red/black,
+   scanlines, cut-corner bar. z-index 60 puts it above the in-game overlays (50);
+   #crawlScreen never coexists with it (the gate only shows after the crawl). */
+.load-gate{
+  z-index:60;
+  background:
+    radial-gradient(circle at 50% 48%, rgba(135,18,28,.2), transparent 28%),
+    radial-gradient(ellipse at 50% 100%, rgba(80,7,12,.24), transparent 46%),
+    linear-gradient(180deg, #070408 0%, #030205 100%);
+}
+.load-gate::before{
+  content:''; position:absolute; inset:0; pointer-events:none;
+  background:
+    linear-gradient(90deg, transparent 0%, rgba(255,60,60,.06) 50%, transparent 100%),
+    repeating-linear-gradient(180deg, rgba(255,255,255,.026) 0 1px, transparent 1px 7px);
+  opacity:.42;
+}
+.lg-panel{ position:relative; z-index:1; display:flex; flex-direction:column; align-items:center; gap:13px; padding:24px; }
+.lg-ep{ font-size:13px; letter-spacing:5px; color:#c97a82; text-transform:uppercase; }
+.lg-title{ font-size:clamp(20px,5vw,30px); font-weight:800; letter-spacing:4px; color:#ff7676; text-shadow:0 0 22px #d6353580; }
+.lg-bar{
+  width:min(420px,78vw); height:14px; overflow:hidden;
+  border:1px solid #a6323d; border-left:3px solid #ff4545;
+  clip-path:polygon(0 0,100% 0,97% 100%,0 100%);
+  background:rgba(20,6,9,.85);
+}
+.lg-fill{
+  height:100%; width:0%;
+  background:linear-gradient(90deg,#7a0e18,#ff4545);
+  box-shadow:0 0 18px rgba(255,34,34,.4);
+  transition:width .3s ease;
+}
+.lg-pct{ font-size:13px; letter-spacing:2px; color:#ffb9be; }
+.lg-stall{ font-size:12px; letter-spacing:1.6px; text-transform:uppercase; color:#d98e62; animation:lgPulse 1.6s ease-in-out infinite; }
+.lg-tip{ max-width:min(520px,86vw); font-size:13px; color:#9a8186; line-height:1.6; }
+#lg-enter{ min-height:44px; }
+@keyframes lgPulse{ 0%,100%{ opacity:.55; } 50%{ opacity:1; } }
+@media (prefers-reduced-motion: reduce){ .lg-stall{ animation:none; } }
+
+/* loading chip inside the crawl — telemetry, not a blocker (bottom-LEFT, mirrors #crawl-skip) */
+#crawl-progress{
+  position:absolute; bottom:40px; left:34px; width:140px; height:3px; z-index:5;
+  background:rgba(255,255,255,.08); opacity:.55;
+}
+#crawl-progress-fill{ height:100%; width:0%; background:#ff4545; box-shadow:0 0 8px rgba(255,69,69,.5); }
+@media (max-width:820px){
+  #crawl-progress{ bottom:calc(26px + var(--safe-b, 0px)); left:18px; }
+}

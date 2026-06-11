@@ -47,7 +47,8 @@ if(typeof window!=='undefined'){
 
   let NUKE_IMG=null, NUKE_IMG_READY=false;
   try { const im=new Image(); im.onload=()=>{NUKE_IMG=im;NUKE_IMG_READY=true;}; im.onerror=()=>{NUKE_IMG_READY=false;};
-        im.src=(typeof ASSET_BASE!=='undefined'?ASSET_BASE:'assets/')+'scenes/nuke/mushroom.png'; } catch(e){}
+        const p=(typeof ASSET_BASE!=='undefined'?ASSET_BASE:'assets/')+'scenes/nuke/mushroom.png';
+        if(typeof LOADER!=='undefined') LOADER.register(im, p, { tag:'scene:nuke', tier:LOADER.T_AMBIENT, optional:true }); else im.src=p; } catch(e){}
 
   function hash(i){ const n=Math.sin(i*127.1+0.5)*43758.5453; return n-Math.floor(n); }
   function clamp(v,a,b){ return v<a?a:(v>b?b:v); }

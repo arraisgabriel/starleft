@@ -33,6 +33,7 @@ window.NET = window.NET || {};
   NET.DELTA = false;
   NET._baseline = new Map();      // host: last packed entity set (delta baseline)
   NET._lastEcoStr = null;         // host: last-sent eco signature (4a)
+  NET._lastQuestStr = null;       // host: last-sent quest-progress signature (change-tracked like eco)
   // ---- Robustness: desync guards + connection reliability ----
   NET._lastAppliedTick = -1;      // client: highest snap.t applied (drop out-of-order / stale snaps)
   NET.CHUNK_TTL = 10000;          // ms: discard a stalled full-snapshot reassembly buffer so a lost chunk can't wedge it forever
@@ -76,6 +77,7 @@ window.NET = window.NET || {};
     const SCALAR = ['eco','players','time','waveCount','graceTime','nextId','runSalt','over',
                     '_outcome','_fledBoss','_villainSpawned','_villainEscaped',   // boss-map outcome → client end screen
                     '_pvp','_pvpWinner',                                          // duel verdict (T4-5)
+                    'quests',                                                     // quest progress → client tracker (mid-match joiners get full state here)
                     'enemySpawnTimer','enemyWaveTimer','enemyFortifyTimer','_recalibratedFor','_coopOrigins'];
     for(const k of SCALAR){ if(s[k]!==undefined) G[k]=s[k]; }
     if(s.campaign && typeof deserializeHubCampaign==='function') deserializeHubCampaign(s.campaign);
@@ -221,6 +223,20 @@ window.NET = window.NET || {};
       if(o.sf) e.shootFx = (e.shootFx && e.shootFx.t>0) ? e.shootFx : { x:(o.sfx!=null?o.sfx:e.x), y:(o.sfy!=null?o.sfy:e.y), t:SHOOTFX_LIFE };
     }
   }
+  // Quest progress for the wire: QUANTIZED ints only (the reachAndHold float accumulator would
+  // otherwise change every tick and defeat the change-tracking), packed compact like eco.
+  function packQuests(){
+    if(!G.quests || !(G.cfg && G.cfg.quests && G.cfg.quests.length)) return null;
+    const qp={};
+    for(const k in G.quests){ const q=G.quests[k];
+      qp[k]={ c:q.cur|0, g:q.goal|0, d:q.done?1:0, f:q.failed?1:0 }; if(q.na) qp[k].n=1; }
+    return qp;
+  }
+  function snapAttachQuests(snap, force){
+    const qp=packQuests(); if(!qp) return;
+    const qStr=JSON.stringify(qp);
+    if(force || qStr!==NET._lastQuestStr || (NET.tick % NET.DELTA_HZ)===0){ snap.q=qp; NET._lastQuestStr=qStr; }
+  }
   NET.buildSnap = function(){
     const ents=[];
     for(const e of G.entities){ if(!e.dead) ents.push(packEnt(e)); }
@@ -229,6 +245,7 @@ window.NET = window.NET || {};
     // reliable+ordered, so a change is never lost), with a ~1 Hz safety resend.
     const ecoStr = JSON.stringify(G.eco);
     if(ecoStr!==NET._lastEcoStr || (NET.tick % NET.DELTA_HZ)===0){ snap.eco=G.eco; NET._lastEcoStr=ecoStr; }
+    snapAttachQuests(snap);
     if(G.hub && typeof serializeHubCampaign==='function') snap.campaign=serializeHubCampaign();
     return snap;
   };
@@ -249,6 +266,7 @@ window.NET = window.NET || {};
     if(keyframe) snap.key=1; else if(gone.length) snap.gone=gone;
     const ecoStr=JSON.stringify(G.eco);
     if(keyframe || ecoStr!==NET._lastEcoStr){ snap.eco=G.eco; NET._lastEcoStr=ecoStr; }
+    snapAttachQuests(snap, keyframe);
     if(G.hub && typeof serializeHubCampaign==='function') snap.campaign=serializeHubCampaign();
     return snap;
   };
@@ -260,6 +278,11 @@ window.NET = window.NET || {};
     const hadCampaign = !!snap.campaign;
     if(hadCampaign && typeof deserializeHubCampaign==='function') deserializeHubCampaign(snap.campaign);
     if(snap.eco) G.eco = snap.eco;
+    // quest progress (quantized {c,g,d,f} → the engine's {cur,goal,done,failed} shape). The quest
+    // tracker + completion toasts are UI-side (updateQuestHud diffs done/failed flips on its own),
+    // so simply swapping the state in is enough for clients.
+    if(snap.q){ const Q={}; for(const k in snap.q){ const p=snap.q[k];
+      Q[k]={ cur:p.c||0, goal:p.g||0, done:p.d?1:0, failed:p.f?1:0, na:p.n?1:0 }; } G.quests=Q; }
     // G.time is advanced locally every frame (clientTick) so time-driven sprite animations run at
     // render rate; only HARD-resync it if it has drifted far from the host (e.g. after a background gap).
     if(snap.time!=null && (G.time==null || Math.abs(G.time - snap.time) > 0.5)) G.time = snap.time;

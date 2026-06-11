@@ -14,7 +14,7 @@ const MEGA_BASE = ASSET_BASE + 'mega/';                 // ASSET_BASE from asset
 const MEGA_MANIFEST = { megabuilding:6, mountain:6, volcano:6, ruin:6 }; // variants per category
 const MEGA_FRAMES = 9;                                  // frames per strip (3×3 grid → 9)
 const MEGA_FPS = { megabuilding:1.4, mountain:0.6, volcano:1.2, ruin:0.9 }; // ambient loop speed (slow)
-function megaPath(cat,n){ return MEGA_BASE + cat + '_' + n + '.png'; }
+function megaPath(cat,n){ return MEGA_BASE + cat + '_' + n + '.webp'; }   // WebP since the mobile-loading fix (_dev/gen/optimize_assets.py)
 
 // Tint a whole 4-frame strip to a biome wash WITHOUT bleeding onto terrain: draw
 // the strip into an offscreen canvas, then 'source-atop' a color fill so only the
@@ -27,19 +27,24 @@ function megaTint(img, rgba){
 }
 // Load a 4-frame horizontal strip (frames laid side by side, sharing one bbox so
 // the structure doesn't jitter). Mirrors assets.js loadWalk. Ruins also get cool
-// (snow) / warm (sand) tinted copies so the neutral-grey art reads in either biome.
-function loadMega(src, cat){
+// (snow) / warm (sand) tinted copies so the neutral-grey art reads in either biome —
+// baked LAZILY on first draw (megaTintFor), not in onload: a late retry-load mid-combat
+// must not stall the main thread with two multi-MB canvas bakes per ruin.
+function loadMega(src, cat, n){
   const a = { img:new Image(), ready:false, fw:0, fh:0, snow:null, sand:null };
-  a.img.onload = ()=>{
-    a.fw = a.img.naturalWidth/MEGA_FRAMES; a.fh = a.img.naturalHeight; a.ready = true;
-    if(cat==='ruin'){ a.snow = megaTint(a.img,'rgba(150,180,205,.40)'); a.sand = megaTint(a.img,'rgba(200,165,110,.40)'); }
-  };
+  a.img.onload = ()=>{ a.fw = a.img.naturalWidth/MEGA_FRAMES; a.fh = a.img.naturalHeight; a.ready = true; };
   a.img.onerror = ()=>{ a.ready=false; };
-  a.img.src = src;
+  LOADER.register(a.img, src, { tag:'mega:'+cat+':'+n, tier:LOADER.T_AMBIENT, weight:6 });
   return a;
 }
+function megaTintFor(a, biome){
+  if(!a || !a.ready) return null;
+  if(biome===B_ICE){    if(!a.snow) a.snow = megaTint(a.img,'rgba(150,180,205,.40)'); return a.snow; }
+  if(biome===B_DESERT){ if(!a.sand) a.sand = megaTint(a.img,'rgba(200,165,110,.40)'); return a.sand; }
+  return null;
+}
 const MEGA = {};
-for(const cat in MEGA_MANIFEST){ MEGA[cat]=[]; for(let n=0;n<MEGA_MANIFEST[cat];n++) MEGA[cat].push(loadMega(megaPath(cat,n), cat)); }
+for(const cat in MEGA_MANIFEST){ MEGA[cat]=[]; for(let n=0;n<MEGA_MANIFEST[cat];n++) MEGA[cat].push(loadMega(megaPath(cat,n), cat, n)); }
 function megaSprite(cat,n){ const r=MEGA[cat]&&MEGA[cat][n]; return (r&&r.ready)?r:null; }
 
 /* ===================== placement ===================== */
@@ -517,7 +522,7 @@ function drawOneMega(state, m, ox, oy, x0, y0, x1, y1){
     const dw=w*(m.overhang||1.3), dh=dw*(spr.fh/spr.fw)*(m.heightScale||1);
     const dx=px+(w-dw)/2, dy=py+h-dh+2;
     let img=spr.img;
-    if(m.cat==='ruin') img=(m.biome===B_ICE?spr.snow : m.biome===B_DESERT?spr.sand : null) || spr.img;
+    if(m.cat==='ruin') img=megaTintFor(spr, m.biome) || spr.img;   // lazy one-time tint bake (snow/sand)
     if(m.hubAnim){
       // MADOSIS Mental Health Facility: animate (not the static HUB frame) at HALF the ambient speed,
       // CROSS-FADING consecutive frames so the lights pulse smoothly with no hard frame pops. Frames

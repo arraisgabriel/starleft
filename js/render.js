@@ -599,8 +599,10 @@ function _tcBake(state, ccx, ccy, z, cnt){
   }
   return { cnv, live, cnt };
 }
+let _tcGen = -1;   // LOADER.gen snapshot: a LATE-arriving atlas (mobile retry) re-bakes every chunk
 function renderTerrainChunks(state, z, x0,y0,x1,y1){
-  if(_tcFor!==state || _tcZoom!==z || _tcDpr!==dpr){ _tcCache.clear(); _tcFor=state; _tcZoom=z; _tcDpr=dpr; }
+  const _lg = (typeof LOADER!=='undefined') ? LOADER.gen : 0;
+  if(_tcFor!==state || _tcZoom!==z || _tcDpr!==dpr || _tcGen!==_lg){ _tcCache.clear(); _tcFor=state; _tcZoom=z; _tcDpr=dpr; _tcGen=_lg; }
   if(_tcCache.size>320) _tcCache.clear();                  // bound memory on big maps (re-bakes only visible chunks next frame)
   const cx0=Math.floor(x0/TC_SIZE), cy0=Math.floor(y0/TC_SIZE), cx1=Math.floor((x1-1)/TC_SIZE), cy1=Math.floor((y1-1)/TC_SIZE);
   const live=[];

@@ -184,8 +184,13 @@ function hubRecordKill(state, victim){
 function hubRewardFor(state){
   const s=hubEnsureStats(state), funding=Math.floor(teamGoldCollected(state)/1000)*25;
   const nonHqBuildings=Math.max(0, s.buildingKills - s.hqKills);
+  // bonus quests: each completed optional objective pays its authored M3$ (legacy saves / quest-less maps → 0)
+  let questBonus=0;
+  if(state.quests && state.cfg && state.cfg.quests)
+    for(const d of state.cfg.quests){ const q=state.quests[d.id]; if(q && q.done && !q.failed && !d.required) questBonus+=(d.reward|0); }
   return { completion:150, unitKills:s.unitKills*4, buildingKills:nonHqBuildings*25,
-    hqKills:s.hqKills*100, funding, total:150+s.unitKills*4+nonHqBuildings*25+s.hqKills*100+funding };
+    hqKills:s.hqKills*100, funding, questBonus,
+    total:150+s.unitKills*4+nonHqBuildings*25+s.hqKills*100+funding+questBonus };
 }
 
 function beginExtractionPhase(state){
@@ -322,9 +327,15 @@ function updateExtraction(state, dt){
     f.phase='panorama'; f.t=0;
     if(typeof resetHubPanoDrones==='function') resetHubPanoDrones();
     if(typeof document!=='undefined') document.body.classList.add('scene-hubload');
+    // the 20s panorama IS the hub's asset-loading window: promote the hub's sprite set now
+    if(typeof LOADER!=='undefined' && typeof missionTagsHub==='function') LOADER.beginMission(missionTagsHub());
   }
   // Bomber crosses the panorama skyline; when it reaches the far side the HUB map appears.
-  else if(f.phase==='panorama' && f.t >= (typeof HUB_LOAD_DURATION!=='undefined'?HUB_LOAD_DURATION:20)){
+  // If the hub's critical sprites haven't settled yet (cold mobile cache), the cinematic
+  // extends until they do, capped at +15s — the gate contract, drawn in the scene's idiom.
+  else if(f.phase==='panorama' && f.t >= (typeof HUB_LOAD_DURATION!=='undefined'?HUB_LOAD_DURATION:20)
+          && ((typeof LOADER==='undefined') || LOADER.missionReady()
+              || f.t >= (typeof HUB_LOAD_DURATION!=='undefined'?HUB_LOAD_DURATION:20)+15)){
     enterHubFromCombat(state);
   }
 }
@@ -1074,7 +1085,8 @@ function hubDispatchNextEpisode(){
         : Math.max(0, Math.min(CAMPAIGN.nextMapIndex, MAPS.length-1));
   mapIndex=idx;
   hubStartDispatchFlight(G, 0);                 // dur refined by showCrawl once narration length is known
-  showCrawl(idx, ()=>{ endDispatchFlight(G); loadMap(idx); });
+  if(typeof LOADER!=='undefined') LOADER.beginMission(missionTags(idx));   // the dispatch crawl doubles as the download window
+  showCrawl(idx, ()=>{ gateMission(idx, ()=>{ endDispatchFlight(G); loadMap(idx); }); });
 }
 function hubLaunchNextEpisode(){ hubDispatchNextEpisode(); }
 function hubSpend(cost){

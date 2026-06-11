@@ -90,6 +90,13 @@
     if(typeof syncHud==='function') syncHud();
     if(typeof clampCam==='function') clampCam(G);
     if(typeof refreshUI==='function') refreshUI();
+    // asset gate (VISUAL-ONLY in co-op): hides the procedural flash while this map's sprites
+    // settle. It must never touch `running` or delay mpstart/sendFull — the sim, host clock and
+    // snapshot flow all proceed underneath the opaque overlay; the gate just lifts on settle/18s.
+    if(typeof gateMission==='function' && typeof LOADER!=='undefined'){
+      LOADER.beginMission(missionTags(S.mapIndex));
+      gateMission(S.mapIndex, null, { passive:true });
+    }
     running = true;
     if(window.USE_ROLLBACK){
       // symmetric rollback: build the session over Trystero, create the rollback room, broadcast 'rbstart' so
@@ -109,7 +116,7 @@
     NET.mpLog && NET.mpLog('info','starting host-authoritative co-op — map '+S.mapIndex+', sending mpstart + full snapshot');
     MP.send('mpstart', { mapIndex:S.mapIndex, mode:S.mode, duelSeed:S.duelSeed });
     NET.tick = 0; NET._sAcc = 0; NET._kAcc = 0;
-    NET._baseline = new Map(); NET._lastEcoStr = null; NET._sinceSend = 0;   // reset Phase 4 delta baseline / eco signature for the new map
+    NET._baseline = new Map(); NET._lastEcoStr = null; NET._lastQuestStr = null; NET._sinceSend = 0;   // reset Phase 4 delta baseline / eco + quest signatures for the new map
     NET.sendFull(S.peerId);
     ui('EnterGame');
     toast('Co-op match started — Quarter '+(S.mapIndex+1));
@@ -222,6 +229,10 @@
     if(typeof syncHud==='function') syncHud();
     if(typeof clampCam==='function') clampCam(G);
     ui('Syncing');
+    if(typeof gateMission==='function' && typeof LOADER!=='undefined'){   // visual-only, same as the snapshot client
+      LOADER.beginMission(missionTags(S.mapIndex));
+      gateMission(S.mapIndex, null, { passive:true, until:()=>running });
+    }
     const ctrlMap = {}; if(msg.hostPeerId) ctrlMap[msg.hostPeerId]='p1'; if(MP.selfId) ctrlMap[MP.selfId]='p2';
     whenRB(()=> NET.rbStartJoin(G, ctrlMap, msg.rbRoomId, msg.hostPeerId).then(()=>{
       running = true;
@@ -250,6 +261,13 @@
     if(NET.flushPendingFull) NET.flushPendingFull();  // a full snapshot may have raced ahead of 'mpstart'
     armSyncWatchdog();
     ui('Syncing');
+    // visual-only gate: lifts when this map's sprites settle AND the first full snapshot has
+    // applied (running flips true in NET.onFullApplied — the gate never touches it). The 15s
+    // sync watchdog stays authoritative for network failure; the gate dissolves on host-gone.
+    if(typeof gateMission==='function' && typeof LOADER!=='undefined'){
+      LOADER.beginMission(missionTags(idx));
+      gateMission(idx, null, { passive:true, until:()=>running });
+    }
   }
   function beginClientHub(msg){
     S.started=true; S.mode=(msg&&msg.mode)||S.mode; S.mapIndex=(msg&&msg.mapIndex)|0;
@@ -265,6 +283,10 @@
     if(NET.flushPendingFull) NET.flushPendingFull();
     armSyncWatchdog();
     ui('Syncing');
+    if(typeof gateMission==='function' && typeof LOADER!=='undefined'){
+      LOADER.beginMission(missionTagsHub());
+      gateMission(S.mapIndex, null, { passive:true, until:()=>running, label:'H.U.B. UPLINK' });
+    }
   }
 
   function applyHostPause(paused){
@@ -349,7 +371,7 @@
     if(S.role!=='host') return;
     S.mapIndex = mapIndex|0;
     NET.tick = 0; NET._sAcc = 0; NET._kAcc = 0;
-    NET._baseline = new Map(); NET._lastEcoStr = null; NET._sinceSend = 0;   // reset Phase 4 delta baseline / eco signature for the new map
+    NET._baseline = new Map(); NET._lastEcoStr = null; NET._lastQuestStr = null; NET._sinceSend = 0;   // reset Phase 4 delta baseline / eco + quest signatures for the new map
     MP.send('mphub', { mapIndex:S.mapIndex, mode:S.mode, campaign: typeof serializeHubCampaign==='function' ? serializeHubCampaign() : null });
     if(S.peerId && NET.sendFull) NET.sendFull(S.peerId);
   };

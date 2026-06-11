@@ -263,6 +263,17 @@ const KENNEL = {
    `winCondition:{type:'survive'|'escort'|'reachAndHold',…}` (T2-1).
    `objective` shows in the top bar at every viewport size — keep it
    ≤ ~220 chars so it stays ≤2 wrapped lines on short/landscape screens.
+   `quests:[{id,text,type,required,reward,…}]` — multi-objective quest
+   list (js/quests.js). With quests present, VICTORY = all `required`
+   quests done (or one `winsAlone` quest); without, the legacy chain
+   (villain / winCondition / razeAll) applies untouched. Bonus quests
+   (no `required`) pay `reward` M3$ via hubRewardFor. AUTHORING RULES:
+   required quests must be derivable from serialized state (razeAll /
+   defeatVillain / survive / escort / reachAndHold only — never
+   trainUnits or unique-unit-dependent types, which can softlock);
+   survive/escort/reachAndHold quests read their params from the map's
+   `winCondition` (keep it). `objective` stays as the legacy-mode /
+   fallback text. Quest ids are save-keys — never rename on a shipped map.
    ===================================================================== */
 const MAPS = [
   {
@@ -289,6 +300,11 @@ The board is watching. Synergy awaits....`,
     startSoldiers:3,
     enemies:[ {x:13,y:27, defenders:1, light:true}, {x:40,y:6, defenders:2}, {x:30,y:24, defenders:2} ],
     objective:'DISRUPTR INC. parked a forward outpost on your lawn. Crush it, then raze their two bases — three positions in all.',
+    quests:[
+      { id:'raze',     text:'Raze all three DISRUPTR positions',  type:'razeAll', required:true },
+      { id:'hire6',    text:'Hire six Growth Cyborgs',            type:'trainUnits', unit:'soldier', count:6, reward:50 },
+      { id:'firstvet', text:'Promote your first veteran',         type:'promotions', count:1, reward:50 },
+    ],
     lakes:[ {x:20,y:20,r:4}, {x:30,y:28,r:3} ],
     rockClusters:[ {x:15,y:14,n:14}, {x:34,y:22,n:12}, {x:24,y:8,n:10} ],
     forests:[ {x:10,y:20,n:30}, {x:38,y:30,n:26}, {x:25,y:34,n:20} ],
@@ -312,6 +328,11 @@ Weaponize your buzzwords, circle back, and disrupt MegaCorp into bankruptcy. The
     aggression:1.5,
     enemies:[ {x:44,y:38, extraBarracks:true, defenders:4}, {x:46,y:12, defenders:3} ],
     objective:'MEGACORP now holds TWO campuses (SE and E). Raze both and acquire their assets by force.',
+    quests:[
+      { id:'raze',  text:'Raze both MEGACORP campuses',           type:'razeAll', required:true },
+      { id:'scale', text:'Scale to 15 headcount',                 type:'peakSupply', count:15, reward:50 },
+      { id:'fast',  text:'Close the takeover inside 12 minutes',  type:'winBy', by:720, reward:75 },
+    ],
     lakes:[ {x:26,y:14,r:5}, {x:18,y:32,r:4}, {x:38,y:20,r:3} ],
     rockClusters:[ {x:30,y:8,n:16},{x:20,y:22,n:14},{x:40,y:30,n:14},{x:12,y:30,n:10},{x:46,y:14,n:10} ],
     forests:[ {x:14,y:14,n:34},{x:34,y:34,n:30},{x:44,y:24,n:22},{x:8,y:40,n:20} ],
@@ -334,6 +355,11 @@ Weaponize your buzzwords, circle back, and disrupt MegaCorp into bankruptcy. The
     terrain:{ biomes:['grass'], seaFrac:0.20, mtnFrac:0.06, moist:{base:0.60,noise:0.5}, forest:0.08 },
     enemies:[ {x:54,y:8, extraBarracks:true, defenders:3}, {x:50,y:46, defenders:3}, {x:40,y:24, extraBarracks:true, defenders:3} ],
     objective:'SYNERGY CORP has THREE campuses — liquidate all three. You start with extra Funding and a People Ops to fund the takeover.',
+    quests:[
+      { id:'raze',  text:'Liquidate all three SYNERGY CORP campuses',         type:'razeAll', required:true },
+      { id:'mine',  text:'Out-earn the board\'s wire — mine 8,000 Funding',   type:'accumulateFunding', amount:8000, reward:75 },
+      { id:'churn', text:'Keep attrition under 10 hires',                     type:'maxUnitsLost', count:9, reward:75 },
+    ],
     lakes:[ {x:30,y:26,r:5},{x:18,y:14,r:3},{x:44,y:34,r:4} ],
     rockClusters:[ {x:36,y:18,n:16},{x:24,y:38,n:14},{x:48,y:24,n:12},{x:14,y:30,n:10} ],
     forests:[ {x:20,y:44,n:26},{x:50,y:14,n:24},{x:40,y:46,n:20},{x:30,y:10,n:18} ],
@@ -357,6 +383,11 @@ Weaponize your buzzwords, circle back, and disrupt MegaCorp into bankruptcy. The
     terrain:{ biomes:['tech'], seaFrac:0.13, mtnFrac:0.08, forest:0 },
     enemies:[ {x:62,y:50, extraBarracks:true, defenders:4}, {x:60,y:12, extraBarracks:true, defenders:4}, {x:36,y:48, extraBarracks:true, defenders:4} ],
     objective:'OMNICORP has THREE HQs — raze all three. You are very well-funded; overwhelm them.',
+    quests:[
+      { id:'raze',  text:'Raze all three OMNICORP HQs',           type:'razeAll', required:true },
+      { id:'kills', text:'Liquidate 60 OMNICORP personnel',       type:'killUnits', count:60, reward:75 },
+      { id:'org',   text:'Run a 20-seat org chart',               type:'peakSupply', count:20, reward:75 },
+    ],
     lakes:[ {x:34,y:30,r:6},{x:50,y:18,r:4},{x:22,y:44,r:4},{x:58,y:40,r:3} ],
     rockClusters:[ {x:40,y:14,n:18},{x:26,y:24,n:16},{x:50,y:48,n:16},{x:16,y:36,n:12},{x:60,y:28,n:12} ],
     forests:[ {x:16,y:14,n:28},{x:44,y:46,n:26},{x:56,y:24,n:22},{x:30,y:50,n:20},{x:62,y:54,n:16} ],
@@ -380,6 +411,11 @@ Weaponize your buzzwords, circle back, and disrupt MegaCorp into bankruptcy. The
     terrain:{ biomes:['volcanic'], seaFrac:0.10, mtnFrac:0.10, forest:0 },
     enemies:[ {x:68,y:10, extraBarracks:true, defenders:3}, {x:72,y:54, extraBarracks:true, defenders:3}, {x:34,y:8, defenders:3}, {x:46,y:36, extraBarracks:true, defenders:3} ],
     objective:'THE CARTEL holds FOUR campuses. Liquidate all four — clear them one at a time. You start very well-funded.',
+    quests:[
+      { id:'raze',  text:'Liquidate all four CARTEL campuses',        type:'razeAll', required:true },
+      { id:'kills', text:'Send 100 CARTEL muscle to the lava line',   type:'killUnits', count:100, reward:100 },
+      { id:'churn', text:'Keep the casualty memo under 15 names',     type:'maxUnitsLost', count:14, reward:100 },
+    ],
     lakes:[ {x:40,y:32,r:6},{x:24,y:18,r:4},{x:56,y:44,r:4},{x:30,y:50,r:3} ],
     rockClusters:[ {x:48,y:20,n:18},{x:30,y:34,n:16},{x:60,y:30,n:14},{x:18,y:44,n:12},{x:52,y:56,n:12} ],
     forests:[ {x:18,y:54,n:28},{x:62,y:14,n:26},{x:68,y:50,n:22},{x:38,y:12,n:20},{x:44,y:48,n:18} ],
@@ -403,6 +439,11 @@ Weaponize your buzzwords, circle back, and disrupt MegaCorp into bankruptcy. The
     terrain:{ biomes:['ice'], temp:{base:0.20,noise:0.15}, freeze:0.50, seaFrac:0.12, mtnFrac:0.10 },
     enemies:[ {x:78,y:62, extraBarracks:true, defenders:4}, {x:80,y:16, extraBarracks:true, defenders:4}, {x:42,y:66, extraBarracks:true, defenders:4}, {x:48,y:36, extraBarracks:true, defenders:4} ],
     objective:'THE BOARD seized FOUR strongholds to oust you. Raze all four for the ultimate exit. You have maximum Funding — make it count.',
+    quests:[
+      { id:'raze',  text:'Raze all four BOARD strongholds',           type:'razeAll', required:true },
+      { id:'full',  text:'Max out headcount — every chair warm (24)', type:'peakSupply', count:24, reward:100 },
+      { id:'promo', text:'Hand out five promotions mid-coup',         type:'promotions', count:5, reward:75 },
+    ],
     lakes:[ {x:44,y:36,r:7},{x:28,y:20,r:4},{x:60,y:24,r:4},{x:34,y:54,r:4},{x:66,y:48,r:3} ],
     rockClusters:[ {x:52,y:16,n:18},{x:34,y:28,n:16},{x:64,y:34,n:16},{x:22,y:46,n:12},{x:56,y:56,n:14},{x:72,y:54,n:10} ],
     forests:[ {x:18,y:18,n:30},{x:50,y:48,n:26},{x:68,y:30,n:22},{x:34,y:60,n:20},{x:74,y:64,n:16},{x:24,y:34,n:16} ],
@@ -440,6 +481,11 @@ Weaponize your buzzwords, circle back, and disrupt MegaCorp into bankruptcy. The
     // two abandoned player outposts flanking the central sea — walk a unit up to reclaim them
     lostBases:[ {x:36,y:50}, {x:84,y:50} ],
     objective:'THE CONGLOMERATE holds EIGHT campuses around a dead sea — liquidate all eight. TWO abandoned outposts sit in the middle: reach them with a unit to reclaim them and fight from the front.',
+    quests:[
+      { id:'raze',    text:'Raze all eight CONGLOMERATE campuses',     type:'razeAll', required:true },
+      { id:'reclaim', text:'Reclaim BOTH outposts on the dead sea',    type:'reclaimOutposts', count:2, reward:150 },
+      { id:'peak',    text:'Keep peak headcount above 20',             type:'peakSupply', count:21, reward:75 },
+    ],
     lakes:[ {x:28,y:24,r:3},{x:96,y:78,r:3},{x:24,y:74,r:3},{x:98,y:26,r:3} ],
     rockClusters:[ {x:50,y:24,n:16},{x:74,y:78,n:16},{x:30,y:64,n:14},{x:92,y:38,n:14},{x:20,y:30,n:12},{x:104,y:66,n:12} ],
     forests:[ {x:18,y:18,n:24},{x:100,y:84,n:24},{x:96,y:20,n:22},{x:22,y:84,n:22},{x:40,y:40,n:16},{x:84,y:62,n:16} ],
@@ -479,6 +525,11 @@ Weaponize your buzzwords, circle back, and disrupt MegaCorp into bankruptcy. The
     } } ],
     enemies:[ {x:44,y:7, extraBarracks:true, defenders:3}, {x:40,y:30, defenders:2} ],
     objective:'A&O bought the ruins of your empire and holds TWO campuses — liquidate both and rebuild from the crater.',
+    quests:[
+      { id:'raze',    text:'Liquidate both A&O campuses squatting on your bones', type:'razeAll', required:true },
+      { id:'nino',    text:'Keep NINO off the memorial wall',                     type:'heroesAlive', reward:75 },
+      { id:'rebuild', text:'Rebuild to 18 headcount from the crater',             type:'peakSupply', count:18, reward:75 },
+    ],
     lakes:[ {x:22,y:14,r:4}, {x:30,y:34,r:3} ],
     rockClusters:[ {x:16,y:20,n:14}, {x:34,y:18,n:12}, {x:24,y:30,n:10} ],
     forests:[ {x:12,y:24,n:24}, {x:38,y:38,n:20}, {x:28,y:8,n:18} ],
@@ -506,6 +557,11 @@ Weaponize your buzzwords, circle back, and disrupt MegaCorp into bankruptcy. The
     terrain:{ biomes:['tech','ice'], temp:{base:0.30,noise:0.16}, freeze:0.46, seaFrac:0.11, mtnFrac:0.08, forest:0 },
     enemies:[ {x:48,y:8, extraBarracks:true, defenders:3}, {x:50,y:34, defenders:3}, {x:30,y:10, defenders:3} ],
     objective:'A&O wants its GRAAL blueprint back and holds THREE research campuses — liquidate all three and keep the proof of concept.',
+    quests:[
+      { id:'raze',  text:'Liquidate all three A&O research campuses',        type:'razeAll', required:true },
+      { id:'ship',  text:'Ship the proof of concept inside 15 minutes',      type:'winBy', by:900, reward:100 },
+      { id:'churn', text:'Keep churn under 12 hires',                        type:'maxUnitsLost', count:11, reward:75 },
+    ],
     lakes:[ {x:24,y:22,r:4}, {x:40,y:30,r:3} ],
     rockClusters:[ {x:18,y:16,n:14}, {x:38,y:18,n:12}, {x:30,y:34,n:10} ],
     forests:[ {x:12,y:28,n:22}, {x:44,y:40,n:18}, {x:34,y:6,n:16} ],
@@ -585,6 +641,14 @@ Weaponize your buzzwords, circle back, and disrupt MegaCorp into bankruptcy. The
     lostBases:[ { x:45, y:150 } ],
     enemies:[ {x:20,y:225, defenders:3}, {x:45,y:255, extraBarracks:true, defenders:4}, {x:70,y:225, defenders:3} ],
     objective:'A&O has caged the GRAAL\'s architect, BIBA, in its prison-office. Punch down the corridor, free Biba and the intern held with her, reclaim the forward outpost, then liquidate all THREE A&O campuses.',
+    // NOTE: freeing Biba stays a BONUS quest — only Nino can free captives (core.js freeCaptives),
+    // so a required rescue would softlock the mission if he falls; the win condition is unchanged.
+    quests:[
+      { id:'raze',    text:'Liquidate all three A&O campuses',               type:'razeAll', required:true },
+      { id:'free',    text:'Free BIBA and the caged intern',                 type:'freeCaptives', count:2, reward:200 },
+      { id:'outpost', text:'Reclaim the forward outpost past the cell',      type:'reclaimOutposts', count:1, reward:75 },
+      { id:'guards',  text:'Wipe every standing guard squad',                type:'guardsCleared', reward:100 },
+    ],
     // rock walls flanking the central lane (x≈38–52) → a guided corridor; left wall x34, right wall x56
     rockClusters:[ {x:34,y:26,n:16},{x:34,y:44,n:16},{x:34,y:62,n:16},{x:34,y:80,n:16},{x:34,y:98,n:16},{x:34,y:116,n:16},
                    {x:56,y:26,n:16},{x:56,y:44,n:16},{x:56,y:62,n:16},{x:56,y:80,n:16},{x:56,y:98,n:16},{x:56,y:116,n:16},
@@ -626,6 +690,11 @@ Weaponize your buzzwords, circle back, and disrupt MegaCorp into bankruptcy. The
       {x:48,y:140, extraBarracks:true, defenders:6},     // THE DARK TOWER — the GRAAL altar, on the peninsula
     ],
     objective:'A&O is building the GRAAL on Dark Tower altar. Fight the road and liquidate all SIX A&O Labs — At the peninsula, raze the Dark Tower to create the GRAAL.',
+    quests:[
+      { id:'raze',   text:'Liquidate all six A&O labs — the DARK TOWER falls', type:'razeAll', required:true },
+      { id:'heroes', text:'Walk NINO and BIBA to the altar alive',             type:'heroesAlive', reward:150 },
+      { id:'fund',   text:'Fund the pilgrimage — mine 12,000 on the road',     type:'accumulateFunding', amount:12000, reward:100 },
+    ],
     // a guided central lane (x~40–56): rock ranges flank it left (x~28–30) and right (x~64–66), funneling
     // the player down through the campuses toward the sea. A separate ring of mountains girds campus #4.
     rockClusters:[
@@ -649,7 +718,7 @@ Weaponize your buzzwords, circle back, and disrupt MegaCorp into bankruptcy. The
       {x:48,y:134,amt:3500},{x:42,y:144,amt:2000},{x:54,y:144,amt:2000},    // the altar prize (peninsula)
     ],
   },
-  {name:'XII — The Continuity Farm',enemyName:'A&O',enemyFaction:'ao',aggression:2.00,startGold:3600,startWorkers:12,startSoldiers:12,startBarracks:true,graceTime:118,waveTimer:112,crawl:{episode:'EPISODE XII',title:'THE CONTINUITY FARM',text:'You rebuilt after the flash, but the new company was never alive. It was a cap table wearing a grief mask.\n\nA&O now leases the dead into refrigerated prototype bodies, charging subscription fees for memories that used to belong to people. Their Continuity Farm hums under black ice and server heat, promising immortality with a cancellation clause.\n\nYour veterans carry names. Your memorial carries more. Crack the farm, steal the transfer lattice, and decide which ghost gets equity again....',summary:`You rebuilt after the flash, but the new company was never alive — just a cap table wearing a grief mask. A&O now leases the dead into refrigerated bodies and bills subscriptions for memories that used to belong to people. Crack the six campuses of its Continuity Farm, seize the transfer lattice, and decide which ghost gets equity again.`},objective:'A&O holds SIX continuity campuses — liquidate all six and seize the transfer lattice.',w:118,h:96,seed:12012,terrain:{biomes:['tech','ice'],temp:{axis:'diag',base:0.26,gradient:0.18,noise:0.14},freeze:0.24,seaFrac:0.14,mtnFrac:0.08,forest:0,beach:true},player:{x:8,y:88},enemies:[{x:106,y:8,defenders:7,extraBarracks:true},{x:106,y:84,defenders:7,extraBarracks:true},{x:58,y:10,defenders:6,extraBarracks:true},{x:62,y:84,defenders:6},{x:92,y:48,defenders:7,extraBarracks:true},{x:34,y:28,defenders:5}],goldNodes:[{x:6,y:90,amt:3600},{x:13,y:88,amt:3200},{x:9,y:80,amt:2800},{x:22,y:82,amt:2400},{x:55,y:52,amt:4200},{x:42,y:44,amt:3000},{x:76,y:42,amt:3000},{x:96,y:54,amt:2500},{x:110,y:12,amt:1900},{x:110,y:82,amt:1900},{x:58,y:6,amt:1900},{x:64,y:90,amt:1900}],lakes:[{x:56,y:48,r:7},{x:86,y:26,r:5},{x:30,y:66,r:4},{x:74,y:72,r:4}],rockClusters:[{x:48,y:25,n:18},{x:70,y:30,n:16},{x:88,y:62,n:18},{x:24,y:48,n:14},{x:60,y:68,n:16}],forests:[],thickets:[{x:38,y:34,w:22,h:14,density:0.72,mix:0.25,trail:'h'},{x:80,y:34,w:18,h:18,density:0.66,mix:0.15,trail:'v'}]},
+  {name:'XII — The Continuity Farm',enemyName:'A&O',enemyFaction:'ao',aggression:2.00,startGold:3600,startWorkers:12,startSoldiers:12,startBarracks:true,graceTime:118,waveTimer:112,crawl:{episode:'EPISODE XII',title:'THE CONTINUITY FARM',text:'You rebuilt after the flash, but the new company was never alive. It was a cap table wearing a grief mask.\n\nA&O now leases the dead into refrigerated prototype bodies, charging subscription fees for memories that used to belong to people. Their Continuity Farm hums under black ice and server heat, promising immortality with a cancellation clause.\n\nYour veterans carry names. Your memorial carries more. Crack the farm, steal the transfer lattice, and decide which ghost gets equity again....',summary:`You rebuilt after the flash, but the new company was never alive — just a cap table wearing a grief mask. A&O now leases the dead into refrigerated bodies and bills subscriptions for memories that used to belong to people. Crack the six campuses of its Continuity Farm, seize the transfer lattice, and decide which ghost gets equity again.`},objective:'A&O holds SIX continuity campuses — liquidate all six and seize the transfer lattice.',quests:[{id:'raze',text:'Crack all six continuity campuses',type:'razeAll',required:true},{id:'kills',text:'Decommission 150 A&O personnel',type:'killUnits',count:150,reward:125},{id:'churn',text:'Hold churn under 20 while the farm burns',type:'maxUnitsLost',count:19,reward:100}],w:118,h:96,seed:12012,terrain:{biomes:['tech','ice'],temp:{axis:'diag',base:0.26,gradient:0.18,noise:0.14},freeze:0.24,seaFrac:0.14,mtnFrac:0.08,forest:0,beach:true},player:{x:8,y:88},enemies:[{x:106,y:8,defenders:7,extraBarracks:true},{x:106,y:84,defenders:7,extraBarracks:true},{x:58,y:10,defenders:6,extraBarracks:true},{x:62,y:84,defenders:6},{x:92,y:48,defenders:7,extraBarracks:true},{x:34,y:28,defenders:5}],goldNodes:[{x:6,y:90,amt:3600},{x:13,y:88,amt:3200},{x:9,y:80,amt:2800},{x:22,y:82,amt:2400},{x:55,y:52,amt:4200},{x:42,y:44,amt:3000},{x:76,y:42,amt:3000},{x:96,y:54,amt:2500},{x:110,y:12,amt:1900},{x:110,y:82,amt:1900},{x:58,y:6,amt:1900},{x:64,y:90,amt:1900}],lakes:[{x:56,y:48,r:7},{x:86,y:26,r:5},{x:30,y:66,r:4},{x:74,y:72,r:4}],rockClusters:[{x:48,y:25,n:18},{x:70,y:30,n:16},{x:88,y:62,n:18},{x:24,y:48,n:14},{x:60,y:68,n:16}],forests:[],thickets:[{x:38,y:34,w:22,h:14,density:0.72,mix:0.25,trail:'h'},{x:80,y:34,w:18,h:18,density:0.66,mix:0.15,trail:'v'}]},
   {
     name:'XIII — The Vesting Cliff',
     enemyName:'A&O', enemyFaction:'ao',
@@ -671,6 +740,11 @@ Weaponize your buzzwords, circle back, and disrupt MegaCorp into bankruptcy. The
       text:'The transfer lattice is yours, and it is empty. You stole the machine that writes a mind into metal and learned, the way you always learn, one quarter too late: a lattice is not a soul. You have the bodies. The cold racks hum, addressed and waiting, and no one is home.\n\nThe minds were never in the farm. A&O keeps them upstream — every churned name backed up, encrypted, booked as inventory on the servers of the fund that owns the beginning and the end. And A&O filed before you finished the manual: an injunction that calls your dead delinquent assets, your rescue an act of churn, the only theft on record the one chip you took. The purge is scheduled. After the cliff, the backups vest to zero.\n\n{?party}They walk the vaults with you: {party} — the ones who reached the cliff alive, here to drag the rest back over it.{/party}{^party}You walk the vaults alone. Everyone who carried you this far is already inside them, filed and waiting.{/party}{?fallen} You came for these names: {fallen} — churn on A&O\'s ledger, the wall on yours.{/fallen}{?biba} Biba says you are not saving them, you are repossessing them — A&O\'s word, A&O\'s machine. She runs the extraction anyway.{/biba}\n\nBreak the SEVEN vault campuses, turn A&O\'s billing engine against itself, and pull every backup out before the cliff zeroes it. You can still only write one of them home. That ledger waits. Tonight, you carry them out of the fire....',
       summary:`You hold A&O's transfer lattice at last — and it is an empty machine: prototype bodies with no minds to wake in them. The minds are upstream, backed up and booked as inventory by the fund that owns the beginning and the end, and A&O has filed to purge them as delinquent assets. Crack its seven backup-vault campuses and pull your dead out of the billing engine before the deadline zeroes them.` },
     objective:'A&O has filed to purge your dead and holds SEVEN backup-vault campuses — liquidate all seven and pull every backup out before the cliff zeroes them.',
+    quests:[
+      { id:'raze', text:'Liquidate all seven backup-vault campuses',     type:'razeAll', required:true },
+      { id:'fast', text:'Beat the purge — close inside 25 minutes',      type:'winBy', by:1500, reward:150 },
+      { id:'wall', text:'Pull every backup out — zero veterans lost',    type:'noVetDeaths', reward:150 },
+    ],
     w:112, h:92,
     seed:13013,
     // deep cold storage: the tech server-farm refrozen into cryo backup vaults — colder than the
@@ -713,6 +787,11 @@ Weaponize your buzzwords, circle back, and disrupt MegaCorp into bankruptcy. The
     player:{ x:5, y:18 },
     terrain:{ biomes:['tech'], seaFrac:0.04, mtnFrac:0.06, forest:0 },
     objective:'Defeat THE CYAN NINJA — he is fast and will flee when wounded. Corner and finish him.',
+    quests:[
+      { id:'duel',   text:'End THE CYAN NINJA\'s contract',                          type:'defeatVillain', required:true },
+      { id:'noflee', text:'No escape clause — finish him before he slips away',      type:'bossNoFlee', reward:100 },
+      { id:'lean',   text:'Lose no more than 5 staff to one contractor',             type:'maxUnitsLost', count:5, reward:50 },
+    ],
     enemies:[],                                  // boss duel — no enemy bases; the villain IS the encounter
     villain:{ id:'cyan_ninja', x:24, y:6 },
     lakes:[], rockClusters:[ {x:13,y:9,n:8}, {x:21,y:18,n:6} ], forests:[],
@@ -733,6 +812,11 @@ Weaponize your buzzwords, circle back, and disrupt MegaCorp into bankruptcy. The
     player:{ x:6, y:28 },
     terrain:{ biomes:['tech'], seaFrac:0.05, mtnFrac:0.06, forest:0 },
     objective:"Destroy A&O's REX. It hits like a foreclosure and turns berserk below 40% — spread out and keep your healers alive.",
+    quests:[
+      { id:'rex',    text:'Destroy REX — crack the core before it cracks you',   type:'defeatVillain', required:true },
+      { id:'heroes', text:'Bring NINO and BIBA through the foreclosure',         type:'heroesAlive', reward:150 },
+      { id:'lean',   text:'Keep the final invoice under 12 names',               type:'maxUnitsLost', count:11, reward:150 },
+    ],
     enemies:[],                                  // boss duel — no enemy bases; the villain IS the encounter
     villain:{ id:'rex', x:30, y:9 },
     lakes:[ {x:14,y:6,r:3} ], rockClusters:[ {x:12,y:12,n:10}, {x:26,y:26,n:10} ], forests:[],
@@ -754,6 +838,12 @@ Weaponize your buzzwords, circle back, and disrupt MegaCorp into bankruptcy. The
       summary:'The crater\'s only uplink ridge is unclaimed, and A&O\'s claim bots are inbound. Take the high ground and hold it long enough for your filing to clear — lose your grip and the wasteland goes dark for good.' },
     objective:'Seize the uplink ridge and HOLD it against A&O — keep units in the zone until your claim clears.',
     winCondition:{ type:'reachAndHold', at:{x:44,y:10}, radius:3, holdSec:75 },
+    // winsAlone razeAll preserves the pre-quest shortcut: razing the survey campus also ends the map
+    quests:[
+      { id:'hold', text:'Hold the uplink ridge until the claim clears',   type:'reachAndHold', required:true },
+      { id:'raze', text:'Or raze A&O\'s survey campus outright',          type:'razeAll', winsAlone:true, reward:100 },
+      { id:'fast', text:'Close the claim inside 4 minutes',               type:'winBy', by:240, reward:75 },
+    ],
     w:52, h:44, seed:8508,
     player:{ x:6, y:38 },
     terrain:{ biomes:['tech','grass'], temp:{axis:'diag', base:0.45, gradient:0.2, noise:0.18}, seaFrac:0.08, mtnFrac:0.10, forest:0.04 },
@@ -777,6 +867,11 @@ Weaponize your buzzwords, circle back, and disrupt MegaCorp into bankruptcy. The
       text:'Somebody at A&O read your prototype filings, cross-referenced the break-in reports, and drew the obvious line: you are going after the architect.\n\nSo they sent the asset-recovery department. One agent, green as server light, retained on commission to make sure the only person who can finish the GRAAL stays exactly where the fund parked her.\n\nHe is between you and the prison-office. He has never once come home without the asset....',
       summary:'A&O knows where you\'re headed next, and it sent its asset-recovery agent to close the route. One hunter, fast and patient, between you and the architect. Put him down or the rescue dies before it starts.' },
     objective:'Put down THE A&O ENFORCER — he is fast, he hunts your healers, and he does not flee.',
+    quests:[
+      { id:'duel', text:'Put down THE A&O ENFORCER',                  type:'defeatVillain', required:true },
+      { id:'wall', text:'No new names on the memorial',               type:'noVetDeaths', reward:100 },
+      { id:'fast', text:'Terminate his retainer inside 6 minutes',    type:'winBy', by:360, reward:75 },
+    ],
     w:30, h:24, seed:9509,
     player:{ x:5, y:18 },
     terrain:{ biomes:['tech'], seaFrac:0.04, mtnFrac:0.06, forest:0 },
@@ -797,6 +892,12 @@ Weaponize your buzzwords, circle back, and disrupt MegaCorp into bankruptcy. The
       summary:'The architect is out of her cell — now get her out of the building. Walk BIBA up A&O\'s locked-down service corridor to the extraction line with only the squad you brought. They know she\'s missing.' },
     objective:'Escort BIBA through A&O\'s corridor to the extraction line at the north fence — if she falls, the GRAAL dies with her.',
     winCondition:{ type:'escort', vipHero:'Biba', to:{x:17,y:4}, radius:3 },
+    // winsAlone razeAll preserves the pre-quest shortcut: razing the checkpoint also ends the map
+    quests:[
+      { id:'escort', text:'Walk BIBA to the extraction line',             type:'escort', required:true },
+      { id:'raze',   text:'Or raze A&O\'s corridor checkpoint outright',  type:'razeAll', winsAlone:true, reward:75 },
+      { id:'nobody', text:'Lose nobody on the corridor',                  type:'maxUnitsLost', count:0, reward:100 },
+    ],
     w:34, h:88, seed:10510,
     player:{ x:17, y:82 },
     terrain:{ biomes:['tech'], seaFrac:0.03, mtnFrac:0.10, forest:0 },
@@ -825,6 +926,11 @@ Weaponize your buzzwords, circle back, and disrupt MegaCorp into bankruptcy. The
       text:'The Dark Tower is yours on paper. The foundation disagrees.\n\nSomething A&O bolted into the bedrock has unmoored itself — a warden core in a five-meter chassis, violet light bleeding from the seams, walking the perimeter it was built to keep. It does not recognize the transfer of title. It does not recognize anything anymore.\n\nThe tower writes the dying into fresh metal. First, evict the metal that refuses to die....',
       summary:'You hold the Dark Tower, but its buried warden has unbolted itself from the foundations and contests the deed. A five-meter chassis with violet light in its seams walks your new perimeter. Evict it.' },
     objective:'Destroy A&O\'s DARK TOWER GUARDIAN — it quakes the ground when it lands, so spread your line.',
+    quests:[
+      { id:'duel', text:'Scrap the DARK TOWER GUARDIAN',                  type:'defeatVillain', required:true },
+      { id:'wall', text:'Evict it without adding names to the wall',      type:'noVetDeaths', reward:100 },
+      { id:'fast', text:'Settle the dispute inside 7 minutes',            type:'winBy', by:420, reward:75 },
+    ],
     w:38, h:30, seed:11511,
     player:{ x:6, y:24 },
     terrain:{ biomes:['tech'], seaFrac:0.05, mtnFrac:0.08, forest:0 },
@@ -845,6 +951,12 @@ Weaponize your buzzwords, circle back, and disrupt MegaCorp into bankruptcy. The
       summary:'The stolen transfer lattice is yours — and A&O\'s emergency injunction says otherwise. No reinforcements, two lean crystal seams, and every repo crew the fund can field. Survive until the markets open.' },
     objective:'SURVIVE A&O\'s injunction — hold out until the order lapses. Lose your HQ and the lattice goes back to the fund.',
     winCondition:{ type:'survive', forSec:330, protect:'hq' },
+    // winsAlone razeAll preserves the pre-quest shortcut: razing both repo camps also ends the map
+    quests:[
+      { id:'survive', text:'Survive the injunction until the order lapses', type:'survive', required:true },
+      { id:'raze',    text:'Or raze both repo camps outright',              type:'razeAll', winsAlone:true, reward:150 },
+      { id:'repo',    text:'Repossess 40 repo crew',                        type:'killUnits', count:40, reward:75 },
+    ],
     w:56, h:46, seed:12512,
     player:{ x:27, y:24 },
     terrain:{ biomes:['ice','tech'], temp:{axis:'y', base:0.30, gradient:0.16, noise:0.14}, freeze:0.26, seaFrac:0.10, mtnFrac:0.09, forest:0 },

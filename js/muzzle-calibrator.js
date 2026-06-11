@@ -48,7 +48,7 @@
     const s={img:new Image(), fw:0, fh:0, ready:false};
     s.img.onload=()=>{ s.fw=s.img.width/UNIT_FRAMES; s.fh=s.img.height; s.ready=true; };
     s.img.onerror=()=>{ s.ready=false; };
-    s.img.src='assets/units/'+u+'/attack.png';
+    s.img.src='assets/units/'+u+'/attack.webp';
     sheets[u]=s; return s;
   }
 

@@ -51,7 +51,7 @@ function refreshUI(){
   const _mn=document.getElementById('mapname');
   _mn.textContent = G.cfg.name;
   if(_mn.parentElement && _mn.parentElement.title!==G.cfg.name) _mn.parentElement.title = G.cfg.name;   // hover recovery when short viewports ellipsize the label
-  document.getElementById('objective').textContent = G.cfg.objective;
+  updateQuestHud();
   updateBossBar();
 
   const sel=G.selection.filter(e=>!e.dead);
@@ -147,6 +147,89 @@ function refreshUI(){
   // tutorial: re-attach the step's button highlight (buttons rebuild on signature change) and
   // re-assert its objective line (overwritten at line 17 each tick). No-op when inactive.
   if(typeof TUTORIAL!=='undefined') TUTORIAL.reapplyHighlight();
+}
+
+/* ---------- Quest tracker (topbar objectives chip + dropdown) ----------
+   Quest mode (cfg.quests on a combat map): chip = "OBJECTIVES n/m ▾", dropdown lists each quest.
+   Legacy mode (hub / extraction / tutorial / quest-less maps / legacy saves): chip goes .plain
+   and shows G.cfg.objective exactly like the old #objective line.
+   The chip summary updates every frame (cheap text writes); the dropdown ROWS rebuild only when
+   the quest set / done / failed flags flip (the updateProdQueue `_sig`-on-DOM pattern — rebuilding
+   every frame would kill scroll position and waste layout). Runs identically on solo/host/client:
+   it only READS G.quests (clients receive it via snapshots), so quest toasts fire on clients too. */
+function questMapKey(){ return (typeof mapIndex==='number'?mapIndex:0)+':'+((G&&G.runSalt)||0); }
+function updateQuestHud(){
+  const chip=document.getElementById('obj-chip'), lab=document.getElementById('objective'),
+        cnt=document.getElementById('obj-count'), panel=document.getElementById('quest-panel');
+  if(!chip||!lab||!panel) return;
+  const defs=(G.cfg && G.cfg.quests) || null;
+  const tutOn=(typeof TUTORIAL!=='undefined' && TUTORIAL.isActive && TUTORIAL.isActive());
+  const questMode=!!(defs && defs.length && !G.hub && !G.extractReady && !tutOn);
+  if(!questMode){                       // ---- legacy mode: behave exactly like the old #objective ----
+    chip.classList.add('plain');
+    const txt=G.cfg.objective||'';
+    if(lab.textContent!==txt) lab.textContent=txt;
+    if(panel._sig){ panel.innerHTML=''; panel._sig=''; panel.style.display='none';
+      chip.classList.remove('open'); chip.setAttribute('aria-expanded','false'); }
+    return;
+  }
+  chip.classList.remove('plain');
+  const Q=G.quests||{};
+  if(lab.textContent!=='OBJECTIVES') lab.textContent='OBJECTIVES';
+  let done=0,total=0;
+  for(const d of defs){ const q=Q[d.id]; if(q&&q.na) continue; total++; if(q&&q.done&&!q.failed) done++; }
+  const c=done+'/'+total; if(cnt.textContent!==c) cnt.textContent=c;
+
+  // ---- structural signature: rebuild rows only when the set or the flags flip ----
+  const sig=defs.map(d=>{ const q=Q[d.id]; return d.id+(q?(q.na?'n':q.done?'!':q.failed?'x':''):'?'); }).join('|');
+  if(sig!==panel._sig){
+    questToasts(defs, Q, panel._sig!=null && panel._sig!=='' && panel._mapKey===questMapKey());
+    panel._sig=sig; panel._mapKey=questMapKey();
+    panel.innerHTML='';
+    for(const d of defs){
+      const q=Q[d.id]; if(q&&q.na) continue;           // not applicable this run (e.g. no hero deployed)
+      const row=document.createElement('div');
+      row.className='q-row'+(q&&q.failed?' failed':q&&q.done?' done':'');
+      row.setAttribute('role','listitem');
+      const mark=q&&q.failed?'✖':q&&q.done?'✔':'☐';
+      row.innerHTML='<span class="q-mark">'+mark+'</span><span class="q-text">'
+        +(!d.required?'<span class="q-bonus">BONUS:</span> ':'')+_escHtml(d.text||d.id)+'</span>'
+        +'<span class="q-count"></span>'
+        +(!d.required&&d.reward?'<span class="q-reward">+'+(d.reward|0)+' M3$</span>':'');
+      row._qid=d.id; row._qdef=d; panel.appendChild(row);
+    }
+  }
+  // ---- cheap per-frame counter refresh (progress 3/8, timers ⏳ 212s) ----
+  for(const row of panel.children){
+    const d=row._qdef; if(!d) continue;
+    const q=Q[row._qid], el=row.querySelector('.q-count'); if(!el) continue;
+    let txt='';
+    if(q && !q.done && !q.failed && typeof QUEST_TIMER_TYPES!=='undefined' && QUEST_TIMER_TYPES[d.type])
+      txt='⏳ '+Math.max(0, Math.ceil((q.goal||0)-(q.cur||0)))+'s';
+    else if(q && (q.goal|0)>1)
+      txt='('+Math.min(q.cur||0,q.goal)+'/'+q.goal+')';
+    if(el.textContent!==txt) el.textContent=txt;
+  }
+}
+/* Toast on quest done/failed flips — UI-side diffing so it works for solo, host AND co-op clients.
+   `announce=false` on the first build of a map / after a load, so restored done-quests and
+   mid-game joins never replay toasts. eventToast auto-logs to ☰ → Events, so missed ones are
+   recoverable. Failed REQUIRED quests don't toast (the defeat screen tells that story). */
+function questToasts(defs, Q, announce){
+  const seen = questToasts._seen || (questToasts._seen={});
+  const key = questMapKey();
+  if(questToasts._key!==key){ questToasts._key=key; for(const k in seen) delete seen[k]; announce=false; }
+  for(const d of defs){
+    const q=Q[d.id]; if(!q) continue;
+    const st=q.failed?'x':q.done?'!':'';
+    if(seen[d.id]===st) continue;
+    const had=(d.id in seen); seen[d.id]=st;
+    if(!announce || !had || !st || window._rbReplaying) continue;
+    if(st==='!') eventToast(!d.required && d.reward
+      ? '🏅 <b>BONUS SECURED</b> — '+_escHtml(d.text)+' <b>+'+(d.reward|0)+' M3$</b> at extraction.'
+      : '✔ <b>OBJECTIVE COMPLETE</b> — '+_escHtml(d.text), 7000);
+    else if(st==='x' && !d.required) eventToast('✖ <b>BONUS FORFEIT</b> — '+_escHtml(d.text), 7000);
+  }
 }
 
 // Preview a building in the info panel while the player is choosing where to
@@ -1038,7 +1121,16 @@ function hubMdcBriefCard(idx){
   const title=document.createElement('div'); title.className='mdc-brief-title'; title.textContent=cr.title||m.name||''; wrap.appendChild(title);
   if(m.enemyName){ const en=document.createElement('div'); en.className='mdc-brief-enemy'; en.innerHTML='⚔ <b>'+_escHtml(m.enemyName)+'</b>'; wrap.appendChild(en); }
   const sum=document.createElement('div'); sum.className='mdc-brief-sum'; sum.textContent=hubEpisodeSummary(m); wrap.appendChild(sum);
-  if(m.objective){ const ob=document.createElement('div'); ob.className='mdc-brief-obj'; ob.innerHTML='<span>OBJECTIVE</span> '+_escHtml(m.objective); wrap.appendChild(ob); }
+  // quest maps brief one row per objective (gold BONUS rows show their M3$ upside so the player
+  // can plan for them); quest-less maps keep the single legacy objective row.
+  if(m.quests && m.quests.length){
+    m.quests.forEach(q=>{
+      const ob=document.createElement('div'); ob.className='mdc-brief-obj'+(q.required?'':' mdc-brief-bonus');
+      ob.innerHTML='<span>'+(q.required?'OBJECTIVE':'BONUS')+'</span> '+_escHtml(q.text||q.id)
+        +(!q.required&&q.reward?' <b>+'+(q.reward|0)+' M3$</b>':'');
+      wrap.appendChild(ob);
+    });
+  } else if(m.objective){ const ob=document.createElement('div'); ob.className='mdc-brief-obj'; ob.innerHTML='<span>OBJECTIVE</span> '+_escHtml(m.objective); wrap.appendChild(ob); }
   return wrap;
 }
 function openMdcMenu(poi){
@@ -1204,7 +1296,9 @@ function beginRun(idx){
   if(typeof resetHeroes==='function') resetHeroes();
   if(typeof resetFallen==='function') resetFallen();   // {fallen} crawl var: empty memorial on a fresh start
   if(typeof resetHubCampaign==='function') resetHubCampaign();
-  mapIndex=idx; showCrawl(idx, ()=>{ loadMap(idx); });
+  mapIndex=idx;
+  LOADER.beginMission(missionTags(idx));                       // the crawl IS the download window
+  showCrawl(idx, ()=>{ gateMission(idx, ()=>loadMap(idx)); }); // skip early → the gate carries the same numbers
 }
 /* ---- T4-2/T4-3: Settings & accessibility panel + the difficulty picker ---- */
 function _lsFlag(k){ try{ return localStorage.getItem(k)==='1'; }catch(_){ return false; } }
@@ -1328,6 +1422,77 @@ function loadMap(idx){
   toast('Quarter '+(idx+1)+': '+G.cfg.name);
 }
 
+/* ---------- Asset loading gate (mobile sprite fix) ----------
+   missionTags(idx) names the sprite set the world view is gated on: terrain atlases +
+   every building strip and unit WALK sheet for both rendered factions (PLAYER_IS_RED
+   means both 'player' and 'enemy' sheets draw on every map) + the _ao recolors on A&O
+   maps. Action sheets and mega scenery are BOOSTED in the queue but never gate entry —
+   a unit's first attack is seconds after entry, and scenery pop-in is acceptable.
+   gateMission() then holds the world view behind #loadGate until that set SETTLES
+   (loaded or errored — missing optional files are a supported state) or the hard
+   timeout passes; the game is always playable behind it (procedural fallbacks). */
+const GATE_TIMEOUT_MS = 18000;   // auto-enter ceiling — nobody ever gets stuck on the gate
+const GATE_BTN_MS     = 6000;    // "Deploy Anyway" appears after this
+const GATE_STALL_MS   = 5000;    // no settle for this long → "SIGNAL DEGRADED" line
+function missionTags(idx){
+  const cfg = (typeof MAPS!=='undefined' && MAPS[idx]) || {};
+  const gate = ['atlas:tileset','atlas:features','atlas:water','res:crystal',
+                'bld:*:player','bld:*:enemy','unit:*:walk:player','unit:*:walk:enemy'];
+  if(cfg.enemyFaction==='ao') gate.push('bld:*:ao','unit:*:walk:ao');
+  return { gate, boost:[ { tags:['unit:*:mine:*','unit:*:attack:*','unit:*:heal:*'], tier:LOADER.T_GAMEPLAY } ] };
+}
+// the H.U.B.'s set: no enemy faction, but its megabuilding towers ARE the hub's identity
+function missionTagsHub(){
+  return { gate:['atlas:tileset','atlas:features','bld:*:player','unit:*:walk:player','mega:megabuilding:*'],
+           boost:[ { tags:['mega:mountain:*','scene:hubpano'], tier:LOADER.T_CRITICAL } ] };
+}
+// gateMission(idx, enter, opts): show #loadGate until the armed mission set settles, then
+// run enter() exactly once. opts.passive (co-op): the overlay is VISUAL-ONLY — it never
+// touches `running` (NET owns that flag) and dissolves if the covered world goes away.
+// opts.until: extra hold predicate (e.g. co-op client: the first full snapshot applied).
+function gateMission(idx, enter, opts){
+  opts = opts || {};
+  const done = (typeof enter==='function') ? enter : null;
+  const hold = opts.until || null;
+  // ?perf=1 needs frozen, byte-identical scenes — and an already-settled set enters instantly
+  if((typeof PERF!=='undefined' && PERF.on) || (LOADER.missionReady() && (!hold || hold()))){ if(done) done(); return; }
+  const gate=document.getElementById('loadGate');
+  if(!gate){ if(done) done(); return; }
+  if(gateMission._t){ clearInterval(gateMission._t); gateMission._t=null; }   // re-arm replaces any prior gate
+  const fill=document.getElementById('lg-fill'), pct=document.getElementById('lg-pct'),
+        stall=document.getElementById('lg-stall'), btn=document.getElementById('lg-enter'),
+        ep=document.getElementById('lg-ep'), tip=document.getElementById('lg-tip');
+  const cr=(typeof MAPS!=='undefined' && MAPS[idx] && MAPS[idx].crawl) || null;
+  if(ep) ep.textContent = opts.label || (cr && cr.episode) || ((typeof MAPS!=='undefined' && MAPS[idx] && MAPS[idx].name) || 'DEPLOYMENT');
+  if(tip) tip.innerHTML = (typeof GAME_TIPS!=='undefined' && GAME_TIPS.length) ? GAME_TIPS[(Math.random()*GAME_TIPS.length)|0] : '';
+  if(fill) fill.style.width='0%'; if(pct) pct.textContent='0%';
+  if(stall) stall.style.display='none'; if(btn) btn.style.display='none';
+  gate.style.display='flex';
+  const t0=performance.now(); let maxFrac=0, finished=false;
+  if(typeof TELE!=='undefined'){ const p=LOADER.missionProgress(); TELE.event('load_gate_shown', { idx, settled:p.settled, total:p.total }); }
+  const fin=(timedOut)=>{
+    if(finished) return; finished=true;
+    clearInterval(tick); gateMission._t=null;
+    gate.style.display='none';
+    if(typeof TELE!=='undefined') TELE.event('load_gate_entered', { ms:Math.round(performance.now()-t0), timedOut:!!timedOut, failed:LOADER.missionProgress().failed });
+    if(timedOut && !opts.passive) toast('Field uplink is slow — some units may deploy as silhouettes until their art lands');
+    if(done) done();
+  };
+  if(btn) btn.onclick=()=>fin(true);
+  const tick=setInterval(()=>{
+    const p=LOADER.missionProgress(), t=performance.now();
+    maxFrac=Math.max(maxFrac, p.frac);                       // bar never moves backwards
+    if(fill) fill.style.width=((maxFrac*100)|0)+'%';
+    if(pct) pct.textContent=((maxFrac*100)|0)+'%';
+    if(stall) stall.style.display=(t-LOADER.lastSettleAt>GATE_STALL_MS && maxFrac<1) ? '' : 'none';
+    if(btn && t-t0>GATE_BTN_MS) btn.style.display='';
+    if(LOADER.missionReady() && (!hold || hold())){ fin(false); return; }
+    if(t-t0>GATE_TIMEOUT_MS){ fin(true); return; }
+    if(opts.passive && (!G || G.over || (window.MP_SESSION && MP_SESSION._gone))) fin(true);
+  }, 250);
+  gateMission._t=tick;
+}
+
 /* ---- Star-Wars-style intro crawl ---- */
 // The crawl scroll is PACED TO THE NARRATION so every line the voice reads is on screen as it is
 // read. The body text rises through the readable mask band (#crawl-viewport masks 24%–54% opaque);
@@ -1403,9 +1568,13 @@ function showCrawl(idx, done){
   content.style.animation=''; content.style.animationPlayState='paused';
   scr.style.display='flex';
 
+  // loading-telemetry chip: the crawl doubles as this map's sprite-download window (js/loader.js)
+  const _cpFill=document.getElementById('crawl-progress-fill');
+  const _cpT=_cpFill ? setInterval(()=>{ try{ _cpFill.style.width=((LOADER.missionProgress().frac*100)|0)+'%'; }catch(_){} }, 400) : null;
   let finished=false, voiceTimer=null, playTimer=null, timer=null, _skipped=false;
   const finish=()=>{ if(finished) return; finished=true;
     clearTimeout(timer); clearTimeout(voiceTimer); clearTimeout(playTimer);
+    if(_cpT) clearInterval(_cpT);
     content.style.animationPlayState='';
     if(typeof VOICE!=='undefined') VOICE.stopCrawl();     // stop narration on skip OR auto-advance
     if(typeof TELE!=='undefined') TELE.event(_skipped?'crawl_skipped':'crawl_watched', { idx });
@@ -1507,7 +1676,9 @@ function onVictory(){
       </div>`;
     const proceed=(chosen)=>{ es.style.display='none'; if(!keepRoster) setCarryover(chosen);
       if(typeof captureHeroes==='function') captureHeroes(G);   // heroes auto-carry (not chooser-driven) until they die — incl. freed Biba
-      G._fledBoss=false; mapIndex=nextIdx; showCrawl(mapIndex, ()=>loadMap(mapIndex)); };
+      G._fledBoss=false; mapIndex=nextIdx;
+      LOADER.beginMission(missionTags(mapIndex));
+      showCrawl(mapIndex, ()=>gateMission(mapIndex, ()=>loadMap(mapIndex))); };
     if(vets.length){ buildCarryChooser(document.getElementById('carry-list'), document.getElementById('carry-count'), vets, cap, document.getElementById('nextBtn'), proceed); }
     else { document.getElementById('nextBtn').onclick=()=>proceed([]); }
   } else {
@@ -1541,7 +1712,9 @@ function startNgPlus(){
     CAMPAIGN.mode='combat';
   }
   const es=document.getElementById('endScreen'); if(es) es.style.display='none';
-  mapIndex=0; showCrawl(0, ()=>loadMap(0));
+  mapIndex=0;
+  LOADER.beginMission(missionTags(0));
+  showCrawl(0, ()=>gateMission(0, ()=>loadMap(0)));
 }
 // T1-9: the "state of my company" run summary — pure reads of already-computed state.
 // Reward breakdown comes from hubRewardFor; promotions/fallen/peakSupply/unitsLost from hubStats.
@@ -1562,6 +1735,17 @@ function victorySummaryHTML(){
       +`<span class="vs">M3$ reward <b>+${r.total}</b></span>`;
     if(val) h+=`<span class="vs vs-score">📈 Valuation <b>${val.label}</b>${val.points>=best&&best>0?' · new best':(best>0?' · best $'+(best/100).toFixed(1)+'B':'')}</span>`;
     h+=`</div>`;
+    // bonus objectives — earned ones pay out (already inside r.total above), missed ones show grayed
+    if(G.quests && G.cfg && G.cfg.quests){
+      const bq=G.cfg.quests.filter(d=>!d.required && d.reward);
+      const lines=bq.map(d=>{ const q=G.quests[d.id];
+        if(q && q.na) return '';
+        return (q && q.done && !q.failed)
+          ? `<div class="vq won">🏅 BONUS: ${_escHtml(d.text||d.id)} <b>+${d.reward|0} M3$</b></div>`
+          : `<div class="vq miss">☐ BONUS: ${_escHtml(d.text||d.id)} <span>+${d.reward|0} M3$ — unclaimed</span></div>`;
+      }).filter(Boolean);
+      if(lines.length) h+=`<div class="vic-quests">${lines.join('')}</div>`;
+    }
     // the fallen this quarter — names, not numbers
     const here=(typeof fallenVets!=='undefined')?fallenVets.filter(f=>f.map===(G.cfg&&G.cfg.name)):[];
     if(here.length) h+=`<div class="vic-fallen">🕯 The Fallen this quarter: ${here.map(f=>'<b>'+f.name+'</b>').join(' · ')}</div>`;
@@ -1618,5 +1802,7 @@ function onDefeat(){
       <button class="btn" id="retryBtn">↻ Pivot &amp; Retry</button>
       <button class="btn" style="background:linear-gradient(180deg,#566,#344);" onclick="if(typeof recordLedgerRun==='function')recordLedgerRun('collapse');location.reload()">⟲ Restart Campaign</button>
     </div>`;
-  document.getElementById('retryBtn').onclick=()=>{ es.style.display='none'; loadMap(mapIndex); };
+  document.getElementById('retryBtn').onclick=()=>{ es.style.display='none';
+    LOADER.beginMission(missionTags(mapIndex));               // usually settled already → instant passthrough
+    gateMission(mapIndex, ()=>loadMap(mapIndex)); };
 }

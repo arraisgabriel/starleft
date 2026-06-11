@@ -37,7 +37,17 @@
     <div class="stat" title="Venture Funding — spend it on Interns, hires and buildings">💰 <span id="gold">0</span> <span id="income" class="lbl" title="Income per second (rolling)"></span> <span class="lbl">Funding</span></div>
     <div class="stat" title="Headcount vs capacity — build more Open-Plan HQs to hire more">👥 <span id="supply">0/0</span> <span class="lbl">Headcount</span></div>
     <div class="lbl">Episode <span id="mapname">—</span></div>
-    <div id="objective">Disrupt the competition.</div>
+    <!-- Objectives: quest mode = compact "OBJECTIVES n/m ▾" chip + dropdown quest list (absolute,
+         overlays the canvas like #topmenu-panel — never changes the measured topbar height, so
+         VIEW_TOP is untouched). Legacy mode (hub/extraction/tutorial/quest-less maps) = the chip
+         goes .plain and behaves exactly like the old #objective line. id="objective" stays on the
+         label span: tutorial.js re-asserts its step text into it each refreshUI tick. -->
+    <div id="obj-wrap">
+      <button id="obj-chip" class="plain" aria-haspopup="true" aria-expanded="false" title="Mission objectives">
+        <span id="objective">Disrupt the competition.</span><span id="obj-count"></span><span id="obj-caret" aria-hidden="true">▾</span>
+      </button>
+      <div id="quest-panel" style="display:none;" role="list"></div>
+    </div>
     <div id="top-menu">
       <button class="tc-btn" id="btn-topmenu" title="Menu" aria-haspopup="true" aria-expanded="false">☰ Menu</button>
       <!-- badge lives OUTSIDE the button: the button's clip-path would otherwise clip this overflowing corner badge -->
@@ -458,6 +468,21 @@
     </div>
   </div>
 
+  <!-- Asset loading gate: shown between picking a map and revealing the world while the map's
+       critical sprites finish downloading (js/loader.js queue + ui.js gateMission). Pure CSS —
+       it must depend on zero image assets. Sits BEFORE #crawlScreen so the crawl stacks above. -->
+  <div class="overlay load-gate" id="loadGate" style="display:none;">
+    <div class="lg-panel">
+      <div class="lg-ep" id="lg-ep">QUARTER I</div>
+      <div class="lg-title">DEPLOYING ASSETS</div>
+      <div class="lg-bar"><div class="lg-fill" id="lg-fill"></div></div>
+      <div class="lg-pct" id="lg-pct">0%</div>
+      <div class="lg-stall" id="lg-stall" style="display:none;">SIGNAL DEGRADED — re-routing supply lines…</div>
+      <div class="lg-tip" id="lg-tip"></div>
+      <button class="btn" id="lg-enter" style="display:none;">Deploy Anyway ▶</button>
+    </div>
+  </div>
+
   <!-- Star-Wars-style intro crawl between maps -->
   <div class="overlay" id="crawlScreen" style="display:none;">
     <div id="crawl-fade"></div>
@@ -469,6 +494,8 @@
         <div class="crawl-text" id="crawl-text"></div>
       </div>
     </div>
+    <!-- thin loading-telemetry chip: this map's critical-sprite download progress (the crawl IS the loading window) -->
+    <div id="crawl-progress" aria-hidden="true"><div id="crawl-progress-fill"></div></div>
     <button class="btn" id="crawl-skip">Skip Pitch ▶</button>
   </div>
 
@@ -489,6 +516,7 @@
 <script src="js/perf.js"></script><!-- render benchmark + instrumentation harness; OFF (zero hot-loop cost) unless ?perf=1 -->
 <script src="js/quality.js"></script><!-- adaptive render-quality controller (QUAL); inert at full FPS, degrades dpr only under sustained load -->
 <script src="js/tips.js"></script>
+<script src="js/loader.js"></script><!-- central image registry: tiered download queue + retry/backoff + the mission-gate API (must parse BEFORE assets.js, which registers every sprite through it) -->
 <script src="js/assets.js"></script>
 <script src="js/muzzle_data.js"></script>
 <script src="js/music.js"></script>
@@ -515,6 +543,7 @@
 <script src="js/madosis.js"></script><!-- Madosis (madness/sanity) runtime: meter, episodes, mad-dog rescue, Kennel; balance in config.js MADOSIS/KENNEL -->
 <script src="js/villains.js"></script><!-- VILLAINS (big bosses): spawn/driver/abilities/phases, boss win condition, campaign gating; balance in VILLAINS table -->
 <script src="js/villain_neon_maps.js"></script><!-- per-frame villain glow anchors (authored later via the calibrator); aura works without it -->
+<script src="js/quests.js"></script><!-- multi-objective quests: cfg.quests evaluation + quest-driven victory (checkWinLose quest branch); maps without cfg.quests keep the legacy win chain -->
 <script src="js/ai.js"></script>
 <script src="js/render.js"></script>
 <script src="js/lyrics.js"></script><!-- runtime-loaded timed song subtitles (LRC/plain); text lives in assets/, not code -->

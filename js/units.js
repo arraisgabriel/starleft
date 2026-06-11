@@ -567,6 +567,7 @@ function spawnTrained(state,b,type){
   if(!placed) placed=[b.tx,b.ty+b.h];
   const u=mkUnit(state,type,b.owner,placed[0],placed[1]);  // mkUnit already pushes to entities
   if(b.owner==='player') u.ctrl = b.ctrl || 'p1';          // trained units inherit the producing player's tag
+  if(b.owner==='player' && typeof questNotifyTrained==='function') questNotifyTrained(state, type);   // quests: trainUnits progress (the one hook — not derivable from state)
   if(b.rally){ if(b.owner==='player'){ issueMove(state,u,b.rally.x,b.rally.y,{type:'amove',x:b.rally.x,y:b.rally.y}); } }
   if(b.owner==='player' && !window._rbReplaying && typeof SFX!=='undefined') SFX.train();   // T0-3: train-ready cue
   if(b.owner==='enemy' && DEF[type] && DEF[type].air && !window._rbReplaying
