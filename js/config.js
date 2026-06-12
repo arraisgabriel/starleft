@@ -3,6 +3,8 @@
    STARLEFT — single-file mini RTS
    ===================================================================== */
 const TILE = 32;
+const ASSIST_BUILD_RATE = 0.15;  // each Intern beyond the first adds +15% build speed
+const DEMOLISH_REFUND = 0.8;     // demolishing a building salvages 80% of the funding paid for it
 const cv = document.getElementById('cv');
 const ctx = cv.getContext('2d');
 const mm = document.getElementById('minimap');
@@ -94,6 +96,18 @@ const TERRAIN_DEFAULTS = {
 };
 
 
+/* ---- Per-turret paid upgrades: select a finished Legal Team to buy (once each per turret) ---- */
+const TURRET_UPGRADES = {
+  firerate: { name:'Expedited Filings', icon:'⚡', cost:75, rateMult:1.7, field:'upgFirerate', hint:'+70% fire rate' },
+  damage:   { name:'Punitive Damages',  icon:'💥', cost:75, dmgMult:1.35, field:'upgDamage',   hint:'+35% fire damage' },
+};
+
+/* ---- Market Research survey (the `intel` tower's map scan) ----
+   time: scan duration (s); clusterR: buildings within this many tiles group as one "campus";
+   seenR: cluster members within this radius of the representative get revealed (the PARTIAL slice);
+   revealR: explored-terrain patch radius around each revealed building. */
+const INTEL_SCAN = { time:20, clusterR:12, seenR:4, revealR:5 };
+
 /* ---- Unit / building definitions (startup-vs-monopoly satire) ---- */
 const DEF = {
   hq:       { name:'Open-Plan HQ', icon:'🏢', kind:'building', w:4,h:3, hp:3000, cost:0,   build:35,  sight:7, supply:24, color:'#3b7fd0',
@@ -101,7 +115,10 @@ const DEF = {
   barracks: { name:'People Ops',   icon:'🎯', kind:'building', w:3,h:3, hp:900,  cost:150, build:20,  sight:5, supply:0,  color:'#5a6b8a',
               flavor:'"Recruiting" department. Turns Funding into Growth Cyborgs and Consultants.' },
   turret:   { name:'Legal Team',   icon:'⚖️', kind:'building', w:2,h:2, hp:550,  cost:100, build:14,  sight:7, supply:0,  color:'#7a8aa8',
-              dmg:14, range:6.0, cd:0.7, flavor:'Fires cease-and-desist letters at anything that trespasses on your IP.' },
+              dmg:14, range:8.625, cd:0.7,   // 15% beyond the longest base unit range (lobbyist 7.5); sieged Auditor (9) still out-ranges it
+              flavor:'Fires cease-and-desist letters at anything that trespasses on your IP.' },
+  intel:    { name:'Market Research', icon:'🕵️', kind:'building', w:1,h:1, hp:600, cost:1999, build:30, sight:7, supply:0, color:'#8a5aa8',
+              flavor:'Runs one "totally anonymous" industry survey and publishes every rival campus it can triangulate — well, the parts Legal would sign off on. Yes, that\'s a Legal Team bolted to the roof: it has never fired a shot, but the consent forms practically notarize themselves.' },
   outpost:  { name:'Satellite Office', icon:'📡', kind:'building', w:3,h:3, hp:650, cost:175, build:16, sight:5, supply:8, color:'#5a6b8a',
               deposit:true, trickle:3.5, flavor:'A scrappy forward branch — Interns deposit here, its rig auto-extracts Funding, and it houses +8 Headcount. The mid-game expansion pivot: cheaper and flimsier than a second HQ.' },   // T2-5: supply + fatter trickle make the forward branch a real tradeoff
   condo:    { name:'Unit Condo', icon:'🏙️', kind:'building', w:5,h:4, hp:1200, cost:0, build:1, sight:6, supply:0, color:'#4b6b8f',
@@ -184,15 +201,21 @@ const MADOSIS = {
   backfill: { perStar:4, perEpisode:6, perFallen:5, perTrauma:8, maxFrac:0.9 },
   // --- event point pool (extend by adding a key here + one madosisEvent(...) call) ---
   events: {
-    vetDeath: 16,         // a fellow player veteran dies (awarded per surviving vet)
-    heroDeath: 28,        // a named hero dies
-    buildingLost: 8,      // a player building is destroyed
-    hqLost: 22,           // a player HQ is destroyed
-    traumaRelapse: 20,    // a req:'trauma' life-event re-fires on level-up
+    vetDeath: 8,          // a fellow player veteran dies (awarded per surviving vet)
+    heroDeath: 16,        // a named hero dies
+    buildingLost: 4,      // a player building is destroyed
+    hqLost: 12,           // a player HQ is destroyed
+    traumaRelapse: 12,    // a req:'trauma' life-event re-fires on level-up
   },
-  vetDeathRadius: 0,      // tiles; 0 = all surviving player vets on the map
+  vetDeathRadius: 14,     // tiles; 0 = all surviving player vets on the map. >0 = only vets who
+                          // SAW it (near the death) grieve — keeps one bad fight from breaking
+                          // the whole roster. Headline knob to re-tune after playtests.
   decayPerSkip: 12,       // madosis removed per mission a unit sits out (HUB rest)
-  onsetChancePerSec: 0.05,// once over threshold (Ep6+) in a mission, chance/sec to snap
+  onsetChancePerSec: 0.02,// once over threshold (Ep6+) in a mission, chance/sec to snap
+  maxConcurrentEpisodes: 1, // at most this many units in madEpisode/madDog at once — a mission
+                            // can have a madosis CRISIS, never a cascade
+  episodeCooldown: 75,    // sec after an episode ends (rescued, killed, or lost) before the
+                          // next onset roll may fire (state._madCalmUntil)
   // --- episode escalation (seconds) ---
   tremorDur: 8,           // warning phase: jitter + accuracy down, still obeys orders
   defianceDur: 10,        // progressively ignores orders, then -> feral
@@ -202,8 +225,12 @@ const MADOSIS = {
   // --- rescue (memory anchors) ---
   rescueRescuers: ['recruiter'],           // + any hero healer (Biba); gated by def.heal
   echoFacets: ['trauma','family','dream'], // the 3 dossier memories to recover
-  echoDistBands: [3, 7, 12],               // tiles from the dog: trauma near / family mid / dream far (tight escort)
-  echoReachRange: 1.6,                     // tiles the healer must reach to trigger an echo
+  echoDistBands: [30, 70, 120],            // tiles from the dog: trauma near / family mid / dream far —
+                                           // far enough that collectors never enter the feral dog's reach
+  echoBandMaxFrac: 0.45,                   // clamp: band = min(band, this × map diagonal)
+  echoMinDist: 12,                         // tiles — echoes never land closer to the dog than this
+  echoReachRange: 1.6,                     // tiles any player unit must reach to trigger an echo
+  rescueSpeedMul: 1.5,                     // healer move-speed multiplier while on the rescue command
   calmDmgFalloff: [1.0, 0.66, 0.33, 0.0],  // dog dmg multiplier at 0/1/2/3 echoes recovered
   rescueTimeLimit: 0,                      // 0 = no limit; >0 sec = echoes fade -> rescue fails
   // --- rescue survivability (a guarded escort, not a suicide run) ---
@@ -240,12 +267,13 @@ const ECON = {
   contestedMinDist: 18,   // a node ≥ this far (unscaled tiles) from BOTH starts counts as contested
 };
 
-// Kennel death-squad: spawned when a mad dog is rescued, sized to the units guarding it.
+// Kennel death-squad: spawned when a mad dog is rescued, sized to the DOG itself — certain death
+// for an isolated dog, a real skirmish for a small escort, never a threat to the assembled army.
 const KENNEL = {
   size: 10,
-  powerRatio: 0.85,       // total squad power ~85% of nearby-guard power (a fight, not a wipe)
-  radiusTiles: 12,        // measure player units within this radius of the dog at rescue
+  dogPowerMul: 2.2,       // total squad power ≈ this × the rescued dog's own combat power
   maxStars: 20,           // hard per-unit level cap (never an unwinnable wall)
+  repathSec: 1.5,         // pursuit cadence — the squad re-tracks the dog wherever it runs
   comp: ['soldier','soldier','ranger','ranger','lobbyist',
          'hustler','auditor','recruiter','soldier','ranger'], // incl. an anti-healer threat
 };

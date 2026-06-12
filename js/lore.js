@@ -361,7 +361,9 @@ function rosterHTML(){
   h += `<div class="roster-col"><h3>Active Veterans (${living.length})</h3>`;
   if(!living.length) h += `<div class="muted">No veterans yet — units earn a dossier at level 2.</div>`;
   for(const u of living){ const d=buildDossier(u), def=DEF[u.type];
-    h += `<div class="roster-rowwrap"><button class="roster-row" data-uid="${u.id}">${def.icon||''} <b>${d.full}</b><span class="rr-sub">${careerTitle(u.stars||0)} ${def.name} · Lv ${u.stars||0}</span></button>`
+    // living-city status (hub only): computed at build time — the roster rebuilds on every open
+    const st=(typeof G!=='undefined'&&G&&G.hub&&typeof hubVetStatus==='function')?' · '+hubStatusText(hubVetStatus(u)):'';
+    h += `<div class="roster-rowwrap"><button class="roster-row" data-uid="${u.id}">${def.icon||''} <b>${d.full}</b><span class="rr-sub">${careerTitle(u.stars||0)} ${def.name} · Lv ${u.stars||0}${st}</span></button>`
        + `<button class="roster-share" data-share-uid="${u.id}" title="Share this file as an image">⇪</button></div>`; }
   h += `</div>`;
   h += `<div class="roster-col"><h3>The Fallen (${fallenVets.length})</h3>`;

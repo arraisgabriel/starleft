@@ -103,7 +103,10 @@ function refreshUI(){
       elStats.innerHTML=`<span class="st">★ Lv ${lvl}</span><span class="st">❤ ${e.hp|0}/${e.maxHp}</span><span class="st">⚔ ${dmg}</span>`+counterSt+madSt;
     } else {
       const s=e.constructing? `🏗 ${(e.buildProg/e.buildTime*100)|0}%` : `❤ ${e.hp|0}/${e.maxHp}`;
-      elStats.innerHTML=`<span class="st">${s}</span>`;
+      let upgSt='';
+      if(e.type==='turret') for(const k in TURRET_UPGRADES){ const sp=TURRET_UPGRADES[k]; if(e[sp.field]) upgSt+=`<span class="st" title="${sp.name}">${sp.icon} ${sp.hint}</span>`; }
+      if(e.type==='intel' && e.scanTotal>0) upgSt+=`<span class="st">🛰️ survey ${(e.scanProg/e.scanTotal*100)|0}%</span>`;
+      elStats.innerHTML=`<span class="st">${s}</span>`+upgSt;
     }
     // secondary detail (context + flavor) — lives in .desc, which is desktop-only on mobile
     let extra='';
@@ -326,10 +329,19 @@ function cmdSig(sel){
   const combat=owned.filter(e=>e.kind==='unit'&&!e.storedIn&&e.type!=='worker');
   const stSig=combat.length?(combat[0].stance||'aggr'):'-';
   const abSig=(typeof ABILITIES!=='undefined')?[...new Set(combat.filter(u=>ABILITIES[u.type]).map(u=>u.type))].sort().join('.'):'';
+  // Turret upgrade buttons rebuild when the selected turret (or its bought set) changes —
+  // including on co-op clients, where the flags flip only when the host snapshot lands.
+  const selTur=owned.find(e=>e.type==='turret'&&!e.constructing);
+  const tSig=selTur ? ((selTur.upgFirerate?1:0)+''+(selTur.upgDamage?1:0)) : '-';
+  // Demolish: rebuilds per selected building (id keys the refund amount in the label)
+  const selB=owned.find(e=>e.kind==='building');
+  // Market Research scan button flips between idle/scanning (clients flip when the snapshot lands)
+  const selIn=owned.find(e=>e.type==='intel'&&!e.constructing);
+  const inSig=selIn ? (selIn.scanTotal>0?1:0) : '-';
   return 'h'+(has('hq')?1:0)+'b'+(has('barracks')?1:0)+'g'+(has('garage')?1:0)+'l'+(has('launchpad')?1:0)
        +'w'+(owned.some(e=>e.type==='worker')?1:0)+'G'+(hasG?1:0)
        +'u'+(owned.some(e=>e.kind==='unit')?1:0)+'c'+(combat.length?1:0)+'s'+stSig+'a'+abSig
-       +'x'+xr+'X'+xs;
+       +'x'+xr+'X'+xs+'T'+tSig+'M'+(selB?selB.id:'-')+'S'+inSig;
 }
 // Resolve a live, selected, finished building of a given type at click time
 // (handlers must not capture stale entity refs, since buttons now persist).
@@ -368,6 +380,23 @@ function buildCommands(sel){
     addCmd(DEF.courier.icon,'Drugztore Delivery Drone',DEF.courier.cost,()=>train('launchpad','courier'));
     addCmd(DEF.bomber.icon,'Buzzword Bomber',DEF.bomber.cost,()=>train('launchpad','bomber'));
   }
+  // ---- per-turret paid upgrades (one purchase each per Legal Team) ----
+  const selTur=owned.find(e=>e.type==='turret'&&!e.constructing);
+  if(selTur){
+    for(const key in TURRET_UPGRADES){
+      const spec=TURRET_UPGRADES[key];
+      if(selTur[spec.field]){
+        addCmd(spec.icon, spec.name+' ✓', null, ()=>{}, 'disabled', 'upg-'+key);
+      } else {
+        addCmd(spec.icon, spec.name, spec.cost, ()=>{
+          const b=selectedBuilding('turret'); if(!b || b[spec.field]) return;
+          (typeof netUpgrade==='function'?netUpgrade:tryUpgradeTurret)(G,b,key);
+          G._cmdSig=null;   // rebuild so the button flips to ✓ (host/solo immediately; client via snapshot sig)
+        }, null, 'upg-'+key);
+        const btn=elCmd.lastChild; if(btn) btn.title=spec.hint;
+      }
+    }
+  }
   if(owned.some(e=>e.type==='worker')){
     addCmd(DEF.hq.icon,'Open-Plan HQ',350,()=>tryPlaceFixed('hq'));
     addCmd(DEF.outpost.icon,'Satellite Office',DEF.outpost.cost,()=>tryPlace(G,'outpost'));
@@ -375,6 +404,31 @@ function buildCommands(sel){
     addCmd(DEF.turret.icon,'Legal Team',DEF.turret.cost,()=>tryPlace(G,'turret'),null,'build-turret');
     addCmd(DEF.garage.icon,'The Garage',DEF.garage.cost,()=>tryPlace(G,'garage'));
     if(hasFinished('garage')) addCmd(DEF.launchpad.icon,'Launch Pad',DEF.launchpad.cost,()=>tryPlace(G,'launchpad'));
+    addCmd(DEF.intel.icon,'Market Research',DEF.intel.cost,()=>tryPlace(G,'intel'),null,'build-intel');
+  }
+  // ---- Market Research: the map-scan command ----
+  const selIntel=owned.find(e=>e.type==='intel'&&!e.constructing);
+  if(selIntel){
+    if(selIntel.scanTotal>0){
+      addCmd('🛰️','Scanning…',null,()=>{},'disabled','intel-scan');
+    } else {
+      addCmd('🛰️','Run Market Scan',null,()=>{
+        const b=selectedBuilding('intel'); if(!b||b.scanTotal>0) return;
+        (typeof netScan==='function'?netScan:tryStartScan)(G,b);
+        G._cmdSig=null;   // flip to Scanning… (host/solo instantly; client when the snapshot lands)
+      },null,'intel-scan');
+    }
+  }
+  // ---- demolish: salvage any own building (even an unfinished shell) for DEMOLISH_REFUND ----
+  const selB=owned.find(e=>e.kind==='building');
+  if(selB){
+    const paid=(selB.paidCost!=null)?selB.paidCost:(DEF[selB.type].cost||0);
+    const refund=Math.round(paid*DEMOLISH_REFUND);
+    addCmd('🧨','Demolish (+'+refund+'🪙)',null,()=>{
+      const b=G.selection.find(e=>!e.dead && e.owner==='player' && e.kind==='building');
+      if(b) (typeof netDemolish==='function'?netDemolish:tryDemolish)(G,b);
+      G._cmdSig=null;
+    },null,'demolish');
   }
   // ---- unit tactics (T2-2/T2-3): attack-move, stance cycle, manual ability ----
   const combat=owned.filter(e=>e.kind==='unit'&&!e.storedIn&&e.type!=='worker');
@@ -545,7 +599,7 @@ let dossierUnit=null, dossierRaf=0;
 function showDossier(u){
   if(!u || !u.lore || typeof dossierHTML!=='function') return;
   const keepRunning = !!(G && running && !G.over);
-  dossierUnit = u;
+  dossierUnit = u; dossierNpc = null;
   document.getElementById('dossierBody').innerHTML = dossierBodyHTML(u);
   document.body.classList.add('dossier-open');   // hide the bottom HUD so the z-19 panel reads as full-bleed (HUB-menu behavior)
   showSub('dossierScreen');
@@ -567,7 +621,7 @@ function closeDossier(){
   hideSub('dossierScreen');
   document.body.classList.remove('dossier-open');
   if(dossierRaf){ cancelAnimationFrame(dossierRaf); dossierRaf=0; }
-  dossierUnit=null;
+  dossierUnit=null; dossierNpc=null;
   dossierSyncHud();
 }
 function dossierBodyHTML(u){
@@ -605,12 +659,18 @@ function dossierCardHTML(u){
 // per-frame refresh of the live card; self-terminates when the dossier is hidden.
 function dossierTick(){
   const scr=document.getElementById('dossierScreen');
-  if(!scr || scr.style.display==='none' || !dossierUnit){
-    dossierRaf=0; dossierUnit=null;
+  if(!scr || scr.style.display==='none' || (!dossierUnit && !dossierNpc)){
+    dossierRaf=0; dossierUnit=null; dossierNpc=null;
     if(document.body.classList.contains('dossier-open')){ document.body.classList.remove('dossier-open'); dossierSyncHud(); }  // fallback teardown if hidden without closeDossier()
     return;
   }
   dossierSyncTop();                        // track responsive topbar height changes while open
+  if(dossierNpc){                          // NPC variant: live portrait + status at ~5 Hz, no HP/Madosis bars
+    const body=document.getElementById('dossierBody'), tnow=performance.now()/1000;
+    if(body && (!dossierTick._npcT || tnow-dossierTick._npcT>0.2)){ dossierTick._npcT=tnow; updateHubStatusLines(body); }
+    dossierRaf=requestAnimationFrame(dossierTick);
+    return;
+  }
   const u=dossierUnit, body=document.getElementById('dossierBody');
   if(body){
     const cv=body.querySelector('canvas.dcard-spr');
@@ -680,6 +740,9 @@ function buildHubMenuBody(){
   const body=document.getElementById('hubMenuBody'), spec=hubMenu.spec; if(!body||!spec) return;
   hubMenu.sig = spec.signature ? spec.signature() : '';
   body.innerHTML=''; spec.build(body);
+  // living city: facilities with a staffPoi get their staff chip-strip appended (no-op pre-NPC)
+  if(spec.staffPoi){ const strip=hubMenuStaffStrip(spec.staffPoi); if(strip) body.appendChild(strip); }
+  updateHubStatusLines(body);   // fill status lines immediately (the 5 Hz tick takes over after)
 }
 // keep the panel below the (possibly 2-row, responsive) topbar — VIEW_TOP is the measured topbar height
 function hubMenuSyncTop(){
@@ -696,7 +759,10 @@ function hubMenuTick(){
   }
   // shared: animate every unit-card portrait in the body (any facility menu)
   if(body){ const tnow=performance.now()/1000;
-    body.querySelectorAll('canvas.train-spr').forEach(cv=>drawTrainCanvas(cv, cv.dataset.type, cv.dataset.sprite||'', tnow)); }
+    body.querySelectorAll('canvas.train-spr').forEach(cv=>drawTrainCanvas(cv, cv.dataset.type, cv.dataset.sprite||'', tnow));
+    // living-city statuses + NPC portraits at ~5 Hz (text flips never rebuild the DOM)
+    if(!hubMenu._stT || tnow-hubMenu._stT>0.2){ hubMenu._stT=tnow; updateHubStatusLines(body); }
+  }
   hubMenuSyncTop();
   hubMenu.raf=requestAnimationFrame(hubMenuTick);
 }
@@ -760,9 +826,18 @@ function hubMenuUnitCard(u, opts){
     i.style.cssText='display:block;height:100%;width:'+(frac*100)+'%;background:linear-gradient(90deg,#7a35ff,#b06bff)'+(over?';box-shadow:0 0 8px rgba(255,90,255,.85)':'');
     bar.appendChild(i); card.appendChild(bar);
   }
+  // living-city status line — text is OWNED by the throttled status tick (updateHubStatusLines),
+  // keyed by data attribute so per-second status flips never enter the signature/rebuild path.
+  if(opts.statusVet || opts.statusNpc){
+    const st=document.createElement('div'); st.className='train-status';
+    if(opts.statusVet) st.dataset.stVet=opts.statusVet;
+    if(opts.statusNpc) st.dataset.stNpc=opts.statusNpc;
+    card.appendChild(st);
+  }
   if(opts.onClick) card.onclick=opts.onClick;
-  if(opts.action){ const a=document.createElement('button'); a.className='hub-card-act'; a.textContent=opts.action.label;
-    a.onclick=(ev)=>{ ev.stopPropagation(); opts.action.onClick(); }; card.appendChild(a); }
+  const _acts=opts.actions || (opts.action?[opts.action]:[]);
+  for(const act of _acts){ const a=document.createElement('button'); a.className='hub-card-act'; a.textContent=act.label;
+    a.onclick=(ev)=>{ ev.stopPropagation(); act.onClick(); }; card.appendChild(a); }
   return card;
 }
 // a wrapped grid of unit cards (the shared "card list" used by Training "Awaiting orders" + M.D.C. enlisted,
@@ -781,6 +856,170 @@ function hubMenuActionBtn(label, cost, enabled, onClick){
   b.innerHTML=label+(cost!=null?' · <b>M3$ '+cost+'</b>':'');
   b.onclick=()=>{ if(ok) onClick(); };
   return b;
+}
+
+/* =====================================================================
+   LIVING CITY UI — NPC cards, staff strips, status lines, breadcrumb,
+   city-clock chip, NPC dossier. Every NPC surface is typeof-guarded so
+   the panels degrade gracefully if the NPC modules are absent.
+   ===================================================================== */
+// dense row card for a household NPC (relative/friend/provider). Click = locate; 📂 = resident file.
+function hubNpcCard(npc, crumb){
+  const card=document.createElement('button'); card.className='npc-card';
+  const cv=document.createElement('canvas'); cv.width=72; cv.height=72; cv.className='npc-port'; cv.dataset.npc=npc.id;
+  card.appendChild(cv);
+  const tx=document.createElement('div'); tx.className='npc-tx';
+  let sub='';
+  if(npc.role==='relative') sub=_uiCap(npc.rel||'kin')+' of '+(npc.vetFull||'a veteran')+' · '+npc.profession;
+  else if(npc.role==='friend') sub='Friend of '+(npc.vetFull||'a veteran')+' · '+npc.profession;
+  else if(npc.role==='provider') sub=npc.profession+(npc.workPoi?(' at '+_uiPoiName(npc.workPoi)):'');
+  else sub=npc.profession+' · ULTRA HQ';
+  tx.innerHTML='<div class="npc-name">'+npc.name+(npc.mourning?' <span class="npc-mourn" title="In mourning">🕯</span>':'')+'</div>'
+    +'<div class="npc-sub">'+sub+'</div>'
+    +'<div class="npc-status" data-st-npc="'+npc.id+'"><span class="dot"></span><span class="npc-st-tx"></span></div>';
+  card.appendChild(tx);
+  const file=document.createElement('span'); file.className='npc-file'; file.textContent='📂'; file.title='Open resident file';
+  file.onclick=(ev)=>{ ev.stopPropagation(); closeHubMenu(); showNpcDossier(npc.id, crumb); };
+  card.appendChild(file);
+  card.title='Click to find '+(npc.first||npc.name)+' in the city';
+  card.onclick=()=>{ closeHubMenu(); if(typeof hubLocateNpc==='function') hubLocateNpc(npc.id); if(crumb) showHubCrumb(crumb.label, crumb.reopen); };
+  return card;
+}
+function _uiCap(s){ return s?s[0].toUpperCase()+s.slice(1):s; }
+function _uiPoiName(id){ const c=(typeof hubPoiConfig==='function')?hubPoiConfig(id):null; return (c&&c.name)||id; }
+// horizontal chip strip with a facility's staff — appended by buildHubMenuBody via spec.staffPoi
+function hubMenuStaffStrip(poiId){
+  if(typeof hubNpcRoster!=='function') return null;
+  let staff=[]; try{ staff=hubNpcRoster().filter(n=>n.workPoi===poiId); }catch(_){ return null; }
+  if(!staff.length) return null;
+  const wrap=document.createElement('div');
+  wrap.appendChild(hubMenuSection('Staff'));
+  const row=document.createElement('div'); row.className='npc-staff';
+  for(const n of staff){
+    const chip=document.createElement('button'); chip.className='npc-chip'; chip.dataset.stDot=n.id;
+    chip.innerHTML='<span class="dot"></span>'+n.name+' <i>'+n.profession+'</i>';
+    chip.title='Open resident file';
+    chip.onclick=()=>{ closeHubMenu(); showNpcDossier(n.id); };
+    row.appendChild(chip);
+  }
+  wrap.appendChild(row);
+  return wrap;
+}
+// the ~5 Hz status pass: fills [data-st-vet]/[data-st-npc] text, [data-st-dot] chips, npc portraits.
+// Text-content updates only — NEVER rebuilds DOM (the signature/rebuild-eats-clicks rule).
+function updateHubStatusLines(root){
+  if(!root) return;
+  root.querySelectorAll('[data-st-vet]').forEach(el=>{
+    let txt='Not in the H.U.B.';
+    if(typeof hubVetStatus==='function' && typeof G!=='undefined' && G && G.entities){
+      const key=el.dataset.stVet;
+      const u=G.entities.find(e=>e&&!e.dead&&e.kind==='unit'&&e.owner==='player'&&hubUnitKey(e)===key);
+      txt = u ? hubStatusText(hubVetStatus(u)) : 'Deployed — not in the H.U.B.';
+    }
+    const t=el.querySelector('.npc-st-tx')||el;
+    if(t.textContent!==txt) t.textContent=txt;
+  });
+  if(typeof HUBNPC!=='undefined'){
+    root.querySelectorAll('[data-st-npc]').forEach(el=>{
+      const txt=HUBNPC.statusOf(el.dataset.stNpc)||'';
+      const t=el.querySelector('.npc-st-tx')||el;
+      if(t.textContent!==txt) t.textContent=txt;
+      const dot=el.querySelector('.dot'); if(dot){ const c='dot '+npcDotClass(txt); if(dot.className!==c) dot.className=c; }
+    });
+    root.querySelectorAll('[data-st-dot]').forEach(el=>{
+      const txt=HUBNPC.statusOf(el.dataset.stDot)||'';
+      const dot=el.querySelector('.dot'); if(dot){ const c='dot '+npcDotClass(txt); if(dot.className!==c) dot.className=c; }
+      if(el.title!==txt) el.title=txt;
+    });
+    if(HUBNPC.drawPortrait) root.querySelectorAll('canvas.npc-port').forEach(cv=>HUBNPC.drawPortrait(cv, cv.dataset.npc));
+  }
+}
+function npcDotClass(txt){
+  if(/^Sleeping/.test(txt)) return 'sleep';
+  if(/^(Working|On shift|Back on|On break)/.test(txt)) return 'work';
+  if(/(Commuting|Heading|Walking|Going|Clocked out)/.test(txt)) return 'walk';
+  return 'idle';
+}
+// breadcrumb chip below the topbar: "◀ Back to <condo>" after a locate jump (auto-hides)
+let _hubCrumbEl=null, _hubCrumbTimer=0;
+function showHubCrumb(label, onClick){
+  if(!_hubCrumbEl){ _hubCrumbEl=document.createElement('button'); _hubCrumbEl.id='hub-crumb'; document.body.appendChild(_hubCrumbEl); }
+  _hubCrumbEl.textContent='◀ '+label;
+  _hubCrumbEl.style.display='block';
+  if(typeof VIEW_TOP==='number') _hubCrumbEl.style.top=(VIEW_TOP+8)+'px';
+  _hubCrumbEl.onclick=()=>{ hideHubCrumb(); if(onClick) onClick(); };
+  clearTimeout(_hubCrumbTimer); _hubCrumbTimer=setTimeout(hideHubCrumb, 8000);
+}
+function hideHubCrumb(){ if(_hubCrumbEl) _hubCrumbEl.style.display='none'; }
+// city-clock chip (hub only) — fed by the main loop's 0.2s UI tick; textContent updates only
+let _hubClockEl=null, _hubClockTxt='';
+function updateHubClockChip(state){
+  const inHub=!!(state && state.hub && typeof HUBNPC!=='undefined' && HUBNPC.clock);
+  if(!_hubClockEl){
+    if(!inHub) return;
+    _hubClockEl=document.createElement('div'); _hubClockEl.id='hub-clock'; document.body.appendChild(_hubClockEl);
+  }
+  if(!inHub){ if(_hubClockEl.style.display!=='none') _hubClockEl.style.display='none'; _hubClockTxt=''; return; }
+  const c=HUBNPC.clock();
+  const mm=c.m-(c.m%10);   // city minutes fly (1 city-hour ≈ 17.5s) — show tens so it doesn't strobe
+  const txt='🕘 '+String(c.h).padStart(2,'0')+':'+String(mm).padStart(2,'0')+' · '+c.phase.toUpperCase();
+  if(_hubClockEl.style.display!=='block') _hubClockEl.style.display='block';
+  if(txt!==_hubClockTxt){ _hubClockTxt=txt; _hubClockEl.textContent=txt; }
+  if(typeof VIEW_TOP==='number'){ const t=(VIEW_TOP+8)+'px'; if(_hubClockEl.style.top!==t) _hubClockEl.style.top=t; }
+}
+
+/* ---- NPC dossier: reuses the #dossierScreen shell + CSS with a bar-less card ---- */
+function npcRoleLine(d){
+  if(d.role==='relative') return _uiCap(d.rel||'kin')+' of '+(d.vetFull||'a veteran')+' · '+d.profession;
+  if(d.role==='friend')   return 'Friend of '+(d.vetFull||'a veteran')+' · '+d.profession;
+  if(d.role==='provider') return d.profession+' at '+d.workPoiName;
+  return d.profession+' · ULTRA HQ';
+}
+function npcDossierBodyHTML(d, crumb){
+  return `<div class="dossier-2col">`
+    + `<div class="dossier-col-left">`
+    +   `<div class="dossier-headrow">`
+    +     `<button class="sc-btn back dossier-back" onclick="closeDossier()">◀ Back</button>`
+    +     `<div class="dossier dossier-head"><h2></h2></div>`
+    +   `</div>`
+    +   `<div class="dossier">${(typeof npcDossierFileHTML==='function')?npcDossierFileHTML(d.id):''}</div>`
+    + `</div>`
+    + `<div class="dossier-col-right">`
+    +   `<div class="dcard npc">`
+    +     `<canvas class="npc-port dcard-spr" width="220" height="220" data-npc="${d.id}"></canvas>`
+    +     `<div class="dcard-name">${d.full}</div>`
+    +     `<div class="dcard-type">${npcRoleLine(d)}</div>`
+    +     `<div class="dcard-status" data-st-npc="${d.id}"></div>`
+    +     `<button class="sc-btn hub-action npc-locate" data-locate-npc="${d.id}">📍 Locate in the H.U.B.</button>`
+    +     (d.vetKey?`<button class="sc-btn back npc-vetlink" data-vetkey="${d.vetKey}">📂 ${d.vetFull}'s service file</button>`:'')
+    +   `</div>`
+    + `</div></div>`;
+}
+let dossierNpc=null;
+function showNpcDossier(id, crumb){
+  if(typeof buildNpcDossier!=='function') return;
+  const d=buildNpcDossier(id); if(!d) return;
+  const keepRunning = !!(G && running && !G.over);
+  dossierNpc=id; dossierUnit=null;
+  const body=document.getElementById('dossierBody'); if(!body) return;
+  body.innerHTML = npcDossierBodyHTML(d, crumb);
+  const head=body.querySelector('.dossier-head h2');
+  if(head){ head.textContent=d.full; const sub=document.createElement('div'); sub.className='dossier-sub';
+    sub.textContent=npcRoleLine(d)+' · from '+d.home; head.after(sub); }
+  const lb=body.querySelector('[data-locate-npc]');
+  if(lb) lb.onclick=()=>{ closeDossier(); if(typeof hubLocateNpc==='function') hubLocateNpc(id); if(crumb) showHubCrumb(crumb.label, crumb.reopen); };
+  const vb=body.querySelector('[data-vetkey]');
+  if(vb) vb.onclick=()=>{
+    const key=vb.dataset.vetkey;
+    const u=G&&G.entities&&G.entities.find(e=>e&&!e.dead&&e.owner==='player'&&e.kind==='unit'&&typeof hubUnitKey==='function'&&hubUnitKey(e)===key);
+    if(u){ showDossier(u); } else toast('Their veteran is not in the H.U.B. right now.');
+  };
+  updateHubStatusLines(body);
+  document.body.classList.add('dossier-open');
+  showSub('dossierScreen');
+  dossierSyncTop(); dossierSyncHud();
+  if(keepRunning) running=true;
+  if(!dossierRaf) dossierRaf=requestAnimationFrame(dossierTick);
 }
 
 /* ---- shared helpers (used by the menus) ---- */
@@ -900,6 +1139,7 @@ function openTrainingMenu(){
   openHubMenu({
     id:'training', icon:'🎯', title:'Training Grounds',
     subtitle:"Mentor a junior up to the senior's level + 1 — both lock in for the session",
+    staffPoi:'training',
     signature: trainPanelSignature,
     build: buildTrainingBody,
     tick: function(body){
@@ -1088,6 +1328,7 @@ function openHealingMenu(){
   openHubMenu({
     id:'mentalhealth', icon:'🧠', title:'Mental Health Facility',
     subtitle:'Treat a frayed veteran — recover most of its max madosis over one mission, paid up-front.',
+    staffPoi:'mentalhealth',
     signature: healPanelSignature,
     build: buildHealingBody,
     tick: function(){}   // visit-based — nothing per-frame (card portraits are animated by hubMenuTick)
@@ -1137,6 +1378,7 @@ function openMdcMenu(poi){
   openHubMenu({
     id:'mdc', icon:'🛰️', title:'M.D.C. — Mission Dispatch',
     subtitle:'Enlist veterans here, then launch the next quarterly deployment',
+    staffPoi:(poi&&poi.hubPoi)?poi.hubPoi.id:null,
     signature: function(){ const d=(CAMPAIGN.dispatch&&CAMPAIGN.dispatch.staged)||[];
       return 'mdc:'+d.join(',')+'|m3:'+(CAMPAIGN.m3|0)+'|nx:'+(CAMPAIGN&&CAMPAIGN.nextMapIndex!=null?CAMPAIGN.nextMapIndex:-1); },
     build: function(body){
@@ -1182,31 +1424,65 @@ function openMdcMenu(poi){
 }
 
 /* ---- Condo (resident housing) menu ---- */
-function openCondoMenu(poi){
-  const id = (poi && poi.hubPoi) ? poi.hubPoi.id : null;
-  const nm = (poi && poi.hubPoi && poi.hubPoi.name) ? poi.hubPoi.name : 'Unit Condo';
+function openCondoMenu(poiOrId){
+  // accepts the POI entity (command button / selection) OR the condo id string (arrival, locate breadcrumb)
+  const id = (typeof poiOrId==='string') ? poiOrId : ((poiOrId && poiOrId.hubPoi) ? poiOrId.hubPoi.id : null);
+  if(!id) return;
+  const cfg=(typeof hubPoiConfig==='function')?hubPoiConfig(id):null;
+  const nm = (cfg && cfg.name) || 'Unit Condo';
+  const crumb = { label:nm, reopen:()=>openCondoMenu(id) };
+  const npcsHere = ()=>{ try{ return (typeof hubNpcRoster==='function')?hubNpcRoster().filter(n=>n.homePoi===id):[]; }catch(_){ return []; } };
   openHubMenu({
     id:'condo', icon:'🏙️', title:nm,
-    subtitle:'Upgrade resident housing — +4% max HP per level for everyone who lives here',
-    signature: function(){ const c=(CAMPAIGN.condos&&CAMPAIGN.condos[id])||{}; return 'condo:'+id+':'+(c.level||0)+'|m3:'+(CAMPAIGN.m3|0); },
+    subtitle:'Home to your veterans and their people — click a card to find them in the city',
+    signature: function(){ const c=(CAMPAIGN.condos&&CAMPAIGN.condos[id])||{};
+      // structural facts ONLY (level/treasury/who lives here) — statuses are tick-updated text,
+      // never part of the signature, so cards don't rebuild under the player's finger.
+      return 'condo:'+id+':'+(c.level||0)+'|m3:'+(CAMPAIGN.m3|0)
+        +'|r:'+((c.residents||[]).join(','))
+        +'|n:'+npcsHere().map(n=>n.id+(n.mourning?'!':'')).join(','); },
     build: function(body){
       const c=(CAMPAIGN.condos&&CAMPAIGN.condos[id])||{level:0,residents:[]};
       const lvl=c.level||0, cost=HUB.condoCosts[lvl];
       // present residents = condo resident keys that resolve to a current roster snapshot. Keys for
       // veterans no longer on the roster (fell / not extracted) are dropped, not shown as raw keys.
       const units=(c.residents||[]).map(k=>(CAMPAIGN.roster||[]).find(x=>x.key===k)).filter(Boolean);
+      const npcs=npcsHere();
+      const household=npcs.filter(n=>n.role==='relative'||n.role==='friend');
+      const providers=npcs.filter(n=>n.role==='provider'||n.role==='ultra');
       const s=document.createElement('div'); s.className='hub-stat';
-      s.innerHTML='Level <b>'+lvl+'</b> · Residents <b>'+units.length+'</b> · HP bonus <b>+'+(lvl*4)+'%</b>';
+      s.innerHTML='Level <b>'+lvl+'</b> · Veterans <b>'+units.length+'</b> · Civilians <b>'+npcs.length+'</b> · HP bonus <b>+'+(lvl*4)+'%</b>';
       body.appendChild(s);
-      body.appendChild(hubMenuSection('Residents'));
-      if(!units.length){ const m=document.createElement('div'); m.className='muted'; m.textContent='No residents yet — veterans move in as they join your roster.'; body.appendChild(m); }
-      // render animated player cards (the same component the Training Grounds / M.D.C. menus use)
-      else body.appendChild(hubMenuUnitGrid(units));
+      const cols=hubMenuColumns(2);
+      const left=hubMenuColumn(true), right=hubMenuColumn(true);
+      left.appendChild(hubMenuSection('Veterans'));
+      if(!units.length){ const m=document.createElement('div'); m.className='muted'; m.textContent='No residents yet — veterans move in as they join your roster.'; left.appendChild(m); }
+      else left.appendChild(hubMenuUnitGrid(units, (u)=>({
+        statusVet:u.key,
+        onClick:()=>{ closeHubMenu(); if(typeof hubLocateUnit==='function') hubLocateUnit(u.key); showHubCrumb(crumb.label, crumb.reopen); },
+        actions:[{label:'📂 File', onClick:()=>{
+          const live=G&&G.entities&&G.entities.find(e=>e&&!e.dead&&e.owner==='player'&&e.kind==='unit'&&hubUnitKey(e)===u.key);
+          if(live){ closeHubMenu(); showDossier(live); }
+          else toast(trainUnitName(u)+' is deployed — file unavailable.');
+        }}],
+      })));
+      // household: the veterans' relatives + friends (living-city NPCs); degrades to nothing pre-NPC
+      right.appendChild(hubMenuSection('Household — family & friends'));
+      if(!household.length){ const m=document.createElement('div'); m.className='muted'; m.textContent='Nobody yet — families follow their veterans into the towers.'; right.appendChild(m); }
+      else { const grid=document.createElement('div'); grid.className='npc-cards';
+        for(const n of household) grid.appendChild(hubNpcCard(n, crumb)); right.appendChild(grid); }
+      if(providers.length){
+        right.appendChild(hubMenuSection('Providers living here'));
+        const grid=document.createElement('div'); grid.className='npc-cards';
+        for(const n of providers) grid.appendChild(hubNpcCard(n, crumb)); right.appendChild(grid);
+      }
+      cols.appendChild(left); cols.appendChild(right);
+      body.appendChild(cols);
       const foot=document.createElement('div'); foot.className='hub-footer';
       const info=document.createElement('div'); info.className='grow';
       info.innerHTML = cost==null ? 'This condo is fully upgraded.' : 'Next level: <b>+4% max HP</b> for its residents.';
       foot.appendChild(info);
-      foot.appendChild(hubMenuActionBtn('🏙️ Upgrade Condo', cost, cost!=null, ()=>{ hubUpgradeSelectedCondo(); buildHubMenuBody(); }));
+      foot.appendChild(hubMenuActionBtn('🏙️ Upgrade Condo', cost, cost!=null, ()=>{ hubUpgradeSelectedCondo(id); buildHubMenuBody(); }));
       body.appendChild(foot);
     }
   });
@@ -1217,6 +1493,7 @@ function openUltraMenu(){
   openHubMenu({
     id:'ultra', icon:'◆', title:'ULTRA Headquarters',
     subtitle:'The company that fabricates life for everyone, everywhere',
+    staffPoi:'ultra',
     signature: function(){ return 'ultra:'+(CAMPAIGN.m3|0)+'|g:'+(CAMPAIGN.gambled?1:0)+'|v:'+(CAMPAIGN.visit|0)+'|si:'+(CAMPAIGN.seriesInf|0); },
     build: function(body){
       const s=document.createElement('div'); s.className='hub-stat';
@@ -1458,7 +1735,9 @@ function gateMission(idx, enter, opts){
   if((typeof PERF!=='undefined' && PERF.on) || (LOADER.missionReady() && (!hold || hold()))){ if(done) done(); return; }
   const gate=document.getElementById('loadGate');
   if(!gate){ if(done) done(); return; }
-  if(gateMission._t){ clearInterval(gateMission._t); gateMission._t=null; }   // re-arm replaces any prior gate
+  // re-arm: FINISH the previous gate (as if its timeout fired) rather than orphaning it —
+  // its enter() may be the only path back to running=true (e.g. a pending loadGame gate).
+  if(gateMission._fin){ gateMission._fin(true); }
   const fill=document.getElementById('lg-fill'), pct=document.getElementById('lg-pct'),
         stall=document.getElementById('lg-stall'), btn=document.getElementById('lg-enter'),
         ep=document.getElementById('lg-ep'), tip=document.getElementById('lg-tip');
@@ -1473,11 +1752,13 @@ function gateMission(idx, enter, opts){
   const fin=(timedOut)=>{
     if(finished) return; finished=true;
     clearInterval(tick); gateMission._t=null;
+    if(gateMission._fin===fin) gateMission._fin=null;
     gate.style.display='none';
     if(typeof TELE!=='undefined') TELE.event('load_gate_entered', { ms:Math.round(performance.now()-t0), timedOut:!!timedOut, failed:LOADER.missionProgress().failed });
     if(timedOut && !opts.passive) toast('Field uplink is slow — some units may deploy as silhouettes until their art lands');
     if(done) done();
   };
+  gateMission._fin=fin;
   if(btn) btn.onclick=()=>fin(true);
   const tick=setInterval(()=>{
     const p=LOADER.missionProgress(), t=performance.now();

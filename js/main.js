@@ -406,10 +406,12 @@ function loop(now){
     updateCamera(G,dt);
     if(typeof updateFlashCutscene==='function') updateFlashCutscene(G,dt);   // mandatory scripted dialog (camera ease + line advance); no-op unless G.flashCutscene
     if(typeof updateHubDrones==='function') updateHubDrones(G,dt);   // decorative HUB drones — netRole-agnostic, gated on state.hub internally
+    if(typeof HUBNPC!=='undefined') HUBNPC.update(G,dt);             // living-city NPCs (clock/cursors/lazy legs) — cosmetic, gated on state.hub internally
+    if(typeof updateHubLocate==='function') updateHubLocate(G,dt);   // condo-card locate: camera ease + ping timer (no-op unless armed)
     if(typeof updateDispatchFlight==='function') updateDispatchFlight(G,dt);   // MDC dispatch panorama bomber — advances while running=false (crawl playing)
     render(G);
     if(typeof updateSprintRipple==='function') updateSprintRipple(G);   // glue the sprint ripple to its world point
-    uiTick+=dt; if(uiTick>0.2){ uiTick=0; if(running) refreshUI(); }
+    uiTick+=dt; if(uiTick>0.2){ uiTick=0; if(running) refreshUI(); if(typeof updateHubClockChip==='function') updateHubClockChip(G); }
     if(typeof QUAL!=='undefined') QUAL.tick(now);                        // adaptive quality: degrade dpr only under sustained load
     if(PERF.on) PERF.frameEnd();
   }

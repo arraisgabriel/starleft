@@ -82,6 +82,7 @@ function hubDefaultCampaign(){
     training:{ staged:[], sessions:[] },
     healing:{ staged:[], sessions:[] },
     reborn:{ sessions:[], done:[] },
+    npc:{ seed:0, byId:{} },   // living-city NPC registry (js/npc_lore.js); seed 0 = unminted
     ngPlus:0,             // T3-1: New-Game+ lap counter (legacy saves default 0 via Object.assign)
     visit:0,
     gambled:false,
@@ -110,6 +111,9 @@ function deserializeHubCampaign(data){
     CAMPAIGN.reborn = Object.assign({sessions:[], done:[]}, data.reborn||{});
     if(!Array.isArray(CAMPAIGN.reborn.sessions)) CAMPAIGN.reborn.sessions=[];
     if(!Array.isArray(CAMPAIGN.reborn.done)) CAMPAIGN.reborn.done=[];
+    // legacy-safe: saves predating the living-city NPCs load unminted (population mints on next hub entry)
+    CAMPAIGN.npc = Object.assign({seed:0, byId:{}}, data.npc||{});
+    if(!CAMPAIGN.npc.byId || typeof CAMPAIGN.npc.byId!=='object') CAMPAIGN.npc.byId={};
   }
 }
 function hubOwnerCtrl(){ return 'p1'; }
@@ -286,6 +290,8 @@ function updateExtraction(state, dt){
       f.phase='nuke'; f.t=0; f.detonated=false; f.camBaseX=state.camX; f.camBaseY=state.camY;
       if(typeof document!=='undefined') document.body.classList.add('scene-flash');
       if(typeof MUSIC!=='undefined' && MUSIC.playCinematic && typeof MUSIC_FLASH!=='undefined') MUSIC.playCinematic(MUSIC_FLASH);   // cue the bomb-drop track
+      // the flash skips the panorama, so the ~73s cinematic is this path's hub-asset download window
+      if(typeof LOADER!=='undefined' && typeof missionTagsHub==='function') LOADER.beginMission(missionTagsHub());
     } else { f.phase='out'; f.t=0; }
   }
   else if(f.phase==='nuke'){
@@ -318,7 +324,8 @@ function updateExtraction(state, dt){
     const _tail=(typeof NUKE_T_ECHO_TAIL!=='undefined'?NUKE_T_ECHO_TAIL:6.0);
     if(typeof MUSIC!=='undefined' && MUSIC.cinematicEcho && f.t>=_dur-6 && f.t<_dur) MUSIC.cinematicEcho((f.t-(_dur-6))/6);
     if(!f.musicStopped && f.t>=_dur){ f.musicStopped=true; if(typeof MUSIC!=='undefined' && MUSIC.stopCinematic) MUSIC.stopCinematic(); }
-    if(f.t >= _dur+_tail) enterHubFlashAftermath(state);
+    // same loading contract as the panorama exit: hold for the hub's sprite set, capped at +15s
+    if(f.t >= _dur+_tail && ((typeof LOADER==='undefined') || LOADER.missionReady() || f.t >= _dur+_tail+15)) enterHubFlashAftermath(state);
   }
   // The bomber has left the mission map → hand off to the HUB panorama loading scene
   // (js/hub_loading.js). It plays for HUB_LOAD_DURATION (13s) as a hidden HUB loader; the
@@ -400,6 +407,7 @@ function enterHubFromCombat(state){
     if(typeof captureHeroes==='function') captureHeroes(state);
   }
   CAMPAIGN.mode='hub'; CAMPAIGN.visit++; CAMPAIGN.gambled=false; CAMPAIGN.dispatch={mdcId:null, staged:[]};
+  if(typeof hubSyncNpcs==='function') hubSyncNpcs();   // living city: mint/refresh the persistent NPC population for this visit
   if(typeof TELE!=='undefined') TELE.event('hub_entered', { visit: CAMPAIGN.visit });
   // T4-1: the moment The Wake comes online (post-XIII) gets its narrative beat — once
   if(typeof rebornUnlocked==='function' && rebornUnlocked() && !CAMPAIGN._wakeAnnounced){
@@ -413,6 +421,12 @@ function enterHubFromCombat(state){
   syncHud();
   hubFocusUltra(G);                 // open at minimum zoom, centered on the ULTRA HQ (map middle)
   clampCam(G); computeFog(G); refreshUI(); running=true;
+  // co-op host skips the extraction panorama (cuts straight here), so arm the hub's sprite
+  // set and show the visual-only gate the client already gets — never touches `running`.
+  if(typeof LOADER!=='undefined' && typeof gateMission==='function'){
+    LOADER.beginMission(missionTagsHub());   // solo arrives with this already armed+settled → no-op
+    if(netRole==='host') gateMission(mapIndex, null, { passive:true, label:'H.U.B. UPLINK' });
+  }
   if(typeof syncPauseBtn==='function') syncPauseBtn();
   if(netRole==='host' && typeof mpHostEnterHub==='function') mpHostEnterHub();
   toast('Arrived at the H.U.B. — M3$ +'+reward.total);
@@ -441,6 +455,7 @@ function enterHubFlashAftermath(state){
   const reward=hubRewardFor(state);
   CAMPAIGN.m3 += reward.total; CAMPAIGN.lastReward=reward;     // you DID liquidate THE CONGLOMERATE — meta merit survives the flash
   CAMPAIGN.mode='hub'; CAMPAIGN.visit++; CAMPAIGN.gambled=false; CAMPAIGN.dispatch={mdcId:null, staged:[]};
+  if(typeof hubSyncNpcs==='function') hubSyncNpcs();   // living city: the whole town learns what the flash took (mourning diffs)
   if(typeof MUSIC!=='undefined' && MUSIC.stopCinematic) MUSIC.stopCinematic();   // the flash track ends as the hub map loads
   if(typeof MUSIC!=='undefined' && MUSIC.stopAmbient) MUSIC.stopAmbient();
   G=newHubMap();
@@ -902,6 +917,7 @@ function hubCondoForUnit(key){ return Object.values(CAMPAIGN.condos).find(c=>(c.
 
 function updateHub(state, dt){
   hubRevealAll(state);
+  hubVetRoutine(state, dt);   // living city: idle veterans stroll/visit by the city clock, sleep at night
   for(const u of state.entities){
     if(u.dead||u.kind!=='unit'||u.owner!=='player') continue;
     if(u.cmd && u.cmd.type==='hubpoi'){
@@ -1094,10 +1110,13 @@ function hubSpend(cost){
   if(CAMPAIGN.m3 < cost){ toast('Not enough M3rit$'); return false; }
   CAMPAIGN.m3-=cost; return true;
 }
-function hubUpgradeSelectedCondo(){
+function hubUpgradeSelectedCondo(id){
   if(!hubCanAct()){ toast('Only the host can upgrade the H.U.B.'); return; }
-  const poi=G&&G.selection[0]; if(!poi||!poi.hubPoi||poi.hubPoi.kind!=='condo') return;
-  const c=CAMPAIGN.condos[poi.hubPoi.id], lvl=c.level||0, cost=HUB.condoCosts[lvl];
+  // accepts an explicit condo id (condo panel opened by arrival/locate) or falls back to the selection
+  let condoId=id;
+  if(!condoId){ const poi=G&&G.selection[0]; if(!poi||!poi.hubPoi||poi.hubPoi.kind!=='condo') return; condoId=poi.hubPoi.id; }
+  if(!CAMPAIGN.condos[condoId]) return;
+  const c=CAMPAIGN.condos[condoId], lvl=c.level||0, cost=HUB.condoCosts[lvl];
   if(cost==null){ toast('Condo already maxed'); return; }
   if(hubSpend(cost)){
     c.level=lvl+1;
@@ -1158,8 +1177,229 @@ function hubBuySeriesInf(){
   toast('\ud83d\udcc8 Series \u221e round '+CAMPAIGN.seriesInf+' closed — roster +1% HP (now +'+CAMPAIGN.seriesInf+'%)');
   refreshUI();
 }
-function hubShowCondo(id){ const c=CAMPAIGN.condos[id]; toast('Condo level '+(c.level||0)+' — residents: '+(c.residents||[]).length); }
+function hubShowCondo(id){
+  if(typeof openCondoMenu==='function'){ openCondoMenu(id); return; }   // full resident panel (ui.js)
+  const c=CAMPAIGN.condos[id]; toast('Condo level '+(c.level||0)+' — residents: '+(c.residents||[]).length);
+}
 function hubShowUltra(u){ toast('ULTRA services unlocked for '+((u&&u.heroId)||'resident')+'.'); }
+
+/* =====================================================================
+   LIVING CITY — veteran routines, condo sleep, statuses, click-to-locate.
+   Sim-side (veterans are real serialized entities) so it lives here, not in
+   the cosmetic hub_npcs.js module. Runs host/solo only via updateHub.
+   ===================================================================== */
+const HUB_VET_HOLD = 45;            // seconds a player command parks a veteran's routine
+let _vetAcc = 0, _vetCursor = 0, _vetRng = 0x5eed;
+const _vetHold = {};                // hubUnitKey → state.time the routine may resume at (module-local)
+function _vetRand(){ _vetRng=(Math.imul(_vetRng,1664525)+1013904223)>>>0; return _vetRng/4294967296; }
+function hubCityClock(){ return (typeof HUBNPC!=='undefined' && HUBNPC.clock) ? HUBNPC.clock() : null; }
+function _hubNightFor(clock){ return !!clock && (clock.h>=21 || clock.h<7); }
+
+function hubVetRoutine(state, dt){
+  if(!state || !state.hub || state.flashCutscene || state.extractFlight) return;
+  _vetAcc += dt; if(_vetAcc < 0.5) return; _vetAcc = 0;
+  const clock = hubCityClock(), night = _hubNightFor(clock);
+  const units = [];
+  for(const u of state.entities){
+    if(!u || u.dead || u.kind!=='unit' || u.owner!=='player') continue;
+    // morning wake pass: sleeping vets get out of bed when the city does
+    if(u._hubSleep){ if(clock && !night) hubVetWake(state, u); continue; }
+    if(u.storedIn) continue;                                  // MDC-staged / trainee / healer
+    if(u.selected) continue;                                  // the player is about to give orders
+    if(u.cmd){ if(!u.cmd._routine) _vetHold[hubUnitKey(u)]=state.time+HUB_VET_HOLD; continue; }
+    if((_vetHold[hubUnitKey(u)]||0) > state.time) continue;   // player orders win; resume after idle
+    units.push(u);
+  }
+  if(!units.length) return;
+  for(let n=0; n<2; n++){                                     // ≤2 decisions per 0.5s tick (A* stays sub-ms)
+    const u = units[(_vetCursor++) % units.length];
+    if(!u || state.time < (u._hubNextDecide||0)) continue;
+    u._hubNextDecide = state.time + 25 + _vetRand()*20;       // each vet re-decides every ~25-45s
+    if(night) hubVetGoHome(state, u);
+    else hubVetWander(state, u);
+  }
+}
+function _hubFreeTileNear(state, tx, ty, spread){
+  for(let tries=0; tries<10; tries++){
+    const x=tx+((_vetRand()*spread*2-spread)|0), y=ty+((_vetRand()*spread*2-spread)|0);
+    if(x>=0&&y>=0&&x<state.W&&y<state.H&&!state.blocked[y*state.W+x]) return {tx:x, ty:y};
+  }
+  return null;
+}
+function _hubRoutineMove(state, u, spot, goal){
+  if(!spot) return;
+  resetMotion(u);
+  // plain 'move' command, NEVER 'hubpoi' — both auto-stage paths key exclusively on hubpoi,
+  // so a routine stroll past the M.D.C. can never enlist anyone.
+  issueMove(state, u, spot.tx*TILE+TILE/2, spot.ty*TILE+TILE/2,
+            { type:'move', x:spot.tx*TILE+TILE/2, y:spot.ty*TILE+TILE/2, _routine:1, _goal:goal||'' });
+}
+function hubVetWander(state, u){
+  const pois=[]; for(const k in (state.hubPois||{})){ const e=state.hubPois[k]; if(e&&!e.dead) pois.push(e); }
+  const roll=_vetRand();
+  let spot=null;
+  if(roll<0.45){ spot=_hubFreeTileNear(state, 62, 47, 6); }                       // downtown plaza
+  else if(roll<0.8 && pois.length){                                              // window-shop a POI doorstep
+    const e=pois[(_vetRand()*pois.length)|0];
+    const d=nearestFreeAdjTile(state, e, u.x, u.y);
+    if(d) spot={tx:(d.x/TILE)|0, ty:(d.y/TILE)|0};
+  } else {                                                                       // hang out near home
+    const condo=hubCondoForUnit(hubUnitKey(u)), e=condo&&state.hubPois&&state.hubPois[condo.id];
+    if(e) spot=_hubFreeTileNear(state, e.tx+((e.w||3)>>1), e.ty+(e.h||3)+1, 3);
+  }
+  if(spot) _hubRoutineMove(state, u, spot, 'stroll');
+}
+function hubVetGoHome(state, u){
+  const condo=hubCondoForUnit(hubUnitKey(u));
+  const e=condo && state.hubPois && state.hubPois[condo.id];
+  if(!e){ return; }                                            // unhoused (no condo record): stays out
+  if(dist(u, e) < entRadius(e)+TILE*1.5){ hubVetSleep(state, u, e); return; }    // close enough: turn in
+  const d=nearestFreeAdjTile(state, e, u.x, u.y);
+  if(d) _hubRoutineMove(state, u, {tx:(d.x/TILE)|0, ty:(d.y/TILE)|0}, 'sleep');
+}
+// tuck a veteran into their condo: same storedIn hiding idiom as the M.D.C./trainees
+// (skipped by depth pass, minimap and sim; serialized harmlessly; self-heals on load via the wake pass)
+function hubVetSleep(state, u, condoEnt){
+  resetMotion(u); u.cmd=null; u.state='idle'; u.vx=0; u.vy=0; u.sprinting=false;
+  u.storedIn=condoEnt.id; u._hubSleep=1; u.x=condoEnt.x; u.y=condoEnt.y;
+  u.selected=false; state.selection=state.selection.filter(e=>e!==u);
+}
+function hubVetWake(state, u){
+  const condoEnt=(state.entities||[]).find(e=>e&&e.id===u.storedIn);
+  delete u.storedIn; u._hubSleep=0;
+  if(condoEnt){
+    const spot=hubMdcExitTile(state, condoEnt, u.id);          // generic "first free tile below the footprint" scan
+    if(spot){ u.x=spot.tx*TILE+TILE/2; u.y=spot.ty*TILE+TILE/2; }
+  }
+  resetMotion(u); u.cmd=null; u.state='idle';
+}
+
+/* ---- status strings: ONE source of truth for condo cards / dossiers / roster rows ---- */
+function hubVetStatus(u){
+  if(!u) return {k:'away'};
+  if(u._hubSleep) return {k:'sleeping'};
+  if(u.storedIn){
+    const b=(typeof G!=='undefined'&&G&&G.entities||[]).find(e=>e&&e.id===u.storedIn);
+    const kind=b&&b.hubPoi&&b.hubPoi.kind, poi=b&&b.hubPoi&&b.hubPoi.name;
+    if(kind==='training') return {k:'training', poi};
+    if(kind==='mentalhealth') return {k:'care', poi};
+    if(kind==='mdc') return {k:'staged', poi};
+    if(kind==='condo') return {k:'sleeping', poi};
+    return {k:'inside', poi:poi||''};
+  }
+  if(u.cmd && u.cmd.type==='hubpoi' && u.cmd.poi && u.cmd.poi.hubPoi) return {k:'walking', poi:u.cmd.poi.hubPoi.name};
+  if(u.cmd && u.cmd._routine) return {k:(u.cmd._goal==='sleep')?'headinghome':'strolling'};
+  if(u.cmd) return {k:'busy'};
+  return {k:'offduty'};
+}
+function hubStatusText(st){
+  if(!st) return 'Off duty';
+  switch(st.k){
+    case 'sleeping':    return 'Sleeping'+(st.poi?' — '+st.poi:'');
+    case 'training':    return 'In training';
+    case 'care':        return 'In care';
+    case 'staged':      return 'Enlisted — awaiting dispatch';
+    case 'walking':     return 'Walking to '+st.poi;
+    case 'strolling':   return 'Out on the town';
+    case 'headinghome': return 'Heading home';
+    case 'busy':        return 'On the move';
+    case 'inside':      return 'Inside '+(st.poi||'a facility');
+    case 'away':        return 'Not in the H.U.B.';
+    default:            return 'Off duty';
+  }
+}
+
+/* ---- click-to-locate: condo-card "find them" — camera ease + 3s pulsing beacon.
+   Module-local fx (never on G, never serialized); camera is local, so co-op clients
+   may locate too. Drawn by drawHubLocatePing (hooked after drawWinObjective). ---- */
+let hubLocateFx=null;
+function _hubLocateStart(t){
+  if(typeof G==='undefined'||!G||!G.hub) return;
+  const reduced=(typeof megaReducedMotion==='function')&&megaReducedMotion();
+  hubLocateFx=Object.assign({ t:0, phase:'pan', panDur:0.45, ping:3.0,
+    fromX:G.camX, fromY:G.camY, fromZ:G.zoom||1, toZ:Math.max(G.zoom||1, 0.9), r:18 }, t);
+  if(reduced){                                                  // reduced motion: snap, no ease
+    G.zoom=hubLocateFx.toZ;
+    G.camX=hubLocateFx.x-(viewW()/G.zoom)/2; G.camY=hubLocateFx.y-(viewH()/G.zoom)/2;
+    clampCam(G);
+    hubLocateFx.phase='ping';
+    if(typeof spawnRing==='function') spawnRing(hubLocateFx.x, hubLocateFx.y, '#7fd6ff');
+  }
+}
+function updateHubLocate(state, dt){
+  const fx=hubLocateFx;
+  if(!state||!fx) return;
+  if(!state.hub){ hubLocateFx=null; return; }
+  // live targets: the beacon tracks a walking NPC / veteran
+  if(fx.trackNpc && typeof HUBNPC!=='undefined'){ const w=HUBNPC.whereIs(fx.trackNpc); if(w.onMap){ fx.x=w.x; fx.y=w.y; } }
+  else if(fx.trackEntId!=null){ const e=(state.entities||[]).find(o=>o&&o.id===fx.trackEntId&&!o.dead); if(e&&!e.storedIn){ fx.x=e.x; fx.y=e.y; } }
+  fx.t+=dt;
+  if(fx.phase==='pan'){
+    const f=Math.min(1, fx.t/fx.panDur), e=1-Math.pow(1-f,3);   // cubic ease-out (the cutscene cam feel)
+    state.zoom=fx.fromZ+(fx.toZ-fx.fromZ)*e;
+    const vw=viewW()/state.zoom, vh=viewH()/state.zoom;
+    state.camX=fx.fromX+((fx.x-vw/2)-fx.fromX)*e;
+    state.camY=fx.fromY+((fx.y-vh/2)-fx.fromY)*e;
+    clampCam(state);
+    if(f>=1){ fx.phase='ping'; fx.t=0; if(typeof spawnRing==='function') spawnRing(fx.x, fx.y, '#7fd6ff'); }
+  } else if(fx.t>=fx.ping){ hubLocateFx=null; }
+}
+function drawHubLocatePing(state, ox, oy){
+  const fx=hubLocateFx;
+  if(!fx || fx.phase!=='ping' || typeof ctx==='undefined') return;
+  const pulse=0.6+0.4*Math.sin(fx.t*5.2);                       // fx.t advances every rAF → pulses even while paused
+  const a=Math.min(1, (fx.ping-fx.t)/0.5);                      // fade the last half second
+  const x=fx.x+ox, y=fx.y+oy, R=fx.r*1.6;
+  ctx.save();
+  ctx.globalAlpha=a*(0.30+0.22*pulse); ctx.strokeStyle='#7fd6ff'; ctx.lineWidth=2.5;
+  ctx.beginPath(); ctx.ellipse(x,y,R,R*0.42,0,0,6.28); ctx.stroke();
+  ctx.globalAlpha=a*(0.16+0.12*pulse);
+  ctx.beginPath(); ctx.ellipse(x,y,R*0.62,R*0.62*0.42,0,0,6.28); ctx.stroke();
+  ctx.globalAlpha=a*0.5; ctx.lineWidth=2;
+  ctx.beginPath(); ctx.moveTo(x,y); ctx.lineTo(x,y-52-10*pulse); ctx.stroke();
+  ctx.globalAlpha=a*0.95; ctx.fillStyle='#7fd6ff'; ctx.font='bold 12px '+GAME_FONT; ctx.textAlign='center';
+  if(fx.label) ctx.fillText(fx.label, x, y-58-10*pulse);
+  if(fx.sub){ ctx.fillStyle='#9fb6c8'; ctx.font='10px '+GAME_FONT; ctx.fillText(fx.sub, x, y-46-10*pulse); }
+  ctx.restore(); ctx.globalAlpha=1;
+}
+// locate a veteran by roster key: live → track them; inside a building → ring the building;
+// not spawned (deployed / fallen) → ring their home condo.
+function hubLocateUnit(key){
+  if(typeof G==='undefined'||!G||!G.hub) return false;
+  const u=(G.entities||[]).find(e=>e&&!e.dead&&e.owner==='player'&&e.kind==='unit'&&hubUnitKey(e)===key);
+  const snap=(CAMPAIGN.roster||[]).find(r=>r.key===key);
+  let label='Veteran';
+  if(u&&u.heroId) label=u.heroId;
+  else if(u&&u.lore&&typeof buildDossier==='function') label=buildDossier(u).full;
+  else if(snap&&snap.heroId) label=snap.heroId;
+  else if(snap&&snap.lore&&typeof buildDossier==='function') label=buildDossier({type:snap.type, lore:snap.lore}).full;
+  if(u && !u.storedIn){
+    _hubLocateStart({ x:u.x, y:u.y, r:Math.max(18,(typeof unitDrawH==='function'?unitDrawH(u):36)*0.5),
+                      label, sub:hubStatusText(hubVetStatus(u)), trackEntId:u.id });
+    return true;
+  }
+  if(u && u.storedIn){
+    const b=(G.entities||[]).find(e=>e&&e.id===u.storedIn);
+    if(b){ _hubLocateStart({ x:b.x, y:b.y, r:Math.max(40,(b.w||3)*TILE*0.55), label,
+                             sub:hubStatusText(hubVetStatus(u)) }); return true; }
+  }
+  const condo=hubCondoForUnit(key), poi=condo&&G.hubPois&&G.hubPois[condo.id];
+  if(poi){ _hubLocateStart({ x:poi.x, y:poi.y, r:(poi.w||3)*TILE*0.55, label, sub:'Resident — away' }); return true; }
+  toast(label+' is not in the H.U.B. right now.');
+  return false;
+}
+// locate a living-city NPC by id: walking → tracked ring; inside/sleeping → ring the building.
+function hubLocateNpc(id){
+  if(typeof G==='undefined'||!G||!G.hub||typeof HUBNPC==='undefined') return false;
+  const w=HUBNPC.whereIs(id);
+  const d=(typeof buildNpcDossier==='function')?buildNpcDossier(id):null;
+  const label=(d&&d.full)||'Resident';
+  if(w.onMap){ _hubLocateStart({ x:w.x, y:w.y, r:16, label, sub:w.status, trackNpc:id }); return true; }
+  const poi=w.insidePoi && G.hubPois && G.hubPois[w.insidePoi];
+  if(poi){ _hubLocateStart({ x:poi.x, y:poi.y, r:(poi.w||3)*TILE*0.55, label, sub:w.status }); return true; }
+  toast(label+' — '+w.status);
+  return false;
+}
 
 /* =====================================================================
    TRAINING GROUNDS — level-cloning between two same-type units.

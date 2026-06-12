@@ -536,7 +536,10 @@
 <script src="js/balance.js"></script>
 <script src="js/lore_data.js"></script>
 <script src="js/dialog_data.js"></script>
+<script src="js/npc_lore_data.js"></script><!-- living-city NPC lore pools (NPC_LORE): append-only + version-gated like lore_data.js -->
 <script src="js/lore.js"></script>
+<script src="js/npc_lore.js"></script><!-- living-city NPC identity/persistence/dossiers: CAMPAIGN.npc registry, derive-don't-store -->
+
 <script src="js/sharecard.js"></script><!-- veteran/memorial share-card PNG (T0-6): offscreen card render + share/clipboard/download ladder -->
 <script src="js/fallen_scene.js"></script><!-- "Fallen" memorial interstitial (T1-1): solo-gated 2.6s beat on a Lv2+ veteran death -->
 
@@ -555,11 +558,13 @@
 <script src="js/input.js"></script>
 <script src="js/cutscene.js"></script><!-- mandatory scripted-dialog sequencer (Nino's Ep VII flash monologue); needs voice.js + camera helpers -->
 <script src="js/core.js"></script>
+<script src="js/lib/lz-string.js"></script><!-- LZ-String 1.5.0 (MIT, pieroxy/lz-string): sync UTF16 compression for localStorage saves; save.js degrades to plain JSON without it -->
 <script src="js/save.js"></script>
 <script src="js/ultra_news_data.js"></script>
 <script src="js/lns.js"></script>
 <script src="js/particles.js"></script>
 <script src="js/hub_drones.js"></script><!-- decorative HUB-only courier drones (cosmetic, module-local, never on G) -->
+<script src="js/hub_npcs.js"></script><!-- living-city HUB NPCs: schedules/paths/rendering (HUBNPC) — cosmetic, module-local, depth-injected, never on G -->
 <script src="js/hub_panoramic_neon.js"></script><!-- pre-generated neon dot map for the extraction loading scene -->
 <script src="js/hub_loading.js"></script><!-- HUB panorama loading scene (extraction → hub transition); needs megasprites.js + assets.js -->
 <!-- ── multiplayer (classic; define functions only — must load before main.js) ── -->

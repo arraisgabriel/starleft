@@ -66,6 +66,15 @@
       } else if(cmd.k === 'cancel'){
         const b = byId.get(cmd.bid); if(!b || (b.ctrl||'p1')!==ctrl) return;
         if(typeof cancelTrain==='function') quietApply(()=> cancelTrain(state, b, cmd.index));
+      } else if(cmd.k === 'upg'){
+        const b = byId.get(cmd.bid); if(!b || b.owner!=='player' || (b.ctrl||'p1')!==ctrl) return;
+        if(typeof tryUpgradeTurret==='function') quietApply(()=> tryUpgradeTurret(state, b, cmd.key));
+      } else if(cmd.k === 'demo'){
+        const b = byId.get(cmd.bid); if(!b || b.owner!=='player' || (b.ctrl||'p1')!==ctrl) return;
+        if(typeof tryDemolish==='function') quietApply(()=> tryDemolish(state, b));
+      } else if(cmd.k === 'scan'){
+        const b = byId.get(cmd.bid); if(!b || b.owner!=='player' || (b.ctrl||'p1')!==ctrl) return;
+        if(typeof tryStartScan==='function') quietApply(()=> tryStartScan(state, b));
       } else if(cmd.k === 'releaseStored'){
         const b = byId.get(cmd.bid), u = byId.get(cmd.uid);
         if(!b || b.owner!=='player' || b.type!=='hq' || (b.ctrl||'p1')!==ctrl) return;

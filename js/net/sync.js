@@ -78,6 +78,7 @@ window.NET = window.NET || {};
                     '_outcome','_fledBoss','_villainSpawned','_villainEscaped',   // boss-map outcome → client end screen
                     '_pvp','_pvpWinner',                                          // duel verdict (T4-5)
                     'quests',                                                     // quest progress → client tracker (mid-match joiners get full state here)
+                    'scanReveals',                                                // Market Research terrain patches (re-applied below)
                     'enemySpawnTimer','enemyWaveTimer','enemyFortifyTimer','_recalibratedFor','_coopOrigins'];
     for(const k of SCALAR){ if(s[k]!==undefined) G[k]=s[k]; }
     if(s.campaign && typeof deserializeHubCampaign==='function') deserializeHubCampaign(s.campaign);
@@ -89,6 +90,11 @@ window.NET = window.NET || {};
     G.selection=[]; G.groups={};                            // selection/groups are LOCAL per client
     if(typeof recomputeSupply==='function') recomputeSupply(G);
     if(typeof computeFog==='function') computeFog(G);
+    // mid-match joiner: stamp the scan's explored patches (ghost buildings already arrive via o.es)
+    if(G.scanReveals && typeof applyScanReveal==='function'){
+      G.scanReveals.forEach(p=>applyScanReveal(G,p.x,p.y,p.r));
+      G._srApplied=G.scanReveals.length;
+    }
     NET.lastFull = s.netTick||0;
     NET._lastAppliedTick = s.netTick||0;   // re-baseline the out-of-order guard (new match / desync resync)
   };
@@ -146,6 +152,9 @@ window.NET = window.NET || {};
       if(e.constructing){ o.cn=1; o.bp=e.buildProg; o.bt=e.buildTime; }
       if(e.prodQueue && e.prodQueue.length){ o.pq=e.prodQueue.slice(); o.pt=e.prodTime; o.ptt=e.prodTotal; }
       if(e.abandoned) o.ab=1;
+      if(e.upgFirerate) o.uf=1;                  // per-turret upgrades — client needs them for its command card
+      if(e.upgDamage) o.ud=1;
+      if(e.scanTotal>0){ o.scp=Math.round(e.scanProg*10)/10; o.sct=e.scanTotal; }   // Market Research survey → client button/%
       if(e.storedUnits && e.storedUnits.length) o.su=e.storedUnits.slice();
       if(e._everSeen) o.es=1;
       if(e.rally) o.rl={x:e.rally.x,y:e.rally.y};
@@ -218,6 +227,8 @@ window.NET = window.NET || {};
       e.prodQueue=o.pq||[]; e.prodTime=o.pt||0; e.prodTotal=o.ptt||0;
       e.storedUnits=o.su||[];
       e.abandoned=!!o.ab; e._everSeen=!!o.es; e.rally=o.rl||null;
+      e.upgFirerate=!!o.uf; e.upgDamage=!!o.ud;
+      e.scanProg=o.scp||0; e.scanTotal=o.sct||0;
       // turret/HQ muzzle-flash: host packs o.sf=1 (+ shot endpoint o.sfx/o.sfy). Rebuild the transient so
       // the shoot-FX render pass can draw the shot line on the client (render decays .t locally at 1/60).
       if(o.sf) e.shootFx = (e.shootFx && e.shootFx.t>0) ? e.shootFx : { x:(o.sfx!=null?o.sfx:e.x), y:(o.sfy!=null?o.sfy:e.y), t:SHOOTFX_LIFE };
@@ -237,6 +248,13 @@ window.NET = window.NET || {};
     const qStr=JSON.stringify(qp);
     if(force || qStr!==NET._lastQuestStr || (NET.tick % NET.DELTA_HZ)===0){ snap.q=qp; NET._lastQuestStr=qStr; }
   }
+  // Market Research reveal patches: explored is NOT in snapshots (clients own their fog), so the
+  // scan's terrain patches ride along as a tiny {x,y,r} list — attached on growth + ~1 Hz resend
+  // (mpsnap is reliable+ordered, the resend just self-heals a stale length across rematches).
+  function snapAttachScans(snap, force){
+    const sr=G.scanReveals; if(!sr || !sr.length) return;
+    if(force || sr.length!==NET._lastSrLen || (NET.tick % NET.DELTA_HZ)===0){ snap.sr=sr; NET._lastSrLen=sr.length; }
+  }
   NET.buildSnap = function(){
     const ents=[];
     for(const e of G.entities){ if(!e.dead) ents.push(packEnt(e)); }
@@ -246,6 +264,7 @@ window.NET = window.NET || {};
     const ecoStr = JSON.stringify(G.eco);
     if(ecoStr!==NET._lastEcoStr || (NET.tick % NET.DELTA_HZ)===0){ snap.eco=G.eco; NET._lastEcoStr=ecoStr; }
     snapAttachQuests(snap);
+    snapAttachScans(snap);
     if(G.hub && typeof serializeHubCampaign==='function') snap.campaign=serializeHubCampaign();
     return snap;
   };
@@ -267,6 +286,7 @@ window.NET = window.NET || {};
     const ecoStr=JSON.stringify(G.eco);
     if(keyframe || ecoStr!==NET._lastEcoStr){ snap.eco=G.eco; NET._lastEcoStr=ecoStr; }
     snapAttachQuests(snap, keyframe);
+    snapAttachScans(snap, keyframe);
     if(G.hub && typeof serializeHubCampaign==='function') snap.campaign=serializeHubCampaign();
     return snap;
   };
@@ -283,6 +303,15 @@ window.NET = window.NET || {};
     // so simply swapping the state in is enough for clients.
     if(snap.q){ const Q={}; for(const k in snap.q){ const p=snap.q[k];
       Q[k]={ cur:p.c||0, goal:p.g||0, done:p.d?1:0, failed:p.f?1:0, na:p.n?1:0 }; } G.quests=Q; }
+    // Market Research reveal patches: apply only the entries we haven't applied yet (idempotent —
+    // the same list is resent ~1 Hz). computeFog only ORs into explored, so the patches persist.
+    if(snap.sr){
+      G.scanReveals=snap.sr; G._srApplied=G._srApplied||0;
+      const fresh=snap.sr.length>G._srApplied;
+      for(let i=G._srApplied;i<snap.sr.length;i++){ const p=snap.sr[i]; if(typeof applyScanReveal==='function') applyScanReveal(G,p.x,p.y,p.r); }
+      G._srApplied=snap.sr.length;
+      if(fresh && typeof toast==='function') toast('🕵️ Market Research published — rival campus located.');
+    }
     // G.time is advanced locally every frame (clientTick) so time-driven sprite animations run at
     // render rate; only HARD-resync it if it has drifted far from the host (e.g. after a background gap).
     if(snap.time!=null && (G.time==null || Math.abs(G.time - snap.time) > 0.5)) G.time = snap.time;

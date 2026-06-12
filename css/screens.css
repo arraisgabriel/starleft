@@ -603,3 +603,39 @@ body.hub-menu-open #bottom{ display:none; }              /* syncHud() then drops
 @media (max-width:820px){
   #crawl-progress{ bottom:calc(26px + var(--safe-b, 0px)); left:18px; }
 }
+
+/* ===== LIVING CITY (hub NPCs): household cards, staff chips, statuses, NPC dossier ===== */
+.npc-cards{ display:grid; grid-template-columns:repeat(auto-fill,minmax(240px,1fr)); gap:10px; }
+.npc-card{ display:flex; align-items:center; gap:10px; text-align:left; cursor:pointer; font:inherit;
+  background:rgba(40,20,28,.6); border:1px solid #5a2f3a; border-radius:9px; padding:8px; color:#f0d6da;
+  transition:.12s; position:relative; }
+.npc-card:hover{ background:rgba(60,28,40,.85); }
+.npc-port{ flex:0 0 auto; width:56px; height:56px; border:1px solid #5a2f3a; border-radius:6px;
+  background:rgba(0,0,0,.45); }
+.npc-tx{ flex:1 1 auto; min-width:0; }
+.npc-name{ font-size:13px; color:#fff; letter-spacing:.3px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.npc-mourn{ font-size:11px; opacity:.9; }
+.npc-sub{ font-size:11px; color:#a88a92; margin-top:1px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.npc-status{ display:flex; align-items:center; gap:5px; font-size:11px; color:#7fd6ff; margin-top:3px;
+  overflow:hidden; white-space:nowrap; }
+.npc-status .npc-st-tx{ overflow:hidden; text-overflow:ellipsis; }
+.npc-status .dot, .npc-chip .dot{ flex:0 0 auto; width:6px; height:6px; border-radius:50%; background:#5c6b7a; }
+.dot.work{ background:#4e9b8f; box-shadow:0 0 5px rgba(78,155,143,.7); }
+.dot.walk{ background:#c9a44e; box-shadow:0 0 5px rgba(201,164,78,.6); }
+.dot.sleep{ background:#6b5570; box-shadow:0 0 5px rgba(120,90,140,.6); }
+.dot.idle{ background:#5c6b7a; }
+.npc-file{ flex:0 0 auto; font-size:14px; color:#9fc6dd; padding:4px 6px; border-radius:4px; cursor:pointer; }
+.npc-file:hover{ color:#fff; background:rgba(40,60,82,.85); }
+/* facility staff chip strip */
+.npc-staff{ display:flex; flex-wrap:wrap; gap:8px; margin:4px 0 8px; }
+.npc-chip{ display:inline-flex; align-items:center; gap:6px; font:inherit; font-size:12px; cursor:pointer;
+  color:#f0d6da; background:rgba(40,20,28,.6); border:1px solid #5a2f3a; border-radius:14px; padding:4px 11px; }
+.npc-chip:hover{ background:rgba(60,28,40,.85); color:#fff; }
+.npc-chip i{ font-style:normal; font-size:10px; color:#a88a92; }
+/* veteran card status line (condo panel) */
+.train-status{ font-size:11px; color:#7fd6ff; text-align:center; line-height:1.3; max-width:100%;
+  overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+/* NPC dossier card variant: no HP/Madosis bars, live status + locate/vet-link buttons */
+.dcard.npc .npc-port{ width:clamp(140px,40vw,190px); height:clamp(140px,40vw,190px); }
+.dcard-status{ font-size:12px; color:#7fd6ff; text-align:center; min-height:15px; }
+.dcard.npc .hub-action, .dcard.npc .npc-vetlink{ width:100%; margin-top:4px; }

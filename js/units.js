@@ -186,6 +186,23 @@ function commandUnits(state, wx, wy, target){
     toast('Move a unit onto the outpost to reclaim it');
     return;
   }
+  // MADOSIS: right-click a memory echo → selected healers run the guided rescue (dog resolved via
+  // dogId); everyone else escorts to it — ANY player unit standing on an echo collects it
+  // (madGlobalTick walk-over sweep). Networked like every commandUnits target (tid id-resolution).
+  if(target && target.kind==='echo' && !target.dead){
+    const dog = state.entities.find(d=> d.id===target.dogId && !d.dead && d.madDog);
+    const healers = dog ? units.filter(u=> typeof madCanRescue==='function' && madCanRescue(u)) : [];
+    if(dog && healers.length && typeof madBeginRescue==='function'){
+      healers.forEach(u=> madBeginRescue(state,u,dog));
+      units.filter(u=> healers.indexOf(u)<0).forEach((u,i)=>{ resetMotion(u); issueMove(state,u, target.x+((i%3)-1)*26, target.y+28); });
+      spawnRing(target.x,target.y,'#b05bff');
+      return;
+    }
+    units.forEach((u,i)=>{ resetMotion(u); issueMove(state,u, target.x+((i%3)-1)*24, target.y+24); });
+    if(dog) toast('Walk onto the memory to recover it — a Recruiter or healer hero runs the whole rescue');
+    spawnRing(target.x,target.y,'#b05bff');
+    return;
+  }
   // MADOSIS: a mad dog is owner:'player' but hostile — handle it before the friendly-target paths.
   // A selected healer (Recruiter / Biba) RESCUES it (memory-anchors mini-game); others put it down.
   if(target && target.madDog){
@@ -412,6 +429,87 @@ function tryTrain(state, building, type){
   building.prodQueue.push(type);
   if(building.prodTotal===0){ building.prodTotal=d.build; building.prodTime=0; }
 }
+// Buy a one-time per-turret upgrade (TURRET_UPGRADES key) from the owning player's pool.
+function tryUpgradeTurret(state, b, key){
+  const spec=TURRET_UPGRADES[key];
+  if(!spec || !b || b.dead || b.type!=='turret' || b.constructing) return;
+  if(b[spec.field]) return;                                   // already installed
+  const eco=playerEco(state, b.ctrl);
+  if(eco.gold < spec.cost){ toast('Not enough gold'); return; }
+  eco.gold -= spec.cost;
+  b[spec.field]=true;
+  toast(spec.name+' installed — '+spec.hint);
+}
+
+// Demolish an own building (works mid-construction too): queued hires refund in full
+// like cancelTrain, the structure itself salvages DEMOLISH_REFUND of the funding paid.
+function tryDemolish(state, b){
+  if(!b || b.dead || b.kind!=='building' || b.owner!=='player') return;
+  if(state.hub || b.hubPoi) return;                        // city facilities are not salvage
+  const eco=playerEco(state, b.ctrl);
+  for(const t of (b.prodQueue||[])) eco.gold += (DEF[t].cost||0);
+  b.prodQueue=[]; b.prodTime=0; b.prodTotal=0;
+  const paid = (b.paidCost!=null) ? b.paidCost : (DEF[b.type].cost||0);   // legacy saves: fall back to DEF
+  const refund = Math.round(paid*DEMOLISH_REFUND);
+  eco.gold += refund;
+  b.hp=0; b._demolished=true;                              // voluntary salvage — no MADOSIS trauma
+  killEntity(state,b);
+  state.selection=state.selection.filter(e=>!e.dead);
+  recomputeSupply(state);
+  toast(DEF[b.type].name+' demolished — '+refund+'🪙 salvaged');
+  refreshUI();
+}
+
+/* ---- Market Research ('intel') map scan ----
+   tryStartScan arms the survey clock (ticked in core.js); intelScanReveal fires on completion
+   and exposes a PARTIAL slice of every enemy campus. Deterministic (no RNG) so rollback resim
+   replays identically: clusters in entity-array order, representative = lowest id. */
+function tryStartScan(state, b){
+  if(!b || b.dead || b.type!=='intel' || b.owner!=='player' || b.constructing || b.scanTotal>0) return;
+  b.scanProg=0; b.scanTotal=INTEL_SCAN.time;
+  toast('🛰️ Market Research survey commissioned…');
+}
+// Idempotent circular explored-terrain patch (mirrors the outpost/P2-start reveal writes in map.js).
+function applyScanReveal(state, x, y, r){
+  const W=state.W, H=state.H, r2=r*r;
+  for(let dy=-r;dy<=r;dy++)for(let dx=-r;dx<=r;dx++){
+    if(dx*dx+dy*dy>r2) continue;
+    const nx=x+dx, ny=y+dy;
+    if(nx>=0&&ny>=0&&nx<W&&ny<H) state.explored[ny*W+nx]=1;
+  }
+}
+function intelScanReveal(state){
+  const blds=state.entities.filter(e=>!e.dead&&e.kind==='building'&&e.owner==='enemy');
+  if(!blds.length){ toast('🕵️ Market Research: no rival operations detected.'); return; }
+  // union-find clusters by <= clusterR tile proximity
+  const p=blds.map((_,i)=>i), find=i=>{ while(p[i]!==i){ p[i]=p[p[i]]; i=p[i]; } return i; };
+  const lim=Math.pow(INTEL_SCAN.clusterR*TILE,2);
+  for(let i=0;i<blds.length;i++)for(let j=i+1;j<blds.length;j++){
+    const dx=blds[i].x-blds[j].x, dy=blds[i].y-blds[j].y;
+    if(dx*dx+dy*dy<=lim){ const a=find(i), b=find(j); if(a!==b) p[a]=b; }
+  }
+  const repOf=new Map();                                  // root → member index with lowest id
+  for(let i=0;i<blds.length;i++){ const r=find(i);
+    if(!repOf.has(r) || blds[i].id<blds[repOf.get(r)].id) repOf.set(r,i); }
+  state.scanReveals = state.scanReveals || [];
+  const seen2=Math.pow(INTEL_SCAN.seenR*TILE,2);
+  let n=0;
+  for(const [root,ri] of repOf){
+    const rep=blds[ri]; n++;
+    for(let i=0;i<blds.length;i++){
+      if(find(i)!==root) continue;
+      const e=blds[i], dx=e.x-rep.x, dy=e.y-rep.y;
+      if(dx*dx+dy*dy>seen2) continue;                     // outside the slice → stays hidden (partial reveal)
+      if(e._everSeen) continue;                           // already exposed (earlier scan or own sight) → no duplicate patch
+      e._everSeen=true;                                   // ghost on map + minimap (render.js)
+      const tx=(e.x/TILE)|0, ty=(e.y/TILE)|0;
+      state.scanReveals.push({x:tx,y:ty,r:INTEL_SCAN.revealR});
+      applyScanReveal(state,tx,ty,INTEL_SCAN.revealR);    // terrain patch always covers the ghost
+    }
+  }
+  toast('🕵️ Market Research published: '+n+' rival campus'+(n===1?'':'es')+' located.');
+}
+
 // Cancel a queued unit by index: refund its cost; if it was the in-progress one,
 // reset progress to the next item in line.
 function cancelTrain(state, building, index){
@@ -442,7 +540,7 @@ function canPlaceAt(state, type, tx, ty){
   }
   // not on top of entities
   for(const e of state.entities){
-    if(e.dead||e.type==='goldmine'&&false) {}
+    if(e.dead) continue;                    // rubble doesn't block — demolished/razed footprints are rebuildable
     if(e.kind==='unit') continue;
     if(e.kind==='building'){
       if(tx< e.tx+e.w && tx+d.w>e.tx && ty< e.ty+e.h && ty+d.h>e.ty) return false;
@@ -486,6 +584,7 @@ function placeBuilding(state, type, tx, ty, builder){
   playerEco(state, ctrl).gold -= d.cost;          // charge the building player's pool
   const b = mkBuilding(state,type,'player',tx,ty,false);
   b.ctrl = ctrl;                                  // the new building belongs to its placer
+  b.paidCost = d.cost;                            // remembered for the demolish salvage refund
   b.hp=1;
   assignBuild(state, builder, b);     // robust approach + re-pathing
   recomputeSupply(state);
@@ -796,7 +895,10 @@ function updateUnit(state,u,dt){
     const reach = Math.max(b.w,b.h)*TILE*0.5 + TILE*1.2;
     if(dist(u,b)<=reach){
       u.path=null; u._toBuild=false;
-      b.buildProg += dt;
+      // progressive crew speed: 1st intern = 100%, each extra intern adds +ASSIST_BUILD_RATE
+      if(b._buildStamp !== state.time){ b._buildStamp = state.time; b._crew = 0; }
+      b._crew++;
+      b.buildProg += dt * (b._crew === 1 ? 1 : ASSIST_BUILD_RATE);
       b.hp = Math.min(b.maxHp, (b.buildProg/b.buildTime)*b.maxHp);
       if(b.buildProg>=b.buildTime){ b.constructing=false; b.hp=b.maxHp; u.cmd=null; u.state='idle';
         if(!window._rbReplaying && typeof SFX!=='undefined') SFX.built();   // T0-3: build-complete cue
@@ -855,8 +957,10 @@ function faceTo(u,t){ u.dir=Math.atan2(t.y-u.y,t.x-u.x); }
 // returns true when arrived
 function followPath(state,u,dt){
   // Sprint accelerates the run a little (up to SPRINT_MAX_BONUS over base) while active.
-  // Caffeine Dash (T2-2 ability) stacks its own short burst on top.
-  const sm=((u.sprinting && state.sprint && state.sprint.active) ? state.sprint.mul : 1) * ((u._dashT||0)>0 ? 1.7 : 1);
+  // Caffeine Dash (T2-2 ability) stacks its own short burst on top. A healer on the MADOSIS
+  // rescue command hustles (urgency — and it offsets the far-flung memory echoes).
+  const sm=((u.sprinting && state.sprint && state.sprint.active) ? state.sprint.mul : 1) * ((u._dashT||0)>0 ? 1.7 : 1)
+          * ((u.cmd && u.cmd.type==='rescue' && MADOSIS.rescueSpeedMul) ? MADOSIS.rescueSpeedMul : 1);
   if(!u.path){
     if(u.dest){ // direct
       const dx=u.dest.x-u.x, dy=u.dest.y-u.y, d=Math.hypot(dx,dy);
@@ -1134,7 +1238,7 @@ function killEntity(state,e){
   if(typeof madosisEvent==='function' && e.owner==='player'){
     if(e.kind==='unit' && (e.hero || (typeof isCombatVet==='function' && isCombatVet(e)) ) && (e.stars||0)>=1)
       madosisEvent(state, e.hero ? 'heroDeath' : 'vetDeath', {dead:e});
-    else if(e.kind==='building' && !e.constructing)
+    else if(e.kind==='building' && !e.constructing && !e._demolished)
       madosisEvent(state, e.type==='hq' ? 'hqLost' : 'buildingLost', {b:e});
   }
 }

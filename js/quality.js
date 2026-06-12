@@ -18,12 +18,13 @@
   // Infinity = native (no cap). Lower tiers shrink the backing store quadratically — the single biggest
   // fill-rate lever on high-DPI screens, which is exactly the zoomed-out-large-map / busy-HUB regime.
   const LEVELS = [
-    { dprCap: Infinity, label: 'full'   },
-    { dprCap: 1.5,      label: 'high'   },
-    { dprCap: 1.25,     label: 'medium' },
-    { dprCap: 1.0,      label: 'low'    },
+    { dprCap: Infinity, npcScale: 1,    label: 'full'   },
+    { dprCap: 1.5,      npcScale: 0.7,  label: 'high'   },
+    { dprCap: 1.25,     npcScale: 0.45, label: 'medium' },
+    { dprCap: 1.0,      npcScale: 0.25, label: 'low'    },
   ];
   QUAL.dprCap = LEVELS[0].dprCap;            // read by resize() in render.js
+  QUAL.npcScale = LEVELS[0].npcScale;        // read by hub_npcs.js — shrinks the living-city crowd under load
   QUAL.levelLabel = function(){ return LEVELS[QUAL.level].label; };
 
   // Hysteresis: degrade only after SLOW is sustained for HOLD frames; recover only after FAST is sustained.
@@ -43,7 +44,7 @@
     l = Math.max(0, Math.min(LEVELS.length-1, l));
     if(l === QUAL.level) return;
     const prevDpr = (typeof dpr !== 'undefined') ? dpr : effectiveDpr(QUAL.dprCap);
-    QUAL.level = l; QUAL.dprCap = LEVELS[l].dprCap;
+    QUAL.level = l; QUAL.dprCap = LEVELS[l].dprCap; QUAL.npcScale = LEVELS[l].npcScale;
     cooldown = COOLDOWN;                            // settle regardless, so we don't immediately re-evaluate
     // Only touch the backing store when the pixel dimensions actually change. On a 1× display (or whenever
     // the cap doesn't move real resolution) this skips the resize entirely — avoiding the canvas clear it

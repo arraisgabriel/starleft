@@ -35,13 +35,19 @@ self.addEventListener('activate', (e)=>{
 
 self.addEventListener('fetch', (e)=>{
   const req = e.request;
-  if(req.method!=='GET' || req.url.indexOf('/assets/')<0) return;   // code is never cached here
-  const norm = req.url.split('?')[0];
-  const busted = req.url.length !== norm.length;                    // loader retry ?r=N → force network
+  if(req.method!=='GET') return;
+  let u; try{ u = new URL(req.url); }catch(_){ return; }
+  // same-origin sprite/scene art only. Code is never cached here. Audio is excluded:
+  // media elements issue byte-range requests, and serving a cached full-200 to a ranged
+  // request breaks WebKit/Firefox playback and seeking — let audio stream natively.
+  if(u.origin!==self.location.origin || u.pathname.indexOf('/assets/')<0 || u.pathname.indexOf('/assets/audio/')>=0) return;
+  if(req.headers.get('range')) return;                              // ranged requests bypass the cache entirely
+  const norm = u.origin + u.pathname;
+  const busted = !!u.search;                                        // loader retry ?r=N → force network
   e.respondWith(
     caches.open(CACHE).then(cache=>{
       const fromNet = ()=>fetch(req).then(res=>{
-        if(res && res.status===200) cache.put(norm, res.clone());
+        if(res && res.status===200 && res.type==='basic') cache.put(norm, res.clone()).catch(()=>{});  // quota errors are non-fatal
         return res;
       });
       if(busted) return fromNet();

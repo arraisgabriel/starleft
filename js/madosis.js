@@ -148,7 +148,17 @@ function updateMadosis(state, u, dt){
     if(madEpisodeNo() < MADOSIS.firstEpisodeEpisode) return;   // no breakdowns before Episode 6
     if(!u.sanityThreshold) return;
     const thr = madThreshold(u);
-    if(thr>0 && (u.madosis||0) >= thr && simRandom(state) < MADOSIS.onsetChancePerSec*dt){
+    if(!(thr>0 && (u.madosis||0) >= thr)) return;
+    // one-at-a-time + post-episode cooldown gates — pure reads of shared sim state BEFORE the
+    // simRandom roll, so skipping is deterministic across save/load/rollback/co-op.
+    if(MADOSIS.maxConcurrentEpisodes){
+      let active=0;
+      for(const o of state.entities)
+        if(!o.dead && o.kind==='unit' && o.owner==='player' && (o.madEpisode||o.madDog)) active++;
+      if(active >= MADOSIS.maxConcurrentEpisodes) return;
+    }
+    if((state._madCalmUntil||0) > (state.time||0)) return;
+    if(simRandom(state) < MADOSIS.onsetChancePerSec*dt){
       u.madEpisode = { phase:'tremor', t:0 };
       if(!window._rbReplaying){
         madToast(u, '⚠ '+madName(u)+' is cracking — a Mad Dog Day begins.');
@@ -188,21 +198,35 @@ function madCanRescue(u){
 function madTileOf(e){ return [Math.floor(e.x/TILE), Math.floor(e.y/TILE)]; }
 
 // pick a passable, REACHABLE tile ~band tiles from the dog (deterministic; findPath validates +
-// snaps to the nearest walkable tile). Falls back through shorter/longer radii, then onto the dog.
+// snaps to the nearest walkable tile). Bands are clamped to the map and floored at echoMinDist so
+// memories always sit far from the feral dog's reach; candidate angles are tried farthest-from-
+// the-nearest-enemy-base first so collectors aren't sent into a fortified camp. findPath calls are
+// budgeted (blocked tiles pre-rejected) to bound the one-time feral-onset cost on huge bands.
 function madPlaceEcho(state, dog, band, idx){
   const [dtx,dty]=madTileOf(dog), W=state.W, H=state.H;
-  const radii=[band, band*0.7, band*1.3, band*0.5, Math.max(3, band*0.35)];
+  const minD=MADOSIS.echoMinDist||12;
+  band = Math.max(minD, Math.min(band, Math.hypot(W,H)*(MADOSIS.echoBandMaxFrac||0.45)));
+  const radii=[band, band*0.85, band*1.15, band*0.7, Math.max(minD, band*0.55)];
+  // enemy base positions (cfg tile coords, already MAP_SCALE-scaled) for the away-bias sort
+  const cfg=state.cfg||{}, bases=cfg.enemies || (cfg.enemy?[cfg.enemy]:[]);
+  const baseDist=(tx,ty)=>{ let m=1e18; for(const b of bases){ const d=(b.x-tx)*(b.x-tx)+(b.y-ty)*(b.y-ty); if(d<m) m=d; } return m; };
+  let budget=20, fallback=null;
   for(const rr of radii){
-    for(let k=0;k<12;k++){
-      const a = idx*1.7 + k*(Math.PI*2/12);
+    let angles=[]; for(let k=0;k<12;k++) angles.push(idx*1.7 + k*(Math.PI*2/12));
+    if(bases.length) angles.sort((a,b)=> baseDist(dtx+Math.cos(b)*rr, dty+Math.sin(b)*rr) - baseDist(dtx+Math.cos(a)*rr, dty+Math.sin(a)*rr));
+    for(const a of angles){
       const ctx=Math.round(dtx+Math.cos(a)*rr), cty=Math.round(dty+Math.sin(a)*rr);
       if(ctx<1||cty<1||ctx>=W-1||cty>=H-1) continue;
+      if(state.blocked && state.blocked[cty*W+ctx]) continue;   // free reject before pathing
+      if(!fallback) fallback=[ctx,cty];                          // best-priority unblocked candidate
       if(typeof findPath!=='function') return [ctx,cty];
+      if(budget<=0) continue;                                    // path budget spent → keep fallback
+      budget--;
       const path=findPath(state, dtx, dty, ctx, cty);
       if(path && path.length){ const last=path[path.length-1]; return [last[0], last[1]]; }
     }
   }
-  return [dtx,dty];
+  return fallback || [dtx,dty];
 }
 
 function madSpawnEcho(state, dog, facet, tileXY){
@@ -266,11 +290,7 @@ function madRescueTick(state, healer, dt){
   if(!best){ healer.cmd=null; healer.state='idle'; healer._rescueShield=0; return true; }   // (resolution fires on the 3rd)
   const reach=MADOSIS.echoReachRange*TILE;
   if(Math.hypot(best.x-healer.x, best.y-healer.y) <= reach){
-    best.reached=true; best.dead=true;
-    dog.calmStage=(dog.calmStage||0)+1;
-    if(!window._rbReplaying) madSpeakMemory(dog, best.facet);
-    healer.path=null; if(typeof faceTo==='function') faceTo(healer,dog); healer._actState='heal';
-    if(dog.calmStage >= MADOSIS.echoFacets.length) madResolveRescue(state, dog, healer);
+    madCollectEcho(state, dog, best, healer);
     return true;
   }
   // walk to the echo (keep the rescue command alive)
@@ -282,6 +302,62 @@ function madRescueTick(state, healer, dt){
   healer._echoRepath-=dt;
   if(typeof followPath==='function') followPath(state, healer, dt);
   return true;
+}
+
+// collect ONE memory echo — the single resolution path shared by the rescue auto-pilot
+// (madRescueTick) and the walk-over sweep (madGlobalTick). `collector` is whichever player unit
+// reached it; rescue-command cosmetics only apply when it actually holds the rescue command.
+function madCollectEcho(state, dog, echo, collector){
+  if(!dog || dog.dead || !dog.madDog || !echo || echo.dead || echo.reached) return;
+  echo.reached=true; echo.dead=true;
+  dog.calmStage=(dog.calmStage||0)+1;
+  if(!window._rbReplaying) madSpeakMemory(dog, echo.facet);
+  const onRescueCmd = collector && collector.cmd && collector.cmd.type==='rescue';
+  if(onRescueCmd){ collector.path=null; if(typeof faceTo==='function') faceTo(collector,dog); collector._actState='heal'; }
+  if(dog.calmStage >= MADOSIS.echoFacets.length) madResolveRescue(state, dog, onRescueCmd ? collector : null);
+}
+
+/* ---- per-tick global driver (host/solo only — called from core.js update, missions only) ----
+   1) post-episode cooldown: edge-detects "the episode just ended" (rescued, killed, or the unit
+      died pre-feral — no per-event hooks needed) and arms state._madCalmUntil so the next
+      breakdown can never chain immediately. Plain serialized scalars; missing on legacy saves →
+      falsy → no cooldown (correct legacy default).
+   2) walk-over collection: ANY player unit standing on an unreached memory echo recovers it,
+      regardless of its command — the auto-pilot rescue stays the guided (and protected) path. */
+function madGlobalTick(state, dt){
+  const active = state.entities.some(o=> !o.dead && o.kind==='unit' && (o.madEpisode||o.madDog));
+  if(state._madWasActive && !active)
+    state._madCalmUntil = (state.time||0) + (MADOSIS.episodeCooldown||75);
+  state._madWasActive = active;
+  // KENNEL pursuit: the squad re-tracks the rescued dog wherever it runs (ai.js deliberately
+  // skips kennel units, so without this they stall at the dog's rescue-time spot and are easy
+  // to evade). Dog dead or extracted → the unit is released to the regular enemy AI pool.
+  // Legacy-save kennel units have no kennelDogId and keep their old one-shot behavior.
+  for(const k of state.entities){
+    if(k.dead || !k.kennel || k.kind!=='unit' || k.kennelDogId==null) continue;
+    k._kennelRepath=(k._kennelRepath||0)-dt;
+    if(k._kennelRepath>0) continue;
+    k._kennelRepath=KENNEL.repathSec||1.5;
+    const dog=state.entities.find(d=> d.id===k.kennelDogId && !d.dead && !d.storedIn);
+    if(!dog){ k.kennel=false; continue; }                       // hunt is over → normal enemy AI
+    if(k.autoTarget && !k.autoTarget.dead) continue;            // mid-brawl: finish the fight first
+    const c=k.cmd;
+    if(c && c.type==='amove' && Math.hypot(c.x-dog.x, c.y-dog.y) < TILE*3) continue;   // order still fresh
+    if(typeof issueMove==='function') issueMove(state, k, dog.x, dog.y, {type:'amove', x:dog.x, y:dog.y});
+  }
+  if(!active) return;   // echoes only exist alongside a live feral dog (cleaned on its death)
+  const reach=MADOSIS.echoReachRange*TILE;
+  for(const e of state.entities){
+    if(e.dead || e.kind!=='echo' || e.reached) continue;
+    const dog=state.entities.find(d=> d.id===e.dogId && !d.dead && d.madDog);
+    if(!dog) continue;
+    for(const u of state.entities){
+      if(u.dead || u.storedIn || u.kind!=='unit' || u.owner!=='player' || u.subdued || u.madDog) continue;
+      if(Math.hypot(e.x-u.x, e.y-u.y) > reach) continue;
+      madCollectEcho(state, dog, e, u);
+      break;
+    }
+  }
 }
 
 function madCleanupEchoes(state, dog){
@@ -304,10 +380,11 @@ function madResolveRescue(state, dog, healer){
 }
 
 /* =====================================================================
-   KENNEL — the death-squad sent after a dog is rescued. Sized to the units guarding the dog ("a
-   fight without necessarily killing him"): total squad power ~= powerRatio × nearby-guard power, on a
-   fixed counter-composition (incl. an Auditor as an anti-healer threat), capped at maxStars. They
-   spawn at the nearest map edge and march on the subdued dog and its escorts.
+   KENNEL — the death-squad sent after a dog is rescued. Sized to the DOG itself (dogPowerMul ×
+   its combat power, on a fixed counter-composition incl. an Auditor as an anti-healer threat,
+   capped at maxStars): certain death for an isolated dog, a real skirmish for a small escort,
+   never a counter-army. They spawn at the nearest map edge and PURSUE the subdued dog wherever
+   it runs (re-tracked in madGlobalTick; ai.js deliberately leaves kennel units alone).
    ===================================================================== */
 
 // smallest uniform star level (>=2, <=maxStars) whose n-unit comp totals at least `target` power.
@@ -338,25 +415,19 @@ function madEdgeSpots(state, dog, n){
   return out;
 }
 
-// spawn the Kennel squad, balanced to the units currently guarding the rescued dog.
+// spawn the Kennel squad, balanced to the rescued dog itself (NOT its guards — guard-scaled
+// sizing made a well-escorted rescue summon a counter-army).
 function madSpawnKennel(state, dog){
   if(!dog || typeof mkUnit!=='function' || typeof typePower!=='function') return;
-  const R=(KENNEL.radiusTiles||12)*TILE;
-  let guard=0;
-  for(const u of state.entities){
-    if(u.dead||u.storedIn||u.owner!=='player'||u.kind!=='unit'||u.madDog) continue;
-    if(typeof dist==='function' && dist(u,dog)>R) continue;
-    guard += combatPower(u);
-  }
-  guard = Math.max(guard, typePower(dog.type, dog.stars||0));   // a lone rescue still draws a real squad
+  const target = typePower(dog.type, dog.stars||0) * (KENNEL.dogPowerMul||2.2);
   const comp = (KENNEL.comp && KENNEL.comp.length) ? KENNEL.comp : ['soldier'];
   const n = KENNEL.size || comp.length;
-  const stars = madSolveStars(comp, n, guard * (KENNEL.powerRatio||0.85));
+  const stars = madSolveStars(comp, n, target);
   const spots = madEdgeSpots(state, dog, n);
   for(let i=0;i<n;i++){
     const type=comp[i%comp.length], sp=spots[i];
     const u=mkUnit(state, type, 'enemy', sp[0], sp[1]);
-    u.stars=stars; u.kennel=true; u.name='Kennel';
+    u.stars=stars; u.kennel=true; u.kennelDogId=dog.id; u.name='Kennel';
     if(typeof applyVetHp==='function') applyVetHp(u, true);
     if(typeof issueMove==='function') issueMove(state, u, dog.x, dog.y, {type:'amove', x:dog.x, y:dog.y});
   }
@@ -419,5 +490,6 @@ if(typeof window!=='undefined'){
   window.madCanRescue=madCanRescue; window.madBeginRescue=madBeginRescue; window.madResolveRescue=madResolveRescue;
   window.madDropEchoes=madDropEchoes;
   window.madRescueTick=madRescueTick; window.madCleanupEchoes=madCleanupEchoes; window.madSpawnKennel=madSpawnKennel;
+  window.madCollectEcho=madCollectEcho; window.madGlobalTick=madGlobalTick;
   window.madRollThreshold=madRollThreshold; window.madosisBackfill=madosisBackfill;
 }

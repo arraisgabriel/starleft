@@ -137,6 +137,13 @@ function dispatchTap(e, opts){
     netCommand(G, w.x, w.y, target); return;
   }
 
+  // living city: with nothing to command, tapping a hub NPC opens their resident file
+  // (NPCs are not entities — pickEntity can't see them, so hit-test the cosmetic pool)
+  if(G.hub && !ent && typeof HUBNPC!=='undefined' && typeof showNpcDossier==='function'){
+    const n=HUBNPC.pickAt(w.x, w.y);
+    if(n && n.id){ showNpcDossier(n.id); return; }
+  }
+
   // nothing to command — inspect what's there (or clear)
   clickSelectAt(G,w,e);
 }
@@ -213,13 +220,25 @@ function pickEntity(state,wx,wy){
     }
   }
   if(best) return best;
+  // MADOSIS memory echoes — pickable so clicking one starts/continues the recovery (units win the
+  // tap above; echoes beat buildings/ground). Generous box: the beacon floats above its ground point.
+  for(const e of state.entities){
+    if(e.dead || e.kind!=='echo' || e.reached) continue;
+    if(wx>=e.x-20 && wx<=e.x+20 && wy>=e.y-36 && wy<=e.y+18) return e;
+  }
+  // buildings: a click inside the FOOTPRINT wins outright; a click on the rest of the DRAWN
+  // sprite (BUILDING_DRAW_SCALE× the footprint, mostly the tall upper structure) is remembered
+  // but loses to a goldmine — so mining right-clicks beside a Satellite Office still hit the rock.
+  let sprPick=null;
   for(const e of state.entities){
     if(e.dead) continue;
     if(e.kind==='building'){
+      if(e.owner==='enemy'&&!isVisiblePix(state,e.x,e.y)&&!e._everSeen) continue;
       const px=e.tx*TILE,py=e.ty*TILE,w=e.w*TILE,h=e.h*TILE;
-      if(wx>=px&&wx<=px+w&&wy>=py&&wy<=py+h){
-        if(e.owner==='enemy'&&!isVisiblePix(state,e.x,e.y)&&!e._everSeen) continue;
-        return e;
+      if(wx>=px&&wx<=px+w&&wy>=py&&wy<=py+h) return e;
+      if(!sprPick && !e.hubSpriteVisual && !e.hubMegaVisual){
+        const bb=buildingDrawBox(e);
+        if(wx>=bb.x&&wx<=bb.x+bb.w&&wy>=bb.y&&wy<=bb.y+bb.h) sprPick=e;
       }
     }
   }
@@ -231,7 +250,7 @@ function pickEntity(state,wx,wy){
     const px=ftx*TILE, py=fty*TILE, w=N*TILE;
     if(wx>=px&&wx<=px+w&&wy>=py&&wy<=py+w) return e;
   }
-  return null;
+  return sprPick;
 }
 
 function clearSelection(){ G.selection.forEach(s=>s.selected=false); G.selection=[]; }

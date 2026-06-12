@@ -25,7 +25,9 @@ This file is repo-specific context for coding agents. Keep it current when the a
 - `js/render.js` owns fog-of-war visibility and all canvas drawing: terrain, water, particles, depth-sorted entities/features, placement ghosts, selection effects, dialogs, and minimap.
 - `js/ui.js` owns DOM-facing game UI: HUD refresh, command buttons, production queue, toasts/events, menu navigation, map loading, intro crawl, victory/defeat flow, roster/dossier screens.
 - `js/save.js` serializes/deserializes `G` to browser `localStorage`, including entity reference relinking.
-- `js/assets.js` is the single source of truth for runtime image/audio paths and sprite loading helpers.
+- `js/assets.js` is the single source of truth for runtime image/audio paths and sprite loading helpers. Sprite sheets ship as WebP (converted by `_dev/gen/optimize_assets.py`).
+- `js/loader.js` (parses BEFORE assets.js) is the central image registry: tiered download queue, retry/backoff on failure, settle-on-first-event semantics, and the mission-gate API (`LOADER.beginMission`/`missionReady`) that `gateMission()` in ui.js uses to hold the world view behind the `#loadGate` loading screen until a map's critical sprites arrive. Every runtime Image must register through it (never assign `img.src` directly).
+- `sw.js` (repo root) is a runtime cache-first service worker for `assets/` only — never code. Bump its `CACHE` version when shipped asset URLs change.
 
 ## Simulation Model
 

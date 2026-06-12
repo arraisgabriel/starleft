@@ -76,9 +76,13 @@
     if(args.zoomOut !== false) G.zoom = ZOOM_MIN;
     clampCam(G);
     running = false;
+    // living-city NPCs: deterministic synthetic roster, all road legs computed synchronously,
+    // clock frozen mid-day → renders are a pure function of frozen state. args:{npcs:140}
+    let npcs = 0;
+    if(window.HUBNPC && HUBNPC.perfPopulate) npcs = HUBNPC.perfPopulate(G, { count: args.npcs!=null?args.npcs:140, clock: 0.45 });
     PERF.installCamera(panSweep(G));
     if(typeof refreshUI==='function') refreshUI();
-    return { scene:'hub', W:G.W, H:G.H, units:G.entities.length };
+    return { scene:'hub', W:G.W, H:G.H, units:G.entities.length, npcs };
   };
 
   // Restore the camera/zoom/running we clobbered so scenes can chain in one session.

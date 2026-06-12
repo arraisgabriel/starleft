@@ -25,6 +25,7 @@
     minimapCache:true,                                  // SHIPPED — bigMap render p95 -53%, hub -39%, pixelDiff 0
     spriteLod:true,                                     // SHIPPED — light sprite (static frame, no anim/HUD) at near-min zoom only
     terrainChunks:true,                                 // ON for evaluation — terrain -73%, but slight min-zoom softening + re-bake hitch (see RESULTS.md)
+    hubNpcs:true,                                       // living-city HUB NPCs (hub_npcs.js) — a FEATURE flag: A/B measures its cost, not a win
     minimapThrottle:false, ctxOpaque:false, depthPool:false, waterMerge:false, fogCache:false,
     cullExtra:false, scrollBuffer:false, desync:false,
   };

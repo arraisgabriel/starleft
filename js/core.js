@@ -32,10 +32,20 @@ function update(state, dt){
     if(bd.dmg){
       b.cd-=dt;
       const tgt=nearestEnemy(state,b, bd.range*TILE);
-      if(tgt && b.cd<=0){ damage(state,tgt,bd.dmg, b); b.cd=bd.cd; b.shootFx={x:tgt.x,y:tgt.y,t:SHOOTFX_LIFE}; }
+      if(tgt && b.cd<=0){
+        // paid per-turret upgrades (TURRET_UPGRADES): boosted damage / shorter reload
+        const dmg = b.upgDamage   ? bd.dmg*TURRET_UPGRADES.damage.dmgMult    : bd.dmg;
+        const cd  = b.upgFirerate ? bd.cd /TURRET_UPGRADES.firerate.rateMult : bd.cd;
+        damage(state,tgt,dmg, b); b.cd=cd; b.shootFx={x:tgt.x,y:tgt.y,t:SHOOTFX_LIFE};
+      }
     }
     // passive auto-extraction (Satellite Office trickles Funding for the player)
     if(bd.trickle && b.owner==='player'){ const eco=playerEco(state, b.ctrl); eco.gold += bd.trickle*dt; eco.gold_collected += bd.trickle*dt; }
+    // Market Research survey clock (host/solo authoritative; both peers in rollback)
+    if(b.type==='intel' && b.scanTotal>0 && b.owner==='player'){
+      b.scanProg+=dt;
+      if(b.scanProg>=b.scanTotal){ b.scanProg=0; b.scanTotal=0; intelScanReveal(state); }
+    }
     // unit production
     if(b.prodQueue.length){
       b.prodTime+=dt;
@@ -81,6 +91,9 @@ function update(state, dt){
 
   // ---- reclaim abandoned outposts (a player unit walking up flips them) ----
   if(!state.hub) reclaimOutposts(state);
+
+  // ---- MADOSIS: post-episode cooldown + walk-over memory collection (any player unit) ----
+  if(!state.hub && typeof madGlobalTick==='function') madGlobalTick(state, dt);
 
   // ---- free captives once their guards are dead (Episode X: Biba + the intern) ----
   if(!state.hub) freeCaptives(state);

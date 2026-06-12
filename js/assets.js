@@ -7,6 +7,7 @@
 const ASSET_BASE      = 'assets/';
 // Sprite sheets ship as WebP (~86% smaller than the PNG masters — the difference between a
 // 15s and a 4s loading gate on mobile). Converted by _dev/gen/optimize_assets.py @ q85.
+// Floor: WebP needs Safari 14+/iOS 14+; older browsers fall back to procedural art everywhere.
 const ATLAS_TILESET   = ASSET_BASE + 'atlas/tileset.webp';
 const ATLAS_BUILDINGS = ASSET_BASE + 'atlas/buildings.webp';
 const RESOURCE_CRYSTAL = ASSET_BASE + 'resource/crystal.png'; // Funding crystal node (optional; procedural fallback if absent)
@@ -109,23 +110,61 @@ function waterSpriteFor(biome, slot, frame){
    assets/buildings/<type>_<player|enemy>.png. (Mirrors loadWalk / loadMega.) */
 const BUILDING_FRAMES = 9;
 const BUILDING_FPS = 0.9;               // slow ambient neon-flicker playback
+const BUILDING_DRAW_SCALE = 2.5;        // all building sprites drawn this much bigger (footprint unchanged)
+const BUILDING_TYPE_SCALE = { hq:0.65, intel:0.5 };   // per-type tweak on top of BUILDING_DRAW_SCALE (HQ reads too big at full 2.5×; intel's composite is extremely tall-thin)
+// Per-type vertical stretch of the drawn sprite (footprint unchanged). intel compresses its
+// ~15:1 composite strip so the tower lands ~11 tiles tall instead of ~40 on a 1×1 footprint.
+const BUILDING_TALL = { hq:1.5625, intel:0.55 };
+function buildingDrawScale(type){ return BUILDING_DRAW_SCALE*(BUILDING_TYPE_SCALE[type]||1); }
 // Per-type frame-count override: most buildings are 9-frame neon-flicker strips, but the Training
 // Grounds is ONE static high-res still (no animation) — see _dev/gen/gen_training.mjs.
 const BUILDING_FRAME_COUNT = { training:1 };
 const BUILDING_TYPES = ['hq','barracks','turret','garage','launchpad','outpost','training'];
+// strips that intentionally don't ship (no art was ever made) — registered optional so the
+// loader doesn't burn its full retry ladder on guaranteed 404s every cold session.
+const BUILDING_NO_ART = { training:{ player:1, ao:1 } };
 function loadBuildingStrip(type, faction){
   const a = { img:new Image(), ready:false, fw:0, fh:0 };
   const nf = BUILDING_FRAME_COUNT[type] || BUILDING_FRAMES;
   a.img.onload  = ()=>{ a.fw = a.img.naturalWidth/nf; a.fh = a.img.naturalHeight; a.ready = true; };
   a.img.onerror = ()=>{ a.ready=false; };
+  const noArt = !!(BUILDING_NO_ART[type] && BUILDING_NO_ART[type][faction]);
   LOADER.register(a.img, buildingSheet(type, faction),
-    { tag:'bld:'+type+':'+faction, tier:faction==='ao'?LOADER.T_AMBIENT:LOADER.T_GAMEPLAY, weight:3, optional:faction==='ao' });
+    { tag:'bld:'+type+':'+faction, tier:faction==='ao'?LOADER.T_AMBIENT:LOADER.T_GAMEPLAY, weight:3, optional:faction==='ao'||noArt });
   return a;
 }
 const BUILDING_ANIM = {};
 // 'ao' = A&O alien faction (black + toxic-green recolor; optional, falls back to the keyed
 // faction set when the _ao strip is absent — see buildingSprite + _dev/gen/recolor_ao.py).
 for(const t of BUILDING_TYPES) BUILDING_ANIM[t] = { player:loadBuildingStrip(t,'player'), enemy:loadBuildingStrip(t,'enemy'), ao:loadBuildingStrip(t,'ao') };
+
+/* ---- Market Research tower ('intel'): composited at runtime, no art file ----
+   One very tall radar mast = the HQ strip squashed to 20% width / stretched to 2× height
+   (the shaft) with the Legal Team turret strip stacked on top at matching width (the head).
+   Baked lazily per faction onto an offscreen canvas strip once both source strips load;
+   stored ONLY in BUILDING_ANIM (never on entities — canvas refs on entities corrupt saves).
+   Until the bake is possible, buildingSprite returns null → procedural fallback box. */
+const INTEL_W = 0.20, INTEL_H = 2.0, INTEL_HEAD_SINK = 0.25;
+BUILDING_ANIM.intel = { player:{ready:false}, enemy:{ready:false}, ao:{ready:false} };
+function bakeIntelStrip(faction){
+  const hq=BUILDING_ANIM.hq[faction], tur=BUILDING_ANIM.turret[faction];
+  if(!hq||!hq.ready||!tur||!tur.ready) return null;
+  const fw=Math.max(2, Math.round(hq.fw*INTEL_W));
+  const shaftH=Math.round(hq.fh*INTEL_H);
+  const headH=Math.max(2, Math.round(tur.fh*(fw/tur.fw)));
+  const sink=Math.round(headH*INTEL_HEAD_SINK), fh=shaftH+headH-sink;
+  const cv=document.createElement('canvas'); cv.width=fw*BUILDING_FRAMES; cv.height=fh;
+  const c=cv.getContext('2d');
+  for(let i=0;i<BUILDING_FRAMES;i++){
+    c.drawImage(hq.img,  i*hq.fw,0,hq.fw,hq.fh,    i*fw, headH-sink, fw, shaftH);  // shaft first
+    c.drawImage(tur.img, i*tur.fw,0,tur.fw,tur.fh, i*fw, 0,          fw, headH);   // head in front, sunk into the shaft top
+  }
+  return { img:cv, ready:true, fw, fh };
+}
+function ensureIntelAnim(){
+  for(const f of ['player','enemy','ao'])
+    if(!BUILDING_ANIM.intel[f].ready){ const b=bakeIntelStrip(f); if(b) BUILDING_ANIM.intel[f]=b; }
+}
 /* ---- Visual faction ----
    Gameplay still treats owner==='player' as the human side everywhere; this
    only flips APPEARANCE. With PLAYER_IS_RED the human renders in red art/colors
@@ -140,6 +179,7 @@ function loadImg(src, opts){ return LOADER.image(src, opts || { tag:'misc:'+src,
 // faction overrides the owner-derived set (e.g. 'ao' for A&O enemies) but gracefully falls
 // back to the factionKey(owner) set when that strip is missing/not-ready.
 function buildingSprite(type,owner,faction){
+  if(type==='intel') ensureIntelAnim();   // lazy composite bake (no-op once all factions baked)
   const e=BUILDING_ANIM[type]; if(!e) return null;
   const a=(faction && e[faction] && e[faction].ready) ? e[faction] : e[factionKey(owner)];
   return (a&&a.ready) ? { img:a.img, fw:a.fw, fh:a.fh, frames:(BUILDING_FRAME_COUNT[type]||BUILDING_FRAMES) } : null;
@@ -267,12 +307,28 @@ function muzzleWorld(u){
   if(((u._face||1)<0) !== facesLeft) lx = -lx;     // same mirror as blitFrame
   return { x:u.x + lx, y:(u.y-alt) + ly };
 }
+/* Drawn sprite box of a building in WORLD px: BUILDING_DRAW_SCALE× the footprint width,
+   aspect-preserved, bottom-anchored, with the per-type overhang/tall factors. Single source
+   of truth for drawBuilding (render), the selection ring, and click hit-testing — keep them
+   in lockstep. Falls back to the bare footprint when the sprite strip isn't loaded. */
+function buildingDrawBox(e, spr){
+  const x0=e.tx*TILE, y0=e.ty*TILE, w=e.w*TILE, h=e.h*TILE;
+  if(spr===undefined) spr=buildingSprite(e.type, e.owner);
+  if(!spr) return { x:x0, y:y0, w, h };
+  const overhang = e.type==='turret'?1.18:1.08;
+  const tall = BUILDING_TALL[e.type]||1;
+  const dw=w*overhang*buildingDrawScale(e.type), dh=dw*(spr.fh/spr.fw)*tall;
+  return { x:x0+(w-dw)/2, y:y0+h-dh+2, w:dw, h:dh };
+}
 // World point of a building's rooftop gun — normalized within the tile FOOTPRINT (no flip).
 function buildingMuzzle(b){
   const m = (typeof MUZZLE!=='undefined' && MUZZLE[b.type]) || null;
   const x0 = b.tx*TILE, y0 = b.ty*TILE, w = b.w*TILE, h = b.h*TILE;
   const bx = m && m.bx!=null ? m.bx : 0.5, by = m && m.by!=null ? m.by : 0.15;
-  return { x:x0 + w*bx, y:y0 + h*by };
+  // Sprites are drawn buildingDrawScale()× about the footprint's bottom-center, so the
+  // footprint-normalized anchor undergoes the same transform to stay on the rooftop gun.
+  const s = buildingDrawScale(b.type);
+  return { x:x0 + w/2 + w*(bx-0.5)*s, y:y0 + h - h*(1-by)*s };
 }
 // Beam-width multiplier for an emitter (big units → heavier ray).
 function muzzleW(e){ const m = (typeof MUZZLE!=='undefined' && MUZZLE[e.spriteType||e.type]); return (m && m.w) || 1; }

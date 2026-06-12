@@ -42,9 +42,11 @@ const LOADER = (function(){
   const T_CRITICAL=1, T_GAMEPLAY=2, T_AMBIENT=3;
   const RETRY_MS = [1000, 4000, 10000];        // backoff after the 1st/2nd/3rd error
   const STUCK_SWEEP_MS = 5000;                 // watchdog cadence
-  const STUCK_AFTER_MS = 45000;                // in-flight this long with no event → assume aborted, re-kick
   const conn = (typeof navigator!=='undefined' && navigator.connection) || null;
   const SLOW = !!(conn && (conn.saveData || /(^|-)[23]g$/.test(conn.effectiveType||'')));
+  // in-flight this long with no event → assume silently aborted, re-kick. Generous on slow
+  // links: a big sheet on 2G legitimately needs minutes, and a re-kick restarts from byte 0.
+  const STUCK_AFTER_MS = SLOW ? 120000 : 45000;
   const MAX_INFLIGHT = SLOW ? 4 : 6;           // single HTTP/2 origin: few streams finish critical files sooner
   // ?perf=1 A/B harness: eager-load everything immediately so benchmark scenes
   // never measure half-loaded sprites (and stay byte-identical run to run).
@@ -107,6 +109,7 @@ const LOADER = (function(){
     fireChange();
   }
   function onLoad(rec){
+    if(rec.state==='loaded') return;           // idempotent: synthetic dispatch + a late real event may both arrive
     if(rec.state==='inflight') inflight=Math.max(0, inflight-1);
     rec.state='loaded';
     if(rec.attempts>1 && typeof TELE!=='undefined') TELE.event('asset_retry_recovered', { tag:rec.tag, attempts:rec.attempts });
@@ -140,37 +143,56 @@ const LOADER = (function(){
     else if(rec.state!=='retrywait' && rec.state!=='failed') return;
     rec.state='queued'; pump();
   }
+  // "Event was missed entirely" (image fully in memory, no load event ever dispatched —
+  // the iOS background-abort shape): fire a SYNTHETIC load event instead of poking the
+  // registry directly, so the consumer's .onload property handler (which owns the ready
+  // flags / frame slicing) runs too. Consumer handlers are idempotent; onLoad's
+  // already-loaded guard makes a later real event harmless.
+  function recoverMissedLoad(rec){ try{ rec.img.dispatchEvent(new Event('load')); }catch(_){ onLoad(rec); } }
   if(!EAGER && typeof setInterval!=='undefined'){
     setInterval(()=>{
       const t=now();
       for(const r of recs){
         if(r.state!=='inflight' || t-r.startedAt < STUCK_AFTER_MS) continue;
-        if(r.img.complete && r.img.naturalWidth>0){ onLoad(r); }          // event was missed entirely
-        else { r._stuck=(r._stuck||0)+1; if(r._stuck<=2) rekick(r); }
+        if(r.img.complete && r.img.naturalWidth>0){ recoverMissedLoad(r); }
+        else { r._stuck=(r._stuck||0)+1;
+          if(r._stuck<=2) rekick(r);
+          // third strike: fail it out cleanly — abandoning it 'inflight' would leak a
+          // concurrency slot for the whole session and pin its gate progress forever.
+          else { inflight=Math.max(0,inflight-1); r.state='failed'; settle(r); pump(); } }
       }
     }, STUCK_SWEEP_MS);
   }
-  if(typeof document!=='undefined'){
-    let hiddenAt=0;
+  if(!EAGER && typeof document!=='undefined'){
+    // start "hidden" if the page opened in a background tab — loads aborted before the
+    // first reveal still deserve the immediate re-kick, not just the slow watchdog.
+    let hiddenAt = (document.visibilityState==='hidden') ? now() : 0;
     document.addEventListener('visibilitychange', ()=>{
       if(document.visibilityState==='hidden'){ hiddenAt=now(); return; }
       if(!hiddenAt) return;
       for(const r of recs){
         if(r.state==='inflight' && r.startedAt<hiddenAt){
-          if(r.img.complete && r.img.naturalWidth>0) onLoad(r); else rekick(r);
+          if(r.img.complete && r.img.naturalWidth>0) recoverMissedLoad(r); else rekick(r);
         }
         else if(r.state==='retrywait') rekick(r);   // background tabs throttle the backoff timers
+        // captive portals fire no second 'online' — recover failed recs on reveal too
+        else if(r.state==='failed' && !r._onlineKick && (typeof navigator==='undefined' || navigator.onLine!==false)){
+          r._onlineKick=true; r.attempts=Math.max(0,r.attempts-1); rekick(r);
+        }
       }
       hiddenAt=0;
     });
   }
-  if(typeof window!=='undefined'){
+  if(!EAGER && typeof window!=='undefined'){
     window.addEventListener('online', ()=>{
       for(const r of recs){
         if(r.state==='failed' && !r._onlineKick){ r._onlineKick=true; r.attempts=Math.max(0,r.attempts-1); rekick(r); }
         else if(r.state==='retrywait') rekick(r);
       }
     });
+    // each disconnect re-arms the one-shot recovery, so a second airplane-mode
+    // cycle (or a flapping link) can still bring failed art back later
+    window.addEventListener('offline', ()=>{ for(const r of recs) r._onlineKick=false; });
   }
 
   /* ---------------- mission gate API ----------------
@@ -198,6 +220,8 @@ const LOADER = (function(){
     return { settled, total, frac: total? settled/total : 1, failed };
   }
   function missionReady(){ return missionRecs.every(r=>r.settled); }
+  // NOTE: single-slot — a second onMissionReady replaces (and silently cancels) the first.
+  // Current consumers all POLL missionReady()/missionProgress() instead; prefer that.
   function onMissionReady(cb, timeoutMs){
     if(missionTimer){ clearTimeout(missionTimer); missionTimer=null; }
     missionCb = cb;

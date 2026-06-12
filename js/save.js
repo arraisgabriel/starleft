@@ -6,7 +6,34 @@
 const SAVE_VERSION = 2;   // v2: madosis fields persist; older (v<2 / null) saves are back-filled on load
 const SAVE_PREFIX  = 'starleft_save_';
 const AUTO_KEY     = SAVE_PREFIX + 'auto';
-const MANUAL_CAP   = 8;             // newest 8 manual saves kept; oldest evicted
+const MANUAL_CAP   = 12;            // newest 12 manual saves kept; oldest evicted (compressed slots are small)
+const SAVE_LZ_MARK = '\u0001';      // sentinel marking an LZ-compressed at-rest value (never a valid JSON start)
+
+/* ---------- compressed at-rest storage ----------
+   A late-campaign save is ~1.1 MB of raw JSON (84% terrain/fog arrays) and localStorage's quota
+   is ~5 MB for the whole origin — 3-4 such saves used to hit "storage full". Slots are therefore
+   LZ-compressed (js/lib/lz-string.js, compressToUTF16 — the localStorage-safe variant, ~10-17x on
+   this payload) behind a sentinel char. Reads accept BOTH formats so legacy plain-JSON saves keep
+   loading; exports stay plain JSON (portable, diffable); if the lib ever fails to load, writes
+   fall back to plain JSON exactly as before. */
+function saveCompress(json){
+  if(typeof LZString==='undefined') return json;
+  try{ return SAVE_LZ_MARK + LZString.compressToUTF16(json); }catch(_){ return json; }
+}
+// the stored slot as a plain JSON string (decompressing if needed), or null
+function saveRawJson(key){
+  const raw=localStorage.getItem(key);
+  if(raw==null || raw==='') return null;
+  if(raw.charAt(0)!==SAVE_LZ_MARK) return raw;
+  if(typeof LZString==='undefined') return null;
+  try{ return LZString.decompressFromUTF16(raw.slice(1)); }catch(_){ return null; }
+}
+function saveRead(key){
+  try{ const j=saveRawJson(key); return j ? JSON.parse(j) : null; }catch(_){ return null; }
+}
+function saveWrite(key, payload){
+  localStorage.setItem(key, saveCompress(JSON.stringify(payload)));
+}
 
 function isSaveBlob(d){ return !!(d && typeof d==='object' && Array.isArray(d.entities)); }
 function saveVersionOk(d){ return d.v==null || d.v<=SAVE_VERSION; }
@@ -42,11 +69,19 @@ function legacyU8(src, n){
    _healTarget, _reTarget, …). Replace those with {$ref:id} on save and re-link
    them after every entity exists on load — this is field-agnostic, so new
    transient ref fields keep working without touching this code. */
-function encodeRefs(val){
+function encodeRefs(val, _stack){
   if(!val || typeof val!=='object') return val;
-  if(Array.isArray(val)) return val.map(encodeRefs);
+  // DOM nodes / canvases (e.g. a renderer cache holding an <img>) are NEVER part of game state —
+  // drop them instead of recursing into their cyclic ownerDocument graph (RangeError).
+  if(typeof Node!=='undefined' && val instanceof Node) return undefined;
+  _stack = _stack || new WeakSet();
+  if(_stack.has(val)) return undefined;                    // cycle guard: drop, don't overflow
+  if(Array.isArray(val)){ _stack.add(val); const a=val.map(v=>encodeRefs(v,_stack)); _stack.delete(val); return a; }
   if(typeof val.id==='number') return {$ref: val.id};      // an entity reference
-  const o={}; for(const k in val) o[k]=encodeRefs(val[k]); return o;
+  _stack.add(val);
+  const o={}; for(const k in val){ const v=encodeRefs(val[k],_stack); if(v!==undefined) o[k]=v; }
+  _stack.delete(val);
+  return o;
 }
 function resolveRefs(val, byId){
   if(!val || typeof val!=='object') return val;
@@ -55,10 +90,11 @@ function resolveRefs(val, byId){
   for(const k in val) val[k]=resolveRefs(val[k],byId);
   return val;
 }
+// per-entity fields that must never serialize: _groups is a Set (rebuilt from `groups` on load);
+// _ghostBlit is a per-frame renderer cache whose anim holds a DOM <img> (render.js drawUnit).
+const ENT_SKIP = {_groups:1, _ghostBlit:1};
 function serializeEntity(e){
-  // _groups is a per-unit Set of control-group tags. Sets don't survive JSON (they become {}),
-  // and it's fully derivable from `groups`, so skip it here and rebuild it on load.
-  const o={}; for(const k in e){ if(k==='_groups') continue; o[k]=encodeRefs(e[k]); } return o;
+  const o={}; for(const k in e){ if(ENT_SKIP[k]) continue; const v=encodeRefs(e[k]); if(v!==undefined) o[k]=v; } return o;
 }
 
 /* ---------- whole-state snapshot ---------- */
@@ -132,6 +168,9 @@ function deserializeGame(s){
     if(typeof hubReconcileFacilities==='function') hubReconcileFacilities(g);
     if(typeof hubSpawnTrainees==='function') hubSpawnTrainees(g);
     if(typeof hubSpawnHealers==='function') hubSpawnHealers(g);
+    // living city: pre-NPC saves (or saves written mid-visit) mint/refresh the population now.
+    // hubSyncNpcs is idempotent and its rolls are visit-pure, so re-running is a no-op on modern saves.
+    if(typeof hubSyncNpcs==='function') hubSyncNpcs();
   }
   // funding nodes carry a 3x3 footprint; feat[] was rebuilt from features[] only, so
   // restamp each node's mask (blocked[] was serialized and is already correct).
@@ -165,8 +204,8 @@ function listSaves(){
   for(let i=0;i<localStorage.length;i++){
     const key=localStorage.key(i);
     if(!key || key.indexOf(SAVE_PREFIX)!==0) continue;
-    let d; try{ d=JSON.parse(localStorage.getItem(key)); }catch(_){ continue; }
-    if(!isSaveBlob(d) || !saveVersionOk(d)) continue;
+    const d=saveRead(key);
+    if(!d || !isSaveBlob(d) || !saveVersionOk(d)) continue;
     out.push({key, auto:key===AUTO_KEY, mapName:d.mapName || (d.cfg&&d.cfg.name) || 'Quarter', gameTime:d.gameTime||d.time||0, savedAt:d.savedAt||0, mapIndex:saveMapIndex(d), hub:saveIsHubMap(d)});
   }
   out.sort((a,b)=> b.savedAt-a.savedAt);     // most recently saved first (autosave included in order)
@@ -189,19 +228,38 @@ function saveGame(){
     let key;
     if(manual.length && now-manual[0].savedAt < 3000) key=manual[0].key;  // collapse rapid re-saves
     else { enforceCap(); key=SAVE_PREFIX+now; }
-    localStorage.setItem(key, JSON.stringify(payload));
+    saveWrite(key, payload);
     toast('Game saved');
-  }catch(_){ toast('Save failed: storage full'); }
+  }catch(err){
+    // only blame storage when it IS storage — anything else is a serialization bug to surface,
+    // not mislabel (a save-crash once shipped as a bogus "storage full" for exactly this reason)
+    if(isQuotaError(err)) toast('Save failed: browser storage full — delete or export saves in Load Game');
+    else { console.error('Save failed', err); toast('Save failed — details in the browser console'); }
+  }
 }
+function isQuotaError(err){
+  return !!(err && (err.name==='QuotaExceededError' || err.code===22 || err.code===1014));
+}
+let _autosaveQuotaWarned=false;   // the 60s autosave must never fail SILENTLY — warn once per session
 function autosaveGame(){
   if(netRole!=='solo') return;                    // never autosave a co-op (half-applied) state
   if(G && G._skirmish) return;                    // skirmish never overwrites the campaign autosave (T3-2)
   if(!(G && running && !G.over)) return;
-  try{ const p=serializeGame(); if(typeof fallenVets!=='undefined' && fallenVets) p.fallen=fallenVets; localStorage.setItem(AUTO_KEY, JSON.stringify(p)); }catch(_){}
+  try{
+    const p=serializeGame(); if(typeof fallenVets!=='undefined' && fallenVets) p.fallen=fallenVets;
+    saveWrite(AUTO_KEY, p);
+    _autosaveQuotaWarned=false;
+  }catch(err){
+    if(!isQuotaError(err)) console.error('Autosave failed', err);
+    if(!_autosaveQuotaWarned){ _autosaveQuotaWarned=true;
+      if(typeof toast==='function') toast(isQuotaError(err)
+        ? '⚠ Autosave failed: storage full — delete old saves in Load Game'
+        : '⚠ Autosave failed — details in the browser console'); }
+  }
 }
 function loadGame(key){
   if(netRole!=='solo'){ toast('Loading is disabled in co-op'); return; }
-  let d; try{ d=JSON.parse(localStorage.getItem(key)); }catch(_){ d=null; }
+  const d=saveRead(key);
   if(!d){ toast('Save not found'); return; }
   if(!isSaveBlob(d)){ toast('Not a STARLEFT save'); return; }
   if(!saveVersionOk(d)){ toast('Incompatible save'); return; }
@@ -223,11 +281,12 @@ function loadGame(key){
   running=false;
   let _isHub=false; try{ _isHub=saveIsHubMap(d); }catch(_){}
   LOADER.beginMission(_isHub ? missionTagsHub() : missionTags(mapIndex));
+  // hub saves: mapIndex points at the NEXT deployment — label the gate as the hub, not that episode
   gateMission(mapIndex, ()=>{
     running=true;
     if(typeof syncPauseBtn==='function') syncPauseBtn();
     toast('Loaded: '+(d.mapName||'game'));
-  });
+  }, _isHub ? { label:'H.U.B. UPLINK' } : undefined);
 }
 
 /* ---------- "▶ Continue" (T0-8): one-click resume of the most recent autosave ---------- */
@@ -242,9 +301,8 @@ function continueGame(){ loadGame(AUTO_KEY); }
 // clean map index fall back to the raw map name; storage empty/disabled hides the button).
 function syncContinueButton(){
   const btn=document.getElementById('btn-continue'); if(!btn) return;
-  let d=null;
-  try{ d=JSON.parse(localStorage.getItem(AUTO_KEY)); }catch(_){ d=null; }
-  if(!isSaveBlob(d) || !saveVersionOk(d)){ btn.style.display='none'; return; }
+  const d=saveRead(AUTO_KEY);
+  if(!d || !isSaveBlob(d) || !saveVersionOk(d)){ btn.style.display='none'; return; }
   const sub=document.getElementById('btn-continue-sub');
   if(sub){
     let lbl;
@@ -267,18 +325,30 @@ function openLoadMenu(){
 }
 function fmtElapsed(sec){ sec=Math.max(0,sec|0); const m=(sec/60)|0, s=sec%60; return m+':'+(s<10?'0':'')+s; }
 function fmtWhen(ms){ try{ return new Date(ms).toLocaleString(); }catch(_){ return ''; } }
+function fmtBytes(b){ return b>=1048576 ? (b/1048576).toFixed(1)+' MB' : Math.max(1,Math.round(b/1024))+' KB'; }
+// localStorage stores UTF-16: 2 bytes per code unit, keys included
+function storageUsedBytes(){
+  let n=0;
+  try{ for(let i=0;i<localStorage.length;i++){ const k=localStorage.key(i); n+=(k.length+(localStorage.getItem(k)||'').length)*2; } }catch(_){}
+  return n;
+}
 function buildLoadSlots(){
   const wrap=document.getElementById('loadSlots'); if(!wrap) return;
   wrap.innerHTML='';
+  // storage meter — quota errors stop being a mystery (the browser caps the origin at ~5 MB)
+  const meter=document.createElement('div'); meter.className='panel-label';
+  meter.textContent='Storage: '+fmtBytes(storageUsedBytes())+' of ~5 MB used';
+  wrap.appendChild(meter);
   const saves=listSaves();
-  if(!saves.length){ wrap.innerHTML='<div class="panel-label">No saved games yet</div>'; return; }
+  if(!saves.length){ const none=document.createElement('div'); none.className='panel-label'; none.textContent='No saved games yet'; wrap.appendChild(none); return; }
   saves.forEach(s=>{
     const row=document.createElement('div'); row.className='save-row';
     let ep=''; try{ ep=saveEpisodeLabel(s.mapIndex, s.hub); }catch(_){ ep=''; }
+    let sz=0; try{ sz=((localStorage.getItem(s.key)||'').length+s.key.length)*2; }catch(_){}
     row.innerHTML=`<button class="map-btn save-load" title="Load this save">
         <b>${s.auto?'★ Autosave — ':''}${ep||s.mapName||'Quarter'}</b>
         <span class="mn">${s.mapName||''} · elapsed ${fmtElapsed(s.gameTime)}</span>
-        <small>${fmtWhen(s.savedAt)}</small>
+        <small>${fmtWhen(s.savedAt)}${sz?' · '+fmtBytes(sz):''}</small>
       </button>
       <button class="tc-btn save-exp" title="Export to file">⬇</button>
       <button class="tc-btn save-del" title="Delete save">✕</button>`;
@@ -290,8 +360,8 @@ function buildLoadSlots(){
 }
 
 /* ---------- export / import save files (share a save between devices) ----------
-   Saves are stored verbatim as JSON strings, so export just downloads the stored
-   string and import validates + writes it back as a new slot — no (de)serialize needed. */
+   Slots are LZ-compressed at rest, but exported files stay PLAIN JSON (portable across
+   versions/devices, human-readable); import validates plain JSON and stores it compressed. */
 function saveSlug(name){
   return (name||'save').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'') || 'save';
 }
@@ -301,7 +371,7 @@ function fmtStamp(ms){
   return p(d.getMonth()+1)+'-'+p(d.getDate())+'-'+p(d.getHours())+':'+p(d.getMinutes());
 }
 function exportSave(key){
-  const raw=localStorage.getItem(key);
+  const raw=saveRawJson(key);   // always export the decompressed JSON
   if(!raw){ toast('Save not found'); return; }
   let d=null; try{ d=JSON.parse(raw); }catch(_){}
   const fname='starleft-'+saveSlug(d&&d.mapName)+'-'+fmtStamp(d&&d.savedAt)+'.json';
@@ -320,12 +390,34 @@ function importSaveFile(file){
     if(!isSaveBlob(d)){ toast('Not a STARLEFT save'); return; }
     if(!saveVersionOk(d)){ toast('Incompatible save version'); return; }
     try{
-      enforceCap();               // respect the 8-manual-slot FIFO cap (same as saveGame)
+      enforceCap();               // respect the manual-slot FIFO cap (same as saveGame)
       d.savedAt=Date.now();       // re-stamp so the import lands at the top & survives the cap
-      localStorage.setItem(SAVE_PREFIX+d.savedAt, JSON.stringify(d));
+      saveWrite(SAVE_PREFIX+d.savedAt, d);
       buildLoadSlots();           // refresh the open Load Game list
       toast('Save imported');
-    }catch(_){ toast('Import failed: storage full'); }
+    }catch(err){
+      if(isQuotaError(err)) toast('Import failed: browser storage full — delete or export saves first');
+      else { console.error('Import failed', err); toast('Import failed — details in the browser console'); }
+    }
   };
   r.readAsText(file);
 }
+
+/* ---------- one-time in-place migration: compress legacy plain-JSON slots ----------
+   Replacing a value with a smaller one on the SAME key can't hit the quota, so the first boot
+   of this build immediately frees ~80-90% of the space existing saves occupy. Runs at script
+   load (localStorage is sync-available); idempotent — compressed slots are skipped. */
+(function migrateSavesToLZ(){
+  if(typeof LZString==='undefined') return;
+  try{
+    const keys=[];
+    for(let i=0;i<localStorage.length;i++){ const k=localStorage.key(i); if(k && k.indexOf(SAVE_PREFIX)===0) keys.push(k); }
+    for(const k of keys){
+      const raw=localStorage.getItem(k);
+      if(!raw || raw.charAt(0)!=='{') continue;                  // already compressed (or not JSON)
+      let d=null; try{ d=JSON.parse(raw); }catch(_){ continue; }
+      if(!isSaveBlob(d)) continue;
+      try{ localStorage.setItem(k, saveCompress(raw)); }catch(_){}
+    }
+  }catch(_){}
+})();

@@ -337,6 +337,24 @@ function render(state){
       depth.push({y:e.y, echo:e});                     // MADOSIS rescue memory beacon
     }
   }
+  // living-city NPCs (hub only): viewport-culled, pre-allocated {y,n} entries so the
+  // crowd Y-sorts correctly against buildings/units. Cosmetic, module-local (hub_npcs.js).
+  if(state.hub && typeof HUBNPC!=='undefined') HUBNPC.collectDepth(state, x0,y0,x1,y1, depth, z);
+  // MADOSIS: glowing purple memory ground-pools — painted BEFORE the depth-sorted sprites so
+  // every unit/building draws over them (an AREA decal anchoring the beacon to the map). View-
+  // culled; breath freezes under prefers-reduced-motion (T1-5).
+  for(const e of state.entities){
+    if(e.dead || e.kind!=='echo' || e.reached) continue;
+    const _rm=(typeof megaReducedMotion==='function'&&megaReducedMotion());
+    const R=TILE*2.6*(_rm?1:0.92+0.08*Math.sin((state.time||0)*2+(e.id||0)));
+    if(e.x+R<x0*TILE || e.x-R>x1*TILE || e.y+R<y0*TILE || e.y-R>y1*TILE) continue;
+    const px=e.x+ox, py=e.y+oy;
+    megaFillEllipseGlow(px, py, R, R*0.55, 0, [176,91,255], 0.30, 0.12);
+    ctx.globalAlpha=_rm?0.4:0.30+0.15*Math.sin((state.time||0)*2+(e.id||0));
+    ctx.strokeStyle='#b05bff'; ctx.lineWidth=1.5;
+    ctx.beginPath(); ctx.ellipse(px,py,R*0.8,R*0.44,0,0,6.28); ctx.stroke();
+    ctx.globalAlpha=1;
+  }
   if(PERF.on){ PERF.lap('depthBuild'); PERF.mark('depthSort'); }
   depth.sort((a,b)=>a.y-b.y);
   if(PERF.on){ PERF.lap('depthSort'); PERF.mark('depthDraw'); }
@@ -346,7 +364,33 @@ function render(state){
     else if(d.f) drawFeature(state, d.f, ox,oy, d.dim);
     else if(d.g) drawGoldmine(state, d.g, ox,oy, d.dim);
     else if(d.echo) drawEcho(state, d.echo, ox,oy);
+    else if(d.n) HUBNPC.drawOne(state, d.n);           // living-city NPC (hub only)
     else drawUnit(state, d.u, ox,oy);
+  }
+  // ---- occluded-unit ghosts: building sprites draw BUILDING_DRAW_SCALE× their footprint, so
+  //      they spill over passable tiles beside them. Any unit Y-sorted BEHIND a building whose
+  //      sprite box covers it gets a faint redraw on top (plus its selection ring) so big
+  //      structures never swallow units. Cosmetic + local — identical on solo/host/client. ----
+  {
+    let occ=null;
+    for(const d of depth){
+      if(!d.b || d.b.hubSpriteVisual || d.b.hubMegaVisual) continue;
+      const bb=buildingDrawBox(d.b);
+      if(bb.w<=d.b.w*TILE) continue;                       // footprint fallback → no spill
+      (occ||(occ=[])).push({x:bb.x, y:bb.y, w:bb.w, h:bb.h, gy:(d.b.ty+d.b.h)*TILE});
+    }
+    if(occ) for(const d of depth){
+      const u=d.u, lb=u && u._ghostBlit;
+      if(!lb || lb.t!==state.time || u._ninjaHidden) continue;
+      const wx=u.x, wy=lb.py-oy-lb.S*0.2;                  // sprite center-ish (box y∈[-0.7S,+0.3S])
+      let hit=false;
+      for(const b of occ){ if(u.y<b.gy && wx>=b.x && wx<=b.x+b.w && wy>=b.y && wy<=b.y+b.h){ hit=true; break; } }
+      if(!hit) continue;
+      ctx.save(); ctx.globalAlpha*=0.45;
+      if(u.selected){ ctx.strokeStyle='#8effb0'; ctx.lineWidth=2; ctx.beginPath(); ctx.ellipse(lb.px, lb.py+lb.S*0.3, lb.S*0.34, lb.S*0.14, 0,0,6.28); ctx.stroke(); }
+      blitFrame(u, lb.px, lb.py, lb.anim, lb.S, lb.fi);
+      ctx.restore();
+    }
   }
   if(PERF.on) PERF.lap('depthDraw');
   // Training Grounds: trainees are storedIn (skipped by the depth loop) — draw them live, on
@@ -409,6 +453,16 @@ function render(state){
   drawFog(state,ox,oy,x0,y0,x1,y1);
   if(PERF.on){ PERF.lap('fog'); PERF.mark('overlays'); }
 
+  // ---- H.U.B. night tint: one low-alpha world-space fill driven by the city clock
+  //      (hub_npcs.js). Rings/labels/dialogs draw above it so UI reads stay bright. ----
+  if(state.hub && typeof HUBNPC!=='undefined'){
+    const _na=HUBNPC.nightAlpha();
+    if(_na>0.004){
+      ctx.fillStyle='rgba(10,16,38,'+_na.toFixed(3)+')';
+      ctx.fillRect(vx, vy, viewW()/z, viewH()/z);
+    }
+  }
+
   // ---- placement ghost ----
   if(state.placing){ drawPlacement(state,ox,oy); }
 
@@ -420,6 +474,9 @@ function render(state){
 
   // ---- alt-win objective beacon + escort VIP marker (T2-1) — gold, fog-independent (it's YOUR objective) ----
   drawWinObjective(state,ox,oy);
+
+  // ---- H.U.B. locate beacon (condo-card "find them" ping) — world space, above sprites ----
+  if(state.hub && typeof drawHubLocatePing==='function') drawHubLocatePing(state, ox, oy);
 
   // ---- in-world unit dialog boxes — drawn last in world space, above every sprite ----
   if(typeof drawDialogs==='function') drawDialogs(state);
@@ -451,7 +508,7 @@ function render(state){
       const sX = dx>0 ? (R-cx0)/dx : dx<0 ? (L-cx0)/dx : Infinity;
       const sY = dy>0 ? (B-cy0)/dy : dy<0 ? (T-cy0)/dy : Infinity;
       const s=Math.min(sX,sY), ax=cx0+dx*s, ay=cy0+dy*s;
-      const col = e.facet==='trauma' ? '#ff5b6b' : e.facet==='dream' ? '#ffd23f' : '#5aa0ff';
+      const col='#b05bff';   // purple — the madosis color language (facet reads on the beacon itself)
       const pulse=0.7+0.3*Math.sin((state.time||0)*4+(e.id||0));
       ctx.save(); ctx.translate(ax,ay); ctx.rotate(Math.atan2(dy,dx));
       ctx.globalAlpha=0.92; ctx.fillStyle=col; ctx.shadowColor=col; ctx.shadowBlur=10*pulse;
@@ -1083,8 +1140,12 @@ function drawBuilding(state,e,ox,oy,dim){
   ctx.save();
   if(dim) ctx.globalAlpha=0.55;
   if(e.abandoned) ctx.globalAlpha*=0.7;   // derelict: faded
-  // selection ring (footprint)
-  if(e.selected){ ctx.strokeStyle='#8effb0'; ctx.lineWidth=2; ctx.strokeRect(px-3,py-3,w+6,h+6); }
+  // selection ring — wraps the DRAWN sprite (BUILDING_DRAW_SCALE× the footprint) so the
+  // highlight matches what the player sees; hub bespoke visuals keep the footprint ring.
+  if(e.selected){
+    const sb=(spr && !e.hubSpriteVisual && !e.hubMegaVisual) ? buildingDrawBox(e,spr) : {x:px-ox,y:py-oy,w,h};
+    ctx.strokeStyle='#8effb0'; ctx.lineWidth=2; ctx.strokeRect(sb.x+ox-3, sb.y+oy-3, sb.w+6, sb.h+6);
+  }
   if(e.hubSpriteVisual){
     const topY=drawHubBuildingSpriteVisual(state,e,ox,oy);
     ctx.restore();
@@ -1104,10 +1165,8 @@ function drawBuilding(state,e,ox,oy,dim){
     // little upward overhang for height. Per-building phase from e.id so identical
     // buildings don't flicker in lockstep. No ground shadow (intentionally dropped).
     const n=spr.frames, fi=((((state.time*BUILDING_FPS + e.id*0.13)|0)%n)+n)%n;
-    const overhang = e.type==='turret'?1.18:1.08;
-    const tall = e.type==='hq'?1.5625:1;   // HQ renders taller (1.25 × 1.25; footprint unchanged)
-    const dw=w*overhang, dh=dw*(spr.fh/spr.fw)*tall;
-    const dx=px+(w-dw)/2, dy=py+h-dh+2;
+    const box=buildingDrawBox(e,spr);   // BUILDING_DRAW_SCALE× footprint, bottom-anchored
+    const dw=box.w, dh=box.h, dx=box.x+ox, dy=box.y+oy;
     topY=dy;
     if(e.constructing) ctx.globalAlpha*=0.5;   // rises faintly while building
     ctx.drawImage(spr.img, fi*spr.fw,0,spr.fw,spr.fh, dx,dy,dw,dh);
@@ -1487,6 +1546,9 @@ function drawUnit(state,u,ox,oy){
       ctx.restore(); ctx.globalAlpha=1;
     }
     const dh = blitFrame(u,px,pyB,useAnim,S*bScale,fi);
+    // remember what was just blitted (screen px, valid this frame only) so the post-depth
+    // pass can re-draw a faint ghost when a building sprite occludes this unit
+    u._ghostBlit = { t:state.time, px, py:pyB, anim:useAnim, S:S*bScale, fi };
     if(u.hero) drawHeroGlowLayer(state, u, useAnim, px, pyB, S*bScale, 'core');   // bright core in front
     else if(u.villain) drawVillainGlow(state, u, useAnim, px, pyB, S*bScale, 'core');
     if(u.type==='worker' && u.carrying>0){ ctx.fillStyle='#ffd86b'; ctx.beginPath(); ctx.arc(px,py-alt-dh*0.7-4,3,0,6.28); ctx.fill(); }
@@ -1580,31 +1642,47 @@ function drawUnit(state,u,ox,oy){
   }
 }
 
-// MADOSIS rescue beacon — a bright pulsing memory echo (trauma=red / family=blue / dream=gold) with a
-// ground ring + tall light column so it reads from across the map, plus a faint tether to its mad dog.
+// MADOSIS rescue beacon — a floating neon memory shard over its glowing purple ground pool (the
+// pool is painted as a pre-pass decal under all sprites; this is the depth-sorted beacon). Purple
+// leads (the madosis color language); the facet survives as the glyph + accent tint
+// (trauma ! / family ♥ / dream ★) so the three memories stay distinguishable.
 function drawEcho(state, e, ox, oy){
   const px=e.x+ox, py=e.y+oy;
-  const col = e.facet==='trauma' ? '#ff5b6b' : e.facet==='dream' ? '#ffd23f' : '#5aa0ff';
-  const pulse = 0.6 + 0.4*Math.sin((state.time||0)*3 + (e.id||0));
+  const PUR='#b05bff', LIT='#e6c8ff';
+  const accent = e.facet==='trauma' ? '#ff9db0' : e.facet==='dream' ? '#ffe08a' : '#a8c4ff';
+  const _rm=(typeof megaReducedMotion==='function'&&megaReducedMotion());
+  const t=state.time||0, ph=(e.id||0);
+  const pulse=_rm?0.7:0.6+0.4*Math.sin(t*3+ph);
+  const bob=_rm?0:3*Math.sin(t*2+ph);
   ctx.save();
   // faint tether back to the dog this memory belongs to (skip if the dog isn't present this frame)
   if(e.dogId!=null){
     const dog=state.entities.find(d=> d.id===e.dogId && !d.dead);
-    if(dog){ ctx.globalAlpha=0.12+0.06*pulse; ctx.strokeStyle=col; ctx.lineWidth=1.5;
+    if(dog){ ctx.globalAlpha=0.08+0.04*pulse; ctx.strokeStyle=PUR; ctx.lineWidth=1.5;
       ctx.beginPath(); ctx.moveTo(px,py); ctx.lineTo(dog.x+ox, dog.y+oy-6); ctx.stroke(); }
   }
-  // pulsing ground ring — anchors the beacon to the tile so it's findable
-  ctx.globalAlpha=0.35+0.25*pulse; ctx.strokeStyle=col; ctx.lineWidth=2;
-  ctx.beginPath(); ctx.ellipse(px, py, 13+5*pulse, 6+2.5*pulse, 0, 0, 6.28); ctx.stroke();
-  // tall light column
-  ctx.globalAlpha=0.32; ctx.lineWidth=2.5;
-  ctx.beginPath(); ctx.moveTo(px,py); ctx.lineTo(px, py-44-16*pulse); ctx.stroke();
-  // glowing core orb
-  ctx.globalAlpha=0.95; ctx.shadowColor=col; ctx.shadowBlur=22*pulse; ctx.fillStyle=col;
-  ctx.beginPath(); ctx.arc(px, py-2, 8+4*pulse, 0, 6.28); ctx.fill();
-  ctx.shadowBlur=0; ctx.globalAlpha=1;
-  ctx.fillStyle='rgba(8,10,16,0.92)'; ctx.font='bold 12px '+GAME_FONT; ctx.textAlign='center'; ctx.textBaseline='middle';
-  ctx.fillText(e.facet==='trauma'?'!':e.facet==='dream'?'★':'♥', px, py-1.5);
+  // the shard: a slim neon diamond hovering over the pool
+  const cy=py-16-bob, w=7+2*pulse, h=15+3*pulse;
+  ctx.globalAlpha=0.95; ctx.shadowColor=PUR; ctx.shadowBlur=14+10*pulse;
+  ctx.fillStyle=PUR;
+  ctx.beginPath(); ctx.moveTo(px,cy-h); ctx.lineTo(px+w,cy); ctx.lineTo(px,cy+h); ctx.lineTo(px-w,cy); ctx.closePath(); ctx.fill();
+  // bright inner edge
+  ctx.shadowBlur=0; ctx.globalAlpha=0.9; ctx.strokeStyle=LIT; ctx.lineWidth=1;
+  ctx.beginPath(); ctx.moveTo(px,cy-h+3); ctx.lineTo(px+w-2.5,cy); ctx.lineTo(px,cy+h-3); ctx.lineTo(px-w+2.5,cy); ctx.closePath(); ctx.stroke();
+  // cyberpunk glitch: occasional 1px horizontal slice offsets (deterministic, cosmetic)
+  if(!_rm){
+    for(let i=0;i<3;i++){
+      const s=Math.sin(t*13+ph*1.7+i*2.4);
+      if(s>0.92){ const gy=cy-h+(i+1)*(h*2/4), gw=w*1.4;
+        ctx.globalAlpha=0.8; ctx.fillStyle=LIT; ctx.fillRect(px-gw/2+(s>0.96?3:-3), gy, gw, 1); }
+    }
+  }
+  // ground contact glint (small — the pool decal carries the area)
+  ctx.globalAlpha=0.5+0.2*pulse; ctx.strokeStyle=PUR; ctx.lineWidth=1.5;
+  ctx.beginPath(); ctx.ellipse(px,py,9+3*pulse,4+1.5*pulse,0,0,6.28); ctx.stroke();
+  // facet glyph riding the shard
+  ctx.globalAlpha=1; ctx.fillStyle=accent; ctx.font='bold 11px '+GAME_FONT; ctx.textAlign='center'; ctx.textBaseline='middle';
+  ctx.fillText(e.facet==='trauma'?'!':e.facet==='dream'?'★':'♥', px, cy+0.5);
   ctx.restore();
 }
 
@@ -1952,7 +2030,12 @@ function renderMinimap(state){
   for(const e of state.entities){
     if(e.dead||e.storedIn) continue;
     if(e.type==='goldmine'){ const N=FEAT_SIZE, ftx=(e.ftx!=null)?e.ftx:(((e.x/TILE)|0)-(N>>1)), fty=(e.fty!=null)?e.fty:(((e.y/TILE)|0)-(N>>1)); const si=(fty+N-1)*state.W+(ftx+(N>>1)); if(state.explored[si]){ mmx.fillStyle='#b06bff'; mmx.fillRect(ftx*sx, fty*sy, Math.ceil(sx*N), Math.ceil(sy*N));} continue; }
-    if(e.kind==='echo'){ const ez=3+1.5*(0.5+0.5*Math.sin((state.time||0)*4+(e.id||0))); mmx.fillStyle = e.facet==='trauma'?'#ff5b6b': e.facet==='dream'?'#ffd23f':'#5aa0ff'; mmx.fillRect(e.x/TILE*sx-ez/2, e.y/TILE*sy-ez/2, ez, ez); continue; }   // MADOSIS rescue beacon (pulses to draw the eye)
+    if(e.kind==='echo'){   // MADOSIS rescue beacon — pulsing purple AREA halo + bright core
+      const p=0.5+0.5*Math.sin((state.time||0)*4+(e.id||0)), ez=4+3*p;
+      mmx.fillStyle='rgba(176,91,255,'+(0.22+0.30*p).toFixed(2)+')';
+      mmx.fillRect(e.x/TILE*sx-ez, e.y/TILE*sy-ez, ez*2, ez*2);
+      mmx.fillStyle='#d9a8ff'; mmx.fillRect(e.x/TILE*sx-1.5, e.y/TILE*sy-1.5, 3, 3);
+      continue; }
     if(e.madDog){ mmx.fillStyle='#ff5bff'; mmx.fillRect(e.x/TILE*sx-1.5, e.y/TILE*sy-1.5, 3, 3); continue; }   // MADOSIS feral mad dog
     if(e.owner==='enemy' && !isVisiblePix(state,e.x,e.y) && !(e.kind==='building'&&e._everSeen)) continue;
     mmx.fillStyle = e.abandoned ? '#8effb0' : isRedSide(e.owner)?'#ff6b6b': (e.ctrl==='p2'?'#ff9d3c':'#7fd6ff');

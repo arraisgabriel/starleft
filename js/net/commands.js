@@ -57,6 +57,24 @@
     if(netRole!=='client') return tryTrain(state, building, type);
     if(building && isMine(building)) MP.send('mpcmd', { k:'train', from:LOCAL_CTRL, bid:building.id, type, seq:(NET._cmdSeq=(NET._cmdSeq||0)+1) });
   }
+  function netUpgrade(state, building, key){
+    if(hubClientBlocked(state)) return;
+    if(window.USE_ROLLBACK){ if(building && isMine(building)) NET.rbEnqueue({ k:'upg', bid:building.id, key }); return; }
+    if(netRole!=='client') return tryUpgradeTurret(state, building, key);
+    if(building && isMine(building)) MP.send('mpcmd', { k:'upg', from:LOCAL_CTRL, bid:building.id, key, seq:(NET._cmdSeq=(NET._cmdSeq||0)+1) });
+  }
+  function netDemolish(state, building){
+    if(hubClientBlocked(state)) return;
+    if(window.USE_ROLLBACK){ if(building && isMine(building)) NET.rbEnqueue({ k:'demo', bid:building.id }); return; }
+    if(netRole!=='client') return tryDemolish(state, building);
+    if(building && isMine(building)) MP.send('mpcmd', { k:'demo', from:LOCAL_CTRL, bid:building.id, seq:(NET._cmdSeq=(NET._cmdSeq||0)+1) });
+  }
+  function netScan(state, building){
+    if(hubClientBlocked(state)) return;
+    if(window.USE_ROLLBACK){ if(building && isMine(building)) NET.rbEnqueue({ k:'scan', bid:building.id }); return; }
+    if(netRole!=='client') return tryStartScan(state, building);
+    if(building && isMine(building)) MP.send('mpcmd', { k:'scan', from:LOCAL_CTRL, bid:building.id, seq:(NET._cmdSeq=(NET._cmdSeq||0)+1) });
+  }
   function netCancelTrain(state, building, index){
     if(hubClientBlocked(state)) return;
     if(window.USE_ROLLBACK){ if(building && isMine(building)) NET.rbEnqueue({ k:'cancel', bid:building.id, index }); return; }
@@ -98,6 +116,7 @@
   }
   window.netCommand=netCommand; window.netPlace=netPlace; window.netStop=netStop;
   window.netTrain=netTrain; window.netCancelTrain=netCancelTrain; window.netReleaseStored=netReleaseStored;
+  window.netUpgrade=netUpgrade; window.netDemolish=netDemolish; window.netScan=netScan;
   window.netAmove=netAmove; window.netStance=netStance; window.netAbility=netAbility;
 
   /* ---------------- host: validate + replay a remote command ---------------- */
@@ -149,6 +168,15 @@
     } else if(cmd.k==='cancel'){
       const b=byId.get(cmd.bid); if(!b||(b.ctrl||'p1')!==ctrl) return;
       quiet(()=> cancelTrain(G, b, cmd.index));
+    } else if(cmd.k==='upg'){
+      const b=byId.get(cmd.bid); if(!b||b.owner!=='player'||(b.ctrl||'p1')!==ctrl) return;
+      quiet(()=> tryUpgradeTurret(G, b, cmd.key));
+    } else if(cmd.k==='demo'){
+      const b=byId.get(cmd.bid); if(!b||b.owner!=='player'||(b.ctrl||'p1')!==ctrl) return;
+      quiet(()=> tryDemolish(G, b));
+    } else if(cmd.k==='scan'){
+      const b=byId.get(cmd.bid); if(!b||b.owner!=='player'||(b.ctrl||'p1')!==ctrl) return;
+      quiet(()=> tryStartScan(G, b));
     } else if(cmd.k==='releaseStored'){
       const b=byId.get(cmd.bid), u=byId.get(cmd.uid);
       if(!b||b.owner!=='player'||b.type!=='hq'||(b.ctrl||'p1')!==ctrl) return;
