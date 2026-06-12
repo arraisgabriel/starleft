@@ -1609,6 +1609,13 @@ function buildSettingsBody(){
   h+=`<label class="set-row"><input type="checkbox" data-aud="music" ${ (typeof MUSIC!=='undefined'&&MUSIC.isEnabled())?'checked':''}> <b>Music &amp; ambient</b> <span>menu theme + in-mission biome beds</span></label>`;
   h+=`<label class="set-row"><input type="checkbox" data-aud="sfx" ${ (typeof SFX!=='undefined'&&SFX.isEnabled())?'checked':''}> <b>Combat SFX</b> <span>lasers, impacts, deaths, UI clicks</span></label>`;
   h+=`<label class="set-row"><input type="checkbox" data-aud="tele" ${ (typeof TELE!=='undefined'&&TELE.isEnabled())?'checked':''}> <b>Anonymous analytics</b> <span>cookieless funnel counts \u2014 nothing is sent unless an endpoint is configured; Do-Not-Track always wins</span></label>`;
+  // Field Manual + (localhost-only) Sandbox moved here from the title menu; each opens its own panel.
+  h+='<div class="panel-label">Manuals &amp; tools</div>';
+  h+='<div style="display:flex;gap:8px;flex-wrap:wrap;">';
+  h+=`<button class="sc-btn" onclick="hideSub('settingsScreen');showDocs(false)">\ud83d\udcd6 Field Manual</button>`;
+  if(typeof SANDBOX!=='undefined')   // sandbox.js is localhost-gated; absent on the deployed build
+    h+=`<button class="sc-btn" title="Localhost battle test tool \u2014 place units &amp; buildings, god-mode, reveal, speed control" onclick="hideSub('settingsScreen');SANDBOX.enter(0)">\ud83e\uddea Sandbox</button>`;
+  h+='</div>';
   body.innerHTML=h;
   buildDifficultyRow('settingsDiffRow');
   body.querySelectorAll('input[data-set]').forEach(inp=>{

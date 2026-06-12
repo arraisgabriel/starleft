@@ -5,10 +5,11 @@
    god-mode / full map reveal / frozen win-loss / infinite funding, and scrub the
    sim clock (⏸ · 1× · 2× · 4×) to set up and watch a fight.
 
-   SELF-CONTAINED: this file injects its own menu entry, control panel, CSS and a
-   capture-phase placement click handler. The ONLY touchpoints in game code are
-   four guarded flags it sets — every one a no-op when this file (or window.SANDBOX)
-   is absent, so deleting sandbox.js fully removes the feature:
+   SELF-CONTAINED: this file injects its own control panel, CSS and a capture-phase
+   placement click handler. The ONLY touchpoints in game code are guarded and
+   no-ops when this file (or window.SANDBOX) is absent, so deleting sandbox.js
+   fully removes the feature:
+     • ui.js     renders a "🧪 Sandbox" button in Settings behind `typeof SANDBOX`
      • main.js   reads SANDBOX.on + SANDBOX.simSteps()  → sub-step / pause the solo sim
      • core.js   reads state._sandboxNoEnd              → freeze win/loss
      • render.js reads state._sandboxReveal             → reveal fog
@@ -92,19 +93,9 @@
   const style=document.createElement('style'); style.textContent=css; document.head.appendChild(style);
 
   /* ====================================================================== */
-  /*  MENU ENTRY                                                             */
-  /* ====================================================================== */
-  function injectMenuButton(){
-    const nav=document.querySelector('.menu-nav');
-    if(!nav || nav.querySelector('#sbx-launch')) return;
-    const b=document.createElement('button');
-    b.className='sc-btn'; b.id='sbx-launch';
-    b.textContent='🧪 Sandbox';
-    b.title='Localhost battle test tool — place units & buildings, god-mode, reveal, speed control';
-    b.onclick=()=>enter(0);
-    nav.appendChild(b);
-  }
-
+  /*  MENU ENTRY: the "🧪 Sandbox" button now lives in the Settings panel —  */
+  /*  rendered by ui.js buildSettingsBody behind a `typeof SANDBOX` guard    */
+  /*  (a no-op when this file is absent, preserving the deletability rule).  */
   /* ====================================================================== */
   /*  CONTROL PANEL                                                          */
   /* ====================================================================== */
@@ -321,7 +312,7 @@
   /*  ENTER / LOAD / EXIT                                                    */
   /* ====================================================================== */
   function hideMenus(){
-    ['startScreen','mapScreen','docScreen','tutorialPromptScreen','mpScreen','loadScreen']
+    ['startScreen','mapScreen','docScreen','tutorialPromptScreen','mpScreen','loadScreen','settingsScreen']
       .forEach(id=>{ const el=document.getElementById(id); if(el) el.style.display='none'; });
   }
   function loadInto(target){
@@ -397,8 +388,6 @@
     if(e.key==='Escape' && SB.placeType){ arm(null); }   // disarm tool (game's Esc still clears selection)
   });
 
-  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded', injectMenuButton);
-  else injectMenuButton();
 
-  console.log('%c[SANDBOX]%c localhost test tool ready — "🧪 Sandbox" on the title menu, or SANDBOX.enter(idx)','color:#22c3e6;font-weight:700','color:inherit');
+  console.log('%c[SANDBOX]%c localhost test tool ready — "🧪 Sandbox" under Settings, or SANDBOX.enter(idx)','color:#22c3e6;font-weight:700','color:inherit');
 })();

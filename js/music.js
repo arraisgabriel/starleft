@@ -20,7 +20,7 @@ const MUSIC = (function(){
   let echoCtx=null, echoSrc=null, echoDelay=null, echoFb=null, echoWet=null, echoDry=null, echoTimer=null, echoActive=false;
   let inMenu=false, started=false, pendingStart=false, initDone=false, startTimer=null;
   let battleMain=null, battleLoop=null, battleVictory=null;
-  let _btState='off', _btTimer=0, _ambDuck=1;
+  let _btState='off', _btTimer=0, _ambDuck=1, _lullTimer=0;
 
   function makeAudio(src, loop){
     const a = new Audio();
@@ -143,7 +143,7 @@ const MUSIC = (function(){
     if(battleMain){ try{ battleMain.pause(); battleMain.currentTime=0; }catch(_){} }
     if(battleLoop){ try{ battleLoop.pause(); battleLoop.currentTime=0; }catch(_){} }
     if(battleVictory){ try{ battleVictory.pause(); battleVictory.currentTime=0; }catch(_){} }
-    _btState='off'; _btTimer=0;
+    _btState='off'; _btTimer=0; _lullTimer=0;
   }
   function bootGateOpen(){
     const gate = document.getElementById('bootGate');
@@ -250,17 +250,19 @@ const MUSIC = (function(){
             || (u.cmd && u.cmd.type==='attack' && u.cmd.target && !u.cmd.target.dead)
             || (u._lastHit && (state.time - u._lastHit) < 1.5);
       });
+      if(combatActive) _lullTimer=0; else _lullTimer+=dt;
       const allEnemiesDead = !state.entities.some(e=>!e.dead && e.owner==='enemy' && e.kind==='unit' && !e.storedIn);
       const battleOver = allEnemiesDead || !!state._villainEscaped || !!state.extractReady || !!state.over;
+      const shouldEnd = battleOver || _lullTimer>=6;
       if(_btState==='off'){
         if(combatActive){ _btState='pending'; _btTimer=0; }
       } else if(_btState==='pending'){
         if(!combatActive){ _btState='off'; }
         else{ _btTimer+=dt; if(_btTimer>=3) _startBattleMain(); }
       } else if(_btState==='main'){
-        if(battleOver) _startVictory();
+        if(shouldEnd) _startVictory();
       } else if(_btState==='loop'){
-        if(battleOver) _startVictory();
+        if(shouldEnd) _startVictory();
       } else if(_btState==='victory'){
         // let it play through; _stopBattle() called by onended
       }
