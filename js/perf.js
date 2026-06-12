@@ -26,6 +26,7 @@
     spriteLod:true,                                     // SHIPPED — light sprite (static frame, no anim/HUD) at near-min zoom only
     terrainChunks:true,                                 // ON for evaluation — terrain -73%, but slight min-zoom softening + re-bake hitch (see RESULTS.md)
     hubNpcs:true,                                       // living-city HUB NPCs (hub_npcs.js) — a FEATURE flag: A/B measures its cost, not a win
+    npcMix:true,                                        // hub NPC wardrobe of band-mixed sprites (npc_sprites.js + hub_npcs.js) — FEATURE flag: A/B measures cost, pixelDiff>0 expected
     minimapThrottle:false, ctxOpaque:false, depthPool:false, waterMerge:false, fogCache:false,
     cullExtra:false, scrollBuffer:false, desync:false,
   };

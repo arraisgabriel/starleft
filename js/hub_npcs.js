@@ -18,6 +18,12 @@
      array (correct Y-occlusion). Sprites reuse existing unit walk sheets at ~70% scale with
      6 muted civilian tints (half-res sheets baked lazily, <=1/frame, hard cap); dark
      silhouette fallback while art streams; 2px dots below DOT_ZOOM. No glows, no bars.
+   - Wardrobe (PERF.opts.npcMix): a session-stable set of MIX_K composed looks — head/
+     torso/legs bands mixed from different human unit sheets via NPCMIX (npc_sprites.js),
+     baked+tinted once each through the same lazy bake queue. Each NPC's seeded rng picks
+     a wardrobe index (the draw is APPENDED after all existing draws, so flag-off behavior
+     and itineraries stay byte-stable). Fallback ladder: mixed sheet → raw unit sheet →
+     silhouette; a failed bake permanently falls back to the plain tinted path.
    - Degrades: PERF.opts.hubNpcs===false → off; QUAL.npcScale shrinks the active cap;
      megaReducedMotion() → no world NPCs (status/clock APIs keep working for the UI). */
 
@@ -34,6 +40,8 @@
   const ROAD_FACTOR = 1.35;        // euclid → road distance estimate for itinerary timing
   const TINT_ALPHA = 0.32;
   const TINT_CAP = 12;             // max baked half-res sheets (memory bound)
+  const MIX_K = 16;                // wardrobe size: composed looks per session (memory bound: ≤16 extra sheets)
+  const MIX_SEED = 0x4D495853;     // 'MIXS' — fixed seed: same wardrobe every session/save (cosmetic only, never persisted)
   const NIGHT_MAX = 0.14;          // peak night-tint alpha
   // muted dark-cyberpunk civilian tints (slate / rust / olive / plum / dim teal / dust amber)
   const TINTS = ['#5c6b7a','#7a5648','#5d6b4e','#6b5570','#4e6b68','#7a6a4e'];
@@ -51,9 +59,11 @@
   let _legs={};                             // nodeId → trunk leg plaza→node {pts,cum,len,ready,broken}
   let _legQueue=[];                         // nodeIds awaiting their A* (≤1/frame)
   let _routes=new Map();                    // 'a>b' → concatenated route {pts,cum,len,bx0..by1,broken}
-  const _tinted={};                         // 'type|owner|tint' → anim-like {img,fw,fh,frames,ready}
+  const _tinted={};                         // 'type|owner|tint' or 'mix|idx' → anim-like {img,fw,fh,frames,ready}
   let _tintCount=0;
   const _bakeQueue=[], _bakeQueued={};
+  let _wardrobe=null, _mixCount=0;          // lazily built MIX_K looks; count of baked mix sheets
+  const _mixBroken={};                      // 'mix|idx' → 1 after a failed bake (permanent plain fallback)
   const _du={ type:'worker', owner:'player', _face:1 };   // blitFrame scratch (zero per-frame alloc)
 
   function _reducedMotion(){
@@ -61,6 +71,25 @@
     try{ return window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches; }catch(_){ return false; }
   }
   function _featureOn(){ return !(typeof PERF!=='undefined' && PERF.opts && PERF.opts.hubNpcs===false); }
+  function _mixOn(){
+    return typeof NPCMIX!=='undefined' &&
+           !(typeof PERF!=='undefined' && PERF.opts && PERF.opts.npcMix===false);
+  }
+  // The session wardrobe: MIX_K {head,torso,legs,owner,tint} looks from a FIXED seed, so
+  // every session/save/peer derives the identical set. Draw order here is frozen the same
+  // way the slot rng is — append new draws only.
+  function _buildWardrobe(){
+    if(_wardrobe) return _wardrobe;
+    const D=NPCMIX.DONORS;
+    const r=(typeof makeRng==='function')?makeRng(_h32(MIX_SEED)%233280):Math.random;
+    _wardrobe=[];
+    for(let i=0;i<MIX_K;i++){
+      const head=D[(r()*D.length)|0]; let torso=D[(r()*D.length)|0]; const legs=D[(r()*D.length)|0];
+      if(head===torso && torso===legs) torso=D[(D.indexOf(torso)+1)%D.length];   // never a plain unit duplicate
+      _wardrobe.push({ head, torso, legs, owner:r()<0.5?'player':'enemy', tint:(r()*TINTS.length)|0 });
+    }
+    return _wardrobe;
+  }
   function _activeCap(){
     if(_reducedMotion()) return 0;
     const sc=(typeof QUAL!=='undefined' && QUAL.npcScale!=null)?QUAL.npcScale:1;
@@ -285,6 +314,10 @@
       const baseH=(typeof UNIT_SPRITE_H!=='undefined' && UNIT_SPRITE_H[slot.sType])||48;
       slot.drawH=baseH*SPRITE_SCALE*(0.92+r()*0.16);
       slot.segs=_buildItin(slot, desc, r);
+      // wardrobe pick — APPENDED after every existing draw (slot fields above + the
+      // itinerary's draws) so adding it never reshuffled anyone's schedule or palette.
+      slot.mixIdx=(r()*MIX_K)|0;
+      slot.mixKey='mix|'+slot.mixIdx;                           // precomputed like animKey: no draw-loop alloc
       _slots.push(slot); _bound++;
     }
   }
@@ -360,7 +393,19 @@
     }
   }
 
+  function _bakeMix(key){
+    delete _bakeQueued[key];
+    if(_tinted[key] || _mixBroken[key]) return;
+    const idx=(+key.slice(4)|0)%MIX_K, w=_buildWardrobe()[idx];
+    if(_mixCount>=MIX_K){ _mixBroken[key]=1; return; }         // structural guard (≤MIX_K distinct keys exist)
+    try{
+      const anim=NPCMIX.composeTinted(w, TINTS[w.tint], TINT_ALPHA);
+      if(!anim) return;                                        // donor art still streaming — re-queued on next draw
+      _tinted[key]=anim; _mixCount++;
+    }catch(_){ _mixBroken[key]=1; }                            // broken bake: this look permanently falls back to plain
+  }
   function _bakeTint(key){
+    if(key.indexOf('mix|')===0){ _bakeMix(key); return; }
     if(_tinted[key]) return;
     const parts=key.split('|');
     const base=(typeof unitWalk==='function')?unitWalk(parts[0], parts[1]):null;
@@ -381,6 +426,14 @@
     }catch(_){ _tinted[key]=base; }
   }
   function _animFor(slot){
+    if(slot.mixKey && _mixOn() && !_mixBroken[slot.mixKey]){   // wardrobe path: mixed sheet → raw unit sheet while it bakes
+      const m=_tinted[slot.mixKey];
+      if(m) return m;
+      if(!_bakeQueued[slot.mixKey]){ _bakeQueued[slot.mixKey]=1; _bakeQueue.push(slot.mixKey); }
+      return (typeof unitWalk==='function')?unitWalk(slot.sType, slot.owner):null;
+      // NOTE: deliberately not queueing the plain tint bake here — mixed NPCs never use it,
+      // and skipping it keeps total baked sheets ≈ MIX_K instead of MIX_K + TINT_CAP.
+    }
     const key=slot.animKey;
     const t=_tinted[key];
     if(t) return t;
@@ -477,8 +530,15 @@
     x.fillStyle='#0c1117'; x.fillRect(0,0,W,H);
     const slot=_slotById(desc.id);
     let anim=null, tint=slot?slot.tint:(desc.seed%TINTS.length), sType=slot?slot.sType:'worker', owner=slot?slot.owner:'player';
-    const key=sType+'|'+owner+'|'+tint;
-    anim=_tinted[key]||((typeof unitWalk==='function')?unitWalk(sType,owner):null);
+    if(slot && slot.mixKey && _mixOn() && !_mixBroken[slot.mixKey]){   // wardrobe portrait: show the body they actually wear
+      anim=_tinted[slot.mixKey];
+      if(anim) tint=_buildWardrobe()[slot.mixIdx%MIX_K].tint;          // accent strip matches the worn look
+      else if(!_bakeQueued[slot.mixKey]){ _bakeQueued[slot.mixKey]=1; _bakeQueue.push(slot.mixKey); }
+    }
+    if(!anim){
+      const key=sType+'|'+owner+'|'+tint;
+      anim=_tinted[key]||((typeof unitWalk==='function')?unitWalk(sType,owner):null);
+    }
     if(anim && anim.ready){
       const fr=anim.frames[0];
       const sw=anim.fw, sh=anim.fh*0.62;                        // bust crop: top 62% of the frame
@@ -526,6 +586,7 @@
     _frozenC=DAY*(opts.clock!=null?opts.clock:0.45);            // frozen mid-day clock → byte-stable renders
     for(const s of _slots){ let i=0; while(i<s.segs.length-1 && _frozenC>=s.segs[i].t1) i++; s.segIdx=i; s.ci=0; }
     for(const s of _slots) _bakeTint(s.animKey);                // pre-bake all tint sheets: the measured window
+    if(_mixOn()) for(const s of _slots) _bakeTint(s.mixKey);    // + all wardrobe sheets (≤MIX_K, loader is eager under ?perf=1)
     _bakeQueue.length=0;                                        // is steady-state only (live play amortizes 1/frame)
     return _bound;
   }
@@ -535,7 +596,8 @@
     const C=_cityC();
     for(let i=0;i<cap;i++){ const s=_slots[i]; _evalSlot(s,C); if(s.onMap) onMap++; else hidden++; }
     return { bound:_bound, activeCap:cap, onMap, hidden, clock:clock(), legsPending:_legQueue.length,
-             routes:_routes.size, bakes:_tintCount, reduced:_reducedMotion() };
+             routes:_routes.size, bakes:_tintCount, reduced:_reducedMotion(),
+             mixOn:_mixOn(), mixBakes:_mixCount, wardrobe:MIX_K };
   }
 
   window.HUBNPC = { update, collectDepth, drawOne, whereIs, statusOf, npcById, pickAt, focus,

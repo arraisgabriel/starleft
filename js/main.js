@@ -409,6 +409,7 @@ function loop(now){
     if(typeof HUBNPC!=='undefined') HUBNPC.update(G,dt);             // living-city NPCs (clock/cursors/lazy legs) — cosmetic, gated on state.hub internally
     if(typeof updateHubLocate==='function') updateHubLocate(G,dt);   // condo-card locate: camera ease + ping timer (no-op unless armed)
     if(typeof updateDispatchFlight==='function') updateDispatchFlight(G,dt);   // MDC dispatch panorama bomber — advances while running=false (crawl playing)
+    if(typeof MUSIC!=='undefined' && MUSIC.battleTick) MUSIC.battleTick(G,dt);
     render(G);
     if(typeof updateSprintRipple==='function') updateSprintRipple(G);   // glue the sprint ripple to its world point
     uiTick+=dt; if(uiTick>0.2){ uiTick=0; if(running) refreshUI(); if(typeof updateHubClockChip==='function') updateHubClockChip(G); }

@@ -1,0 +1,847 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>STARLEFT — NPC Part Calibrator</title>
+<!--
+  npc-part-calibrator.html — dev-only calibration + QA tool for the hub-NPC sprite
+  randomizer (js/npc_sprites.js / NPCMIX). Serve from the repo root:
+      python3 -m http.server 8000   →   http://localhost:8000/npc-part-calibrator.html
+  (getImageData scans need http(s); file:// may taint the canvas and disable
+  auto-suggest / worst-offenders — composition itself still works.)
+
+  Three tabs:
+    Calibrate — drag the neck/hip cut lines + cx/w content guides per donor unit,
+                onion-skin the gait, auto-suggest from alpha scans.
+    Gallery   — seeded grid of random head/torso/legs recipes baked through the REAL
+                NPCMIX.composeTinted, at actual NPC size / 2x / band-debug.
+    Worst     — score every donor pair by seam content-width mismatch, show top 12.
+  Export emits the paste-ready @npc-band-cal marker block for js/npc_sprites.js.
+-->
+<style>
+  :root{ --bg:#070a11; --panel:#0e131d; --line:#1d2738; --ink:#cfe0f5; --dim:#7f93b3; --gold:#ffc846; --cyan:#5ac8ff; --purple:#aa5af0; }
+  *{ box-sizing:border-box; }
+  body{ margin:0 0 40px; background:var(--bg); color:var(--ink); font:13px/1.5 ui-monospace,Menlo,Consolas,monospace; }
+  header{ padding:10px 16px; border-bottom:1px solid var(--line); display:flex; gap:18px; align-items:baseline; flex-wrap:wrap; }
+  header h1{ font-size:15px; margin:0; letter-spacing:.5px; }
+  header .hint{ color:var(--dim); font-size:11px; }
+  nav.tabs{ display:flex; gap:6px; margin-left:auto; }
+  nav.tabs button{ padding:5px 14px; }
+  .banner{ margin:12px 16px; padding:10px 14px; border:1px solid #7a3030; background:#2a0f12; color:#ff9a9a; border-radius:6px; }
+  .wrap{ display:grid; grid-template-columns:minmax(560px,1fr) 380px; gap:16px; padding:16px; align-items:start; }
+  .panel{ background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:12px; }
+  .pad{ padding:12px 16px; }
+  canvas{ background:#04060b; border-radius:6px; display:block; image-rendering:pixelated; }
+  #calCv{ cursor:crosshair; width:100%; height:auto; }
+  .row{ display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin:8px 0; }
+  label{ color:var(--dim); font-size:11px; }
+  select,input[type=number]{ background:#0a0f18; color:var(--ink); border:1px solid var(--line); border-radius:5px; padding:4px 6px; font:inherit; }
+  input[type=range]{ flex:1; min-width:120px; }
+  button{ background:#142033; color:var(--ink); border:1px solid var(--line); border-radius:5px; padding:5px 10px; font:inherit; cursor:pointer; }
+  button:hover{ border-color:#39507a; }
+  button.on{ background:#1d3a5e; border-color:#3a78c0; }
+  textarea{ width:100%; height:260px; background:#06090f; color:#bfe0c8; border:1px solid var(--line); border-radius:6px; padding:8px; font:11px/1.45 ui-monospace,monospace; resize:vertical; }
+  .val{ color:var(--ink); min-width:46px; display:inline-block; text-align:right; }
+  .frames{ display:flex; gap:3px; flex-wrap:wrap; margin-top:6px; }
+  .frames .fchip{ width:22px; height:22px; border:1px solid var(--line); border-radius:4px; font-size:10px; color:var(--dim); display:flex; align-items:center; justify-content:center; cursor:pointer; }
+  .frames .fchip.cur{ border-color:#3a78c0; color:var(--ink); background:#13243b; }
+  .note{ color:var(--dim); font-size:11px; margin:6px 0; }
+  .copyMsg{ color:#7fe0a0; font-size:11px; }
+  table.cal{ border-collapse:collapse; font-size:11px; width:100%; margin-top:6px; }
+  table.cal th, table.cal td{ border:1px solid var(--line); padding:2px 7px; text-align:right; color:var(--dim); }
+  table.cal th{ color:var(--ink); }
+  table.cal td:first-child{ text-align:left; cursor:pointer; }
+  table.cal tr.cur td{ color:var(--ink); background:#13243b; }
+  .grid{ display:grid; gap:8px; padding:4px 0; overflow-x:auto; }
+  .cellrow{ display:flex; gap:8px; flex-wrap:wrap; padding:4px 0; }
+  .cell{ background:#04060b; border:1px solid var(--line); border-radius:6px; padding:4px; cursor:pointer; }
+  .cell.pin{ border-color:#39507a; }
+  .cell .clab{ color:var(--dim); font-size:10px; text-align:center; margin-top:2px; max-width:212px; }
+  .cell.worst .clab{ max-width:160px; }
+  .swatch{ width:12px; height:12px; border-radius:3px; border:1px solid #000; display:inline-block; vertical-align:middle; }
+  #recipeLine{ color:#9fd3a8; font-size:11px; min-height:18px; word-break:break-all; }
+  footer#status{ position:fixed; left:0; right:0; bottom:0; padding:6px 16px; background:#0a0f18; border-top:1px solid var(--line); color:var(--dim); font-size:11px; min-height:28px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>NPC PART CALIBRATOR</h1>
+  <span class="hint">Tune per-donor neck/hip band cuts for the hub-NPC compositor, QA random mixes, export the <code>@npc-band-cal</code> block into <code>js/npc_sprites.js</code>.</span>
+  <nav class="tabs">
+    <button id="tabBtnCal" class="on">Calibrate</button>
+    <button id="tabBtnGal">Gallery</button>
+    <button id="tabBtnWorst">Worst offenders</button>
+  </nav>
+</header>
+
+<div id="banner" class="banner" hidden>js/npc_sprites.js missing — tool disabled (Gallery/Worst need NPCMIX; serve from the repo root).</div>
+
+<!-- ============================ CALIBRATE ============================ -->
+<section id="tab-cal">
+  <div class="wrap">
+    <div class="panel">
+      <div class="row">
+        <label>Donor</label> <select id="donorSel"></select>
+        <button id="ownerBtn">Owner: player (red)</button>
+        <label>Frame</label>
+        <input id="frameRange" type="range" min="0" max="9" value="0">
+        <span class="val" id="frameVal">0</span>
+        <button id="prevBtn">◀</button>
+        <button id="nextBtn">▶</button>
+        <button id="playBtn">Play</button>
+        <button id="onionBtn">Onion</button>
+      </div>
+      <!-- 920 wide: left 760px = frame area, right gutter = row-width histogram
+           (drawn inside the same canvas so its rows pixel-align with the frame). -->
+      <canvas id="calCv" width="920" height="560"></canvas>
+      <div class="frames" id="frameStrip"></div>
+      <div class="note" id="loadNote"></div>
+      <div class="note">Drag the <b style="color:var(--gold)">neck</b> / <b style="color:var(--cyan)">hip</b> lines or the cx / width guides (±6px grab). Arrow keys nudge the selected line by 0.002 (Shift = 0.01). Onion stacks all 10 frames — the hip line must clear the leg-swing envelope on every frame.</div>
+    </div>
+
+    <div class="panel">
+      <div class="row"><label>selected line</label> <span class="val" id="selVal" style="min-width:60px">neck</span></div>
+      <div class="row">
+        <label style="color:var(--gold)">neckY</label><input id="inNeck" type="number" step="0.001" min="0" max="1" style="width:80px">
+        <label style="color:var(--cyan)">hipY</label><input id="inHip" type="number" step="0.001" min="0" max="1" style="width:80px">
+      </div>
+      <div class="row">
+        <label>cx</label><input id="inCx" type="number" step="0.001" min="0" max="1" style="width:80px">
+        <label>w</label><input id="inW" type="number" step="0.001" min="0.02" max="1" style="width:80px">
+        <label>phase</label><input id="inPhase" type="number" step="1" min="0" max="9" style="width:60px">
+      </div>
+      <div class="row">
+        <button id="autoBtn">Auto-suggest cx/w (alpha scan)</button>
+      </div>
+      <div class="row">
+        <button id="resetUnitBtn">Reset this unit</button>
+        <button id="resetAllBtn">Reset to shipped</button>
+      </div>
+      <table class="cal" id="calTable"></table>
+      <div class="note">Working table autosaves to <code>localStorage['starleft.npcPartCal.v1']</code> and is pushed live into NPCMIX on every change — Gallery always renders through the shipping compositor.</div>
+      <div class="row" style="margin-top:14px">
+        <button id="exportBtn">Build export</button>
+        <button id="copyBtn">Copy</button>
+        <span class="copyMsg" id="copyMsg"></span>
+      </div>
+      <textarea id="out" spellcheck="false"></textarea>
+    </div>
+  </div>
+</section>
+
+<!-- ============================ GALLERY ============================ -->
+<section id="tab-gal" hidden>
+  <div class="panel" style="margin:16px">
+    <div class="row">
+      <label>Seed</label><input id="seedIn" type="number" value="1" style="width:110px">
+      <button id="rerollBtn">Reroll</button>
+      <label>Grid</label>
+      <select id="gridSel"><option value="6x4">6×4</option><option value="8x5">8×5</option></select>
+      <button id="animBtn" class="on">Animate</button>
+      <label>Owner</label>
+      <select id="ownerFilter"><option value="mixed">mixed</option><option value="player">player</option><option value="enemy">enemy</option></select>
+      <label>Tint</label>
+      <select id="tintFilter"></select>
+    </div>
+    <div class="note">Each cell: 1× actual NPC size · 2× · band-debug with seam lines. Click a cell for its recipe JSON. Top row = the 6 un-mixed originals (baseline).</div>
+    <div id="recipeLine"></div>
+    <div class="cellrow" id="pinRow"></div>
+    <div class="grid" id="galGrid"></div>
+  </div>
+</section>
+
+<!-- ========================= WORST OFFENDERS ========================= -->
+<section id="tab-worst" hidden>
+  <div class="panel" style="margin:16px">
+    <div class="row">
+      <button id="worstBtn">Rescan</button>
+      <span class="note" id="worstMsg" style="margin:0"></span>
+    </div>
+    <div class="note">Score = |log(seam content-width ratio)| at the cut lines, after the compositor's full-frame-width x-mapping (equivalent to comparing contentWidth/frameWidth fractions — the legs frame width cancels). Higher = uglier waist/shoulder pop. Fixed neutral tint, owner=player.</div>
+    <div class="cellrow" id="worstGrid"></div>
+  </div>
+</section>
+
+<footer id="status"></footer>
+
+<!-- the SHIPPING compositor — all composition in this tool goes through NPCMIX -->
+<script src="js/npc_sprites.js"></script>
+<script>
+(function(){
+  'use strict';
+  const FRAMES = 10;
+  const LS_KEY = 'starleft.npcPartCal.v1';
+
+  /* ---- game constants (keep in sync with js/hub_npcs.js) ---- */
+  const TINTS = ['#5c6b7a','#7a5648','#5d6b4e','#6b5570','#4e6b68','#7a6a4e'];
+  const TINT_ALPHA = 0.32;
+  const SPRITE_SCALE = 0.7;                  // NPCs draw at ~70% of the unit sprite height
+  /* keep in sync with js/assets.js UNIT_SPRITE_H (donor subset). NPC actual draw
+     height = UNIT_SPRITE_H[legsDonor] * SPRITE_SCALE (≈32–45 px on screen). */
+  const UNIT_SPRITE_H = { worker:46, soldier:68, ranger:62, recruiter:54, hustler:56, lobbyist:64 };
+
+  const HAVE_MIX = (typeof NPCMIX !== 'undefined');
+  const DONORS = HAVE_MIX ? NPCMIX.DONORS.slice()
+                          : ['worker','soldier','ranger','recruiter','hustler','lobbyist'];
+
+  /* ---- unitWalk shim ----
+     npc_sprites.resolvePart() calls the GAME's unitWalk(type, owner), which doesn't
+     exist on this standalone page. Provide a minimal anim-shaped loader over plain
+     Image() loads. Owner→sheet mapping mirrors assets.js with PLAYER_IS_RED=true:
+       factionKey('player') === 'enemy'  → red  assets/units/<t>/walk_enemy.webp
+       factionKey('enemy')  === 'player' → blue assets/units/<t>/walk.webp
+     so tool colors match the game. DEF is NOT shimmed on purpose: resolvePart guards
+     `typeof DEF !== 'undefined'` and only reads facesLeft, which none of the six
+     donors sets (only bomber does) — so the flag can never matter here. */
+  const SHEETS = {};                          // 'type|owner' → {img, ready, fw, fh, frames}
+  window.unitWalk = function(type, owner){
+    owner = owner || 'player';
+    const key = type + '|' + owner;
+    let s = SHEETS[key];
+    if(!s){
+      s = SHEETS[key] = { img:new Image(), ready:false, fw:0, fh:0, frames:null, error:false };
+      const red = (owner === 'player');       // PLAYER_IS_RED — see comment above
+      s.img.onload = function(){
+        s.fw = s.img.width / FRAMES; s.fh = s.img.height;
+        s.frames = []; for(let i=0;i<FRAMES;i++) s.frames.push([i*s.fw, 0, s.fw, s.fh]);
+        s.ready = true;
+      };
+      s.img.onerror = function(){ s.error = true; status('failed to load '+s.img.src); };
+      s.img.src = 'assets/units/' + type + '/walk' + (red ? '_enemy' : '') + '.webp';
+    }
+    return s.ready ? s : null;
+  };
+  function sheetPath(type, owner){ return 'assets/units/'+type+'/walk'+(owner!=='enemy'?'_enemy':'')+'.webp'; }
+
+  /* ---- calibration table: shipped snapshot + working copy ---- */
+  // hardcoded fallback mirrors the shipped @npc-band-cal block (used only if NPCMIX is absent)
+  const FALLBACK_CAL = { version:1, units:{
+    worker:    { neckY:0.20, hipY:0.68, cx:0.50, w:0.91, phase:0 },
+    soldier:   { neckY:0.11, hipY:0.62, cx:0.50, w:0.99, phase:0 },
+    ranger:    { neckY:0.14, hipY:0.55, cx:0.50, w:0.93, phase:0 },
+    recruiter: { neckY:0.14, hipY:0.58, cx:0.50, w:0.98, phase:0 },
+    hustler:   { neckY:0.10, hipY:0.58, cx:0.50, w:0.78, phase:0 },
+    lobbyist:  { neckY:0.13, hipY:0.74, cx:0.50, w:0.72, phase:0 },
+  }};
+  const FIELDS = ['neckY','hipY','cx','w','phase'];
+  function deepCopyCal(c){
+    const o = { version:(c.version|0)||1, units:{} };
+    for(const d of DONORS){
+      const u = (c.units && c.units[d]) || FALLBACK_CAL.units[d];
+      o.units[d] = { neckY:+u.neckY, hipY:+u.hipY, cx:+u.cx, w:+u.w, phase:u.phase|0 };
+    }
+    return o;
+  }
+  // SNAPSHOT shipped values BEFORE any setCalibration (it mutates NPCMIX's table)
+  const shipped = deepCopyCal(HAVE_MIX ? NPCMIX.getCalibration() : FALLBACK_CAL);
+  // load priority: localStorage → shipped snapshot → hardcoded fallback
+  let work = (function(){
+    const base = deepCopyCal(shipped);
+    try{
+      const raw = localStorage.getItem(LS_KEY);
+      if(raw){
+        const j = JSON.parse(raw);
+        if(j && j.units){
+          if(typeof j.version === 'number') base.version = j.version|0;
+          for(const d of DONORS){ const u = j.units[d]; if(!u) continue;
+            for(const f of FIELDS){ const v = +u[f]; if(isFinite(v)) base.units[d][f] = (f==='phase') ? (v|0) : v; }
+          }
+          status('loaded working table from localStorage');
+        }
+      }
+    }catch(_){ status('localStorage table unreadable — using shipped values'); }
+    return base;
+  })();
+
+  /* ---- DOM handles ---- */
+  const $ = id => document.getElementById(id);
+  const calCv = $('calCv'), cx2 = calCv.getContext('2d');
+  const donorSel=$('donorSel'), ownerBtn=$('ownerBtn'), frameRange=$('frameRange'),
+        frameVal=$('frameVal'), frameStrip=$('frameStrip'), loadNote=$('loadNote'),
+        inNeck=$('inNeck'), inHip=$('inHip'), inCx=$('inCx'), inW=$('inW'), inPhase=$('inPhase'),
+        selVal=$('selVal'), calTable=$('calTable'), out=$('out'),
+        seedIn=$('seedIn'), gridSel=$('gridSel'), ownerFilter=$('ownerFilter'),
+        tintFilter=$('tintFilter'), pinRow=$('pinRow'), galGrid=$('galGrid'),
+        recipeLine=$('recipeLine'), worstGrid=$('worstGrid'), worstMsg=$('worstMsg'),
+        statusEl=$('status');
+
+  if(!HAVE_MIX) $('banner').hidden = false;
+
+  /* ---- tool state ---- */
+  let tab = 'cal';
+  let cur = DONORS[0];                       // calibrate-mode donor
+  let calOwner = 'player';
+  let frame = 0, playing = false, onion = false;
+  let sel = 'neck';                          // 'neck' | 'hip' | 'cx' | 'wL' | 'wR'
+  let dragging = false;
+  let sharedFi = 0;                          // shared frame index — mirrors the runtime's
+                                             // same-frame-index contract across all cells
+  let seed = 1, animOn = true;
+  let galCells = [], worstCells = [], worstDirty = true, lastWorstTry = 0;
+  const BAKES = new Map();                   // recipeKey → baked strip (composeTinted result)
+  const SCANS = {};                          // 'type|owner' → {rowW[], fw, fh, cx, w} | 'tainted'
+
+  /* ---- status footer ---- */
+  let statusT = null;
+  function status(msg){
+    statusEl.textContent = msg;
+    clearTimeout(statusT);
+    statusT = setTimeout(()=>{ statusEl.textContent=''; }, 3500);
+  }
+
+  const r3 = v => Math.round(v*1000)/1000;
+  const f3 = v => (+v).toFixed(3);
+  const clamp = (v,a,b) => Math.max(a, Math.min(b, v));
+
+  /* ---- the single change funnel: every edit flows through here so NPCMIX,
+          localStorage, the bake cache, the export and all readouts stay in step ---- */
+  function calChanged(){
+    if(HAVE_MIX) NPCMIX.setCalibration(work);            // live: gallery renders shipping code
+    try{ localStorage.setItem(LS_KEY, JSON.stringify(work)); }catch(_){ /* quota/file:// — keep going */ }
+    BAKES.clear();
+    for(const c of galCells)   { c.strip=null; c.broken=false; c.lastTry=0; }
+    for(const c of worstCells) { c.strip=null; c.broken=false; c.lastTry=0; }
+    worstDirty = true;
+    syncReadouts(); buildExport();
+  }
+
+  /* ================================================================
+     CALIBRATE MODE
+     ================================================================ */
+  function u(){ return work.units[cur]; }
+
+  // frame area = left 760px of the 920px canvas; right gutter = histogram
+  const FRAME_AREA_W = 760, HIST_X0 = 775, HIST_W = 130;
+  function frameBox(s){
+    const cw = FRAME_AREA_W, ch = calCv.height;
+    const sc = Math.min(cw/s.fw, ch/s.fh) * 0.92;
+    const dw = s.fw*sc, dh = s.fh*sc;
+    return { dx:(cw-dw)/2, dy:(ch-dh)/2, dw, dh };
+  }
+
+  /* ---- alpha-content row scan (cache per donor+owner) ----
+     frames 0 and 5 combined (the two gait extremes): per-row max content width,
+     alpha-weighted centroid → suggested cx, max row width → suggested w. */
+  function scan(type, owner){
+    const key = type + '|' + owner;
+    if(SCANS[key] === 'tainted') return null;
+    if(SCANS[key]) return SCANS[key];
+    const s = window.unitWalk(type, owner);
+    if(!s) return null;                                  // art still streaming
+    try{
+      const fw = Math.round(s.fw), fh = s.fh;
+      const oc = document.createElement('canvas'); oc.width = fw; oc.height = fh;
+      const ox = oc.getContext('2d', { willReadFrequently:true });
+      const rowW = new Array(fh).fill(0);
+      let sumX = 0, cnt = 0, maxW = 0;
+      for(const fi of [0,5]){
+        ox.clearRect(0,0,fw,fh);
+        const fr = s.frames[fi];
+        ox.drawImage(s.img, fr[0], fr[1], fr[2], fr[3], 0, 0, fw, fh);
+        const px = ox.getImageData(0,0,fw,fh).data;      // throws if tainted (file://)
+        for(let y=0; y<fh; y++){
+          let x0 = -1, x1 = -1;
+          for(let x=0; x<fw; x++){
+            if(px[(y*fw+x)*4+3] > 16){ if(x0<0) x0=x; x1=x; sumX += x+0.5; cnt++; }
+          }
+          if(x0 >= 0){ const wpx = x1-x0+1; if(wpx > rowW[y]) rowW[y]=wpx; if(wpx>maxW) maxW=wpx; }
+        }
+      }
+      const sc = { rowW, fw, fh, cx: cnt ? r3(sumX/cnt/fw) : 0.5, w: r3(maxW/fw) };
+      SCANS[key] = sc; worstDirty = true;
+      return sc;
+    }catch(err){
+      SCANS[key] = 'tainted';
+      status('alpha scan unavailable (canvas tainted — serve over http, not file://)');
+      return null;
+    }
+  }
+
+  function drawCal(){
+    const W = calCv.width, H = calCv.height;
+    cx2.clearRect(0,0,W,H);
+    cx2.fillStyle = '#04060b'; cx2.fillRect(0,0,W,H);
+    cx2.imageSmoothingEnabled = false;
+    const s = window.unitWalk(cur, calOwner);
+    loadNote.textContent = sheetPath(cur, calOwner) + (s ? ('  ('+Math.round(s.fw)+'×'+s.fh+'/frame)') : '  loading…');
+    if(!s){ cx2.fillStyle='#7f93b3'; cx2.fillText('loading '+sheetPath(cur, calOwner)+' …', 16, 24); return; }
+    const b = frameBox(s);
+    // sprite frames: onion = all 10 at 15% (gait envelope) + current at 50% for context
+    if(onion){
+      cx2.globalAlpha = 0.15;
+      for(let i=0;i<FRAMES;i++){ const fr=s.frames[i]; cx2.drawImage(s.img, fr[0],fr[1],fr[2],fr[3], b.dx,b.dy,b.dw,b.dh); }
+      cx2.globalAlpha = 0.5;
+    }
+    { const fr=s.frames[frame]; cx2.drawImage(s.img, fr[0],fr[1],fr[2],fr[3], b.dx,b.dy,b.dw,b.dh); }
+    cx2.globalAlpha = 1;
+    cx2.strokeStyle='rgba(120,160,220,.22)'; cx2.lineWidth=1;
+    cx2.strokeRect(b.dx+.5, b.dy+.5, b.dw-1, b.dh-1);
+
+    // ---- overlay lines ----
+    const d = u();
+    const yN = b.dy + d.neckY*b.dh, yH = b.dy + d.hipY*b.dh;
+    const xC = b.dx + d.cx*b.dw, xL = b.dx + (d.cx-d.w/2)*b.dw, xR = b.dx + (d.cx+d.w/2)*b.dw;
+    function hline(y, color, on, label){
+      cx2.strokeStyle = color; cx2.lineWidth = on?2.5:1.2; cx2.setLineDash([]);
+      cx2.beginPath(); cx2.moveTo(b.dx-14, y); cx2.lineTo(b.dx+b.dw+14, y); cx2.stroke();
+      cx2.fillStyle = color; cx2.font = '11px monospace';
+      cx2.fillText(label + (on?' ◄':''), b.dx+b.dw+18, y+4);
+    }
+    function vline(x, color, on, dash){
+      cx2.strokeStyle = color; cx2.lineWidth = on?2.5:1;
+      cx2.setLineDash(dash||[]);
+      cx2.beginPath(); cx2.moveTo(x, b.dy-10); cx2.lineTo(x, b.dy+b.dh+10); cx2.stroke();
+      cx2.setLineDash([]);
+    }
+    vline(xC, 'rgba(255,255,255,'+(sel==='cx'?'0.95':'0.55')+')', sel==='cx', [5,4]);
+    vline(xL, 'rgba(255,255,255,'+(sel==='wL'?'0.9':'0.3')+')', sel==='wL');
+    vline(xR, 'rgba(255,255,255,'+(sel==='wR'?'0.9':'0.3')+')', sel==='wR');
+    hline(yN, 'rgba(255,200,70,'+(sel==='neck'?'1':'0.75')+')', sel==='neck', 'neck '+f3(d.neckY));
+    hline(yH, 'rgba(90,200,255,'+(sel==='hip'?'1':'0.75')+')',  sel==='hip',  'hip '+f3(d.hipY));
+
+    // ---- histogram gutter (row content width — spot waist minima for neck/hip) ----
+    const sc = scan(cur, calOwner);                      // lazy; cached; null while streaming/tainted
+    cx2.fillStyle = '#070b13'; cx2.fillRect(HIST_X0, 0, HIST_W, H);
+    cx2.fillStyle = '#7f93b3'; cx2.font = '10px monospace';
+    cx2.fillText('row width', HIST_X0+4, 14);
+    if(sc){
+      cx2.fillStyle = 'rgba(90,160,220,0.55)';
+      for(let y=0; y<sc.fh; y++){
+        if(!sc.rowW[y]) continue;
+        const yy = b.dy + (y/sc.fh)*b.dh;
+        cx2.fillRect(HIST_X0+4, yy, (sc.rowW[y]/sc.fw)*(HIST_W-10), Math.max(1, b.dh/sc.fh));
+      }
+      cx2.strokeStyle='rgba(255,200,70,0.9)'; cx2.beginPath(); cx2.moveTo(HIST_X0,yN); cx2.lineTo(HIST_X0+HIST_W,yN); cx2.stroke();
+      cx2.strokeStyle='rgba(90,200,255,0.9)'; cx2.beginPath(); cx2.moveTo(HIST_X0,yH); cx2.lineTo(HIST_X0+HIST_W,yH); cx2.stroke();
+    }else{
+      cx2.fillText(SCANS[cur+'|'+calOwner]==='tainted' ? '(tainted)' : '(scanning…)', HIST_X0+4, 30);
+    }
+  }
+
+  /* ---- line drag / select (±6 canvas-px grab) ---- */
+  function canvasXY(ev){
+    const r = calCv.getBoundingClientRect();
+    return { x:(ev.clientX-r.left)*(calCv.width/r.width), y:(ev.clientY-r.top)*(calCv.height/r.height) };
+  }
+  function pickLine(p){
+    const s = window.unitWalk(cur, calOwner); if(!s) return null;
+    const b = frameBox(s), d = u();
+    const cand = [
+      { id:'neck', dist:Math.abs(p.y - (b.dy + d.neckY*b.dh)) },
+      { id:'hip',  dist:Math.abs(p.y - (b.dy + d.hipY*b.dh)) },
+      { id:'cx',   dist:Math.abs(p.x - (b.dx + d.cx*b.dw)) },
+      { id:'wL',   dist:Math.abs(p.x - (b.dx + (d.cx-d.w/2)*b.dw)) },
+      { id:'wR',   dist:Math.abs(p.x - (b.dx + (d.cx+d.w/2)*b.dw)) },
+    ].sort((a,c)=>a.dist-c.dist);
+    return cand[0].dist <= 6 ? cand[0].id : null;
+  }
+  function applyDrag(p){
+    const s = window.unitWalk(cur, calOwner); if(!s) return;
+    const b = frameBox(s), d = u();
+    const fy = clamp((p.y - b.dy)/b.dh, 0, 1), fx = clamp((p.x - b.dx)/b.dw, -0.5, 1.5);
+    if(sel==='neck')      d.neckY = r3(clamp(fy, 0.02, d.hipY - 0.02));
+    else if(sel==='hip')  d.hipY  = r3(clamp(fy, d.neckY + 0.02, 0.98));
+    else if(sel==='cx')   d.cx    = r3(clamp(fx, 0, 1));
+    else if(sel==='wL')   d.w     = r3(clamp(2*(d.cx - fx), 0.02, 1));
+    else if(sel==='wR')   d.w     = r3(clamp(2*(fx - d.cx), 0.02, 1));
+    calChanged();
+  }
+  calCv.addEventListener('pointerdown', ev=>{
+    const p = canvasXY(ev), hit = pickLine(p);
+    if(hit){ sel = hit; dragging = true; calCv.setPointerCapture(ev.pointerId); applyDrag(p); }
+    syncReadouts();
+  });
+  calCv.addEventListener('pointermove', ev=>{ if(dragging) applyDrag(canvasXY(ev)); });
+  calCv.addEventListener('pointerup',   ev=>{ dragging = false; });
+
+  /* ---- keyboard nudge: ±0.002, Shift = ±0.01 ---- */
+  window.addEventListener('keydown', e=>{
+    if(document.activeElement && /^(INPUT|SELECT|TEXTAREA)$/.test(document.activeElement.tagName)) return;
+    if(tab !== 'cal') return;
+    const step = e.shiftKey ? 0.01 : 0.002, d = u();
+    let used = true;
+    if(sel==='neck'){
+      if(e.key==='ArrowUp')        d.neckY = r3(clamp(d.neckY-step, 0.02, d.hipY-0.02));
+      else if(e.key==='ArrowDown') d.neckY = r3(clamp(d.neckY+step, 0.02, d.hipY-0.02));
+      else used = false;
+    }else if(sel==='hip'){
+      if(e.key==='ArrowUp')        d.hipY = r3(clamp(d.hipY-step, d.neckY+0.02, 0.98));
+      else if(e.key==='ArrowDown') d.hipY = r3(clamp(d.hipY+step, d.neckY+0.02, 0.98));
+      else used = false;
+    }else if(sel==='cx'){
+      if(e.key==='ArrowLeft')       d.cx = r3(clamp(d.cx-step, 0, 1));
+      else if(e.key==='ArrowRight') d.cx = r3(clamp(d.cx+step, 0, 1));
+      else used = false;
+    }else{ // wL / wR brackets: Left = narrower, Right = wider
+      if(e.key==='ArrowLeft')       d.w = r3(clamp(d.w-step, 0.02, 1));
+      else if(e.key==='ArrowRight') d.w = r3(clamp(d.w+step, 0.02, 1));
+      else used = false;
+    }
+    if(used){ e.preventDefault(); calChanged(); }
+  });
+
+  /* ---- readouts / table / export ---- */
+  function syncReadouts(){
+    const d = u();
+    inNeck.value = f3(d.neckY); inHip.value = f3(d.hipY);
+    inCx.value = f3(d.cx); inW.value = f3(d.w); inPhase.value = d.phase|0;
+    selVal.textContent = sel;
+    frameVal.textContent = frame; frameRange.value = frame;
+    let h = '<tr><th>unit</th><th>neckY</th><th>hipY</th><th>cx</th><th>w</th><th>ph</th></tr>';
+    for(const dn of DONORS){
+      const x = work.units[dn];
+      h += '<tr'+(dn===cur?' class="cur"':'')+' data-d="'+dn+'"><td>'+dn+'</td><td>'+f3(x.neckY)+
+           '</td><td>'+f3(x.hipY)+'</td><td>'+f3(x.cx)+'</td><td>'+f3(x.w)+'</td><td>'+(x.phase|0)+'</td></tr>';
+    }
+    calTable.innerHTML = h;
+    calTable.querySelectorAll('tr[data-d]').forEach(tr=>{
+      tr.onclick = ()=>{ cur = tr.dataset.d; donorSel.value = cur; syncReadouts(); };
+    });
+  }
+
+  /* export: EXACT paste-ready @npc-band-cal block for js/npc_sprites.js */
+  function buildExport(){
+    let s = '';
+    s += '  /* @npc-band-cal-start — tune in npc-part-calibrator.html, then paste this block back.\n';
+    s += '     neckY/hipY: band cut lines as fractions of the frame height (neck = bottom of head\n';
+    s += '     band, hip = bottom of torso band). cx/w: content center/width hints (calibrator +\n';
+    s += '     worst-offenders scoring only — the compositor maps full frame width). phase: frame\n';
+    s += '     offset applied when this donor supplies a band (gait-sync knob, 0..9).\n';
+    s += '     Values generated by npc-part-calibrator.html. */\n';
+    s += '  var NPC_BAND_CAL = {\n';
+    s += '    version: ' + ((work.version|0)||1) + ',\n';
+    s += '    units: {\n';
+    for(const d of DONORS){
+      const x = work.units[d];
+      s += '      ' + (d+':').padEnd(11) + '{ neckY:'+f3(x.neckY)+', hipY:'+f3(x.hipY)+
+           ', cx:'+f3(x.cx)+', w:'+f3(x.w)+', phase:'+(x.phase|0)+' },\n';
+    }
+    s += '    }\n';
+    s += '  };\n';
+    s += '  /* @npc-band-cal-end */\n';
+    out.value = s;
+  }
+
+  /* ================================================================
+     GALLERY MODE
+     ================================================================ */
+  // deterministic PRNG — same seed → same gallery, independent of filters
+  // (filters only override AFTER all rng draws are consumed in fixed order)
+  function mulberry32(a){
+    return function(){
+      a |= 0; a = (a + 0x6D2B79F5) | 0;
+      let t = Math.imul(a ^ (a >>> 15), 1 | a);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+  function cellRecipe(idx){
+    const rng = mulberry32(seed*6151 + idx);
+    // fixed draw order: head, torso, legs, tint, owner — never reorder (determinism)
+    const head  = DONORS[(rng()*DONORS.length)|0];
+    const torso = DONORS[(rng()*DONORS.length)|0];
+    const legs  = DONORS[(rng()*DONORS.length)|0];
+    const ti    = (rng()*TINTS.length)|0;
+    const own   = rng() < 0.5 ? 'player' : 'enemy';
+    const of = ownerFilter.value, tf = tintFilter.value;
+    const owner = (of==='mixed') ? own : of;
+    let tint = TINTS[ti];
+    if(tf==='untinted') tint = null;
+    else if(tf!=='mixed') tint = TINTS[+tf.slice(1)];
+    return { head, torso, legs, owner, tint, tintAlpha: tint ? TINT_ALPHA : 0 };
+  }
+  const recipeKey = r => [r.head,r.torso,r.legs,r.owner,r.tint||'-',r.tintAlpha].join('|');
+
+  function makeCell(recipe, label, kind){               // kind: 'gal' | 'pin' | 'worst'
+    const div = document.createElement('div');
+    div.className = 'cell' + (kind==='pin' ? ' pin' : '') + (kind==='worst' ? ' worst' : '');
+    const cv = document.createElement('canvas');
+    if(kind==='worst'){ cv.width = 160; cv.height = 200; }
+    else              { cv.width = 212; cv.height = 132; }
+    div.appendChild(cv);
+    const lab = document.createElement('div');
+    lab.className = 'clab'; lab.textContent = label;
+    div.appendChild(lab);
+    const cell = { r:recipe, key:recipeKey(recipe), cv, ctx:cv.getContext('2d'),
+                   strip:null, broken:false, lastTry:0, msg:null, kind };
+    div.onclick = ()=>{
+      const j = JSON.stringify(cell.r);
+      recipeLine.textContent = j;
+      status('recipe: ' + j);
+    };
+    return cell;
+  }
+
+  let bakesThisFrame = 0;
+  function ensureStrip(cell, now){
+    if(cell.strip || cell.broken) return;
+    if(!HAVE_MIX){ cell.msg = 'NPCMIX missing'; return; }
+    const hit = BAKES.get(cell.key);
+    if(hit){ cell.strip = hit; return; }
+    if(now - cell.lastTry < 300 || bakesThisFrame >= 4) return;   // retry timer + per-frame budget
+    cell.lastTry = now; bakesThisFrame++;
+    let st = null;
+    try{
+      st = NPCMIX.composeTinted({ head:cell.r.head, torso:cell.r.torso, legs:cell.r.legs, owner:cell.r.owner },
+                                cell.r.tint, cell.r.tintAlpha);
+    }catch(err){ cell.broken = true; cell.msg = 'bake error'; status('bake error ['+cell.key+']: '+err.message); return; }
+    if(st){ BAKES.set(cell.key, st); cell.strip = st; }           // null = donor art still streaming
+  }
+
+  function drawSeamLines(c, x, y, w, h, legs){
+    const lc = work.units[legs];
+    c.strokeStyle = 'rgba(255,200,70,0.85)'; c.lineWidth = 1;
+    c.beginPath(); c.moveTo(x, y + lc.neckY*h); c.lineTo(x+w, y + lc.neckY*h); c.stroke();
+    c.strokeStyle = 'rgba(90,200,255,0.85)';
+    c.beginPath(); c.moveTo(x, y + lc.hipY*h); c.lineTo(x+w, y + lc.hipY*h); c.stroke();
+  }
+
+  function drawCell(cell, fi){
+    const c = cell.ctx, W = cell.cv.width, H = cell.cv.height;
+    c.clearRect(0,0,W,H);
+    c.fillStyle = '#04060b'; c.fillRect(0,0,W,H);     // game bg color behind sprites
+    c.imageSmoothingEnabled = false;
+    if(!cell.strip){
+      c.fillStyle = '#7f93b3'; c.font = '10px monospace';
+      c.fillText(cell.msg || 'loading…', 8, H/2);
+      return;
+    }
+    const st = cell.strip, fr = st.frames[fi % st.frames.length], ar = st.fw/st.fh;
+    if(cell.kind === 'worst'){
+      // single 2× view + seam lines
+      const h2 = UNIT_SPRITE_H[cell.r.legs]*SPRITE_SCALE*2, w2 = h2*ar;
+      const x = (W-w2)/2, y = H-6-h2;
+      c.drawImage(st.img, fr[0],fr[1],fr[2],fr[3], x, y, w2, h2);
+      drawSeamLines(c, x, y, w2, h2, cell.r.legs);
+      return;
+    }
+    // three views: 1× actual NPC size / 2× / 120px band-debug with seam lines
+    const base = H-6;
+    const h1 = UNIT_SPRITE_H[cell.r.legs]*SPRITE_SCALE, w1 = h1*ar;   // what ships on screen
+    const h2 = h1*2, w2 = w1*2;
+    const h3 = 118, w3 = h3*ar;
+    let x = 6;
+    c.drawImage(st.img, fr[0],fr[1],fr[2],fr[3], x, base-h1, w1, h1); x += w1+8;
+    c.drawImage(st.img, fr[0],fr[1],fr[2],fr[3], x, base-h2, w2, h2); x += w2+8;
+    c.drawImage(st.img, fr[0],fr[1],fr[2],fr[3], x, base-h3, w3, h3);
+    drawSeamLines(c, x, base-h3, w3, h3, cell.r.legs);
+  }
+
+  function buildTintFilter(){
+    tintFilter.innerHTML = '';
+    const add = (v, txt)=>{ const o=document.createElement('option'); o.value=v; o.textContent=txt; tintFilter.appendChild(o); };
+    add('mixed','mixed');
+    TINTS.forEach((t,i)=> add('t'+i, 't'+i+' '+t));
+    add('untinted','untinted');
+  }
+
+  function buildGallery(){
+    galCells = []; galGrid.innerHTML = ''; pinRow.innerHTML = '';
+    const [cols, rows] = gridSel.value==='8x5' ? [8,5] : [6,4];
+    galGrid.style.gridTemplateColumns = 'repeat('+cols+', 212px)';
+    // pinned baseline row: the 6 un-mixed originals (head=torso=legs=donor) through the
+    // SAME compositor + tint path. Tint per filter: specific tint → that tint;
+    // untinted → none; mixed → TINTS[i] (one of each — doubles as a tint chart).
+    // Owner per filter: mixed → player (the common civilian case).
+    DONORS.forEach((d,i)=>{
+      const tf = tintFilter.value, of = ownerFilter.value;
+      let tint = TINTS[i % TINTS.length];
+      if(tf==='untinted') tint = null; else if(tf!=='mixed') tint = TINTS[+tf.slice(1)];
+      const owner = (of==='mixed') ? 'player' : of;
+      const r = { head:d, torso:d, legs:d, owner, tint, tintAlpha: tint ? TINT_ALPHA : 0 };
+      const cell = makeCell(r, d + ' (original)', 'pin');
+      galCells.push(cell); pinRow.appendChild(cell.cv.parentElement);
+    });
+    for(let i=0; i<cols*rows; i++){
+      const r = cellRecipe(i);
+      const lab = 'H '+r.head.slice(0,4)+' · T '+r.torso.slice(0,4)+' · L '+r.legs.slice(0,4)
+                + ' · '+r.owner + (r.tint ? ' · '+r.tint : ' · raw');
+      const cell = makeCell(r, lab, 'gal');
+      galCells.push(cell); galGrid.appendChild(cell.cv.parentElement);
+    }
+  }
+
+  function drawGallery(now){
+    bakesThisFrame = 0;
+    const fi = animOn ? sharedFi : 0;
+    for(const cell of galCells){ ensureStrip(cell, now); drawCell(cell, fi); }
+  }
+
+  /* ================================================================
+     WORST-OFFENDERS MODE
+     ================================================================ */
+  const WORST_OWNER = 'player';                          // fixed owner for scan parity
+  // content width (as a fraction of frame width) at cut line `frac`, max over a 3-row
+  // window for robustness against single-row noise.
+  function seamFrac(type, frac){
+    const sc = scan(type, WORST_OWNER); if(!sc) return null;
+    const y = clamp(Math.round(frac*sc.fh), 0, sc.fh-1);
+    let w = 0;
+    for(let dy=-1; dy<=1; dy++) w = Math.max(w, sc.rowW[clamp(y+dy, 0, sc.fh-1)]);
+    return Math.max(w, 1) / sc.fw;                       // floor 1px: avoids log(0)
+  }
+  /* score = |log(widthUpper_scaled / widthLower)|. The compositor maps full source
+     frame width → full target frame width, so the upper band's on-target width is
+     wUpper * fwLegs/fwUpper — dividing by wLower * fwLegs/fwLower the legs frame
+     width cancels, leaving the normalized fractions compared below. */
+  function buildWorst(){
+    if(!HAVE_MIX){ worstMsg.textContent = 'NPCMIX missing — disabled'; return; }
+    const missing = DONORS.filter(d => !scan(d, WORST_OWNER));
+    if(missing.length){
+      worstMsg.textContent = 'waiting for donor art / scans: ' + missing.join(', ') + ' …';
+      worstDirty = true;                                  // loop retries until scans land
+      return;
+    }
+    const list = [];
+    for(const a of DONORS) for(const b of DONORS){
+      if(a === b) continue;
+      // hip seam: torso a stacked on legs b — composite isolates it (head=torso donor)
+      let fu = seamFrac(a, work.units[a].hipY), fl = seamFrac(b, work.units[b].hipY);
+      if(fu && fl) list.push({ seam:'hip', up:a, lo:b, score:Math.abs(Math.log(fu/fl)),
+                               recipe:{ head:a, torso:a, legs:b, owner:WORST_OWNER, tint:TINTS[0], tintAlpha:TINT_ALPHA } });
+      // neck seam: head a stacked on torso b — composite isolates it (legs=torso donor)
+      fu = seamFrac(a, work.units[a].neckY); fl = seamFrac(b, work.units[b].neckY);
+      if(fu && fl) list.push({ seam:'neck', up:a, lo:b, score:Math.abs(Math.log(fu/fl)),
+                               recipe:{ head:a, torso:b, legs:b, owner:WORST_OWNER, tint:TINTS[0], tintAlpha:TINT_ALPHA } });
+    }
+    list.sort((p,q)=> q.score - p.score);
+    worstCells = []; worstGrid.innerHTML = '';
+    for(const e of list.slice(0,12)){
+      const lab = e.seam+' seam: '+e.up+' ▾ '+e.lo+'  ·  '+e.score.toFixed(3);
+      const cell = makeCell(e.recipe, lab, 'worst');
+      worstCells.push(cell); worstGrid.appendChild(cell.cv.parentElement);
+    }
+    worstMsg.textContent = list.length + ' pairs scored (owner='+WORST_OWNER+', tint '+TINTS[0]+') — top 12 shown, worst first';
+    worstDirty = false;
+  }
+  function drawWorst(now){
+    if(worstDirty && now - lastWorstTry > 500){ lastWorstTry = now; buildWorst(); }
+    bakesThisFrame = 0;
+    for(const cell of worstCells){ ensureStrip(cell, now); drawCell(cell, sharedFi); }
+  }
+
+  /* ================================================================
+     UI WIRING
+     ================================================================ */
+  DONORS.forEach(d=>{ const o=document.createElement('option'); o.value=d; o.textContent=d; donorSel.appendChild(o); });
+  donorSel.value = cur;
+  buildTintFilter();
+
+  function buildFrameStrip(){
+    frameStrip.innerHTML = '';
+    for(let i=0;i<FRAMES;i++){
+      const c = document.createElement('div');
+      c.className = 'fchip' + (i===frame ? ' cur' : '');
+      c.textContent = i;
+      c.onclick = ()=>{ frame=i; playing=false; $('playBtn').classList.remove('on'); syncReadouts(); buildFrameStrip(); };
+      frameStrip.appendChild(c);
+    }
+  }
+  function setFrame(f){ frame = ((f%FRAMES)+FRAMES)%FRAMES; syncReadouts(); buildFrameStrip(); }
+
+  donorSel.addEventListener('change', e=>{ cur = e.target.value; syncReadouts(); });
+  ownerBtn.onclick = ()=>{
+    calOwner = (calOwner==='player') ? 'enemy' : 'player';
+    ownerBtn.textContent = 'Owner: ' + (calOwner==='player' ? 'player (red)' : 'enemy (blue)');
+  };
+  frameRange.addEventListener('input', e=>{ setFrame(+e.target.value); });
+  $('prevBtn').onclick = ()=> setFrame(frame-1);
+  $('nextBtn').onclick = ()=> setFrame(frame+1);
+  $('playBtn').onclick = e=>{ playing = !playing; e.target.classList.toggle('on', playing); };
+  $('onionBtn').onclick = e=>{ onion = !onion; e.target.classList.toggle('on', onion); };
+
+  function numInput(el, field, lo, hi, integer){
+    el.addEventListener('input', ()=>{
+      let v = +el.value; if(!isFinite(v)) return;
+      v = clamp(v, lo, hi); if(integer) v = v|0;
+      const d = u();
+      if(field==='neckY') v = clamp(v, 0.02, d.hipY-0.02);
+      if(field==='hipY')  v = clamp(v, d.neckY+0.02, 0.98);
+      d[field] = integer ? v : r3(v);
+      calChanged();
+    });
+  }
+  numInput(inNeck,'neckY',0,1,false); numInput(inHip,'hipY',0,1,false);
+  numInput(inCx,'cx',0,1,false);      numInput(inW,'w',0.02,1,false);
+  numInput(inPhase,'phase',0,9,true);
+
+  $('autoBtn').onclick = ()=>{
+    const sc = scan(cur, calOwner);
+    if(!sc){ status('scan unavailable — donor art still loading (or canvas tainted)'); return; }
+    const d = u(); d.cx = sc.cx; d.w = sc.w;
+    calChanged();
+    status('auto-suggest applied for '+cur+': cx='+f3(sc.cx)+' w='+f3(sc.w)+' — check the histogram for waist minima');
+  };
+  $('resetUnitBtn').onclick = ()=>{
+    work.units[cur] = Object.assign({}, shipped.units[cur]);
+    calChanged(); status(cur+' reset to shipped values');
+  };
+  $('resetAllBtn').onclick = ()=>{
+    work = deepCopyCal(shipped);
+    calChanged(); status('all units reset to the shipped calibration');
+  };
+
+  $('exportBtn').onclick = ()=>{ buildExport(); out.scrollIntoView({behavior:'smooth'}); };
+  $('copyBtn').onclick = ()=>{
+    out.select();
+    try{ document.execCommand('copy'); }catch(_){ }
+    if(navigator.clipboard) navigator.clipboard.writeText(out.value).catch(()=>{});
+    $('copyMsg').textContent = 'copied ✓';
+    setTimeout(()=>{ $('copyMsg').textContent=''; }, 1500);
+  };
+
+  // gallery controls
+  seedIn.addEventListener('change', ()=>{ seed = (+seedIn.value|0); buildGallery(); });
+  $('rerollBtn').onclick = ()=>{
+    seed = (Math.random()*1e9)|0; seedIn.value = seed;
+    BAKES.clear(); buildGallery();
+    status('rerolled — seed '+seed);
+  };
+  gridSel.addEventListener('change', buildGallery);
+  ownerFilter.addEventListener('change', buildGallery);
+  tintFilter.addEventListener('change', buildGallery);
+  $('animBtn').onclick = e=>{ animOn = !animOn; e.target.classList.toggle('on', animOn); };
+  $('worstBtn').onclick = ()=>{ worstDirty = true; lastWorstTry = 0; };
+
+  // tabs
+  const TABS = { cal:['tab-cal','tabBtnCal'], gal:['tab-gal','tabBtnGal'], worst:['tab-worst','tabBtnWorst'] };
+  function setTab(t){
+    tab = t;
+    for(const k in TABS){
+      $(TABS[k][0]).hidden = (k!==t);
+      $(TABS[k][1]).classList.toggle('on', k===t);
+    }
+    if(t==='worst') worstDirty = true;
+  }
+  $('tabBtnCal').onclick   = ()=> setTab('cal');
+  $('tabBtnGal').onclick   = ()=> setTab('gal');
+  $('tabBtnWorst').onclick = ()=> setTab('worst');
+
+  /* ---- master loop: one rAF drives play scrub, gallery animation and worst retries.
+          sharedFi = (t/100|0)%10 — every cell shows the SAME frame index, mirroring the
+          runtime contract (all three donors sampled at one index), so gait mismatch is
+          visible exactly as it ships. ---- */
+  function loop(now){
+    sharedFi = ((now/100)|0) % FRAMES;
+    if(tab==='cal'){
+      if(playing && sharedFi !== frame) setFrame(sharedFi);
+      drawCal();
+    }else if(tab==='gal'){
+      drawGallery(now);
+    }else{
+      drawWorst(now);
+    }
+    requestAnimationFrame(loop);
+  }
+
+  /* ---- go ---- */
+  if(HAVE_MIX) NPCMIX.setCalibration(work);              // push working table before first bake
+  for(const d of DONORS){ window.unitWalk(d,'player'); window.unitWalk(d,'enemy'); }  // kick off all loads
+  buildFrameStrip(); syncReadouts(); buildExport(); buildGallery();
+  if(!HAVE_MIX) status('NPCMIX missing — calibration overlay still works, composition disabled');
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>

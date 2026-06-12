@@ -15,9 +15,12 @@ const MUSIC = (function(){
 
   let mainAudio=null, loopAudio=null, cineAudio=null, ambAudio=null, ambKey=null;
   const AMB_VOL = 0.4;   // ambient beds sit far under the menu theme — sparse, not a soundtrack
+  const BATTLE_VOL = 0.6;
   // Web-Audio feedback-delay echo for the cinematic cue's finale (intensifies, then "resounds" after the source stops)
   let echoCtx=null, echoSrc=null, echoDelay=null, echoFb=null, echoWet=null, echoDry=null, echoTimer=null, echoActive=false;
   let inMenu=false, started=false, pendingStart=false, initDone=false, startTimer=null;
+  let battleMain=null, battleLoop=null, battleVictory=null;
+  let _btState='off', _btTimer=0, _ambDuck=1;
 
   function makeAudio(src, loop){
     const a = new Audio();
@@ -105,6 +108,43 @@ const MUSIC = (function(){
     if(echoCtx){ try{ echoSrc&&echoSrc.disconnect(); }catch(_){} try{ echoCtx.close(); }catch(_){} }
     echoCtx=echoSrc=echoDelay=echoFb=echoWet=echoDry=null; echoActive=false;
   }
+  function _startBattleMain(){
+    if(!battleMain){
+      battleMain = makeAudio(typeof MUSIC_BASE!=='undefined' ? MUSIC_BASE+'cyberpunk-rts-battle-main.mp3' : '', false);
+      battleMain.onended = ()=>{ if(_btState==='main') _startBattleLoop(); };
+    }
+    battleMain.volume = volume * BATTLE_VOL;
+    try{ battleMain.currentTime=0; }catch(_){}
+    _btState = 'main';
+    const p = battleMain.play(); if(p && p.catch) p.catch(()=>{});
+  }
+  function _startBattleLoop(){
+    if(!battleLoop){
+      battleLoop = makeAudio(typeof MUSIC_BASE!=='undefined' ? MUSIC_BASE+'cyberpunk-rts-battle-loop.mp3' : '', true);
+    }
+    try{ if(battleMain){ battleMain.pause(); battleMain.currentTime=0; } }catch(_){}
+    battleLoop.volume = volume * BATTLE_VOL;
+    _btState = 'loop';
+    const p = battleLoop.play(); if(p && p.catch) p.catch(()=>{});
+  }
+  function _startVictory(){
+    if(!battleVictory){
+      battleVictory = makeAudio(typeof MUSIC_BASE!=='undefined' ? MUSIC_BASE+'cyberpunk-rts-battle-victory.mp3' : '', false);
+      battleVictory.onended = ()=>{ if(_btState==='victory') _stopBattle(); };
+    }
+    try{ if(battleLoop){ battleLoop.pause(); battleLoop.currentTime=0; } }catch(_){}
+    try{ if(battleMain){ battleMain.pause(); battleMain.currentTime=0; } }catch(_){}
+    battleVictory.volume = volume * BATTLE_VOL;
+    try{ battleVictory.currentTime=0; }catch(_){}
+    _btState = 'victory';
+    const p = battleVictory.play(); if(p && p.catch) p.catch(()=>{});
+  }
+  function _stopBattle(){
+    if(battleMain){ try{ battleMain.pause(); battleMain.currentTime=0; }catch(_){} }
+    if(battleLoop){ try{ battleLoop.pause(); battleLoop.currentTime=0; }catch(_){} }
+    if(battleVictory){ try{ battleVictory.pause(); battleVictory.currentTime=0; }catch(_){} }
+    _btState='off'; _btTimer=0;
+  }
   function bootGateOpen(){
     const gate = document.getElementById('bootGate');
     return !!(gate && gate.style.display !== 'none' && !gate.classList.contains('hide'));
@@ -172,7 +212,7 @@ const MUSIC = (function(){
       if(!enabled || typeof sfxPath!=='function') return;
       ambKey = key;
       ambAudio = makeAudio(sfxPath(key), true);
-      ambAudio.volume = volume * AMB_VOL;
+      ambAudio.volume = volume * AMB_VOL * _ambDuck;
       const p = ambAudio.play(); if(p && p.catch) p.catch(()=>{});   // autoplay-blocked → stays silent
     },
     stopAmbient(){ if(ambAudio){ try{ ambAudio.pause(); }catch(_){} ambAudio=null; ambKey=null; } },
@@ -194,17 +234,50 @@ const MUSIC = (function(){
     isEnabled(){ return enabled; },
     setEnabled(v){
       enabled=!!v; save();
-      if(!enabled){ pauseAll(false); this.stopCinematic(); this.stopAmbient(); killEcho(); }   // mute: kill any ringing echo immediately
+      if(!enabled){ pauseAll(false); this.stopCinematic(); this.stopAmbient(); killEcho(); _stopBattle(); _ambDuck=1; }   // mute: kill any ringing echo immediately
       else if(inMenu && !bootGateOpen()) this.enterMenu();
     },
     toggle(){ this.setEnabled(!enabled); return enabled; },
+    battleTick(state, dt){
+      if(!enabled || !state || !state.entities || state.hub){
+        if(_btState!=='off') _stopBattle();
+        _ambDuck=1;
+        return;
+      }
+      const combatActive = state.entities.some(u=>{
+        if(u.dead || u.kind!=='unit' || u.owner!=='player' || u.storedIn) return false;
+        return (u.autoTarget && !u.autoTarget.dead)
+            || (u.cmd && u.cmd.type==='attack' && u.cmd.target && !u.cmd.target.dead)
+            || (u._lastHit && (state.time - u._lastHit) < 1.5);
+      });
+      const allEnemiesDead = !state.entities.some(e=>!e.dead && e.owner==='enemy' && e.kind==='unit' && !e.storedIn);
+      const battleOver = allEnemiesDead || !!state._villainEscaped || !!state.extractReady || !!state.over;
+      if(_btState==='off'){
+        if(combatActive){ _btState='pending'; _btTimer=0; }
+      } else if(_btState==='pending'){
+        if(!combatActive){ _btState='off'; }
+        else{ _btTimer+=dt; if(_btTimer>=3) _startBattleMain(); }
+      } else if(_btState==='main'){
+        if(battleOver) _startVictory();
+      } else if(_btState==='loop'){
+        if(battleOver) _startVictory();
+      } else if(_btState==='victory'){
+        // let it play through; _stopBattle() called by onended
+      }
+      const duckTarget = (_btState==='main'||_btState==='loop'||_btState==='victory') ? 0.12 : 1;
+      _ambDuck += (duckTarget - _ambDuck) * Math.min(1, dt*1.5);
+      if(ambAudio) ambAudio.volume = Math.max(0, Math.min(1, AMB_VOL*volume*_ambDuck));
+    },
     getVolume(){ return volume; },
     setVolume(v){
       volume=Math.max(0, Math.min(1, +v || 0));
       if(mainAudio) mainAudio.volume=volume;
       if(loopAudio) loopAudio.volume=volume;
       if(cineAudio) cineAudio.volume=volume;
-      if(ambAudio) ambAudio.volume=volume*AMB_VOL;
+      if(ambAudio) ambAudio.volume=volume*AMB_VOL*_ambDuck;
+      if(battleMain) battleMain.volume=volume*BATTLE_VOL;
+      if(battleLoop) battleLoop.volume=volume*BATTLE_VOL;
+      if(battleVictory) battleVictory.volume=volume*BATTLE_VOL;
       save();
     },
   };

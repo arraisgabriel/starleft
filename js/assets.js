@@ -111,10 +111,9 @@ function waterSpriteFor(biome, slot, frame){
 const BUILDING_FRAMES = 9;
 const BUILDING_FPS = 0.9;               // slow ambient neon-flicker playback
 const BUILDING_DRAW_SCALE = 2.5;        // all building sprites drawn this much bigger (footprint unchanged)
-const BUILDING_TYPE_SCALE = { hq:0.65, intel:0.5 };   // per-type tweak on top of BUILDING_DRAW_SCALE (HQ reads too big at full 2.5×; intel's composite is extremely tall-thin)
-// Per-type vertical stretch of the drawn sprite (footprint unchanged). intel compresses its
-// ~15:1 composite strip so the tower lands ~11 tiles tall instead of ~40 on a 1×1 footprint.
-const BUILDING_TALL = { hq:1.5625, intel:0.55 };
+const BUILDING_TYPE_SCALE = { hq:0.65, intel:0.25 };   // per-type tweak on top of BUILDING_DRAW_SCALE (HQ reads too big at full 2.5×; intel is a needle-thin mast)
+// Per-type vertical stretch of the drawn sprite (footprint unchanged).
+const BUILDING_TALL = { hq:1.5625 };
 function buildingDrawScale(type){ return BUILDING_DRAW_SCALE*(BUILDING_TYPE_SCALE[type]||1); }
 // Per-type frame-count override: most buildings are 9-frame neon-flicker strips, but the Training
 // Grounds is ONE static high-res still (no animation) — see _dev/gen/gen_training.mjs.
@@ -144,20 +143,53 @@ for(const t of BUILDING_TYPES) BUILDING_ANIM[t] = { player:loadBuildingStrip(t,'
    Baked lazily per faction onto an offscreen canvas strip once both source strips load;
    stored ONLY in BUILDING_ANIM (never on entities — canvas refs on entities corrupt saves).
    Until the bake is possible, buildingSprite returns null → procedural fallback box. */
-const INTEL_W = 0.20, INTEL_H = 2.0, INTEL_HEAD_SINK = 0.25;
+// INTEL_W: mast width as a fraction of the HQ art's OPAQUE width. INTEL_TALLX: the finished
+// mast's on-screen height as a multiple of the HQ's on-screen height (hand-tuned).
+// Source frames carry large transparent padding, so both are cropped to their opaque pixel
+// bounds before composing — otherwise the stretched padding leaves the head floating in a gap.
+const INTEL_W = 0.20, INTEL_TALLX = 1.0, INTEL_HEAD_SINK = 0.25;
 BUILDING_ANIM.intel = { player:{ready:false}, enemy:{ready:false}, ao:{ready:false} };
+// Opaque bounding box of one strip frame (alpha>8, +2px margin clamped to the frame).
+// minWFrac (optional): push the TOP edge down to the first row whose opaque span is at least
+// that fraction of the full width — skips thin rooftop antennas that would stretch into a
+// disconnected hairline when the art is scaled to an extreme aspect.
+function _opaqueBounds(img, sx, sw, sh, minWFrac){
+  const c=document.createElement('canvas'); c.width=sw; c.height=sh;
+  const g=c.getContext('2d'); g.drawImage(img, sx,0,sw,sh, 0,0,sw,sh);
+  let d; try{ d=g.getImageData(0,0,sw,sh).data; }catch(_){ return null; }
+  let x0=sw,y0=sh,x1=-1,y1=-1;
+  const rowW=new Array(sh).fill(0);
+  for(let y=0;y<sh;y++){ let rx0=sw,rx1=-1;
+    for(let x=0;x<sw;x++){ if(d[(y*sw+x)*4+3]>8){ if(x<rx0)rx0=x; if(x>rx1)rx1=x; } }
+    if(rx1>=0){ rowW[y]=rx1-rx0+1; if(rx0<x0)x0=rx0; if(rx1>x1)x1=rx1; if(y<y0)y0=y; if(y>y1)y1=y; }
+  }
+  if(x1<0) return null;
+  if(minWFrac){ const need=(x1-x0+1)*minWFrac; for(let y=y0;y<=y1;y++){ if(rowW[y]>=need){ y0=y; break; } } }
+  x0=Math.max(0,x0-2); y0=Math.max(0,y0-2); x1=Math.min(sw-1,x1+2); y1=Math.min(sh-1,y1+2);
+  return { x:x0, y:y0, w:x1-x0+1, h:y1-y0+1 };
+}
+// Crop fractions measured from the shipped player art (enemy/_ao are recolors of the same
+// geometry). Used when canvas pixel reads are unavailable — file:// taints the canvas, so
+// getImageData throws and _opaqueBounds returns null. Without this the mast never bakes there.
+const INTEL_CROP_FALLBACK = { hq:{x:0, y:0.129, w:1, h:0.871}, turret:{x:0, y:0, w:1, h:1} };
+function _fracBox(a, f){ return { x:Math.round(f.x*a.fw), y:Math.round(f.y*a.fh), w:Math.round(f.w*a.fw), h:Math.round(f.h*a.fh) }; }
 function bakeIntelStrip(faction){
   const hq=BUILDING_ANIM.hq[faction], tur=BUILDING_ANIM.turret[faction];
   if(!hq||!hq.ready||!tur||!tur.ready) return null;
-  const fw=Math.max(2, Math.round(hq.fw*INTEL_W));
-  const shaftH=Math.round(hq.fh*INTEL_H);
-  const headH=Math.max(2, Math.round(tur.fh*(fw/tur.fw)));
-  const sink=Math.round(headH*INTEL_HEAD_SINK), fh=shaftH+headH-sink;
+  const hqB=_opaqueBounds(hq.img, 0, hq.fw, hq.fh, 0.5) || _fracBox(hq, INTEL_CROP_FALLBACK.hq);
+  const tuB=_opaqueBounds(tur.img, 0, tur.fw, tur.fh)   || _fracBox(tur, INTEL_CROP_FALLBACK.turret);
+  const fw=Math.max(2, Math.round(hqB.w*INTEL_W));
+  const headH=Math.max(2, Math.round(tuB.h*(fw/tuB.w)));
+  const sink=Math.round(headH*INTEL_HEAD_SINK);
+  // canvas aspect chosen so the DRAWN mast = INTEL_TALLX × the HQ's drawn height (buildingDrawBox math)
+  const hqDh = DEF.hq.w*TILE*1.08*buildingDrawScale('hq')*(hq.fh/hq.fw)*(BUILDING_TALL.hq||1);
+  const dw   = DEF.intel.w*TILE*1.08*buildingDrawScale('intel');
+  const fh   = Math.max(headH+4, Math.round(fw*(INTEL_TALLX*hqDh)/dw));
   const cv=document.createElement('canvas'); cv.width=fw*BUILDING_FRAMES; cv.height=fh;
   const c=cv.getContext('2d');
   for(let i=0;i<BUILDING_FRAMES;i++){
-    c.drawImage(hq.img,  i*hq.fw,0,hq.fw,hq.fh,    i*fw, headH-sink, fw, shaftH);  // shaft first
-    c.drawImage(tur.img, i*tur.fw,0,tur.fw,tur.fh, i*fw, 0,          fw, headH);   // head in front, sunk into the shaft top
+    c.drawImage(hq.img,  i*hq.fw+hqB.x, hqB.y, hqB.w, hqB.h,  i*fw, headH-sink, fw, fh-(headH-sink));  // shaft (cropped art, fills to the ground)
+    c.drawImage(tur.img, i*tur.fw+tuB.x, tuB.y, tuB.w, tuB.h, i*fw, 0,          fw, headH);            // head in front, sunk into the shaft top
   }
   return { img:cv, ready:true, fw, fh };
 }
