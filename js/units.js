@@ -4,6 +4,7 @@
    ===================================================================== */
 function findPath(state, sx,sy, gx,gy){
   const W=state.W,H=state.H, B=state.blocked;
+  const RC=state.roadCost;   // per-tile cost overlay (HUB roads); null on mission maps → unchanged behaviour
   if(gx<0||gy<0||gx>=W||gy>=H) return null;
   // if goal blocked, find nearest passable around it
   if(B[gy*W+gx]){
@@ -23,9 +24,12 @@ function findPath(state, sx,sy, gx,gy){
   gScore.set(key(sx,sy),0);
   open.push({x:sx,y:sy,f:h(sx,sy)});
   const dirs=[[1,0],[-1,0],[0,1],[0,-1],[1,1],[1,-1],[-1,1],[-1,-1]];
+  // weighted pathfinding (roadCost) explores more nodes; the HUB has W*H≈12.6k cells, above the
+  // default 9000 cap, so scale it up there to avoid null→straight-line fallback through buildings.
+  const ITER_CAP = RC ? Math.max(9000, W*H*3) : 9000;
   let iter=0;
   while(open.length){
-    if(++iter>9000) break;
+    if(++iter>ITER_CAP) break;
     // get lowest f (linear; fine for our sizes)
     let bi=0; for(let i=1;i<open.length;i++) if(open[i].f<open[bi].f) bi=i;
     const cur=open.splice(bi,1)[0];
@@ -43,8 +47,9 @@ function findPath(state, sx,sy, gx,gy){
       if(dx&&dy){ // no diagonal through wall corners
         if(B[key(cur.x+dx,cur.y)]||B[key(cur.x,cur.y+dy)]) continue;
       }
-      const ng=cg + ((dx&&dy)?1.414:1);
       const nk=key(nx,ny);
+      const step=(dx&&dy)?1.414:1;
+      const ng=cg + (RC ? step*RC[nk] : step);   // road/sidewalk=1.0, off-road=penalty → prefer the network
       if(!gScore.has(nk)||ng<gScore.get(nk)){
         gScore.set(nk,ng); came.set(nk,key(cur.x,cur.y));
         const f=ng+h(nx,ny);
@@ -609,6 +614,7 @@ function isHostile(a,b){
   return a.owner!==b.owner;
 }
 function nearestEnemy(state, e, radius){
+  if(state.hub) return null;   // the H.U.B. is a safe zone — nothing auto-acquires (the neutral Wake/HQ rooftop gun reads strolling vets as 'hostile' otherwise)
   let best=null,bd=radius*radius; const air=canHitAir(e);
   for(const o of state.entities){
     if(o.dead||o.storedIn||o.owner==null||o._untargetable||!isHostile(e,o)) continue;   // _untargetable: the ninja while smoke-bombed
@@ -802,6 +808,9 @@ function updateUnit(state,u,dt){
   // ---- handle attack target (explicit or auto) ----
   let atk = (cmd&&cmd.type==='attack'&&cmd.target&&!cmd.target.dead) ? cmd.target : null;
   if(!atk && u.autoTarget && !u.autoTarget.dead) atk=u.autoTarget;
+  // H.U.B. safe zone: no fighting, ever — drop explicit attack orders, retaliation locks and
+  // stale targets carried in from a loaded save so units never even play the shoot animation.
+  if(state.hub){ u.autoTarget=null; atk=null; if(cmd&&cmd.type==='attack'){ cmd=u.cmd=null; } }
   // SPRINT: ignore the fight entirely. Whatever set a target (auto-acquire, retaliation in
   // damage(), a callToArms rally, or an explicit attack cmd), a sprinting unit drops it and
   // falls through to the move handler — so it keeps running and never fights back.
@@ -1170,6 +1179,8 @@ function callToArms(state, foe, side, from){
 }
 
 function damage(state, t, amt, src){
+  if(state.hub) return;   // the H.U.B. is a safe zone — no entity (building, vet, NPC) ever loses HP there
+
   if(t.dead||t.storedIn) return;
   if(t._godmode) return;   // sandbox god-mode (localhost test tool): ignore all incoming damage (flag set only by js/sandbox.js)
   if(t.captive) return;   // imprisoned captives (Biba + the intern) are invulnerable until Nino frees them — neither friendly fire nor splash can kill them

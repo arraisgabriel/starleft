@@ -3,6 +3,30 @@ var BUILDING_NEON_MAPS = {
   "version": 1,
   "frames": 9,
   "sprites": {
+    // HAND-AUTHORED (keep when regenerating): The Wake's A&O-green conduit — a VERTICAL strip
+    // covering the central cyan window column of hq_player.webp frames 4 (bottom stack segment)
+    // and 5 (top segment); bboxes measured from the art. Tall thin 'spot' ellipse = vertical neon
+    // column; same green as the wake's lightning aura; slow megaBreath pulse (in sync, phase 0).
+    "wake_hq": {
+      "frameSize": { "w": 346, "h": 487 },
+      "frames": [
+        { "glows": [] },
+        { "glows": [] },
+        { "glows": [] },
+        { "glows": [] },
+        { "glows": [
+          { "id": 0, "kind": "spot", "x": 0.5434, "y": 0.577, "rx": 0.042, "ry": 0.175,
+            "rot": 0.0, "color": [74, 238, 96], "alpha": 1.0, "phase": 0.0, "pulse": 1.3, "sparkle": 0 }
+        ] },
+        { "glows": [
+          { "id": 0, "kind": "spot", "x": 0.5405, "y": 0.578, "rx": 0.046, "ry": 0.27,
+            "rot": 0.0, "color": [74, 238, 96], "alpha": 1.0, "phase": 0.0, "pulse": 1.3, "sparkle": 0 }
+        ] },
+        { "glows": [] },
+        { "glows": [] },
+        { "glows": [] }
+      ]
+    },
     "barracks_enemy": {
       "frameSize": {
         "w": 472,

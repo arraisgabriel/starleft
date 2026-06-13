@@ -662,6 +662,8 @@ function newHubMap(){
   for(let i=0;i<W*H;i++) state.blocked[i]=baseBlocked(state,i);
   if(typeof buildWaterDepth==='function') buildWaterDepth(state);
   hubPlacePois(state);
+  hubBuildRoads(state);          // procedural road+sidewalk network (footprints must be placed first)
+  hubBuildRoadCost(state);       // pathfinding bias overlay derived from the road tiles
   hubSpawnRoster(state);
   if(typeof hubSpawnTrainees==='function') hubSpawnTrainees(state);
   if(typeof hubSpawnHealers==='function') hubSpawnHealers(state);
@@ -707,6 +709,208 @@ function hubResizeBuilding(state,e,w,h){
   e.w=nw; e.h=nh; e.x=(e.tx+e.w/2)*TILE; e.y=(e.ty+e.h/2)*TILE;
   if(typeof markBuilding==='function') markBuilding(state,e,true);
 }
+
+/* =====================================================================
+   HUB ROADS + SIDEWALKS  (procedurally generated, rendered as colored
+   canvas tiles by drawRoads() in render.js; pathfinding-biased via
+   state.roadCost). All grids are TRANSIENT — rebuilt by hubBuildRoads()
+   on every newHubMap() and on save-load, never serialized. Generation
+   uses NO RNG so solo/host/client/reload agree byte-for-byte.
+   ===================================================================== */
+// First unblocked tile scanning the row(s) below a footprint — the building's "door".
+// Shared by the road network and the NPC graph (hub_npcs.js) so both terminate on the
+// same tile.
+function hubDoorstep(state, e){
+  const W=state.W, H=state.H, B=state.blocked;
+  const cx=e.tx + ((e.w||1)>>1);
+  for(let row=0; row<3; row++){
+    const ty=e.ty+(e.h||1)+row; if(ty>=H) break;
+    for(const off of [0,1,-1,2,-2,3,-3,4,-4]){
+      const tx=cx+off; if(tx<0||tx>=W) continue;
+      if(!B[ty*W+tx]) return {tx, ty};
+    }
+  }
+  return {tx:cx, ty:Math.min(H-1, e.ty+(e.h||1))};
+}
+
+const HUB_OFFROAD_PEN   = 4.0;  // off-road tile cost vs 1.0 on road/sidewalk (pathfinding bias; tuning knob)
+const HUB_TOPO_PEN      = 6.0;  // cost to plow a road through trees/rocks (cleared when paved) — roads prefer open ground
+const HUB_TURN_PEN      = 2.0;  // per-90°-turn cost → long straight runs / clean orthogonal L routes (tuning knob)
+const HUB_ARTERIAL_HALF = 2;    // arterial carriageway half-width → 5-tile avenues
+const HUB_STREET_HALF   = 1;    // building-street half-width → 3-tile streets
+const HUB_SIDEWALK_W    = 2;    // sidewalk band width, each side
+
+// Turn-penalized (tile,direction) Dijkstra. Routes `start` to the plaza-connected network `conn`
+// in long STRAIGHT orthogonal runs (each 90° turn costs HUB_TURN_PEN). Hard walls (buildings +
+// open water) are impassable; topography (`topo` = trees/rocks, routable, cleared when paved) costs
+// HUB_TOPO_PEN. `topo` is a STABLE snapshot of the original obstacle map (not the live blocked,
+// which road-building mutates) so the result is identical on a fresh visit and a reloaded save.
+// Returns { path:[tileIdx...], dir:[0..4] } (dir = heading used to ARRIVE at each tile: 0=N,1=E,
+// 2=S,3=W, 4=start) or null. Deterministic: a state is (tile,dir) packed as tile*5+dir, so
+// ordering by (dist, stateId) is exactly (dist, tile, dir) — no float epsilon.
+// `dist`/`par` are caller-owned scratch arrays of length W*H*5 (reset here).
+function _hubRoadRoute(W,H,wall,topo,conn,start,dist,par){
+  dist.fill(Infinity); par.fill(-1);
+  const heap=[];                                            // binary min-heap of [dist, stateId]
+  function up(c){ while(c>0){ const p=(c-1)>>1, a=heap[p], b=heap[c];
+    if(a[0]<b[0] || (a[0]===b[0] && a[1]<=b[1])) break; heap[p]=b; heap[c]=a; c=p; } }
+  function down(){ let c=0; const n=heap.length;
+    while(true){ const l=2*c+1, r=2*c+2; let s=c;
+      if(l<n && (heap[l][0]<heap[s][0] || (heap[l][0]===heap[s][0] && heap[l][1]<heap[s][1]))) s=l;
+      if(r<n && (heap[r][0]<heap[s][0] || (heap[r][0]===heap[s][0] && heap[r][1]<heap[s][1]))) s=r;
+      if(s===c) break; const t=heap[s]; heap[s]=heap[c]; heap[c]=t; c=s; } }
+  const s0=start*5+4; dist[s0]=0; heap.push([0,s0]);        // start has no heading (dir 4 → first step free of turn cost)
+  while(heap.length){
+    const top=heap[0], last=heap.pop();
+    if(heap.length){ heap[0]=last; down(); }
+    const d=top[0], sid=top[1];
+    if(d>dist[sid]) continue;
+    const i=(sid/5)|0, pd=sid%5;
+    if(i!==start && conn[i]){                               // tapped the plaza-connected network → reconstruct
+      const path=[], dir=[]; let s=sid;
+      while(s!==-1){ path.push((s/5)|0); dir.push(s%5); s=par[s]; }
+      path.reverse(); dir.reverse(); return {path, dir};
+    }
+    const x=i%W, y=(i/W)|0;
+    if(y>0)   _hubRouteRelax(i-W, 0, sid, d, pd, wall, topo, dist, par, heap, up);   // N
+    if(x<W-1) _hubRouteRelax(i+1, 1, sid, d, pd, wall, topo, dist, par, heap, up);   // E
+    if(y<H-1) _hubRouteRelax(i+W, 2, sid, d, pd, wall, topo, dist, par, heap, up);   // S
+    if(x>0)   _hubRouteRelax(i-1, 3, sid, d, pd, wall, topo, dist, par, heap, up);   // W
+  }
+  return null;
+}
+function _hubRouteRelax(ni, nd, fromSid, d, pd, wall, topo, dist, par, heap, up){
+  if(wall[ni]) return;                                      // never route through a building or open water
+  const step = (topo[ni] ? HUB_TOPO_PEN : 1.0) + ((pd===4 || nd===pd) ? 0 : HUB_TURN_PEN);
+  const nsid = ni*5+nd, ncost = d+step;
+  if(ncost < dist[nsid]){ dist[nsid]=ncost; par[nsid]=fromSid; heap.push([ncost,nsid]); up(heap.length-1); }
+}
+// Last-resort straight carve toward the plaza when Dijkstra finds no route (gaps left on wall tiles).
+function _hubRoadFallback(W,H,wall,start,center,pave){
+  let x0=start%W, y0=(start/W)|0; const x1=center.x, y1=center.y;
+  const dx=Math.abs(x1-x0), dy=Math.abs(y1-y0), sx=x0<x1?1:-1, sy=y0<y1?1:-1;
+  let err=dx-dy;
+  for(;;){
+    if(x0>=0&&y0>=0&&x0<W&&y0<H && !wall[y0*W+x0]) pave(y0*W+x0);
+    if(x0===x1 && y0===y1) break;
+    const e2=2*err; if(e2>-dy){ err-=dy; x0+=sx; } if(e2<dx){ err+=dx; y0+=sy; }
+  }
+}
+
+// Build state.roadTiles (0 none / 1 road / 2 sidewalk) + state.roadMask (per-road N/E/S/W
+// connectivity nibble). Pure function of state.blocked + the building footprints + the
+// authored arterial polylines. Call AFTER hubPlacePois (footprints must be in state.blocked).
+function hubBuildRoads(state){
+  const W=state.W, H=state.H, N=W*H, B=state.blocked, tiles=state.tiles, feat=state.feat;
+  const road=new Uint8Array(N); state.roadTiles=road;
+  const axis=new Uint8Array(N); state.roadAxis=axis;          // 0 none / 1 horizontal / 2 vertical (centreline tiles → neon dash)
+  const center={x:62,y:50};                                   // downtown plaza (in the gap below ULTRA HQ)
+  // ---- hard walls = building footprints + open water (bridges are dirt). Topography (trees/rocks)
+  //      is NOT a wall: a road plows through it, clearing the tile to passable when paved. ----
+  const wall=new Uint8Array(N);
+  for(const e of (state.entities||[])){
+    if(!e || e.dead || e.kind!=='building') continue;
+    for(let y=e.ty;y<e.ty+(e.h||1);y++) for(let x=e.tx;x<e.tx+(e.w||1);x++)
+      if(x>=0&&y>=0&&x<W&&y<H) wall[y*W+x]=1;
+  }
+  for(let i=0;i<N;i++) if(tiles[i]===T_WATER) wall[i]=1;
+  // STABLE obstacle snapshot for routing: the ORIGINAL topography (trees/rocks) from baseBlocked,
+  // taken BEFORE any paving. `state.blocked` is mutated by pave() (topo cleared) AND serialized, so
+  // reading it would make a reloaded hub route differently from a fresh one — `topo` avoids that
+  // (tiles + feat are both original here on fresh build and on load), keeping roads deterministic.
+  const topo=new Uint8Array(N);
+  for(let i=0;i<N;i++) if(!wall[i] && baseBlocked(state,i)) topo[i]=1;   // clearable obstacle (rock/tree/feature)
+  function pave(i){ if(wall[i]) return; road[i]=1; if(B[i]){ B[i]=0; if(feat) feat[i]=0; } }
+
+  // ---- routing runs on 1-wide CENTRELINES first (clean orthogonal runs), then dilates to a
+  //      uniform width; this is what makes the roads straight + consistent instead of blobby. ----
+  const conn=new Uint8Array(N);             // plaza-connected centreline component (tap targets + router goal)
+  const cax=new Uint8Array(N);              // centreline axis: 0 unset / 1 H / 2 V / 9 corner-or-junction (no dash)
+  const lines=[];                           // flat [tileIdx, half, ...] centrelines to dilate
+  const rdist=new Float64Array(N*5), rpar=new Int32Array(N*5);   // router scratch (reused per call)
+  function setAxis(i,a){                     // a: 0=corner→9 (no dash), 1=H, 2=V
+    if(a===0){ cax[i]=9; return; }
+    if(cax[i]===0) cax[i]=a; else if(cax[i]!==a) cax[i]=9;       // two runs disagree on a tile = junction → no dash
+  }
+  function addLine(r, half){                 // record a routed centreline (path + per-tile arrival dir)
+    const p=r.path, dr=r.dir;
+    for(let k=0;k<p.length;k++){
+      const t=p[k]; conn[t]=1; lines.push(t, half);
+      const inD=dr[k], outD=(k+1<p.length)?dr[k+1]:dr[k];        // a tile is "straight" iff arrival heading == departure heading
+      setAxis(t, (inD!==outD)?0 : (inD===1||inD===3)?1 : (inD===0||inD===2)?2 : 0);
+    }
+  }
+  function routeTo(start, half){
+    if(conn[start]) return;
+    const r=_hubRoadRoute(W,H,wall,topo,conn,start,rdist,rpar);
+    if(r) addLine(r, half);
+    else _hubRoadFallback(W,H,wall,start,center,(i)=>{ conn[i]=1; lines.push(i, HUB_STREET_HALF); });   // rare: gapped stub
+  }
+
+  // ---- 1b. plaza: a clean square block that seeds the connected network ----
+  const PLAZA_HALF=3;
+  for(let dy=-PLAZA_HALF;dy<=PLAZA_HALF;dy++) for(let dx=-PLAZA_HALF;dx<=PLAZA_HALF;dx++){
+    const x=center.x+dx, y=center.y+dy; if(x<0||y<0||x>=W||y>=H) continue;
+    const i=y*W+x; if(wall[i]) continue; pave(i); conn[i]=1;     // interior axis stays 0 → no dash across the plaza
+  }
+  // ---- 1c. orthogonal arterials: route 4 corner gates + a N/S cross-town pair into the plaza ----
+  const GATES=[[14,20],[105,20],[15,87],[116,92],[62,16],[62,88]];
+  for(const g of GATES){ const tx=g[0], ty=g[1];
+    if(tx<0||ty<0||tx>=W||ty>=H) continue;
+    if(!wall[ty*W+tx]) routeTo(ty*W+tx, HUB_ARTERIAL_HALF); }
+  // ---- 1d. building streets: a door on every side; route the ones not already on the network ----
+  const seen=new Set();
+  function door(e,dx,dy){                     // first non-wall tile stepping out from a footprint edge
+    const cx=e.tx+((e.w||1)>>1), cy=e.ty+((e.h||1)>>1);
+    let sx, sy;
+    if(dy>0){ sx=cx; sy=e.ty+(e.h||1); } else if(dy<0){ sx=cx; sy=e.ty-1; }
+    else if(dx>0){ sx=e.tx+(e.w||1); sy=cy; } else { sx=e.tx-1; sy=cy; }
+    for(let s=0;s<6;s++){ const tx=sx+dx*s, ty=sy+dy*s;
+      if(tx<0||ty<0||tx>=W||ty>=H) return;
+      const i=ty*W+tx; if(!wall[i]){ if(!seen.has(i)){ seen.add(i); routeTo(i, HUB_STREET_HALF); } return; } }
+  }
+  const builds=(state.entities||[]).filter(e=>e && !e.dead && e.kind==='building');
+  builds.sort((a,b)=>{ const ka=(a.hubPoi&&a.hubPoi.id)||('b'+a.id), kb=(b.hubPoi&&b.hubPoi.id)||('b'+b.id); return ka<kb?-1:(ka>kb?1:0); });
+  for(const e of builds){ door(e,0,1); door(e,0,-1); door(e,1,0); door(e,-1,0); }
+  // ---- 1e. dilate centrelines to uniform width (Chebyshev square; clips on walls so corners fill
+  //      cleanly and footprints are never paved; topography under the whole carriageway is cleared) ----
+  for(let k=0;k<lines.length;k+=2){ const i=lines[k], half=lines[k+1], cx=i%W, cy=(i/W)|0;
+    for(let dy=-half;dy<=half;dy++) for(let dx=-half;dx<=half;dx++){
+      const x=cx+dx, y=cy+dy; if(x<0||y<0||x>=W||y>=H) continue; pave(y*W+x);
+    }
+  }
+  // ---- 1f. thick two-sided sidewalks: Chebyshev band HUB_SIDEWALK_W tiles out from the carriageway ----
+  let frontier=[]; for(let i=0;i<N;i++) if(road[i]===1) frontier.push(i);
+  for(let ring=0; ring<HUB_SIDEWALK_W; ring++){
+    const next=[];
+    for(const i of frontier){ const x=i%W, y=(i/W)|0;
+      for(let dy=-1;dy<=1;dy++) for(let dx=-1;dx<=1;dx++){ if(!dx&&!dy) continue;
+        const nx=x+dx, ny=y+dy; if(nx<0||ny<0||nx>=W||ny>=H) continue;
+        const j=ny*W+nx; if(road[j]||wall[j]||topo[j]) continue;   // wall already covers water; topo = uncleared obstacle
+        road[j]=2; next.push(j);
+      } }
+    frontier=next;
+  }
+  // ---- 1g. centreline axis (only tiles still on the carriageway, on dash-able straight runs) ----
+  for(let i=0;i<N;i++){ if(road[i]===1 && (cax[i]===1||cax[i]===2)) axis[i]=cax[i]; }
+  // ---- 1h. connectivity mask (road tiles only): N=1 E=2 S=4 W=8 ----
+  const mask=new Uint8Array(N); state.roadMask=mask;
+  for(let y=0;y<H;y++) for(let x=0;x<W;x++){
+    const i=y*W+x; if(road[i]!==1) continue; let m=0;
+    if(y>0 && road[i-W]===1) m|=1;
+    if(x<W-1 && road[i+1]===1) m|=2;
+    if(y<H-1 && road[i+W]===1) m|=4;
+    if(x>0 && road[i-1]===1) m|=8;
+    mask[i]=m;
+  }
+}
+// Derive the pathfinding cost overlay from roadTiles: road/sidewalk = 1.0, off-road = penalty.
+function hubBuildRoadCost(state){
+  const rt=state.roadTiles; if(!rt){ state.roadCost=null; return; }
+  const n=state.W*state.H, rc=new Float32Array(n);
+  for(let i=0;i<n;i++) rc[i]= rt[i] ? 1.0 : HUB_OFFROAD_PEN;
+  state.roadCost=rc;
+}
 function hubMegaFromConfig(state, cfg, idx){
   const m=Object.assign({}, cfg);
   m.id = m.id || ('hub_mega_'+idx);
@@ -742,7 +946,8 @@ function hubApplyPoiVisual(e,p){
     e.hubSpriteVisual = { type:v.type, faction:v.faction, neonId:v.neonId,
       fixedFrame:v.fixedFrame||0, w:v.w||e.w, h:v.h||e.h,
       overhang:v.overhang||1.08, heightScale:v.heightScale||1,
-      stack:v.stack||1, stackOverlap:(v.stackOverlap!=null?v.stackOverlap:0.06), seed:(e.id||1)*0.071 };
+      stack:v.stack||1, stackOverlap:(v.stackOverlap!=null?v.stackOverlap:0.06),
+      stackFrames:Array.isArray(v.stackFrames)?v.stackFrames.slice():null, seed:(e.id||1)*0.071 };
   }
   if(v && v.megaId) e.hubMegaVisual=true;
   if(p && (HUB.megaSprites||[]).some(m=>m.poiId===p.id && (hubHasTag(m,'hubCondo') || hubHasTag(m,'hubUltra')))) e.hubMegaVisual=true;
@@ -840,7 +1045,10 @@ function hubReconcileFacilities(state){
     const e=state.hubPois[p.id] || (state.entities||[]).find(x=>x&&!x.dead&&x.hubPoi&&x.hubPoi.id===p.id);
     if(!e) continue;                                                  // missing → handled by the inject loop above
     const d=DEF[p.type]||{w:3,h:3}, w=p.w||d.w||3, h=p.h||d.h||3;
-    if(e.tx===p.x && e.ty===p.y && e.w===w && e.h===h){ state.hubPois[p.id]=e; continue; }   // already canonical
+    if(e.tx===p.x && e.ty===p.y && e.w===w && e.h===h){            // already canonical —
+      hubApplyPoiVisual(e,p);                                      // still refresh the render-only visual so old saves pick up art changes (e.g. the Wake's stackFrames)
+      state.hubPois[p.id]=e; continue;
+    }
     e.tx=p.x; e.ty=p.y; e.w=w; e.h=h; e.x=(p.x+w/2)*TILE; e.y=(p.y+h/2)*TILE;
     hubClearFootprint(state, p.x-2, p.y-2, w+4, h+4);
     hubApplyPoiVisual(e, p);
@@ -856,7 +1064,44 @@ function hubReconcileFacilities(state){
     state.hubPois[p.id]=e;
     moved=true;
   }
-  if(moved){
+  // Same migration for decor buildings (HUB.buildings): old saves bake their footprint at save
+  // time, so a layout resize (e.g. the oversized garage / satellite office shrunk to 3×3) never
+  // reaches them. Decor entries with poiId:null leave no id on the entity, so match by type+owner
+  // on an overlapping footprint — layout edits keep the new rect inside the old one.
+  for(const b of (HUB.buildings||[])){
+    const w=Math.max(1,(b.w|0)||3), h=Math.max(1,(b.h|0)||3), owner=b.owner||'neutral';
+    const e=(state.entities||[]).find(x=> x && !x.dead && x.kind==='building' && x.type===b.type
+        && (x.owner||'neutral')===owner && !(x.hubPoi && x.hubPoi.kind!=='decor')
+        && (b.poiId ? (x.hubPoi && x.hubPoi.id===b.poiId)
+                    : overlaps(b.tx,b.ty,w,h, x.tx,x.ty,x.w,x.h)));
+    if(!e) continue;
+    if(e.tx===b.tx && e.ty===b.ty && e.w===w && e.h===h) continue;
+    e.tx=b.tx; e.ty=b.ty; e.w=w; e.h=h; e.x=(b.tx+w/2)*TILE; e.y=(b.ty+h/2)*TILE;
+    moved=true;
+  }
+  // Drop STRAY decor buildings: a building of a known decor type (one that appears in HUB.buildings,
+  // i.e. garage / outpost) that is NEITHER a currently-configured POI NOR matches a current
+  // HUB.buildings footprint. These are leftovers baked into an old save from a superseded layout —
+  // e.g. a satellite office (an 'outpost' sprite) stranded among the megasprites near the ULTRA HQ,
+  // possibly still carrying a stale hubPoi tag from a long-removed facility. Runs AFTER the migration
+  // loop, so the canonical garage/satellite office are already snapped to config and survive. Real,
+  // still-configured POIs are kept by id — the Mental Health Facility is internally an 'outpost' but
+  // its hubPoi.id ('mentalhealth') is in HUB.pois, so it is never touched.
+  const _decorTypes=new Set((HUB.buildings||[]).map(b=>b.type));
+  const _poiIds=new Set((HUB.pois||[]).map(p=>p.id));
+  let removed=false;
+  for(const e of (state.entities||[])){
+    if(!e || e.dead || e.kind!=='building') continue;
+    if(e.hubPoi && _poiIds.has(e.hubPoi.id)) continue;               // keep real, still-configured POIs (incl. Mental Health Facility)
+    if(!_decorTypes.has(e.type)) continue;                           // only prune known decor classes (garage/outpost)
+    const ok=(HUB.buildings||[]).some(b=> b.type===e.type
+      && overlaps(b.tx,b.ty,Math.max(1,(b.w|0)||3),Math.max(1,(b.h|0)||3), e.tx,e.ty,e.w,e.h));
+    if(ok) continue;                                                 // matches a config decor footprint → canonical, keep
+    if(typeof markBuilding==='function') markBuilding(state,e,false);
+    if(state.hubPois && e.hubPoi) delete state.hubPois[e.hubPoi.id];
+    e.dead=true; removed=true;
+  }
+  if(moved || removed){
     // recompute passability from terrain + features, then re-block every building at its current footprint
     if(typeof baseBlocked==='function') for(let i=0;i<state.W*state.H;i++) state.blocked[i]=baseBlocked(state,i);
     if(typeof markBuilding==='function') for(const b of (state.entities||[])){ if(b&&!b.dead&&b.kind==='building') markBuilding(state,b,true); }

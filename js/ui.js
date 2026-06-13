@@ -82,7 +82,9 @@ function refreshUI(){
     const hasDossier = e.owner==='player' && e.lore && typeof buildDossier==='function';
     const titlePrefix=(e.owner==='player'&&lvl>0)? careerTitle(lvl)+' ' : '';
     const personName = hasDossier ? ' · '+buildDossier(e).full : '';
-    elTitle.textContent=(d.icon?d.icon+' ':'')+titlePrefix+d.name+personName + (e.owner==='enemy'?' (rival)':'');
+    // The Wake is an hq-type POI — show its own name, not "Open-Plan HQ" (just this building)
+    const dispName=(e.hubPoi && e.hubPoi.kind==='wake' && e.hubPoi.name) ? e.hubPoi.name : d.name;
+    elTitle.textContent=(d.icon?d.icon+' ':'')+titlePrefix+dispName+personName + (e.owner==='enemy'?' (rival)':'');
     if(elDossierBtn){ elDossierBtn.style.display = hasDossier ? '' : 'none'; if(hasDossier) elDossierBtn.onclick=()=>showDossier(e); }
     // always-visible 3-stat line (level / HP / damage) — shown on desktop AND mobile
     if(e.kind==='unit'){

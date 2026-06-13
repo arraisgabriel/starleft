@@ -86,12 +86,33 @@
                frameCount:anim.frames.length, y0, y1,
                // the donor's own cut lines (fractions) — when this part is the LEGS donor
                // they define the output frame's neck/hip lines (Phase-2 strips carry the
-               // canonical lines in their descriptor instead)
+               // canonical lines in their manifest instead)
                neckFrac: cal.neckY, hipFrac: cal.hipY,
                facesLeft: !!(typeof DEF !== 'undefined' && DEF[desc.type] && DEF[desc.type].facesLeft),
                phase: cal.phase|0 };
     }
-    // {kind:'strip'}: Phase-2 dedicated parts — resolve from _partLibs once implemented.
+    if(desc.kind === 'strip'){
+      // Phase-2 dedicated civilian parts: {kind:'strip', band, idx} against _partLibs[0]
+      // (js/npc_parts_data.js manifest). Every part file is a FULL canonical frame with
+      // only its band painted, all sharing the manifest's cut lines — so any head fits
+      // any torso fits any legs by construction, and composeTinted's math reduces to the
+      // unit-donor case (canonical strips ARE donors whose cal lines are the manifest fracs).
+      // Faction-neutral: `owner` is ignored (tints supply color variety).
+      const lib = _partLibs[0];
+      const rec = lib && lib.parts && lib.parts[desc.band] && lib.parts[desc.band][desc.idx];
+      if(!rec) return null;
+      const anim = rec._anim;                                  // images registered in registerPartLib
+      if(!anim || !anim.ready) return null;                    // streaming (or broken — caller checks partLibState)
+      const fh = lib.frame.h, neck = lib.neckFrac * fh, hip = lib.hipFrac * fh;
+      let y0 = 0, y1 = fh;
+      if(desc.band === 'head') y1 = neck;
+      else if(desc.band === 'torso'){ y0 = neck; y1 = hip; }
+      else y0 = hip;                                           // 'legs'
+      return { img:anim.img, fw:anim.fw, fh:anim.fh, frames:anim.frames,
+               frameCount:anim.frames.length, y0, y1,
+               neckFrac:lib.neckFrac, hipFrac:lib.hipFrac,
+               facesLeft:false, phase:rec.phase|0 };
+    }
     return null;
   }
   function _desc(v, band){ return (typeof v === 'string') ? { kind:'unit-band', type:v, band } : v; }
@@ -206,11 +227,64 @@
       for(const f in src) dst[f] = src[f];
     }
   }
-  // Phase 2: dedicated Gemini part libraries (js/npc_parts_data.js calls this with its
-  // manifest). Stored now so the data file can ship independently; consumed once the
-  // {kind:'strip'} resolvePart branch lands.
-  function registerPartLib(manifest){ if(manifest) _partLibs.push(manifest); return _partLibs.length; }
+  // Phase 2: dedicated Gemini part libraries — js/npc_parts_data.js calls this with its
+  // manifest at parse time. Image registration happens HERE, eagerly, via assets.js's
+  // loadNpcPart (ambient + optional tier: streams in the background, can't block the
+  // loading gate, and the eager registration keeps perfPopulate's steady-state pre-bake
+  // honest under ?perf=1's eager loader). This amends the original "registers NO images"
+  // rule for the one Phase-2 case; the compositor itself still creates only bake canvases.
+  function registerPartLib(manifest){
+    if(!manifest) return _partLibs.length;
+    if(manifest.parts && typeof loadNpcPart === 'function'){
+      for(const band in manifest.parts)
+        for(const rec of manifest.parts[band])
+          rec._anim = loadNpcPart(manifest.base + rec.file, manifest.frame.w, manifest.frame.h);
+    }
+    _partLibs.push(manifest);
+    return _partLibs.length;
+  }
+  // 'none' (no manifest) | 'broken' (any part file failed → wardrobe falls back to
+  // Phase-1 unit bands) | 'ready' (all streamed) | 'loading' (still streaming —
+  // composeTinted returns null and the caller re-queues, same contract as unit donors).
+  function partLibState(){
+    const lib = _partLibs[0];
+    if(!lib || !lib.parts) return 'none';
+    let ready = true;
+    for(const band in lib.parts)
+      for(const rec of lib.parts[band]){
+        if(!rec._anim || rec._anim.broken) return rec._anim ? 'broken' : 'none';
+        if(!rec._anim.ready) ready = false;
+      }
+    return ready ? 'ready' : 'loading';
+  }
+  // wardrobe rolls strip indices against these (manifest may ship <10 while sheets regen)
+  function partLibCounts(){
+    const lib = _partLibs[0];
+    if(!lib || !lib.parts) return null;
+    return { head:(lib.parts.head||[]).length, torso:(lib.parts.torso||[]).length, legs:(lib.parts.legs||[]).length };
+  }
+  // gendered index list per band, from the manifest's per-part sex tags ('m'/'f') — the
+  // wardrobe builds single-sex looks so a woman-named NPC (NPC_LORE gender) never draws a
+  // bearded head. Untagged parts (legacy manifest) land in BOTH pools → degenerates to the
+  // un-gendered behavior. Returns null when the band has no eligible parts.
+  const _libIdxCache = {};
+  function partLibIdx(band, sex){
+    const lib = _partLibs[0];
+    if(!lib || !lib.parts || !lib.parts[band]) return null;
+    const k = band + '|' + sex;
+    if(_libIdxCache[k]) return _libIdxCache[k];
+    const out = [];
+    lib.parts[band].forEach((rec, i) => { if(!rec.sex || rec.sex === sex) out.push(i); });
+    return (_libIdxCache[k] = out.length ? out : null);
+  }
+  // manifest style tag of one part ('civ' | 'punk' | null) — the wardrobe drops the muted
+  // tint on looks containing any 'punk' part so the neon stays vivid.
+  function partLibStyleOf(band, idx){
+    const lib = _partLibs[0];
+    const rec = lib && lib.parts && lib.parts[band] && lib.parts[band][idx];
+    return (rec && rec.style) || null;
+  }
 
   window.NPCMIX = { DONORS, resolvePart, composeTinted, debugSheet,
-                    getCalibration, setCalibration, registerPartLib };
+                    getCalibration, setCalibration, registerPartLib, partLibState, partLibCounts, partLibIdx, partLibStyleOf };
 })();

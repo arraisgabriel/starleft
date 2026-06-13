@@ -251,6 +251,19 @@ function walkPair(type, act){
            enemy: loadWalk(unitSheet(type,act,true), 0,0,null,meta('enemy')),
            ao:    loadWalk(unitSheetFac(type,act,'ao'),0,0,null,meta('ao')) };
 }
+// Phase-2 NPC wardrobe part strips (assets/units/npc_parts/, canonical 176×320 frames,
+// band-only painted; manifest in js/npc_parts_data.js → NPCMIX.registerPartLib). Civilians
+// are hub-only cosmetics: ambient tier + optional, so absent part files can never wedge
+// the loading gate — NPCMIX.partLibState() reports 'broken' and the wardrobe falls back
+// to Phase-1 unit-band mixes. Unlike loadWalk, `broken` is tracked so the consumer can
+// tell "still streaming" (re-queue) from "will never arrive" (fall back).
+function loadNpcPart(src, fw, fh){
+  const a = { img:new Image(), ready:false, broken:false, fw, fh, frames:null };
+  a.img.onload=()=>{ a.frames=[]; for(let i=0;i<UNIT_FRAMES;i++) a.frames.push([i*fw,0,fw,fh]); a.ready=true; };
+  a.img.onerror=()=>{ a.ready=false; a.broken=true; };
+  LOADER.register(a.img, src, { tag:'npcpart:'+src, tier:LOADER.T_AMBIENT, weight:1, optional:true });
+  return a;
+}
 // per-type walk sets keyed by owner (player cyan / enemy red). Missing/!ready →
 // null → procedural vector fallback (shown only until the art loads).
 const UNIT_WALK = {
@@ -264,10 +277,14 @@ const UNIT_WALK = {
   // Hero Recruiter "Biba" (Storm-likeness: white vest, silver hair) — visual override only;
   // gameplay stays a recruiter. Bespoke palette written to both faction keys (see slice_biba.py).
   biba:walkPair('biba','walk'),
+  // VILLAIN BOSSES — bespoke sprites (visual-only via u.spriteType; gameplay stays soldier/founder).
+  ninja:walkPair('ninja','walk'),         rex:walkPair('rex','walk'),
 };
 // drawn sprite HEIGHT per type — ~2× the old values (bigger on screen). Collision
 // radius r / speed / range in DEF are UNCHANGED, so gameplay is unaffected.
-const UNIT_SPRITE_H = { worker:46, soldier:68, ranger:62, recruiter:54, hustler:56, lobbyist:64, foodtruck:64, auditor:72, founder:92, courier:36, bomber:96, biba:60.6 };
+const UNIT_SPRITE_H = { worker:46, soldier:68, ranger:62, recruiter:54, hustler:56, lobbyist:64, foodtruck:64, auditor:72, founder:92, courier:36, bomber:96, biba:60.6, ninja:44, rex:92 };
+// ninja:44 → ×bossScale 2.1 ≈ 92px drawn, the same on-screen size as a Founder Mech (visual only; bossScale/collision r unchanged).
+// rex:92 → ×bossScale 4.0 keeps REX huge.
 // biba:60.6 (not 54): her walk & heal strips share a 341px frame height (see slice_biba.py STRIP_CANVAS_H);
 // the engine maps frame-height -> draw-height, so 54*341/304 keeps her on-screen body the size it was
 // when the walk strip was 304px tall, while killing the size pop when she switches to the heal anim.
@@ -303,6 +320,7 @@ const UNIT_ACTION = {
   founder:{ attack:walkPair('founder','attack') },     courier:{ heal:walkPair('courier','heal') },
   bomber:{ attack:walkPair('bomber','attack') },       nino:{ attack:walkPair('nino','attack') },
   biba:{ heal:walkPair('biba','heal') },               // hero Recruiter — custom heal animation
+  ninja:{ attack:walkPair('ninja','attack') },         rex:{ attack:walkPair('rex','attack') },   // villain bosses
 };
 function actionAnim(type,action,owner,faction){ const t=UNIT_ACTION[type]; const a=t&&t[action]; if(!a) return null;
   const x=(faction && a[faction] && a[faction].ready) ? a[faction] : a[factionKey(owner)]; return (x&&x.ready)?x:null; }

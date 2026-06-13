@@ -27,9 +27,10 @@ function update(state, dt){
       }
       continue;
     }
-    // any building with a dmg stat returns fire (turret, and the HQ's weak rooftop shot)
+    // any building with a dmg stat returns fire (turret, and the HQ's weak rooftop shot).
+    // Never in the H.U.B. — the neutral Wake (type hq) must not gun down strolling veterans.
     const bd=DEF[b.type];
-    if(bd.dmg){
+    if(bd.dmg && !state.hub){
       b.cd-=dt;
       const tgt=nearestEnemy(state,b, bd.range*TILE);
       if(tgt && b.cd<=0){

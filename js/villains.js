@@ -35,24 +35,26 @@ const VILLAINS = {
   cyan_ninja: {
     name:'THE CYAN NINJA',
     base:'soldier',            // Growth Cyborg sprite (melee range fits a ninja); stats overridden below
-    spriteType:'soldier',      // visual sheet (a bespoke cyan recolor can replace this later)
+    spriteType:'ninja',        // bespoke cyborg-ninja sprite (assets/units/ninja); gameplay still soldier via base
     spriteFaction:'player',    // render the CYAN player variant (not enemy-red) so the body's own cyan lights match the glow
-    neonId:'cyanNinja', neonColor:'#50e6ff', auraColor:[80,230,255], bossScale:2.1,
-    hp:7000, dmg:50, range:1.8, cd:0.42, speed:4.6, sight:11,
-    dmgReduce:0.35, hpVpiScale:1/60, dmgVpiScale:1/140,   // ≈ 10.8k effective HP at VPI 0, far more vs a veteran army
+    neonId:'ninja', neonColor:'#50e6ff', auraColor:[80,230,255], bossScale:2.1,   // own neon map; ao_enforcer keeps 'cyanNinja'
+    hp:7000, dmg:8, range:1.8, cd:0.42, speed:4.6, sight:11,    // dmg LOW: he strikes in fast flurries (combo), so each cut is weak — a leveled tank must survive a long duel
+    dmgReduce:0.35, hpVpiScale:1/60, dmgVpiScale:1/240,   // ≈ 10.8k effective HP at VPI 0; gentler dmg scaling so a veteran (high-VPI) roster isn't melted
     aiKind:'ninja',            // bespoke hit-and-run AI (updateNinja) fully owns movement+combat; updateUnit yields for it
     ninja:{
       dashSpeed:15,            // tiles/sec while gliding a dash hop (fast — reads as a blade streak)
       hopLen:2.3,              // tiles per diagonal hop
-      hopGap:0.7,              // pause between hops. ~0.5s makes the dash/bounce cadence ~30% as frequent as
-                               // the old 0.06 (period ~0.19s→~0.63s) so he stands still long enough to click + hit.
+      hopGap:0.38,             // pause between hops (was 0.7). Tighter → faster re-approach AND faster evade, so he
+                               // re-engages much sooner; the 0.30s rooted strike windup is still the clickable punish window.
       lungeRange:2.6,          // tiles — commit to a strike from here; the apex flash-lunges to contact (beats the separation jostle)
-      strikeWindup:0.40,       // ROOTED, EXPOSED wind-up before the guaranteed strike (the player's punish window)
+      strikeWindup:0.30,       // ROOTED, EXPOSED wind-up before the FIRST strike (the player's punish window; was 0.40)
+      combo:5,                 // strikes CHAINED per engagement (a blade flurry) before he retreats — the main "attack often" lever
+      comboWindup:0.13,        // snappy wind-up for the 2nd+ combo strikes (the 1st keeps the full telegraphed window)
       exposeMul:0.4,           // during the wind-up the ninja's dmgReduce is scaled by this (0.35→0.14 → ~+32% incoming)
-      evadeHops:3,             // diagonal weave hops away from shooters before vanishing
-      safeDist:6,              // tiles — retreat until the nearest shooter is beyond this
+      evadeHops:1,             // weave hops away before vanishing (was 3) → far less time spent retreating between strikes
+      safeDist:3.5,            // tiles — retreat only this far (was 6) so the re-approach back into lunge range is short
       shooterR:5.5,            // tiles — units within this count as "shooting at me" (evade centroid)
-      hideDur:1.5,             // smoke-bomb vanish: invisible + untargetable for this long
+      hideDur:0.4,             // smoke-bomb vanish duration (was 1.5) → re-emerges fast; keeps the ninja flavor, kills the downtime
       hideAlpha:0.16,          // sprite opacity while vanished (render)
       panicRange:1.6,          // tiles — a shooter this close mid-evade triggers an emergency blink
       panicBlink:5,            // tiles — emergency teleport distance
@@ -111,8 +113,10 @@ const VILLAINS = {
   },
   rex: {
     name:'REX',
-    base:'founder', ao:true,   // founder mech sprite + the existing A&O _ao green recolor (set map enemyFaction:'ao')
-    neonId:'rex', neonColor:'#7bff5b', auraColor:[120,255,90], bossScale:4.0,
+    base:'founder', ao:true,   // gameplay stays founder-mech (stats/abilities below); bespoke sprite below
+    spriteType:'rex',          // bespoke alien A&O mech sprite (assets/units/rex/*_ao); gameplay still founder via base
+    spriteFaction:'ao',        // always render the A&O toxic-green variant (robust even if a map omits enemyFaction:'ao')
+    neonId:'rexBoss', neonColor:'#7bff5b', auraColor:[120,255,90], bossScale:4.0,   // own neon map; tower_guardian keeps 'rex'
     hp:18000, dmg:80, range:4.0, cd:1.3, speed:1.5, sight:10,
     dmgReduce:0.28, hpVpiScale:1/80, dmgVpiScale:1/160,   // ≈ 25k effective HP at VPI 0 — the finale superboss
     // two telegraphed AREA specials (updateMech). capFrac caps EACH blast to a % of a unit's maxHp,
@@ -492,6 +496,7 @@ function updateNinja(state, u, dt){
 
   // ---------- APPROACH: staircase diagonally toward a chosen victim until in lunge range ----------
   if(u._ninjaState==='approach'){
+    u._comboN=0;                                                // fresh engagement → reset the strike-flurry counter
     let t=u._ninjaTgt; if(!alive(t)){ t=pickNinjaTarget(state,u,N); u._ninjaTgt=t; }
     if(!alive(t)) return;                                        // duel map → there is always a target
     const dd=dist(u,t);
@@ -503,9 +508,9 @@ function updateNinja(state, u, dt){
   // ---------- STRIKE: rooted, EXPOSED wind-up at range, then a flash-LUNGE to a guaranteed hit ----------
   if(u._ninjaState==='strike'){
     let t=u._ninjaTgt;
-    if(!alive(t) || dist(u,t) > (N.lungeRange||2.6)*TS + 1.5*TS){ u._ninjaState='approach'; return; }   // it slipped away → re-approach
+    if(!alive(t) || dist(u,t) > (N.lungeRange||2.6)*TS + 1.5*TS){ u._comboN=0; u._ninjaState='approach'; return; }   // it slipped away → re-approach
     faceTo(u,t); u._face = t.x<u.x?-1:1; u._exposed=true;
-    const wind=(N.strikeWindup||0.40)*(phase2?0.7:1);
+    const wind=((u._comboN>0)?(N.comboWindup||0.14):(N.strikeWindup||0.40))*(phase2?0.7:1);   // 1st strike telegraphed; combo follow-ups snap fast
     u._strikeT=(u._strikeT||0)+dt;
     if(u._strikeT < wind){
       if(!u._abilCastT || state.time-u._abilCastT>0.5) u._abilCastT=state.time;   // peak the charge glow (drawVillainGlow)
@@ -526,7 +531,11 @@ function updateNinja(state, u, dt){
       if(typeof spawnRing==='function')  spawnRing(u.x, u.y, def.neonColor||'#50e6ff');
     }
     if(phase2){ const t2=nearestEnemy(state,u,(u.range+0.7)*TS); if(t2&&t2!==t){ applyHit(state,u,t2,dmg,0,1.3); if(typeof spawnSlash==='function'&&!window._rbReplaying) spawnSlash(u,t2,def.neonColor||'#bffcff'); } }
-    u._exposed=false; u._ninjaState='evade'; u._evadeN=0; u._strikeT=0;
+    // COMBO — chain a few quick strikes per engagement (a blade FLURRY) before retreating, so he attacks
+    // OFTEN instead of one-and-vanish. Keep re-striking while the victim stays in reach and the cap isn't hit.
+    u._comboN=(u._comboN||0)+1; u._strikeT=0; u._exposed=false;
+    if(u._comboN < (N.combo||3) && alive(t) && dist(u,t) <= (N.lungeRange||2.6)*TS*1.35){ u._ninjaState='strike'; return; }
+    u._comboN=0; u._ninjaState='evade'; u._evadeN=0;
     return;
   }
 

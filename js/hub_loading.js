@@ -20,7 +20,7 @@ const HUB_LOAD_DURATION = 20;   // seconds the bomber takes to cross — sets th
 
 // HUB neon palette (rgb): purple / blue / cyan / red dots, matching the hub's identity.
 const HUB_PANO_COLORS = {
-  purple:[178,90,255], blue:[80,150,255], cyan:[60,230,235], red:[255,70,55]
+  purple:[178,90,255], blue:[80,150,255], cyan:[60,230,235], red:[255,70,55], green:[150,255,110]
 };
 
 // ULTRA HQ tower placement on the panorama, in NORMALIZED image coords (0..1). Tuned to
@@ -224,10 +224,13 @@ function _spawnHubPanoDrone(state){
   const ny = (R()<0.72) ? bomberNy + (R()-0.5)*2*D.band      // mostly near the bomber...
                         : 0.12 + R()*0.30;                   // ...sometimes elsewhere in the upper sky
   const spd = D.spdMin + R()*D.spdRange;
+  // even three-way livery: red (player) / blue (enemy) / A&O black-green (faction 'ao' → _ao sheet, green lights)
+  const roll = R(), isAO = roll < 1/3;
   _hubPanoDrones.push({
     nx, ny, vnx: face*spd, vny:(R()-0.5)*2*D.vyDrift, face,
-    owner: R()<0.5 ? 'player' : 'enemy',                     // red / blue courier sheet (mix)
-    color: HUB_PANO_DRONE_COLORS[(R()*HUB_PANO_DRONE_COLORS.length)|0],
+    faction: isAO ? 'ao' : null,
+    owner: isAO ? 'enemy' : (roll < 2/3 ? 'player' : 'enemy'), // red / blue courier sheet (A&O → _ao green)
+    color: isAO ? 'green' : HUB_PANO_DRONE_COLORS[(R()*HUB_PANO_DRONE_COLORS.length)|0],
     phase: R()*6.2832, life:0, sz: 0.85 + R()*0.4,
   });
 }
@@ -254,14 +257,15 @@ function updateHubPanoDrones(state, dt){
 // Draw the drones (clipped to the image, like the bomber) with blinking neon nav lights.
 function drawHubPanoDrones(state, fit){
   if(!_hubPanoDrones.length) return;
-  const animR=(typeof unitWalk==='function')?unitWalk('courier','player'):null;   // red sheet
-  const animB=(typeof unitWalk==='function')?unitWalk('courier','enemy'):null;     // blue sheet
+  const animR=(typeof unitWalk==='function')?unitWalk('courier','player'):null;        // red sheet
+  const animB=(typeof unitWalk==='function')?unitWalk('courier','enemy'):null;         // blue sheet
+  const animA=(typeof unitWalk==='function')?unitWalk('courier','enemy','ao'):null;    // A&O black/green sheet
   const t=_hubPanoDroneState.clock;
   const baseS=fit.vh * HUB_PANO_DRONE.sizeFrac;
   ctx.save();
   ctx.beginPath(); ctx.rect(fit.ox, fit.oy, fit.dw, fit.dh); ctx.clip();            // framed-movie clip
   for(const d of _hubPanoDrones){
-    const anim = d.owner==='enemy' ? animB : animR;
+    const anim = d.faction==='ao' ? animA : (d.owner==='enemy' ? animB : animR);
     if(!anim || !anim.ready) continue;
     const px=fit.ox + d.nx*fit.dw, py=fit.oy + d.ny*fit.dh;
     const wob=Math.sin(t*0.9 + d.phase);
@@ -273,12 +277,13 @@ function drawHubPanoDrones(state, fit){
     ctx.restore();
     // neon nav lights: a soft body underglow + two out-of-phase blinking wingtip lights, additive.
     const accent=HUB_PANO_COLORS[d.color]||HUB_PANO_COLORS.cyan;
+    const star=d.faction==='ao' ? accent : HUB_PANO_COLORS.cyan;   // A&O → twin green lights; else accent/cyan pair
     const ly=py - S*0.18, wx=S*0.42, gr=S*0.42;
     const b1=0.35+0.5*Math.sin(t*4.2 + d.phase), b2=0.35+0.5*Math.sin(t*4.2 + d.phase + 2.1);
     ctx.save(); ctx.globalCompositeOperation='lighter';
-    megaFillEllipseGlow(px,    ly, S*0.7, S*0.5, 0, accent,               0.22*a*(0.6+0.4*wob), 0.07*a);  // body underglow
-    megaFillEllipseGlow(px-wx, ly, gr,    gr,    0, accent,               0.85*a*b1, 0.22*a*b1);          // port light
-    megaFillEllipseGlow(px+wx, ly, gr,    gr,    0, HUB_PANO_COLORS.cyan,  0.85*a*b2, 0.22*a*b2);          // starboard light
+    megaFillEllipseGlow(px,    ly, S*0.7, S*0.5, 0, accent, 0.22*a*(0.6+0.4*wob), 0.07*a);  // body underglow
+    megaFillEllipseGlow(px-wx, ly, gr,    gr,    0, accent, 0.85*a*b1, 0.22*a*b1);          // port light
+    megaFillEllipseGlow(px+wx, ly, gr,    gr,    0, star,   0.85*a*b2, 0.22*a*b2);          // starboard light
     ctx.restore();
   }
   ctx.restore();

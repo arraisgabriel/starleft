@@ -34,13 +34,17 @@
   const CAP = 140;                 // hard structural cap (pool size)
   const DAY = 420;                 // real seconds per city day (~7 min)
   const HOUR = DAY/24;
-  const DOT_ZOOM = 0.5;            // below this zoom: 2px dots instead of sprites
-  const DOT_ZOOM_DEGRADED = 0.7;   // dot threshold when QUAL.level >= 2
-  const SPRITE_SCALE = 0.7;        // NPCs draw at ~70% of the unit sprite height
+  // Dot LOD retired (was: dots below zoom 0.5 / 0.7 degraded). Units render full sprites
+  // at every zoom, and NPCs must never read differently — at strategic zoom the dots made
+  // them look like insects next to unit sprites. Thresholds kept as knobs at 0 (= never);
+  // QUAL still degrades by shrinking the active CAP, which bounds the extra blits.
+  const DOT_ZOOM = 0;              // below this zoom: 2px dots instead of sprites (0 = never)
+  const DOT_ZOOM_DEGRADED = 0;     // dot threshold when QUAL.level >= 2 (0 = never)
+  const SPRITE_SCALE = 1.0;        // NPCs draw at full unit sprite height (was 0.7 — read as too small next to units)
   const ROAD_FACTOR = 1.35;        // euclid → road distance estimate for itinerary timing
   const TINT_ALPHA = 0.32;
   const TINT_CAP = 12;             // max baked half-res sheets (memory bound)
-  const MIX_K = 16;                // wardrobe size: composed looks per session (memory bound: ≤16 extra sheets)
+  const MIX_K = 24;                // wardrobe size: composed looks per session (memory bound: ≤24 extra sheets, ≈13.5MB; raised from 16 with the 20-sheet punk+civ part library)
   const MIX_SEED = 0x4D495853;     // 'MIXS' — fixed seed: same wardrobe every session/save (cosmetic only, never persisted)
   const NIGHT_MAX = 0.14;          // peak night-tint alpha
   // muted dark-cyberpunk civilian tints (slate / rust / olive / plum / dim teal / dust amber)
@@ -75,18 +79,42 @@
     return typeof NPCMIX!=='undefined' &&
            !(typeof PERF!=='undefined' && PERF.opts && PERF.opts.npcMix===false);
   }
-  // The session wardrobe: MIX_K {head,torso,legs,owner,tint} looks from a FIXED seed, so
-  // every session/save/peer derives the identical set. Draw order here is frozen the same
-  // way the slot rng is — append new draws only.
+  // The session wardrobe: MIX_K looks from a FIXED seed, so every session/save/peer
+  // derives the identical set. Draw order here is frozen the same way the slot rng is —
+  // append new draws only. With the Phase-2 civilian part library registered
+  // (js/npc_parts_data.js), looks are {kind:'strip'} part trios; the Phase-1 unit-band
+  // trio is still rolled FIRST (same draws, same order — flag-off/no-lib stays
+  // byte-identical) and kept as `fallback` for when the part assets turn out broken/404.
   function _buildWardrobe(){
     if(_wardrobe) return _wardrobe;
     const D=NPCMIX.DONORS;
     const r=(typeof makeRng==='function')?makeRng(_h32(MIX_SEED)%233280):Math.random;
     _wardrobe=[];
+    const pc=(typeof NPCMIX.partLibCounts==='function')?NPCMIX.partLibCounts():null;
+    const lib=!!(pc && pc.head && pc.torso && pc.legs);
     for(let i=0;i<MIX_K;i++){
       const head=D[(r()*D.length)|0]; let torso=D[(r()*D.length)|0]; const legs=D[(r()*D.length)|0];
       if(head===torso && torso===legs) torso=D[(D.indexOf(torso)+1)%D.length];   // never a plain unit duplicate
-      _wardrobe.push({ head, torso, legs, owner:r()<0.5?'player':'enemy', tint:(r()*TINTS.length)|0 });
+      const owner=r()<0.5?'player':'enemy', tint=(r()*TINTS.length)|0;
+      // single-sex looks, alternating by slot parity (8 f / 8 m, no extra draw): all three
+      // parts come from same-sex sheets, and _bind maps each NPC's pick into the looks
+      // matching its NPC_LORE gender — so dossier and body always agree.
+      const sex=(i%2)?'m':'f';
+      const ih=lib&&NPCMIX.partLibIdx('head',sex), it=lib&&NPCMIX.partLibIdx('torso',sex), il=lib&&NPCMIX.partLibIdx('legs',sex);
+      if(lib && ih && it && il){                                // appended draws — only consumed when the lib exists
+        const sh={kind:'strip',band:'head',idx:ih[(r()*ih.length)|0]},
+              st={kind:'strip',band:'torso',idx:it[(r()*it.length)|0]},
+              sl={kind:'strip',band:'legs',idx:il[(r()*il.length)|0]};
+        // punk parts ship their own neon — the muted tint would dull them, so looks
+        // containing ANY punk part bake untinted (full color punch; user-decided).
+        const punk=(typeof NPCMIX.partLibStyleOf==='function') &&
+                   [sh,st,sl].some(d=>NPCMIX.partLibStyleOf(d.band,d.idx)==='punk');
+        _wardrobe.push({ sex, head:sh, torso:st, legs:sl,
+                         owner, tint, tintAlpha:punk?0:TINT_ALPHA,
+                         fallback:{head,torso,legs,owner,tint} });
+      }else{
+        _wardrobe.push({ head, torso, legs, owner, tint });
+      }
     }
     return _wardrobe;
   }
@@ -118,18 +146,8 @@
 
   /* ---- path graph ---- */
   // first unblocked tile scanning the row(s) below a POI footprint — the building's "door"
-  function _doorstep(state, e){
-    const W=state.W,H=state.H,B=state.blocked;
-    const cx=e.tx+((e.w||1)>>1);
-    for(let row=0;row<3;row++){
-      const ty=e.ty+(e.h||1)+row; if(ty>=H) break;
-      for(const off of [0,1,-1,2,-2,3,-3,4,-4]){
-        const tx=cx+off; if(tx<0||tx>=W) continue;
-        if(!B[ty*W+tx]) return {tx, ty};
-      }
-    }
-    return {tx:cx, ty:Math.min(H-1, e.ty+(e.h||1))};
-  }
+  // shared with the road network so both terminate on the same door (def in hub.js)
+  function _doorstep(state, e){ return hubDoorstep(state, e); }
   const GATES=[ {tx:14,ty:20}, {tx:105,ty:20}, {tx:15,ty:87}, {tx:116,ty:92} ];   // authored road ends (hub.js roads)
   function _buildGraph(state){
     _nodes={}; _legs={}; _legQueue.length=0; _routes.clear();
@@ -204,7 +222,18 @@
   function _seg(t0,t1,kind,st,place){ return { t0, t1, kind, st, place:place||'', a:'', b:'', ax:0, ay:0, bx:0, by:0, route:null, tried:false }; }
   function _nodeOr(id, fb){ return _nodes[id]||_nodes[fb]||_nodes.plaza; }
   function _scatter(n, r, rad){ const a=r()*6.2832, d=r()*(rad||2)*TILE; return {x:n.x+Math.cos(a)*d, y:n.y+Math.sin(a)*d}; }
-  function _estDur(a, b, speed){ return Math.max(4, Math.hypot(b.x-a.x, b.y-a.y)*ROAD_FACTOR/speed); }
+  // Travel-window estimate. Every route is the concatenation of two plaza trunk legs
+  // (_routeFor joins a→plaza→b), so the realistic distance is VIA THE PLAZA — the old
+  // straight-line estimate undershot cross-town hops by 10-30× and the closed-form eval
+  // (position = fraction × route.len) made those NPCs sprint to stay on schedule.
+  // _paceSeg still trims the residual (real A* legs are ~1.2-1.4× their euclid).
+  function _estDur(a, b, speed){
+    const p=_nodes.plaza;
+    const d=(p && a!==p && b!==p)
+      ? Math.hypot(p.x-a.x, p.y-a.y) + Math.hypot(b.x-p.x, b.y-p.y)
+      : Math.hypot(b.x-a.x, b.y-a.y);
+    return Math.max(4, d*ROAD_FACTOR/speed);
+  }
 
   function _buildItin(slot, desc, r){
     const segs=[];
@@ -297,6 +326,18 @@
       const ra=ROLE_RANK[a.role]|0, rb=ROLE_RANK[b.role]|0;
       return ra!==rb?ra-rb:(a.id<b.id?-1:1);
     }).slice(0, CAP);
+    // gendered wardrobe pools (Phase-2 part lib only — Phase-1 looks carry no sex): the
+    // per-NPC mixIdx draw below is MAPPED into the pool matching the NPC's lore gender,
+    // so the dossier ("kid sister Maria") and the body always agree. Same single draw —
+    // schedules and palettes stay byte-stable; only the look interpretation changes.
+    let poolF=null, poolM=null;
+    if(_mixOn()){
+      const wd=_buildWardrobe();
+      if(wd[0] && wd[0].sex){
+        poolF=[]; poolM=[];
+        for(let wi=0; wi<wd.length; wi++) (wd[wi].sex==='f'?poolF:poolM).push(wi);
+      }
+    }
     for(const desc of ordered){
       const seed=desc.seed>>>0, r=(typeof makeRng==='function')?makeRng(_h32(seed ^ 0x534348)%233280):Math.random;
       const sprites=CIVILIAN_SPRITES[desc.role]||CIVILIAN_SPRITES.friend;
@@ -305,18 +346,27 @@
         sType:sprites[(r()*sprites.length)|0],
         owner:r()<0.5?'player':'enemy',                      // red/blue source palettes for variety
         tint:(r()*TINTS.length)|0, animKey:'',
-        drawH:0, speed:28+r()*14, jit:(r()-0.5)*12, phase:r()*6.2832,
+        drawH:0, speed:_vmax()*(0.92+r()*0.16), jit:(r()-0.5)*12, phase:r()*6.2832,   // ≈ lobbyist pace (was 28+r()*14 — read as ambling, and windy routes made outliers sprint)
         segs:null, segIdx:0, ci:0, x:0, y:0, face:r()<0.5?-1:1, onMap:false,
         de:{y:0, n:null},
       };
       slot.de.n=slot;
       slot.animKey=slot.sType+'|'+slot.owner+'|'+slot.tint;   // precomputed: no string alloc in the draw loop
-      const baseH=(typeof UNIT_SPRITE_H!=='undefined' && UNIT_SPRITE_H[slot.sType])||48;
-      slot.drawH=baseH*SPRITE_SCALE*(0.92+r()*0.16);
+      // NPCs draw at EXACTLY unit height — same UNIT_SPRITE_H table units use, pinned to
+      // the lobbyist (the human unit civilians stand next to in the hub). It was previously
+      // per-donor-type (worker 46 … lobbyist 64) × ±8% jitter, which read as "NPCs are
+      // smaller than units" whenever one stood near a lobbyist. The jitter draw is retired
+      // but still CONSUMED so the frozen rng stream (itinerary draws below) never shifts.
+      r();
+      slot.drawH=((typeof UNIT_SPRITE_H!=='undefined' && UNIT_SPRITE_H.lobbyist)||64)*SPRITE_SCALE;
       slot.segs=_buildItin(slot, desc, r);
       // wardrobe pick — APPENDED after every existing draw (slot fields above + the
       // itinerary's draws) so adding it never reshuffled anyone's schedule or palette.
       slot.mixIdx=(r()*MIX_K)|0;
+      if(poolF){                                                // gender-match (see pools above)
+        const pool=(desc.gender==='f')?poolF:poolM;
+        if(pool.length) slot.mixIdx=pool[slot.mixIdx%pool.length];
+      }
       slot.mixKey='mix|'+slot.mixIdx;                           // precomputed like animKey: no draw-loop alloc
       _slots.push(slot); _bound++;
     }
@@ -355,12 +405,37 @@
   }
 
   /* ---- closed-form evaluation ---- */
+  // walk-speed ceiling = the Lobbyist's move speed (the slowest human unit) — NPCs must
+  // never read faster than units. Lazy: DEF/TILE are parse-time globals, read once.
+  let _vmaxC=0;
+  function _vmax(){
+    if(!_vmaxC) _vmaxC=(typeof DEF!=='undefined' && DEF.lobbyist && typeof TILE!=='undefined') ? DEF.lobbyist.speed*TILE : 70;
+    return _vmaxC;
+  }
+  // Bound the VISIBLE walk speed. Itineraries schedule each travel window from the
+  // straight-line distance × ROAD_FACTOR (the route isn't computed yet at bind), but the
+  // real A* road route can be far windier — covering it inside the same window is what
+  // made some NPCs sprint. When the route first resolves, if the implied speed exceeds
+  // _vmax(), extend this travel into the FOLLOWING dwell/hide (arrive later, linger
+  // less, ≥2s of the dwell kept). Deterministic (routes are static-map A*), no position
+  // pops (dwell eval ignores t0; segment advancement reads t1 live), and the mutation is
+  // one-shot per segment (_paced) so day-wrap replays are stable.
+  function _paceSeg(slot, seg, route){
+    seg._paced=1;
+    const W=seg.t1-seg.t0, need=route.len/_vmax();
+    if(need<=W) return;
+    const next=slot.segs[slot.segIdx+1];
+    if(!next || next.kind===K_TRAVEL) return;                  // nothing safe to borrow from (rare)
+    const grab=Math.min(need-W, Math.max(0, (next.t1-next.t0)-2));
+    if(grab>0){ seg.t1+=grab; next.t0+=grab; }
+  }
   function _evalSlot(slot, C){
     const seg=slot.segs[slot.segIdx];
     if(!seg || seg.kind===K_HIDDEN){ slot.onMap=false; return seg; }
     if(seg.kind===K_DWELL){ slot.x=seg.ax; slot.y=seg.ay; slot.onMap=true; return seg; }
-    const f=Math.max(0, Math.min(1, (C-seg.t0)/(seg.t1-seg.t0||1)));
     const route=seg.route || (seg.route=_routeFor(seg.a, seg.b));
+    if(route && !route.broken && !seg._paced) _paceSeg(slot, seg, route);
+    const f=Math.max(0, Math.min(1, (C-seg.t0)/(seg.t1-seg.t0||1)));
     if(route && route.broken){ slot.onMap=false; return seg; }  // walled-in doorstep: skip the walk, arrive on schedule
     if(route){ _routeAt(route, f*route.len, slot, _pt); slot.x=_pt.x; slot.y=_pt.y; slot.face=_pt.face; }
     else { slot.x=seg.ax+(seg.bx-seg.ax)*f; slot.y=seg.ay+(seg.by-seg.ay)*f; slot.face=(seg.bx-seg.ax)<0?-1:1; } // legs still computing (first ~14 frames)
@@ -398,8 +473,14 @@
     if(_tinted[key] || _mixBroken[key]) return;
     const idx=(+key.slice(4)|0)%MIX_K, w=_buildWardrobe()[idx];
     if(_mixCount>=MIX_K){ _mixBroken[key]=1; return; }         // structural guard (≤MIX_K distinct keys exist)
+    // Phase-2 fallback ladder: civilian strip recipe → ('broken' part assets: 404'd
+    // optional files) → the look's Phase-1 unit-band fallback → (throw) → plain tint.
+    // 'loading' keeps the strip recipe: composeTinted returns null → re-queued, same
+    // streaming contract as unit donors.
+    const recipe=(w.fallback && typeof NPCMIX.partLibState==='function' && NPCMIX.partLibState()==='broken') ? w.fallback : w;
     try{
-      const anim=NPCMIX.composeTinted(w, TINTS[w.tint], TINT_ALPHA);
+      // per-look tintAlpha (punk looks bake untinted — composeTinted skips tint at <=0)
+      const anim=NPCMIX.composeTinted(recipe, TINTS[recipe.tint], recipe.tintAlpha!=null?recipe.tintAlpha:TINT_ALPHA);
       if(!anim) return;                                        // donor art still streaming — re-queued on next draw
       _tinted[key]=anim; _mixCount++;
     }catch(_){ _mixBroken[key]=1; }                            // broken bake: this look permanently falls back to plain
@@ -572,7 +653,7 @@
     for(let i=0;i<n;i++){
       const roll=i%10;
       const role=roll<4?'relative':(roll<6?'friend':(roll<8?'provider':'ultra'));
-      roster.push({ id:'perf:'+i, seed:_h32(777+i*7919), role,
+      roster.push({ id:'perf:'+i, seed:_h32(777+i*7919), role, gender:(i%2)?'m':'f',   // both wardrobe pools get baked
         name:'Perf '+i, first:'Perf'+i, profession:'Benchmark Subject', chores:['standing very still','being measured'],
         homePoi:role==='ultra'?'':(condos[i%Math.max(1,condos.length)]||''),
         workPoi:role==='provider'?(pois[i%Math.max(1,pois.length)]||'ultra'):(role==='ultra'?'ultra':null),

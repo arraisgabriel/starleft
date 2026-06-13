@@ -31,9 +31,29 @@ const REX_GLOWS = [
   { id:6, kind:'spot', x:0.50, y:0.93, rx:0.20, ry:0.07, color:[90,232,70],   alpha:0.60, pulse:1.00, phase:0.15 }, // heavy ground wash
 ];
 
+// ---- BESPOKE-ART BOSSES (THE CYAN NINJA → 'ninja', REX → 'rexBoss') ----
+// Separate maps so the lieutenants that STILL reuse the soldier/founder art keep their original
+// anchors: ao_enforcer→'cyanNinja' (soldier), tower_guardian→'rex' (founder). Coords eyeballed
+// against the new strips; fine-tune live (no villain calibrator — hand-edit these normalized x/y).
+const NINJA_BOSS_GLOWS = [
+  { id:0, kind:'spot', x:0.50, y:0.50, rx:0.18, ry:0.16, color:[95,242,255],  alpha:1.00, pulse:1.30, phase:0.00 }, // chest core / circuitry (dominant)
+  { id:1, kind:'spot', x:0.50, y:0.23, rx:0.075, ry:0.070, color:[170,250,255], alpha:0.92, pulse:1.05, phase:0.35 }, // head / visor slit
+  { id:2, kind:'spot', x:0.62, y:0.47, rx:0.060, ry:0.060, color:[95,242,255], alpha:0.70, pulse:1.00, phase:0.55 }, // sword-hand / forearm
+  { id:3, kind:'spot', x:0.50, y:0.93, rx:0.13, ry:0.055, color:[70,220,255],  alpha:0.52, pulse:1.00, phase:0.20 }, // ground wash under the feet
+];
+const REX_BOSS_GLOWS = [
+  { id:0, kind:'spot', x:0.50, y:0.46, rx:0.20, ry:0.18, color:[125,255,95],  alpha:1.00, pulse:1.35, phase:0.00 }, // chest reactor core (dominant)
+  { id:1, kind:'spot', x:0.50, y:0.20, rx:0.090, ry:0.080, color:[175,255,130], alpha:0.92, pulse:1.05, phase:0.30 }, // ugly alien face / eyes
+  { id:2, kind:'spot', x:0.27, y:0.34, rx:0.085, ry:0.085, color:[125,255,95], alpha:0.80, pulse:1.00, phase:0.50 }, // left shoulder pod
+  { id:3, kind:'spot', x:0.73, y:0.34, rx:0.085, ry:0.085, color:[125,255,95], alpha:0.80, pulse:1.00, phase:0.62 }, // right shoulder pod
+  { id:4, kind:'spot', x:0.50, y:0.93, rx:0.20, ry:0.07, color:[90,232,70],   alpha:0.58, pulse:1.00, phase:0.15 }, // heavy ground wash
+];
+
 const VILLAIN_NEON_MAPS = { sprites: {
   cyanNinja: { walk:{ frames:[{ glows:NINJA_GLOWS }] }, attack:{ frames:[{ glows:NINJA_GLOWS }] } },
   rex:       { walk:{ frames:[{ glows:REX_GLOWS }] },   attack:{ frames:[{ glows:REX_GLOWS }] } },
+  ninja:     { walk:{ frames:[{ glows:NINJA_BOSS_GLOWS }] }, attack:{ frames:[{ glows:NINJA_BOSS_GLOWS }] } },
+  rexBoss:   { walk:{ frames:[{ glows:REX_BOSS_GLOWS }] },   attack:{ frames:[{ glows:REX_BOSS_GLOWS }] } },
 } };
 
 if(typeof window!=='undefined') window.VILLAIN_NEON_MAPS = VILLAIN_NEON_MAPS;

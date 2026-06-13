@@ -35,10 +35,11 @@
   const FADE_IN   = 0.8;             // seconds to fade a drone in
   const SPAWN_MIN = 0.6, SPAWN_RANGE = 0.8; // seconds between spawns → busier skies (~double the density)
   const LAUNCH_KINDS = { condo:1, mdc:1, ultra:1 };   // landmark rooftops drones lift off from
+  const AO_SHARE  = 1/3;             // fraction of flyers in A&O black/green livery (even three-way with the red/blue mix)
 
   // ---- pre-allocated pool + free-list (zero per-frame allocation) ----
   const _pool = new Array(CAP), _free = [];
-  for(let i=CAP-1;i>=0;i--){ _pool[i]={ idx:i, active:false, kind:'drone', x:0,y:0, vx:0,vy:0, nx:0,ny:0, face:1, size:SIZE_MIN, life:0, phase:0, owner:'player' }; _free.push(i); }
+  for(let i=CAP-1;i>=0;i--){ _pool[i]={ idx:i, active:false, kind:'drone', x:0,y:0, vx:0,vy:0, nx:0,ny:0, face:1, size:SIZE_MIN, life:0, phase:0, owner:'player', faction:null }; _free.push(i); }
   let _alive=0;
 
   let _clock=0, _spawnAcc=0, _nextSpawn=0, _bombAcc=0, _nextBomb=0, _lastState=null;
@@ -78,7 +79,11 @@
     p.kind=kind; p.x=ox; p.y=oy; p.nx=hx; p.ny=hy; p.vx=hx*spd; p.vy=hy*spd; p.face = p.vx<0?-1:1;
     p.size = isBomb ? (BOMB_SIZE_MIN+R()*BOMB_SIZE_RANGE) : (SIZE_MIN+R()*SIZE_RANGE);
     p.life=0; p.phase=R()*6.2832;
-    p.owner = R()<0.5 ? 'player' : 'enemy';   // 'player' → red sheet, 'enemy' → blue sheet (mix of both colours)
+    // even three-way livery: red (player sheet) / blue (enemy sheet) / A&O black-green (faction 'ao').
+    // A&O sets owner='enemy' so the fallback, if the optional _ao art isn't ready yet, is the blue sheet.
+    const roll=R();
+    if(roll < AO_SHARE){ p.faction='ao';  p.owner='enemy'; }
+    else               { p.faction=null;  p.owner = roll < AO_SHARE+(1-AO_SHARE)/2 ? 'player' : 'enemy'; }
   }
 
   function updateHubDrones(state, dt){
@@ -102,7 +107,7 @@
   }
 
   // ---- cached neon nav-light glow sprites (built once per colour, additive 'lighter' blit) ----
-  const LIGHT_R='255,80,70', LIGHT_B='90,175,255';   // neon red + blue
+  const LIGHT_R='255,80,70', LIGHT_B='90,175,255', LIGHT_G='150,255,110';   // neon red + blue + A&O toxic green (matches aoSide palette)
   const _glowCache={};
   function _glow(tint){
     let g=_glowCache[tint]; if(g) return g;
@@ -120,12 +125,13 @@
     if(CAP===0 || !_alive) return;
     if(typeof unitWalk!=='function' || typeof blitFrame!=='function') return;
     // both flyer sprites in both colours (factionKey: 'player'→red walk_enemy, 'enemy'→blue walk)
-    const courierR=unitWalk('courier','player'), courierB=unitWalk('courier','enemy');
-    const bomberR =unitWalk('bomber','player'),  bomberB =unitWalk('bomber','enemy');
-    const glowR=_glow(LIGHT_R), glowB=_glow(LIGHT_B);            // cached neon glow sprites
+    const courierR=unitWalk('courier','player'), courierB=unitWalk('courier','enemy'), courierA=unitWalk('courier','enemy','ao');
+    const bomberR =unitWalk('bomber','player'),  bomberB =unitWalk('bomber','enemy'),  bomberA =unitWalk('bomber','enemy','ao');
+    const glowR=_glow(LIGHT_R), glowB=_glow(LIGHT_B), glowG=_glow(LIGHT_G);   // cached neon glow sprites (red / blue / A&O green)
     for(let i=0;i<CAP;i++){ const p=_pool[i]; if(!p.active) continue;
-      const isBomb=p.kind==='bomber';
-      const anim = isBomb ? (p.owner==='enemy'?bomberB:bomberR) : (p.owner==='enemy'?courierB:courierR);
+      const isBomb=p.kind==='bomber', isAO=p.faction==='ao';
+      const anim = isBomb ? (isAO?bomberA :(p.owner==='enemy'?bomberB :bomberR))
+                          : (isAO?courierA:(p.owner==='enemy'?courierB:courierR));
       if(!anim || !anim.ready) continue;                         // that sprite's art not loaded yet → skip this flyer
       const wob=Math.sin(_clock*BOB_FREQ+p.phase);                // -1..1, slow & smooth (_clock, not state.time → animates on clients too)
       const size=p.size*(1+wob*BREATHE);                          // gradual grow/shrink "breathe" (no size pop)
@@ -140,19 +146,21 @@
       if(isBomb){
         // BOMBER: twin THRUST lights matching its sprite colour (red/blue) at the lower wingtips,
         // with a faster engine flicker. Bigger sprite → bigger glow.
-        const g = p.owner==='enemy' ? glowB : glowR;
+        const g = isAO ? glowG : (p.owner==='enemy' ? glowB : glowR);
         const tx=size*0.30, ty=cy+size*0.24, gr=size*0.42;
         ctx.globalAlpha = a*(0.34 + 0.34*Math.sin(_clock*6.0 + p.phase));
         ctx.drawImage(g, p.x-tx-gr, ty-gr, gr*2, gr*2);
         ctx.globalAlpha = a*(0.34 + 0.34*Math.sin(_clock*6.0 + p.phase + 1.7));
         ctx.drawImage(g, p.x+tx-gr, ty-gr, gr*2, gr*2);
       } else {
-        // DRONE: tiny red + blue nav lights at the wingtips, gentle out-of-phase blink.
+        // DRONE: twin wingtip nav lights, gentle out-of-phase blink — red+blue normally,
+        // twin toxic-green for A&O (matches the black/green sprite recolor).
         const wx=size*0.42, gr=size*0.55;
+        const gL=isAO?glowG:glowR, gR=isAO?glowG:glowB;
         ctx.globalAlpha = a*(0.30 + 0.32*Math.sin(_clock*3.0 + p.phase));
-        ctx.drawImage(glowR, p.x-wx-gr, cy-gr, gr*2, gr*2);
+        ctx.drawImage(gL, p.x-wx-gr, cy-gr, gr*2, gr*2);
         ctx.globalAlpha = a*(0.30 + 0.32*Math.sin(_clock*3.0 + p.phase + 2.1));
-        ctx.drawImage(glowB, p.x+wx-gr, cy-gr, gr*2, gr*2);
+        ctx.drawImage(gR, p.x+wx-gr, cy-gr, gr*2, gr*2);
       }
       ctx.restore();                                              // restore() resets alpha + composite op
     }

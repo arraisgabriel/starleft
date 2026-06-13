@@ -207,7 +207,8 @@ function spawnVets(state){
   if(!carryoverVets.length) return;
   const c=state.cfg.player;
   carryoverVets.slice(0, vetCarryCount()).forEach((v,i)=>{
-    const u=mkUnit(state, v.type, 'player', c.x-2+(i%4), c.y-3-((i/4)|0));
+    // BELOW the HQ (rising-sprite buildings occlude anything spawned above them); fanned wide.
+    const u=mkUnit(state, v.type, 'player', c.x-3+(i%6), c.y+8+((i/6)|0));
     u.stars=v.stars; u.xp=v.xp; if(v.lore) u.lore=v.lore;
     u.madosis=v.madosis||0; u.sanityThreshold=v.sanityThreshold||0; u.scarred=!!v.scarred;   // sanity travels with the vet
     u.reborn=!!v.reborn;                                                                       // reborn cyborg flag travels too

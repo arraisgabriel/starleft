@@ -281,6 +281,14 @@ function render(state){
   }
   if(PERF.on) PERF.lap('terrain');
 
+  // ---- roads + sidewalks (HUB only): colored canvas tiles painted over terrain but UNDER the
+  //      depth-sorted sprites, so buildings/units/NPCs occlude them. Gated on roadTiles existing. ----
+  if(state.roadTiles){
+    if(PERF.on) PERF.mark('roads');
+    drawRoads(state, x0,y0,x1,y1);
+    if(PERF.on) PERF.lap('roads');
+  }
+
   // ---- water/magma surface overlay: caustic shimmer + tide highlight + lava cracks/core (js/water.js) ----
   if(PERF.on) PERF.mark('water');
   if(typeof drawWater==='function') drawWater(state, x0,y0,x1,y1);
@@ -306,6 +314,7 @@ function render(state){
     const sx=Math.max(0, Math.min(state.W-1, f.tx+(fw>>1))), sy=Math.max(0, Math.min(state.H-1, f.ty+fh-1));
     const si=sy*state.W + sx;                                          // one bottom-row sample cell (shared w/ minimap/fog)
     if(!state.explored[si]) continue;                                 // hidden until explored
+    if(state.roadTiles && state.roadTiles[si]===1) continue;          // a road plowed through this grove → don't draw canopy over the asphalt
     depth.push({y:(f.ty+fh)*TILE, f, dim:state.visible[si]!==1});      // neutral scenery: dim when not visible
   } }
   // funding nodes ("funding rock"): a 3x3 walk-under footprint like a topo feature —
@@ -747,6 +756,68 @@ function drawFloorDeco(state,b,v,px,py){
   }
 }
 
+/* ---- HUB roads + sidewalks: colored canvas tiles (no sprites). roadTiles 0=none/1=road/2=sidewalk;
+   roadMask = per-road N/E/S/W road-neighbour nibble (N=1,E=2,S=4,W=8) → carriageway edges; roadAxis =
+   centreline tiles (1=H,2=V) → the dashed lane line. Lit cyan neon survives the HUB night tint. ---- */
+const ROAD_ASPHALT  = '#0d1016', ROAD_ASPHALT2  = '#11151c';   // wet asphalt, 2-tone (deterministic mottle)
+const ROAD_SIDEWALK = '#222a34', ROAD_SIDEWALK2 = '#27313d';   // cool concrete slab, clearly lighter than asphalt
+const ROAD_BEVEL_HI = 'rgba(150,175,205,.10)';                 // raised-curb highlight where sidewalk meets road
+const ROAD_NEON     = '90,210,255';                            // cyan lane neon (alpha applied per use)
+function drawRoads(state, x0,y0,x1,y1){
+  const W=state.W, H=state.H, R=state.roadTiles, M=state.roadMask, AX=state.roadAxis, T=TILE, z=state.zoom||1;
+  // ---- Pass A: fills (every zoom). 2-tone (≈25% alt) so asphalt/concrete aren't dead-flat. +1 overscan. ----
+  for(let ty=y0;ty<y1;ty++) for(let tx=x0;tx<x1;tx++){
+    const v=R[ty*W+tx]; if(!v) continue;
+    const alt=((tx*7 ^ ty*13)&3)===0;
+    ctx.fillStyle = v===2 ? (alt?ROAD_SIDEWALK2:ROAD_SIDEWALK) : (alt?ROAD_ASPHALT2:ROAD_ASPHALT);
+    ctx.fillRect(tx*T, ty*T, T+1, T+1);
+  }
+  const q    = (typeof QUAL!=='undefined' && QUAL) ? (QUAL.level||0) : 0;
+  const glow = z>=0.5 && q<2;                                  // shadowBlur (bloom) only when readable + affordable
+  const anim = z>=0.7 && q<1 && !(typeof megaReducedMotion==='function' && megaReducedMotion());
+  const t    = state.time||0;
+  const lw   = 1/z;                                            // hold line weight + dash ≈constant in SCREEN px → neon reads at EVERY zoom
+
+  // ---- Pass A2: curb bevel — fine detail, only when zoomed in enough to see it ----
+  if(z>=0.55){
+    ctx.lineWidth=1; ctx.strokeStyle=ROAD_BEVEL_HI; ctx.beginPath();
+    for(let ty=y0;ty<y1;ty++) for(let tx=x0;tx<x1;tx++){
+      const i=ty*W+tx; if(R[i]!==2) continue; const px=tx*T, py=ty*T;
+      if(ty>0   && R[i-W]===1){ ctx.moveTo(px, py+0.5);   ctx.lineTo(px+T, py+0.5); }
+      if(ty<H-1 && R[i+W]===1){ ctx.moveTo(px, py+T-0.5); ctx.lineTo(px+T, py+T-0.5); }
+      if(tx>0   && R[i-1]===1){ ctx.moveTo(px+0.5, py);   ctx.lineTo(px+0.5, py+T); }
+      if(tx<W-1 && R[i+1]===1){ ctx.moveTo(px+T-0.5, py); ctx.lineTo(px+T-0.5, py+T); }
+    }
+    ctx.stroke();
+  }
+
+  // ---- Pass B: neon EDGES (the lit-street rails) — carriageway↔non-road boundary, one batched stroke. ALWAYS. ----
+  ctx.beginPath();
+  for(let ty=y0;ty<y1;ty++) for(let tx=x0;tx<x1;tx++){
+    const i=ty*W+tx; if(R[i]!==1) continue; const m=M[i], px=tx*T, py=ty*T;
+    if(!(m&1)){ ctx.moveTo(px, py+0.5);   ctx.lineTo(px+T, py+0.5); }
+    if(!(m&4)){ ctx.moveTo(px, py+T-0.5); ctx.lineTo(px+T, py+T-0.5); }
+    if(!(m&8)){ ctx.moveTo(px+0.5, py);   ctx.lineTo(px+0.5, py+T); }
+    if(!(m&2)){ ctx.moveTo(px+T-0.5, py); ctx.lineTo(px+T-0.5, py+T); }
+  }
+  ctx.shadowColor = glow ? 'rgba('+ROAD_NEON+',.5)' : 'transparent'; ctx.shadowBlur = glow?11:0;
+  ctx.strokeStyle = 'rgba('+ROAD_NEON+',.6)'; ctx.lineWidth=1.8*lw; ctx.stroke();   // border lines at 60% opacity (40% transparent)
+
+  // ---- Pass C: neon CENTRE LINE — run-merged so dashes flow continuously down each carriageway. ALWAYS. ----
+  if(AX){
+    ctx.setLineDash([18*lw,10*lw]); ctx.lineDashOffset = anim ? -((t*9)%28)*lw : 0;   // dash held ≈constant in screen px
+    ctx.beginPath();
+    for(let ty=y0;ty<y1;ty++){ const cy=ty*T+T/2; let tx=x0;        // horizontal runs
+      while(tx<x1){ if(AX[ty*W+tx]===1){ const sx=tx; while(tx<x1 && AX[ty*W+tx]===1) tx++; ctx.moveTo(sx*T,cy); ctx.lineTo(tx*T,cy); } else tx++; } }
+    for(let tx=x0;tx<x1;tx++){ const cx=tx*T+T/2; let ty=y0;        // vertical runs
+      while(ty<y1){ if(AX[ty*W+tx]===2){ const sy=ty; while(ty<y1 && AX[ty*W+tx]===2) ty++; ctx.moveTo(cx,sy*T); ctx.lineTo(cx,ty*T); } else ty++; } }
+    ctx.shadowColor = glow ? 'rgba('+ROAD_NEON+',.46)' : 'transparent'; ctx.shadowBlur = glow?8:0;
+    ctx.strokeStyle = 'rgba('+ROAD_NEON+','+(glow?'.50':'.58')+')'; ctx.lineWidth=1.6*lw; ctx.stroke();
+  }
+  // ---- reset (following water/lava passes assume no shadow/dash) ----
+  ctx.shadowBlur=0; ctx.setLineDash([]); ctx.lineDashOffset=0;
+}
+
 /* ---- Water: neighbour-aware so a lake reads as open water in the interior with
    a real shoreline only where it meets land — no more shore tile blitted across
    the middle of the lake. Works for every water biome; the shore rim colour is
@@ -1033,7 +1104,6 @@ function drawHubBuildingSpriteVisual(state,e,ox,oy){
   const dw=baseW*(v.overhang||1.08), dh=dw*(spr.fh/spr.fw)*(v.heightScale||1);
   const dx=baseX+(baseW-dw)/2, dy=baseY+baseH-dh+2;
   const f=(v.fixedFrame!=null?Math.floor(v.fixedFrame):0), fi=((f%spr.frames)+spr.frames)%spr.frames;
-  const neon=buildingNeonFrame(v.neonId || (v.type+'_'+(v.faction||factionKey(e.owner))), fi);
   // Optional vertical STACK: draw the sprite N times to build ONE ultra-tall tower. It stays a single
   // entity with a single footprint, so it looks AND clicks as one. Lower segments draw last so they
   // cover the seam of the segment above them; stackOverlap blends the join.
@@ -1041,10 +1111,15 @@ function drawHubBuildingSpriteVisual(state,e,ox,oy){
   const topYout=dy-(stack-1)*step;
   // draw bottom segment FIRST, each higher segment ON TOP — so the upper sprite's base hides the
   // roof/helipad of the one below it and the stack reads as a single continuous tower.
+  // stackFrames picks a sheet frame PER SEGMENT (index = segment, 0 = bottom) so a stack can
+  // line up its art (e.g. The Wake's continuous light strip); missing entries fall back to fixedFrame.
   for(let s=0; s<stack; s++){
     const sy=dy-s*step;
+    const sfi=(v.stackFrames && v.stackFrames[s]!=null)
+      ? ((Math.floor(v.stackFrames[s])%spr.frames)+spr.frames)%spr.frames : fi;
+    const neon=buildingNeonFrame(v.neonId || (v.type+'_'+(v.faction||factionKey(e.owner))), sfi);
     if(typeof drawMegaNeonLayer==='function') drawMegaNeonLayer(state, v, neon, dx, sy, dw, dh, 'aura');
-    ctx.drawImage(spr.img, fi*spr.fw, 0, spr.fw, spr.fh, dx, sy, dw, dh);
+    ctx.drawImage(spr.img, sfi*spr.fw, 0, spr.fw, spr.fh, dx, sy, dw, dh);
     if(typeof drawMegaNeonLayer==='function') drawMegaNeonLayer(state, v, neon, dx, sy, dw, dh, 'core');
   }
   return topYout;
@@ -1503,7 +1578,8 @@ function drawUnit(state,u,ox,oy){
       else { fi = ((state.time*7)|0) % n; }                                        // mine / heal loop
     } else {
       // ---- IDLE PATH: walk frame 0 when still, plus render-only "life" layers ----
-      useAnim = anim; fi = moving ? (((u._walkDist||0)/9)|0) % anim.frames.length : 0;
+      const stridePx = (sType==='ninja') ? 15 : 9;   // px of travel per walk frame; ninja uses 15 → legs cycle at 60% of default rate (25% slower, then a further 20%)
+      useAnim = anim; fi = moving ? (((u._walkDist||0)/stridePx)|0) % anim.frames.length : 0;
       if(!u.captive){                                  // captives stay frozen
         const idleAmount = moving ? 0 : Math.max(0, Math.min(1, ((u._still||0)-6)/IDLE.rampFrames));
         // LAYER 2 — occasional action fidget (settled, grounded units): replay the

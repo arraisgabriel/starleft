@@ -1,8 +1,10 @@
 /* map.js — map generation & entity factories: buildEnemyBase, newMap, mkEntity/mkBuilding/mkUnit, markBuilding, recomputeSupply. */
 function buildEnemyBase(state, base, idx){
-  // origin (ax,ay) = HQ top-left. Buildings are big now (HQ 4×3, barracks/garage
-  // 3×3, turret 2×2), so they're laid out side-by-side without overlap; the base
-  // spans roughly ax-2..ax+7 × ay..ay+6 (clearArea below clears radius 7 around it).
+  // origin (ax,ay) = HQ top-left. Building SPRITES render ~2.5× their tile footprint
+  // (bottom-anchored, rising upward), so a compact side-by-side layout piles the sprites
+  // into one blob on top of the muster. Spread the footprints wide and drop the flankers a
+  // row so the tall sprites layer front-to-back into a readable skyline; muster sits clear
+  // below. Base spans ~ax-4..ax+9 × ay..ay+6 (clearArea clears radius 10 around it).
   const ax=base.x, ay=base.y;
   // `light:true` = a forward outpost, not a base: ONE weak structure + its few guards.
   // Used by Quarter I to give a new player a fast first fight (T0-1); skips vet scaling.
@@ -15,15 +17,20 @@ function buildEnemyBase(state, base, idx){
     for(let i=0;i<n;i++) mkUnit(state,'soldier','enemy', ax+1+(i%4), ay+4);
     return;
   }
-  mkBuilding(state,'hq','enemy', ax, ay, true);                 // 4×3
-  mkBuilding(state,'barracks','enemy', ax+4, ay, true);         // 3×3, right of HQ
-  if(base.extraBarracks) mkBuilding(state,'barracks','enemy', ax+4, ay+3, true); // below the barracks
-  mkBuilding(state,'turret','enemy', ax-2, ay, true);           // 2×2, left of HQ
-  if(idx>=1 && ax+3<=state.W && ay+6<=state.H) mkBuilding(state,'garage','enemy', ax, ay+3, true); // 3×3, below HQ
+  // Wide, vertically-staggered layout. Near a map edge, fall back to the old snug offsets so
+  // nothing lands off-map (wideR / left-room guards mirror the original unconditional placement).
+  const turretX = (ax-4>=0)          ? ax-4 : ax-2;             // left wing (snug fallback)
+  const barrX   = (ax+9<=state.W-1)  ? ax+7 : ax+4;            // right wing (snug fallback)
+  const mY      = Math.min(ay+8, state.H-2);                    // muster row, clear below the base
+  mkBuilding(state,'hq','enemy', ax, ay, true);                       // 4×3, back-centre anchor (tallest)
+  mkBuilding(state,'barracks','enemy', barrX, ay+1, true);            // 3×3, right wing, dropped a row
+  if(base.extraBarracks) mkBuilding(state,'barracks','enemy', barrX, ay+4, true); // stacked below the right barracks
+  mkBuilding(state,'turret','enemy', turretX, ay+1, true);           // 2×2, left wing, dropped a row
+  if(idx>=1 && ax+3<=state.W && ay+6<=state.H-1) mkBuilding(state,'garage','enemy', ax, ay+4, true); // 3×3, in front of HQ
   const ndef0 = base.defenders!=null ? base.defenders : (idx===0?2:4);
   // co-op: more starting defenders so 2 players don't trivially rush a base (sub-linear, balance.js)
   const ndef = Math.round(ndef0 * ((typeof coopFactor==='function')?coopFactor(state.players):1));
-  for(let i=0;i<ndef;i++) mkUnit(state,'soldier','enemy', ax+1+(i%6), ay+6+((i/6)|0));   // muster below the base (clear ground)
+  for(let i=0;i<ndef;i++) mkUnit(state,'soldier','enemy', ax+1+(i%6), mY+((i/6)|0));   // muster below the base (clear ground)
   // dynamic difficulty: extra defenders scaled to the player's carried career power (balance.js).
   // state._vpi is computed once in newMap before the bases are built; 0 (fresh) → no bonus.
   if(typeof applyVetScalingToBase==='function') applyVetScalingToBase(state, base, idx, state._vpi||0);
@@ -330,8 +337,8 @@ function newMap(idx){
   const clearArea=(px,py,rad)=>{ for(let y=-rad;y<=rad;y++)for(let x=-rad;x<=rad;x++){
     if(inB(px+x,py+y)){ const j=(py+y)*W+(px+x); tiles[j]=T_GRASS;
       if(biome[j]===B_WATER||biome[j]===B_MOUNTAIN) biome[j]=landBiome; } } };
-  clearArea(cfg.player.x,cfg.player.y,6);                  // bigger buildings need a bigger clear pad
-  bases.forEach(b=> clearArea(b.x,b.y,7));                 // enemy base spans ~ax-2..ax+7 × ay..ay+6
+  clearArea(cfg.player.x,cfg.player.y,10);                 // sprites draw ~2.5× footprint; spread base + muster needs a big clear pad
+  bases.forEach(b=> clearArea(b.x,b.y,10));                // enemy base spread ~ax-4..ax+9 × ay..ay+6, muster at ay+8
   (cfg.lostBases||[]).forEach(b=> clearArea(b.x,b.y,4));   // abandoned outposts sit on clear ground too
   (cfg.guards||[]).forEach(g=> clearArea(g.x,g.y,3));      // standing guard squads (now mixed/larger) need clear footing
   (cfg.captives||[]).forEach(c=> clearArea(c.x,c.y,3));    // the prison cell at the corridor's end
@@ -461,17 +468,25 @@ function newMap(idx){
   }
 
   // ---- player start: HQ + Interns + Growth Cyborgs (+ optional People Ops) ----
+  // Buildings render ~2.5× their footprint and rise upward, so combat starters used to spawn
+  // *behind* the tall HQ sprite (only a faint ghost showed through). Muster every starting unit
+  // BELOW the HQ footprint (in front, never occluded), in widening rows; push the optional
+  // People Ops well to the left and down a row so the two big sprites don't pile.
   const phq = mkBuilding(state,'hq','player', cfg.player.x, cfg.player.y, true);
+  if(cfg.startBarracks) mkBuilding(state,'barracks','player', (cfg.player.x-6>=0?cfg.player.x-6:cfg.player.x-4), cfg.player.y+1, true); // People Ops: left wing, dropped a row
   const nW = cfg.startWorkers!=null ? cfg.startWorkers : 4;   // explicit 0 must stay 0 (Ep X starts economy-less)
   const nS = cfg.startSoldiers!=null ? cfg.startSoldiers : 2;
-  for(let i=0;i<nW;i++) mkUnit(state,'worker','player', cfg.player.x+ (i%3), cfg.player.y+4 + ((i/3)|0));  // below the 4×3 HQ
-  for(let i=0;i<nS;i++) mkUnit(state,'soldier','player', cfg.player.x-1+(i%5), cfg.player.y-2 - ((i/5)|0)); // above the HQ
+  let mrow = cfg.player.y+4;                                  // first muster row, clear below the 4×3 HQ
+  for(let i=0;i<nW;i++) mkUnit(state,'worker','player', cfg.player.x+(i%5), mrow+((i/5)|0));
+  mrow += Math.ceil(nW/5);
+  for(let i=0;i<nS;i++) mkUnit(state,'soldier','player', cfg.player.x-1+(i%7), mrow+((i/7)|0));
+  mrow += Math.ceil(nS/7);
   // hand-specified extra starters — Episode X sends Nino in with two Lobbyists and no economy.
-  // each {type, n, level} spawns n units of `type` above the HQ, optionally pre-leveled.
-  if(cfg.startUnits) cfg.startUnits.forEach(g=>{ const lvl=g.level||0; for(let i=0;i<(g.n||1);i++){
-    const u=mkUnit(state, g.type, 'player', cfg.player.x-2+(i%5), cfg.player.y-4-((i/5)|0));
+  // each {type, n, level} spawns n units of `type` below the HQ, optionally pre-leveled.
+  if(cfg.startUnits) cfg.startUnits.forEach(g=>{ const lvl=g.level||0, n=g.n||1; for(let i=0;i<n;i++){
+    const u=mkUnit(state, g.type, 'player', cfg.player.x-2+(i%6), mrow+((i/6)|0));
     if(lvl && typeof CAREER!=='undefined'){ u.stars=Math.max(0,Math.min(CAREER.maxStars,lvl)); u.xp=CAREER.xpFor(u.stars); if(typeof applyVetHp==='function') applyVetHp(u,true); }
-  }});
+  } mrow += Math.ceil(n/6); });
   spawnVets(state);   // carry veterans from the previous campaign map (count grows every 2 maps)
   spawnHeroes(state); // named campaign heroes declared on the map (e.g. Nino on Episode VIII)
   // T2-1 escort verb: flag the VIP the mission must deliver (a named hero, a unit type, or any fighter)
@@ -483,7 +498,6 @@ function newMap(idx){
     if(!vip) vip=state.entities.find(e=>!e.dead&&e.owner==='player'&&e.kind==='unit'&&e.type!=='worker');
     if(vip) vip._vip=true;
   }
-  if(cfg.startBarracks) mkBuilding(state,'barracks','player', cfg.player.x-3, cfg.player.y, true);
 
   // dynamic difficulty: measure P1's carried career power NOW (player units are placed, enemies aren't),
   // so each enemy base can muster proportionate extra defenders (balance.js). 0 (fresh) → no bonus.
@@ -711,21 +725,24 @@ function addCoopPlayer(state, slot){
   });
   const origin = candidates.length ? candidates[0].origin : {x:Math.max(6,Math.min(W-7,p1.x+8)), y:Math.max(6,Math.min(H-7,p1.y))};
 
-  coopClearArea(state, origin.x, origin.y, 6);                 // open a build pad
+  coopClearArea(state, origin.x, origin.y, 10);                // open a build pad (matches P1's spread start)
 
   // seed this controller's economy pool (same starting Funding as p1)
   if(!state.eco[slot]) state.eco[slot]={ gold: cfg.startGold!=null?cfg.startGold:300, supply:0, supplyCap:0, gold_collected:0 };
 
   const prev=state._defaultCtrl; state._defaultCtrl=slot;       // tag everything spawned below as this slot
   mkBuilding(state,'hq','player', origin.x, origin.y, true);
+  // mirror P1's layout: People Ops left-and-down, all units mustered BELOW the rising HQ sprite.
+  if(cfg.startBarracks) mkBuilding(state,'barracks','player', (origin.x-6>=0?origin.x-6:origin.x-4), origin.y+1, true);
   const nW = cfg.startWorkers!=null?cfg.startWorkers:4, nS = cfg.startSoldiers!=null?cfg.startSoldiers:2;
-  for(let i=0;i<nW;i++) mkUnit(state,'worker','player', origin.x+(i%3), origin.y+4+((i/3)|0));
-  for(let i=0;i<nS;i++) mkUnit(state,'soldier','player', origin.x-1+(i%5), origin.y-2-((i/5)|0));
-  if(cfg.startBarracks) mkBuilding(state,'barracks','player', origin.x-3, origin.y, true);
+  let mrow = origin.y+4;
+  for(let i=0;i<nW;i++) mkUnit(state,'worker','player', origin.x+(i%5), mrow+((i/5)|0));
+  mrow += Math.ceil(nW/5);
+  for(let i=0;i<nS;i++) mkUnit(state,'soldier','player', origin.x-1+(i%7), mrow+((i/7)|0));
   // NOTE: deliberately no spawnVets/spawnHeroes/startUnits — those are p1's campaign roster (no clone of Nino).
   state._defaultCtrl=prev;
 
-  for(let y=-5;y<=6;y++)for(let x=-5;x<=6;x++){ const gx=origin.x+x, gy=origin.y+y;   // reveal p2's start
+  for(let y=-8;y<=12;y++)for(let x=-8;x<=11;x++){ const gx=origin.x+x, gy=origin.y+y;   // reveal p2's spread start
     if(gx>=0&&gy>=0&&gx<W&&gy<H) state.explored[gy*W+gx]=1; }
   recomputeSupply(state);
   (state._coopOrigins||(state._coopOrigins={}))[slot]=origin;   // remembered so the joiner's camera centres here

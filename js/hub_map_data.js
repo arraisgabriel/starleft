@@ -182,7 +182,7 @@ window.HUB_MAP_DATA = {
       "y": 19,
       "w": 6,
       "h": 6,
-      "visual": { "type": "hq", "faction": "player", "fixedFrame": 0, "overhang": 0.46, "heightScale": 2.4, "stack": 2, "stackOverlap": 0.30 }
+      "visual": { "type": "hq", "faction": "player", "fixedFrame": 0, "stackFrames": [4, 5], "neonId": "wake_hq", "overhang": 0.46, "heightScale": 2.4, "stack": 2, "stackOverlap": 0.30 }
     }
   ],
   "rivers": [
@@ -1398,10 +1398,10 @@ window.HUB_MAP_DATA = {
       "poiId": null,
       "type": "garage",
       "owner": "neutral",
-      "tx": 33,
-      "ty": 30,
-      "w": 8,
-      "h": 8,
+      "tx": 36,
+      "ty": 33,
+      "w": 3,
+      "h": 3,
       "visual": null
     },
     {
@@ -1409,10 +1409,10 @@ window.HUB_MAP_DATA = {
       "poiId": null,
       "type": "outpost",
       "owner": "neutral",
-      "tx": 41,
-      "ty": 87,
-      "w": 10,
-      "h": 10,
+      "tx": 44,
+      "ty": 90,
+      "w": 3,
+      "h": 3,
       "visual": null
     }
   ],

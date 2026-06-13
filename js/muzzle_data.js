@@ -24,6 +24,7 @@ const MUZZLE = {
   foodtruck:{ mx:0.76, my:0.50, w:1.10 },   // Food Truck — flame jet from the front grille
   auditor:  { mx:0.72, my:0.40, w:1.30 },   // Auditor — due-diligence cannon (big)
   founder:  { mx:0.74, my:0.40, w:1.50 },   // Founder Mech — arm cannon (biggest)
+  rex:      { mx:0.74, my:0.46, w:1.70 },   // REX boss — alien arm/shoulder cannon (4× mech; fine-tune via calibrator)
   bomber:   { mx:0.42, my:0.66, w:1.40 },   // Buzzword Bomber — underside ordnance (facesLeft)
 
   // ---- defensive buildings (footprint-relative rooftop muzzle) ----

@@ -102,7 +102,8 @@ function serializeEntity(e){
 // _cmdSig/placing (transient UI), and the fields handled specially below.
 // feat[] is the per-cell topography mask — rebuilt from features[] on load (keeps saves small).
 // waterDepth: a renderer-only distance-to-shore field (js/water.js), rebuilt from tiles[] on load.
-const SKIP = {cfg:1, visible:1, _cmdSig:1, placing:1, sprint:1, entities:1, selection:1, groups:1, blocked:1, explored:1, feat:1, waterDepth:1, hubPois:1};
+// roadTiles/roadMask/roadCost: transient HUB road grids — rebuilt by hubBuildRoads on load (keeps saves small + auto-migrates old hubs).
+const SKIP = {cfg:1, visible:1, _cmdSig:1, placing:1, sprint:1, entities:1, selection:1, groups:1, blocked:1, explored:1, feat:1, waterDepth:1, hubPois:1, roadTiles:1, roadMask:1, roadCost:1, roadAxis:1};
 function serializeGame(){
   const s={};
   for(const k in G){ if(!SKIP[k]) s[k]=G[k]; }       // primitives + JSON-safe arrays (tiles/biome/megaSprites)
@@ -166,6 +167,10 @@ function deserializeGame(s){
     // migrate old HUB saves: inject facilities added since the save was written (e.g. the
     // Training Grounds, which replaced the launchpad) and re-materialise any trainees.
     if(typeof hubReconcileFacilities==='function') hubReconcileFacilities(g);
+    // rebuild the transient road+sidewalk grids (never serialized) now that every building
+    // footprint is restored — old saves simply gain roads on load.
+    if(typeof hubBuildRoads==='function') hubBuildRoads(g);
+    if(typeof hubBuildRoadCost==='function') hubBuildRoadCost(g);
     if(typeof hubSpawnTrainees==='function') hubSpawnTrainees(g);
     if(typeof hubSpawnHealers==='function') hubSpawnHealers(g);
     // living city: pre-NPC saves (or saves written mid-visit) mint/refresh the population now.
