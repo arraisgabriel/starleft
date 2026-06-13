@@ -800,8 +800,8 @@ function drawRoads(state, x0,y0,x1,y1){
     if(!(m&8)){ ctx.moveTo(px+0.5, py);   ctx.lineTo(px+0.5, py+T); }
     if(!(m&2)){ ctx.moveTo(px+T-0.5, py); ctx.lineTo(px+T-0.5, py+T); }
   }
-  ctx.shadowColor = glow ? 'rgba('+ROAD_NEON+',.5)' : 'transparent'; ctx.shadowBlur = glow?11:0;
-  ctx.strokeStyle = 'rgba('+ROAD_NEON+',.6)'; ctx.lineWidth=1.8*lw; ctx.stroke();   // border lines at 60% opacity (40% transparent)
+  ctx.shadowColor = glow ? 'rgba('+ROAD_NEON+',.18)' : 'transparent'; ctx.shadowBlur = glow?9:0;
+  ctx.strokeStyle = 'rgba('+ROAD_NEON+',.24)'; ctx.lineWidth=1.8*lw; ctx.stroke();   // border lines at 24% opacity
 
   // ---- Pass C: neon CENTRE LINE — run-merged so dashes flow continuously down each carriageway. ALWAYS. ----
   if(AX){
