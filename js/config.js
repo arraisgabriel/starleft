@@ -163,6 +163,11 @@ const DEF = {
               flavor:'Vehicle bay. Turns Funding into Food Trucks, Auditors and Founder Mechs.' },
   launchpad:{ name:'Launch Pad', icon:'🚀', kind:'building', w:3,h:3, hp:850,  cost:250, build:28, sight:5, supply:0, color:'#5a6b8a',
               flavor:'Starport. Assembles Drugztore Delivery Drones and Buzzword Bombers. Requires a Garage.' },
+  /* ---- A&O's Dark Tower (indestructible scenery landmark; spawned via cfg.scenery as a neutral prop —
+     never buildable, never a combat target). The giant look comes from BUILDING_TYPE_SCALE in assets.js;
+     w/h here is only the collision footprint so units route around its base. ---- */
+  darktower:{ name:'The Dark Tower', icon:'🗼', kind:'building', w:6,h:5, hp:1, cost:0, build:1, sight:9, supply:0, color:'#0c0a12',
+              flavor:'A&O\'s black altar — the GRAAL writes the dying into fresh metal and the dead into product.' },
   /* ---- H.U.B.-only Training Grounds (level-cloning facility; never built in combat) ---- */
   training: { name:'Training Grounds', icon:'🎯', kind:'building', w:28,h:22, hp:4000, cost:0, build:1, sight:8, supply:0, color:'#5a6b8a',
               flavor:'A neon shooting academy. Lock a veteran mentor in with a junior of the same type — both walk out one level above the senior.' },
@@ -714,12 +719,35 @@ Weaponize your buzzwords, circle back, and disrupt MegaCorp into bankruptcy. The
       {x:66,y:38, defenders:3},                          // right gateway campus
       {x:48,y:66, extraBarracks:true, defenders:4},      // central chokepoint on the road
       {x:20,y:92, defenders:3},                          // the mountain-ringed campus (rock chains)
-      {x:48,y:112, defenders:4},                         // neck guardian — gates the peninsula
-      {x:48,y:140, extraBarracks:true, defenders:6},     // THE DARK TOWER — the GRAAL altar, on the peninsula
+      {x:48,y:112, defenders:4},                         // neck guardian — the LAST razeable lab; the GRAAL altar beyond is SEIZED (holdout), not razed
     ],
-    objective:'A&O is building the GRAAL on Dark Tower altar. Fight the road and liquidate all SIX A&O Labs — At the peninsula, raze the Dark Tower to create the GRAAL.',
+    // A&O's GIGANTIC indestructible Dark Tower — the GRAAL altar — at the peninsula's tip. Black spire
+    // crowned with a continuous green storm. NOT razed: it is SEIZED via the holdout below.
+    scenery:[ { type:'darktower', x:45, y:147 } ],
+    // "Seize the GRAAL" finale (reusable wave-defense engine, waves.js): once the five labs are razed,
+    // bring a unit to the tower to begin, then hold the altar through four escalating waves (the seizure's
+    // "time passing"), the last carrying the A&O ninja mini-boss. Waves spawn off-view on the neck north
+    // of the tower and march on the defenders; lose every defender in the zone and the transfer aborts.
+    holdout:{
+      quest:'graal', requires:'raze',
+      anchor:{ type:'darktower' }, zone:{ radius:6 }, trigger:{ reachRadius:3 },
+      spawns:[ {x:45,y:136},{x:39,y:140},{x:51,y:140},{x:43,y:132},{x:49,y:132} ],
+      resetOnUndefended:true, scaleWithRoster:true, gapSec:3,
+      framing:{ label:'GRAAL TRANSFER',
+        armPrompt:'📡 The five A&O labs are ash. Bring a unit to the DARK TOWER to begin the seizure.',
+        startToast:'📡 GRAAL transfer initiated — hold the altar. A&O counter-intrusion inbound.',
+        abortToast:'⚠ GRAAL transfer aborted — the altar fell undefended. Re-secure it.' },
+      waves:[
+        { comp:[['soldier',4],['ranger',2]] },
+        { comp:[['soldier',5],['hustler',3],['ranger',2]] },
+        { comp:[['soldier',6],['lobbyist',2],['foodtruck',2]] },
+        { comp:[['soldier',4],['ranger',3]], boss:{ id:'ao_ninja' } },
+      ],
+    },
+    objective:'Liquidate the five A&O labs down the road, then bring a unit to the DARK TOWER and hold the altar to seize the GRAAL.',
     quests:[
-      { id:'raze',   text:'Liquidate all six A&O labs — the DARK TOWER falls', type:'razeAll', required:true },
+      { id:'raze',   text:'Liquidate the five A&O labs',                       type:'razeAll', required:true },
+      { id:'graal',  text:'Seize the GRAAL — hold the Dark Tower altar',       type:'holdout', required:true },
       { id:'heroes', text:'Walk NINO and BIBA to the altar alive',             type:'heroesAlive', reward:150 },
       { id:'fund',   text:'Fund the pilgrimage — mine 12,000 on the road',     type:'accumulateFunding', amount:12000, reward:100 },
     ],
@@ -964,6 +992,9 @@ Weaponize your buzzwords, circle back, and disrupt MegaCorp into bankruptcy. The
     terrain:{ biomes:['tech'], seaFrac:0.05, mtnFrac:0.08, forest:0 },
     enemies:[],
     villain:{ id:'tower_guardian', x:29, y:8 },
+    // the duel is fought at the Dark Tower's foundation — the GIGANTIC indestructible spire looms over
+    // the arena as a backdrop (top-centre, clear of the player start and the guardian spawn).
+    scenery:[ { type:'darktower', x:18, y:2 } ],
     lakes:[ {x:13,y:7,r:3} ], rockClusters:[ {x:11,y:12,n:10}, {x:25,y:23,n:10} ], forests:[],
     goldNodes:[ {x:7,y:26,amt:2200}, {x:4,y:21,amt:1800}, {x:11,y:27,amt:1800}, {x:19,y:15,amt:2400} ],
   },

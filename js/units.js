@@ -1184,6 +1184,7 @@ function damage(state, t, amt, src){
   if(t.dead||t.storedIn) return;
   if(t._godmode) return;   // sandbox god-mode (localhost test tool): ignore all incoming damage (flag set only by js/sandbox.js)
   if(t.captive) return;   // imprisoned captives (Biba + the intern) are invulnerable until Nino frees them — neither friendly fire nor splash can kill them
+  if(t.scenery) return;   // indestructible backdrop props (the Dark Tower) never take damage — they exist purely as a landmark
   // T2-4 counter axis: DEF-driven armor (vehicles/mechs shrug off a flat % of small-arms) unless the
   // attacker PIERCES. Pure deterministic math — identical on host/solo/rollback. The per-entity
   // dmgReduce below (ninja/bosses, with the expose window) is a separate hand-tuned layer.

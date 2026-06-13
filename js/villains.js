@@ -73,6 +73,32 @@ const VILLAINS = {
       death:['A clean… exit.'],
     },
   },
+  // A&O black+green recolor of the cyan ninja — a MINI-boss for the Episode XI "Seize the GRAAL"
+  // holdout (waves.js spawns it on the final wave). Same hit-and-run AI/abilities as cyan_ninja but
+  // half the HP and the 'ao' sprite set (black body + toxic-green neon — needs ninja/walk_ao+attack_ao).
+  ao_ninja: {
+    name:'THE A&O NINJA',
+    base:'soldier', spriteType:'ninja', spriteFaction:'ao',    // force the black+green _ao sheet (aoSide / _vdef.spriteFaction, render.js)
+    neonId:'ninja_ao', neonColor:'#4aee60', auraColor:[74,238,96], bossScale:1.9,   // A&O toxic-green aura (works without a neon map)
+    hp:3600, dmg:8, range:1.8, cd:0.42, speed:4.6, sight:11,    // mini-boss: ~half the cyan ninja's 7000
+    dmgReduce:0.30, hpVpiScale:1/90, dmgVpiScale:1/240,         // gentler HP scaling than the full duel ninja
+    aiKind:'ninja',
+    ninja:{
+      dashSpeed:15, hopLen:2.3, hopGap:0.38, lungeRange:2.6, strikeWindup:0.30,
+      combo:5, comboWindup:0.13, exposeMul:0.4, evadeHops:1, safeDist:3.5, shooterR:5.5,
+      hideDur:0.4, hideAlpha:0.16, panicRange:1.6, panicBlink:5, retargetR:13,
+      escapeAfter:10, escapeDist:11, escapeSpeed:34,
+    },
+    fleeHpFrac:0.10, fleeSpeedMul:1.7,                          // rarely flees — it's defending the altar, not dueling (a fled boss still clears the wave)
+    phases:[ {at:0.50, dmgMul:1.35, cdMul:0.7, speedMul:1.15, tint:[120,255,150]} ],   // green enrage at half HP
+    taunts:{
+      intro:['The altar is not yours to take.', 'The GRAAL writes the dying. You will feed it.'],
+      phase:['You delay the inevitable.', 'A&O does not lose what it owns.'],
+      flee:['The transfer continues without me.', 'You bought seconds, not the war.'],
+      escaped:['Filed under acceptable loss.'],
+      death:['…re-instantiate… me…'],
+    },
+  },
   // ---- T2-7 mid-tier "lieutenant" duels — the villain framework scales them to roster power
   // (hpVpiScale) for free; both reuse existing AI kinds (ninja hit-and-run / mech area specials).
   ao_enforcer: {

@@ -17,8 +17,9 @@
 
    AUTHORING INVARIANTS:
    - required quests must be completable from any mid-mission state (legacy saves lazily re-init
-     here): only razeAll / defeatVillain / survive / escort / reachAndHold — all derived from
-     serialized state — may be `required`. Hook-counted (trainUnits) or unique-unit-dependent
+     here): only razeAll / defeatVillain / survive / escort / reachAndHold / holdout — all derived
+     from serialized state (holdout reads state.holdout, maintained by waves.js) — may be `required`.
+     Hook-counted (trainUnits) or unique-unit-dependent
      (freeCaptives — only Nino frees captives) quests must stay bonus or they can softlock.
    - everything is POLLED from serialized state each tick (self-correcting, idempotent,
      rollback-safe) except trainUnits (underivable → 2-line hook in spawnTrained).
@@ -53,12 +54,14 @@ function questInit(state, def){
       const hero=state.entities.some(e=>!e.dead && e.kind==='unit' && e.owner==='player' && e.hero && !e.captive);
       if(!hero) q.na=1; break;
     }
+    case 'holdout':          q.goal=((state.cfg.holdout&&state.cfg.holdout.waves)||[]).length||1; break;   // waves cleared → the transfer bar
   }
   return q;
 }
 
 /* ---------- evaluators — return 'run' | 'done' | 'failed'; mutate q.cur/q.goal only ---------- */
 const QUEST_TIMER_TYPES={survive:1, reachAndHold:1, winBy:1};   // UI renders these as ⏳ countdowns
+const QUEST_PROGRESS_TYPES={holdout:1};   // UI renders these as a ▰▰▱▱ progress bar (cur/goal), not an (n/m) counter
 const QUEST_FINALIZE_TYPES={maxUnitsLost:1, winBy:1, heroesAlive:1, noVetDeaths:1, bossNoFlee:1};   // invariant quests: fail mid-run, done at the win edge
 
 const QUEST_EVAL={
@@ -77,6 +80,15 @@ const QUEST_EVAL={
     if(!state._villainSpawned) return 'run';
     if(state.entities.some(e=>e.villain && !e.dead && !e.escaped)) return 'run';
     q.cur=1; return 'done';
+  },
+  // holdout: the reusable wave-defense engine (waves.js) owns the staging; this just mirrors its
+  // progress (cur=waves cleared → the transfer bar) and flips done when state.holdout reaches 'done'.
+  holdout(state, def, q){
+    const hd=state.cfg&&state.cfg.holdout; q.goal=((hd&&hd.waves)||[]).length||1;
+    const H=state.holdout;
+    if(!H) return 'run';
+    q.cur=Math.min(q.goal, H.cleared||0);
+    return H.phase==='done' ? 'done' : 'run';
   },
   // survive/escort/reachAndHold share core.js's evalSurvive/evalEscort/evalReachAndHold (one body
   // of logic with the quest-less checkAltWin fallback); params stay on cfg.winCondition so

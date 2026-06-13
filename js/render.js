@@ -774,7 +774,8 @@ function drawRoads(state, x0,y0,x1,y1){
   }
   const q    = (typeof QUAL!=='undefined' && QUAL) ? (QUAL.level||0) : 0;
   const glow = z>=0.5 && q<2;                                  // shadowBlur (bloom) only when readable + affordable
-  const anim = z>=0.7 && q<1 && !(typeof megaReducedMotion==='function' && megaReducedMotion());
+  const reduced = (typeof megaReducedMotion==='function' && megaReducedMotion());
+  const anim = q<1 && !reduced;                               // centre-line dash flows at EVERY zoom (offset is ≈free; quality/motion gated only)
   const t    = state.time||0;
   const lw   = 1/z;                                            // hold line weight + dash ≈constant in SCREEN px → neon reads at EVERY zoom
 
@@ -805,7 +806,7 @@ function drawRoads(state, x0,y0,x1,y1){
 
   // ---- Pass C: neon CENTRE LINE — run-merged so dashes flow continuously down each carriageway. ALWAYS. ----
   if(AX){
-    ctx.setLineDash([18*lw,10*lw]); ctx.lineDashOffset = anim ? -((t*9)%28)*lw : 0;   // dash held ≈constant in screen px
+    ctx.setLineDash([18,10]); ctx.lineDashOffset = anim ? -((t*9)%28) : 0;   // dash in WORLD units → shrinks with the road at low zoom (was screen-constant = oversized when zoomed out)
     ctx.beginPath();
     for(let ty=y0;ty<y1;ty++){ const cy=ty*T+T/2; let tx=x0;        // horizontal runs
       while(tx<x1){ if(AX[ty*W+tx]===1){ const sx=tx; while(tx<x1 && AX[ty*W+tx]===1) tx++; ctx.moveTo(sx*T,cy); ctx.lineTo(tx*T,cy); } else tx++; } }
@@ -1133,11 +1134,15 @@ function aoSide(state, owner){ return owner==='enemy' && !!(state && state.cfg &
 // The Wake's lightning conduit (render-only): a faint A&O-green corona + periodic bolts striking the
 // spire top. Deterministic from state.time + e.id, additive, reduced-motion aware. Mirrors the A&O
 // emissive pattern; allocates only short-lived gradients per frame (no persistent state).
-function drawHubWakeFX(state, e, ox, oy, topY){
+// alwaysStorm: force the charging cadence (the Dark Tower storms continuously, independent of the
+// Wake-only CAMPAIGN.reborn queue). wOverride: scale the corona/bolt geometry to the DRAWN sprite
+// width instead of the footprint — so the giant tower's storm is proportional to what's on screen.
+function drawHubWakeFX(state, e, ox, oy, topY, alwaysStorm, wOverride){
   if(typeof megaReducedMotion==='function' && megaReducedMotion()) return;
   const t=state.time||0, id=(e.id||0);
-  const px=e.tx*TILE+ox, w=e.w*TILE;
-  const cx=px+w/2;                              // spire centre x
+  const px=e.tx*TILE+ox, fw=e.w*TILE;
+  const cx=px+fw/2;                             // spire centre x (footprint-based — the sprite is centred on the footprint)
+  const w=wOverride||fw;                        // effect SCALE: drawn width for the giant Dark Tower, footprint for the Wake
   const baseY=(e.ty+e.h)*TILE+oy;              // ground line
   const spanY=baseY-topY;
   ctx.save(); ctx.globalCompositeOperation='lighter';
@@ -1163,7 +1168,7 @@ function drawHubWakeFX(state, e, ox, oy, topY){
     [0,'rgba(72,236,92,'+(0.12+0.06*pulse).toFixed(3)+')'],
     [1,'rgba(40,150,60,0)']]);
   // periodic GREEN lightning striking the spire — big, branched, frequent (more so while charging)
-  const charging=(typeof CAMPAIGN!=='undefined' && CAMPAIGN.reborn && (CAMPAIGN.reborn.sessions||[]).length>0);
+  const charging=alwaysStorm || (typeof CAMPAIGN!=='undefined' && CAMPAIGN.reborn && (CAMPAIGN.reborn.sessions||[]).length>0);
   const period=charging?1.5:3.2, dur=0.42, ph=(t + id*0.7) % period;
   if(ph < dur){
     const k=1-ph/dur, flick=0.5+0.5*Math.abs(Math.sin(t*40)), a=k*flick;
@@ -1210,7 +1215,8 @@ function drawBuilding(state,e,ox,oy,dim){
   const px=e.tx*TILE+ox, py=e.ty*TILE+oy;
   const w=e.w*TILE, h=e.h*TILE;
   const ao=aoSide(state, e.owner);
-  const spr=buildingSprite(e.type, e.owner, ao?'ao':null);
+  const isTower = e.type==='darktower';   // A&O's indestructible landmark: force its black+green 'ao' art + storm even though it's a neutral entity
+  const spr=buildingSprite(e.type, e.owner, (ao||isTower)?'ao':null);
 
   ctx.save();
   if(dim) ctx.globalAlpha=0.55;
@@ -1245,6 +1251,9 @@ function drawBuilding(state,e,ox,oy,dim){
     topY=dy;
     if(e.constructing) ctx.globalAlpha*=0.5;   // rises faintly while building
     ctx.drawImage(spr.img, fi*spr.fw,0,spr.fw,spr.fh, dx,dy,dw,dh);
+    // The Dark Tower always storms: reuse the Wake's green lightning conduit, scaled to the DRAWN
+    // sprite (dw*0.5 keeps the corona/flash proportional to the giant tower instead of its tiny footprint).
+    if(isTower) drawHubWakeFX(state, e, ox, oy, topY, true, dw*0.5);
   } else {
     // ---- procedural fallback ----
     const col = isRedSide(e.owner)? '#9a3b3b' : d.color;

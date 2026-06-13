@@ -233,6 +233,7 @@ function pickEntity(state,wx,wy){
   for(const e of state.entities){
     if(e.dead) continue;
     if(e.kind==='building'){
+      if(e.scenery) continue;   // indestructible backdrop props (the Dark Tower) aren't selectable — clicking falls through to ground/goldmine
       if(e.owner==='enemy'&&!isVisiblePix(state,e.x,e.y)&&!e._everSeen) continue;
       const px=e.tx*TILE,py=e.ty*TILE,w=e.w*TILE,h=e.h*TILE;
       if(wx>=px&&wx<=px+w&&wy>=py&&wy<=py+h) return e;

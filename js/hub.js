@@ -23,6 +23,7 @@ const HUB = Object.assign({
   rebornHourSeconds:3600, // real seconds of ACTIVE play per "in-game hour" of a write (1h = 1 real hour)
   rebornTotalCap:3,       // how many Reborn Cyborgs may EVER exist across the whole campaign (hard cap)
   rebornSlotCap:1,        // how many may be in the lattice at once (one soul at a time)
+  wakeAppearIdx:11,       // The Wake spire is ABSENT from the H.U.B. until CAMPAIGN.nextMapIndex >= this (it only rises once Episode XI is behind you). Distinct from rebornUnlockIdx, which gates the resurrection *function* — the tower can stand "cold" before then.
   rebornUnlockIdx:13,     // inert until CAMPAIGN.nextMapIndex >= this (after Ep XIII: you hold lattice+backups)
   rebornBaseHours:6,      // base in-game hours to reassemble a body
   rebornHoursPerStar:0.5, // + per veteran level
@@ -38,6 +39,17 @@ function hubBiomeId(v, fallback){
 function hubTags(o){ return Array.isArray(o&&o.tags) ? o.tags : []; }
 function hubHasTag(o, tag){ return hubTags(o).indexOf(tag) >= 0; }
 function hubPoiConfig(id){ return (HUB.pois||[]).find(p=>p.id===id) || null; }
+// Campaign-progress gate for a POI's PRESENCE in the H.U.B. Most POIs are always there; The Wake
+// only materialises once Episode XI is behind you (CAMPAIGN.nextMapIndex >= HUB.wakeAppearIdx) — so
+// it must be filtered out of every injection path (fresh generation + saved-hub restore) before then.
+function hubPoiAvailable(p){
+  if(!p) return false;
+  if(p.kind==='wake'){
+    const idx=(typeof CAMPAIGN!=='undefined' && CAMPAIGN && CAMPAIGN.nextMapIndex!=null) ? CAMPAIGN.nextMapIndex : 0;
+    return idx >= (HUB.wakeAppearIdx!=null ? HUB.wakeAppearIdx : 11);
+  }
+  return true;
+}
 function hubCondoIds(){ return (HUB.pois||[]).filter(p=>p.kind==='condo').map(p=>p.id); }
 function hubNormalizePlacementData(data){
   if(typeof HUB_SCHEMA_ROOT.hubNormalizeMapData === 'function') return HUB_SCHEMA_ROOT.hubNormalizeMapData(data || null);
@@ -634,6 +646,7 @@ function hubBuildTerrain(W,H,rng){
   // Clear readable pads around every HUB point of interest after all scenery
   // placement. This prevents trees/rocks/rivers from eating entrances.
   for(const p of HUB.pois){
+    if(!hubPoiAvailable(p)) continue;   // don't pre-clear a bare pad where a not-yet-present POI (The Wake) will later rise
     const d=Object.assign({}, DEF[p.type]||{w:3,h:3}, {w:p.w||((DEF[p.type]||{}).w||3), h:p.h||((DEF[p.type]||{}).h||3)});
     const pad=p.kind==='condo'?4:(p.kind==='ultra'?7:3);
     const b=hubInWasteland(p.x,p.y)?B_DESERT:B_GRASS;
@@ -1016,6 +1029,7 @@ function hubReconcileFacilities(state){
   const overlaps=(ax,ay,aw,ah, bx,by,bw,bh)=> ax < bx+bw && ax+aw > bx && ay < by+bh && ay+ah > by;
   let added=false;
   for(const p of (HUB.pois||[])){
+    if(!hubPoiAvailable(p)) continue;   // progress-gated POIs (e.g. The Wake pre-Ep XI) aren't injected yet
     if((state.entities||[]).some(e=>e&&!e.dead&&e.hubPoi&&e.hubPoi.id===p.id)) continue;   // already present
     const d=DEF[p.type]||{w:3,h:3}, w=p.w||d.w||3, h=p.h||d.h||3;
     // remove decor / non-POI buildings sitting on this footprint (e.g. the old launchpad)
@@ -1090,6 +1104,19 @@ function hubReconcileFacilities(state){
   const _decorTypes=new Set((HUB.buildings||[]).map(b=>b.type));
   const _poiIds=new Set((HUB.pois||[]).map(p=>p.id));
   let removed=false;
+  // Progress-gated POIs (e.g. The Wake before Episode XI) may be BAKED into an old save written
+  // when they were always present. The inject loop above only skips ADDING them — it can't remove
+  // one already in the save — so drop any still-saved POI entity that isn't available at this point
+  // in the campaign. (Without this, loading a pre-Ep-XI save shows a Wake that shouldn't exist yet.)
+  for(const e of (state.entities||[])){
+    if(!e || e.dead || e.kind!=='building' || !e.hubPoi) continue;
+    const p=hubPoiConfig(e.hubPoi.id);
+    if(p && !hubPoiAvailable(p)){
+      if(typeof markBuilding==='function') markBuilding(state,e,false);
+      if(state.hubPois && e.hubPoi) delete state.hubPois[e.hubPoi.id];
+      e.dead=true; removed=true;
+    }
+  }
   for(const e of (state.entities||[])){
     if(!e || e.dead || e.kind!=='building') continue;
     if(e.hubPoi && _poiIds.has(e.hubPoi.id)) continue;               // keep real, still-configured POIs (incl. Mental Health Facility)
@@ -1116,6 +1143,7 @@ function hubReconcileFacilities(state){
 }
 function hubPlacePois(state){
   for(const p of HUB.pois){
+    if(!hubPoiAvailable(p)) continue;   // e.g. The Wake stays absent until Episode XI is cleared
     const e=mkBuilding(state,p.type,'neutral',p.x,p.y,true);
     hubResizeBuilding(state,e,p.w||e.w,p.h||e.h);
     e.hubPoi={id:p.id, kind:p.kind, name:p.name};

@@ -171,18 +171,27 @@ window.HUB_MAP_DATA = {
       "y": 39,
       "w": 13,
       "h": 10,
-      "visual": { "megaId": "mentalhealth_mega" }
+      "visual": {
+        "megaId": "mentalhealth_mega"
+      }
     },
     {
       "id": "wake",
       "kind": "wake",
       "name": "The Wake",
       "type": "hq",
-      "x": 55,
-      "y": 19,
-      "w": 6,
-      "h": 6,
-      "visual": { "type": "hq", "faction": "player", "fixedFrame": 0, "stackFrames": [4, 5], "neonId": "wake_hq", "overhang": 0.46, "heightScale": 2.4, "stack": 2, "stackOverlap": 0.30 }
+      "x": 54,
+      "y": 10,
+      "w": 7,
+      "h": 14,
+      "visual": {
+        "type": "darktower",
+        "faction": "ao",
+        "fixedFrame": 0,
+        "overhang": 1.068,
+        "heightScale": 1,
+        "stack": 1
+      }
     }
   ],
   "rivers": [
@@ -447,8 +456,9 @@ window.HUB_MAP_DATA = {
       "w": 13,
       "h": 10,
       "overhang": 1.3,
-      "heightScale": 1.0,
+      "heightScale": 1,
       "biome": "tech",
+      "fixedFrame": null,
       "seed": 0.44,
       "tags": [
         "neon",

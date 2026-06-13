@@ -53,6 +53,11 @@ function scaleCfg(cfg){
   if(cfg.forests)      c.forests      = cfg.forests.map(pt);
   if(cfg.goldNodes)    c.goldNodes    = cfg.goldNodes.map(pt);
   if(cfg.lostBases)    c.lostBases    = cfg.lostBases.map(pt);
+  if(cfg.scenery)      c.scenery      = cfg.scenery.map(pt);  // {type,x,y} — indestructible backdrop props (e.g. the Dark Tower)
+  if(cfg.holdout){ const h=Object.assign({}, cfg.holdout);    // reusable wave-defense (waves.js): scale the map positions, leave tile-radii/comp as authored
+    if(h.spawns) h.spawns=h.spawns.map(pt);
+    if(h.anchor && h.anchor.x!=null) h.anchor=pt(h.anchor);
+    c.holdout=h; }
   if(cfg.guards)       c.guards       = cfg.guards.map(pt);   // {x,y,n,type} — n/type preserved by pt
   if(cfg.captives)     c.captives     = cfg.captives.map(p=> Object.assign({}, p, { x:S(p.x), y:S(p.y) }, p.freeRadius!=null?{freeRadius:S(p.freeRadius)}:{}));
   if(cfg.villain){ const vl=Array.isArray(cfg.villain)?cfg.villain:[cfg.villain]; c.villain = vl.map(v=>Object.assign({}, v, { x:S(v.x), y:S(v.y) })); }   // boss spawn points (villains.js)
@@ -516,6 +521,17 @@ function newMap(idx){
     for(let y=-5;y<=6;y++)for(let x=-5;x<=6;x++){
       if(inB(b.x+x,b.y+y)) state.explored[(b.y+y)*W+(b.x+x)]=1;
     }
+  });
+
+  // ---- indestructible scenery props (e.g. A&O's GIGANTIC Dark Tower) ----
+  // Neutral-owned so they're ignored by combat/targeting/AI and never count toward win/lose; flagged
+  // `scenery` so damage() can't hurt them and they can't be selected. markBuilding still blocks the
+  // footprint, so units route around the base. The 'ao' (black+green) art + storm FX are forced in
+  // render.js regardless of the neutral owner.
+  (cfg.scenery||[]).forEach(s=>{
+    const e = mkBuilding(state, s.type, 'neutral', s.x, s.y, true);
+    e.scenery = true;
+    for(let y=-6;y<=8;y++)for(let x=-6;x<=8;x++){ if(inB(s.x+x,s.y+y)) state.explored[(s.y+y)*W+(s.x+x)]=1; }   // reveal terrain so the landmark always reads
   });
 
   // ---- loose guard squads (Episode X corridor + the ring around the cell) ----

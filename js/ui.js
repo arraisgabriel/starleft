@@ -209,7 +209,12 @@ function updateQuestHud(){
     const d=row._qdef; if(!d) continue;
     const q=Q[row._qid], el=row.querySelector('.q-count'); if(!el) continue;
     let txt='';
-    if(q && !q.done && !q.failed && typeof QUEST_TIMER_TYPES!=='undefined' && QUEST_TIMER_TYPES[d.type])
+    if(q && typeof QUEST_PROGRESS_TYPES!=='undefined' && QUEST_PROGRESS_TYPES[d.type]){
+      // holdout/seizure: a filling ▰▰▱▱ "transfer" bar (time passing), not an (n/m) counter
+      const goal=Math.max(1,q.goal||1), cur=Math.min(goal, q.cur||0), fill=Math.round(cur/goal*8);
+      txt='▰'.repeat(fill)+'▱'.repeat(8-fill)+' '+Math.round(cur/goal*100)+'%';
+    }
+    else if(q && !q.done && !q.failed && typeof QUEST_TIMER_TYPES!=='undefined' && QUEST_TIMER_TYPES[d.type])
       txt='⏳ '+Math.max(0, Math.ceil((q.goal||0)-(q.cur||0)))+'s';
     else if(q && (q.goal|0)>1)
       txt='('+Math.min(q.cur||0,q.goal)+'/'+q.goal+')';

@@ -187,7 +187,9 @@
     // header
     panel.querySelector('#sbx-exit').onclick=exit;
     panel.querySelector('#sbx-coll').onclick=()=>{ panel.classList.toggle('sbx-min'); panel.querySelector('#sbx-coll').textContent=panel.classList.contains('sbx-min')?'▸':'▾'; };
-    panel.querySelector('#sbx-load').onclick=()=>{ const v=els.select.value; loadInto(v==='hub'?'hub':(v|0)); };
+    const loadSelected=()=>{ const v=els.select.value; loadInto(v==='hub'?'hub':(v|0)); };
+    panel.querySelector('#sbx-load').onclick=loadSelected;
+    els.select.onchange=loadSelected;   // picking a map auto-loads it — without this the screen keeps showing the previously-loaded map, making two different maps look "the same"
 
     // speed
     panel.querySelectorAll('#sbx-speed button').forEach(b=>b.onclick=()=>{

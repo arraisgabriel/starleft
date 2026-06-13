@@ -90,6 +90,11 @@ function update(state, dt){
     }
   }
 
+  // ---- reusable HOLDOUT / wave-defense (waves.js): cfg.holdout drives a staged "hold the position
+  // through N escalating waves (+ optional boss)" objective. Host/solo only (this whole path is);
+  // clients see the spawned waves/boss as synced entities and the progress via synced G.quests. ----
+  if(!state.hub && typeof holdoutTick==='function') holdoutTick(state, dt);
+
   // ---- reclaim abandoned outposts (a player unit walking up flips them) ----
   if(!state.hub) reclaimOutposts(state);
 

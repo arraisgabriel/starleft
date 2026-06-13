@@ -153,6 +153,17 @@ addEventListener('keydown', e=>{
   }
   // T4-4: F2 = select the whole army (the desktop "Select Army" helper; ⛶ covers touch)
   if(e.key==='F2' && G && !G.over){ e.preventDefault(); if(typeof selectAllArmy==='function'){ selectAllArmy(); } return; }
+  // +/- keyboard zoom — same factor as the wheel, anchored at the screen centre so there's
+  // no cursor to read. '=' is the unshifted '+' on US layouts; '_' the shifted '-'.
+  if(!e.metaKey && !e.ctrlKey && !e.altKey && G && !G.over && typeof zoomAt==='function'){
+    const zin = e.key==='+' || e.key==='=', zout = e.key==='-' || e.key==='_';
+    if(zin || zout){
+      e.preventDefault();
+      const cx=viewW()/2, cy=VIEW_TOP+viewH()/2;
+      zoomAt(G, cx, cy, zin ? 1.1 : 1/1.1);
+      return;
+    }
+  }
   // T2-3: A arms attack-move — the next click/tap orders the selection to advance-and-engage
   if((e.key==='a'||e.key==='A') && !e.metaKey && !e.ctrlKey && !e.altKey && G && !G.over && !G.hub){
     if(G.selection.some(s=>!s.dead && !s.storedIn && s.kind==='unit' && s.owner==='player' && s.type!=='worker')){

@@ -111,25 +111,30 @@ function waterSpriteFor(biome, slot, frame){
 const BUILDING_FRAMES = 9;
 const BUILDING_FPS = 0.9;               // slow ambient neon-flicker playback
 const BUILDING_DRAW_SCALE = 2.5;        // all building sprites drawn this much bigger (footprint unchanged)
-const BUILDING_TYPE_SCALE = { hq:0.65, intel:0.25 };   // per-type tweak on top of BUILDING_DRAW_SCALE (HQ reads too big at full 2.5×; intel is a needle-thin mast)
-// Per-type vertical stretch of the drawn sprite (footprint unchanged).
-const BUILDING_TALL = { hq:1.5625 };
+const BUILDING_TYPE_SCALE = { hq:0.65, intel:0.25, darktower:1.05 };   // per-type tweak on top of BUILDING_DRAW_SCALE (HQ reads too big at full 2.5×; intel is a needle-thin mast; darktower is the towering A&O landmark ~3× the HQ)
+// Per-type vertical stretch of the drawn sprite (footprint unchanged). darktower stays 1.0 — its 9:16 art already carries the height; stretching would distort it.
+const BUILDING_TALL = { hq:1.5625, darktower:1.0 };
 function buildingDrawScale(type){ return BUILDING_DRAW_SCALE*(BUILDING_TYPE_SCALE[type]||1); }
 // Per-type frame-count override: most buildings are 9-frame neon-flicker strips, but the Training
 // Grounds is ONE static high-res still (no animation) — see _dev/gen/gen_training.mjs.
-const BUILDING_FRAME_COUNT = { training:1 };
-const BUILDING_TYPES = ['hq','barracks','turret','garage','launchpad','outpost','training'];
+const BUILDING_FRAME_COUNT = { training:1, darktower:1 };   // darktower is a single static still (NOT a 9-frame neon strip)
+const BUILDING_TYPES = ['hq','barracks','turret','garage','launchpad','outpost','training','darktower'];
 // strips that intentionally don't ship (no art was ever made) — registered optional so the
 // loader doesn't burn its full retry ladder on guaranteed 404s every cold session.
-const BUILDING_NO_ART = { training:{ player:1, ao:1 } };
+// darktower ships ONLY the _ao (black+toxic-green) variant; player/enemy are never requested
+// (the renderer forces the 'ao' strip for it regardless of owner — see drawBuilding).
+const BUILDING_NO_ART = { training:{ player:1, ao:1 }, darktower:{ player:1, enemy:1 } };
 function loadBuildingStrip(type, faction){
   const a = { img:new Image(), ready:false, fw:0, fh:0 };
   const nf = BUILDING_FRAME_COUNT[type] || BUILDING_FRAMES;
   a.img.onload  = ()=>{ a.fw = a.img.naturalWidth/nf; a.fh = a.img.naturalHeight; a.ready = true; };
   a.img.onerror = ()=>{ a.ready=false; };
   const noArt = !!(BUILDING_NO_ART[type] && BUILDING_NO_ART[type][faction]);
+  // darktower's _ao strip is its ONLY art and a hero landmark, so load it in the gameplay tier (not
+  // ambient) — but keep it optional so a not-yet-generated file never blocks the loading gate.
+  const aoLandmark = (type==='darktower' && faction==='ao');
   LOADER.register(a.img, buildingSheet(type, faction),
-    { tag:'bld:'+type+':'+faction, tier:faction==='ao'?LOADER.T_AMBIENT:LOADER.T_GAMEPLAY, weight:3, optional:faction==='ao'||noArt });
+    { tag:'bld:'+type+':'+faction, tier:(faction==='ao' && !aoLandmark)?LOADER.T_AMBIENT:LOADER.T_GAMEPLAY, weight:3, optional:faction==='ao'||noArt });
   return a;
 }
 const BUILDING_ANIM = {};

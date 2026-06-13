@@ -546,6 +546,7 @@
 <script src="js/villains.js"></script><!-- VILLAINS (big bosses): spawn/driver/abilities/phases, boss win condition, campaign gating; balance in VILLAINS table -->
 <script src="js/villain_neon_maps.js"></script><!-- per-frame villain glow anchors (authored later via the calibrator); aura works without it -->
 <script src="js/quests.js"></script><!-- multi-objective quests: cfg.quests evaluation + quest-driven victory (checkWinLose quest branch); maps without cfg.quests keep the legacy win chain -->
+<script src="js/waves.js"></script><!-- reusable HOLDOUT/wave-defense engine: cfg.holdout drives a staged "hold the position through N escalating waves (+ optional boss)" objective; bridges into quests via the 'holdout' quest type. Host/solo only; waves+boss are synced entities -->
 <script src="js/ai.js"></script>
 <script src="js/render.js"></script>
 <script src="js/lyrics.js"></script><!-- runtime-loaded timed song subtitles (LRC/plain); text lives in assets/, not code -->
