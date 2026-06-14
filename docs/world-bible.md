@@ -103,6 +103,27 @@ the hero/carryover overrides, and any Reborn-Cyborg unit type live in code (`car
 mechanic is separate code work. Keep new chapters honest to the descent — **never** redemptive, bright,
 or triumphant.
 
+**Update — the Reborn-Cyborg system is now SHIPPED and STANDING (not arc-gated).** The Wake (the H.U.B.
+resurrection tower) is live: it appears at `CAMPAIGN.nextMapIndex >= 11` and resurrection unlocks at
+`>= 13` (`js/hub.js`), letting the player write a chosen fallen veteran home — **3 ever, 1 at a time**,
+for M3$ + write-time. No future chapter switches it on; it is a permanent, scarce H.U.B. choice. Any
+chapter touching resurrection must protect this — its stakes are about the *backup pool* the dead are
+written back from, never about granting the player resurrection they already have.
+
+**Arc 3 — A&O strikes back (planned, Episodes XIV–XXIII; see `docs/story-next-steps-ceo-arc.md`).** With
+the resurrection cycle closed (Biba + the cyborgs aboard, the Wake live), A&O finally gives capital a
+face: **DELLAN "DELL" VOSS**, its managing partner — and secretly **the first successful GRAAL write**, a
+re-instantiating backup who wants to *own* the cure because he *is* it (the player's dark mirror; never
+redeemed). His **PROJECT CHAPTER ELEVEN** moves to foreclose the company that stole the GRAAL and **purge
+the upstream backup pool** so the dead can never be written home again. Across ten episodes the player
+reaches and recruits two A&O cast-offs who are literally the keys that dismantle his plan: **HOLT "RUST"
+ARMAND**, a sarcastic Mechfounder hero (a hero Founder Mech, recruited by boss-duel→defection) whose
+foundry raid strips Voss's mech army so the finale is survivable; and **MEI "ZÉ" OKONKWO**, a gifted Intern
+hero (an Overclock-aura + Crunch-burst tempo accelerator, rescued Biba-style) whose vault heist seizes the
+custody keys — including Voss's own backup — so Voss can finally stay dead. The finale **re-skins the
+existing REX superboss as Voss's escape vehicle** (`finale:true` routing unchanged). Stay honest to the
+descent: hollow victory, the wall still keeps most of its names.
+
 ---
 
 ## 3. How enemy factions escalate

@@ -455,7 +455,6 @@ const HERO_SELECT_LINES = {
     "My word used to be for sale. Not today.",
     "Pension's gone. Spite's compounding nicely.",
     "I lobbied for worse men. Cheaper, too.",
-    // — Arc 2 seed: the rumor he chased, and what the GRAAL is for (appended; new voice-clip indices) —
     "A&O buried the one who brings them back. We dig her out.",
     "The wall's not the last word. I found who rewrites it.",
     "I don't bury my hires twice. I re-hire them.",
@@ -497,7 +496,6 @@ const HERO_SELECT_LINES = {
     "Pain's just a signal. Let me reroute it.",
     "I stitched a generation. One squad is easy.",
     "Hold pressure, dear. I'll hold the line.",
-    // — Arc 2 seed: implanted-memory unease + the sabotage, no full reveal yet (appended; new indices) —
     "I built the cure, then the lie under it.",
     "Some of these memories don't fit my hands.",
     "I made it. Then I broke it. On purpose.",
