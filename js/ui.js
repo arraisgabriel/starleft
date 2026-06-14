@@ -1280,10 +1280,35 @@ function openWakeMenu(){
 /* ---- Mental Health Facility menu (madosis healing — single-unit, visit-timed) ---- */
 function healPanelSignature(){
   const h=(typeof CAMPAIGN!=='undefined'&&CAMPAIGN.healing)||{staged:[],sessions:[]};
-  return 'hst:'+(h.staged||[]).map(s=>s.key+'@'+Math.round(s.madosis||0)).join(',')
-       +'|hse:'+(h.sessions||[]).map(s=>s.id+':'+((s.unit&&s.unit.key)||'')).join(',')
+  // include accelQueue so a Speed-up purchase / full-recovery release rebuilds the cards; the per-second
+  // ⚡ countdown itself is owned by the panel tick (healAccelText), never the signature.
+  const tag=s=>s.key+'@'+Math.round(s.madosis||0)+((s.accelQueue>0)?('^'+Math.round(s.accelQueue)):'');
+  return 'hst:'+(h.staged||[]).map(tag).join(',')
+       +'|hse:'+(h.sessions||[]).map(s=>s.id+':'+((s.unit&&tag(s.unit))||'')).join(',')
        +'|v:'+((typeof CAMPAIGN!=='undefined'&&CAMPAIGN.visit)||0)
        +'|m3:'+((typeof CAMPAIGN!=='undefined'&&(CAMPAIGN.m3|0))||0);
+}
+// ⚡ accelerated-treatment status text for a garrisoned snapshot (points left + live time remaining).
+function healAccelText(snap){
+  if(!snap || !(snap.accelQueue>0)) return '';
+  const left=Math.max(1, Math.round(snap.accelQueue||0));   // ≥1 while any fraction remains
+  const rate=(typeof madAccelPtsPerSec==='function')?madAccelPtsPerSec():0;
+  const sec=rate>0 ? Math.max(0, (snap.accelQueue||0)/rate) : 0;
+  return '⚡ recovering '+left+' madosis'+(sec>0?(' · '+fmtTrainRemain(sec)):'');
+}
+// caption fragment with a tick-updated ⚡ countdown span (keyed by hubUnitKey), or '' when not accelerating.
+function healAccelCaption(snap){
+  if(!snap || !(snap.accelQueue>0)) return '';
+  return '<br><span class="heal-accel-cd" data-accel-key="'+String(snap.key||'').replace(/"/g,'')+'">'+healAccelText(snap)+'</span>';
+}
+// the optional "⚡ Speed up" card action for a garrisoned snapshot (null when nothing left to treat).
+function healSpeedUpAction(snap){
+  if(typeof MADOSIS==='undefined' || !MADOSIS.accel || typeof hubHealAccelTreatable!=='function') return null;
+  const treatable=hubHealAccelTreatable(snap);
+  if(treatable<=0) return null;
+  const chunk=Math.min((MADOSIS.accel.points||10), treatable);
+  const cost=(typeof hubHealAccelCost==='function')?hubHealAccelCost(chunk):100;
+  return { label:'⚡ Speed up · M3$ '+cost, onClick:()=>{ if(typeof hubHealSpeedUp==='function' && hubHealSpeedUp(snap.key)) buildHubMenuBody(); } };
 }
 function buildHealingBody(body){
   const h=(typeof CAMPAIGN!=='undefined'&&CAMPAIGN.healing)||{staged:[],sessions:[]};
@@ -1307,13 +1332,17 @@ function buildHealingBody(body){
   } else {
     left.appendChild(hubMenuUnitGrid(staged, s=>{
       const cost=(typeof hubHealCost==='function')?hubHealCost(s):0;
+      const acts=[{ label:'Start · M3$ '+cost, onClick:()=>{ if(typeof hubHealStartSession==='function' && hubHealStartSession(s.key)) buildHubMenuBody(); } }];
+      const sp=healSpeedUpAction(s); if(sp) acts.push(sp);
       return {
-        caption: trainTypeName(s),   // level now shown by the card's built-in .train-rank row
-        action: { label:'Start · M3$ '+cost, onClick:()=>{ if(typeof hubHealStartSession==='function' && hubHealStartSession(s.key)) buildHubMenuBody(); } }
+        caption: trainTypeName(s)+healAccelCaption(s),   // level shown by the card's built-in .train-rank row
+        actions: acts
       };
     }));
     const note=document.createElement('div'); note.className='muted';
-    note.textContent='Treatment recovers up to '+fracPct+'% of a unit’s maximum madosis and occupies it for one mission.';
+    const A=(typeof MADOSIS!=='undefined'&&MADOSIS.accel)||{merits:100,points:10,minutes:10};
+    note.innerHTML='Treatment recovers up to '+fracPct+'% of a unit’s maximum madosis and occupies it for one mission.'
+      +' Or ⚡ <b>Speed up</b>: M3$ '+(A.merits||100)+' recovers '+(A.points||10)+' madosis over '+(A.minutes||10)+' in-game minutes — no mission needed.';
     left.appendChild(note);
   }
 
@@ -1323,11 +1352,14 @@ function buildHealingBody(body){
   for(const ses of sessions){
     const who=ses.unit||{};
     const card=document.createElement('div'); card.className='train-session'; card.dataset.healid=ses.id;
-    card.appendChild(hubMenuUnitGrid([who], s=>({ caption: trainTypeName(s)+'<br>recovering <b>'+(ses.heal||0)+'</b> madosis' })));
+    card.appendChild(hubMenuUnitGrid([who], s=>({ caption: trainTypeName(s)+'<br>recovering <b>'+(ses.heal||0)+'</b> madosis'+healAccelCaption(s) })));
     const meta=document.createElement('div'); meta.className='train-meta';
     meta.innerHTML='<div class="train-countdown">IN CARE</div><div class="train-bar"><i style="width:30%"></i></div>'
       +'<div class="muted">Completes after the next mission.</div>';
     card.appendChild(meta);
+    // ⚡ optional merit-paid acceleration — recover madosis now instead of waiting for the mission.
+    const sp=healSpeedUpAction(who);
+    if(sp){ const sb=document.createElement('button'); sb.className='sc-btn'; sb.textContent=sp.label; sb.onclick=sp.onClick; card.appendChild(sb); }
     const cb=document.createElement('button'); cb.className='sc-btn train-withdraw'; cb.textContent='Cancel — no recovery, no refund';
     cb.onclick=()=>{ if(typeof hubHealCancel==='function' && hubHealCancel(who.key)) buildHubMenuBody(); };
     card.appendChild(cb);
@@ -1338,11 +1370,17 @@ function openHealingMenu(){
   if(typeof CAMPAIGN==='undefined' || !CAMPAIGN.healing) return;
   openHubMenu({
     id:'mentalhealth', icon:'🧠', title:'Mental Health Facility',
-    subtitle:'Treat a frayed veteran — recover most of its max madosis over one mission, paid up-front.',
+    subtitle:'Treat a frayed veteran — recover madosis over one mission, or ⚡ pay merits to speed it up now.',
     staffPoi:'mentalhealth',
     signature: healPanelSignature,
     build: buildHealingBody,
-    tick: function(){}   // visit-based — nothing per-frame (card portraits are animated by hubMenuTick)
+    // smooth per-second ⚡ accelerated-recovery countdown (card rebuilds only when a whole point drops)
+    tick: function(body){
+      body.querySelectorAll('.heal-accel-cd[data-accel-key]').forEach(el=>{
+        const snap=(typeof hubHealFindSnap==='function')?hubHealFindSnap(el.dataset.accelKey):null;
+        el.textContent = (snap&&snap.accelQueue>0) ? healAccelText(snap) : '';
+      });
+    }
   });
 }
 

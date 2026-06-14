@@ -6,6 +6,7 @@ function update(state, dt){
   // mentorship completes whether the player idles in the H.U.B. or is off fighting elsewhere.
   if(typeof updateTrainingSessions==='function') updateTrainingSessions(dt);
   if(typeof updateRebornProduction==='function') updateRebornProduction(dt);   // The Wake clock — charges in HUB & missions
+  if(typeof updateMentalHealthAccel==='function') updateMentalHealthAccel(dt); // merit-paid accelerated madosis recovery — drains in HUB & missions
   if(typeof updateSprint==='function') updateSprint(state, dt);   // decay the tap window / ramp accel
   recomputeSupply(state);
   // run-summary stat (T1-9/T3-3): track the army's high-water mark
