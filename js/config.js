@@ -937,22 +937,22 @@ Weaponize your buzzwords, circle back, and disrupt MegaCorp into bankruptcy. The
     goldNodes:[ {x:6,y:20,amt:1400}, {x:4,y:15,amt:1200}, {x:9,y:21,amt:1200} ],
   },
   {
-    name:'THE EXTRACTION CLAUSE',                // Biba escort (T2-1) + corridor infiltration (T2-8) — between X and XI
+    name:'THE EXTRACTION CLAUSE',                // freed Biba leads a GRAAL-blueprint extraction (escort T2-1 + corridor infiltration T2-8) — between X and XI
     isVillain:true, gateAfter:9, returnTo:10, displayEp:'10.5',
     enemyName:'A&O', enemyFaction:'ao',
     aggression:1.4, startGold:0, startWorkers:0, startSoldiers:5, startBarracks:false,
     graceTime:9999, waveTimer:9999,              // corridor run — pressure comes from guards + scripted beats, not waves
     noEconRebalance:true,                        // no economy at all — the T2-5 rebalance has nothing to touch
     crawl:{ episode:'EPISODE 10.5', title:'THE EXTRACTION CLAUSE',
-      text:'You broke the architect out of the open-plan prison. A&O\'s lawyers call that "involuntary offboarding," and the perimeter is already locking down.\n\nBIBA knows every coil of the GRAAL by heart, which makes her the most valuable severance package in the wasteland. Walk her up the service corridor to the extraction line. Every camera between here and the fence has her face.\n\nNo funding. No reinforcements. Just the squad you came in with, and a promise you intend to keep....',
-      summary:'The architect is out of her cell — now get her out of the building. Walk BIBA up A&O\'s locked-down service corridor to the extraction line with only the squad you brought. They know she\'s missing.' },
-    objective:'Escort BIBA through A&O\'s corridor to the extraction line at the north fence — if she falls, the GRAAL dies with her.',
+      text:'Biba is free. She walked the hub, slept under a roof that locks from the inside, and watched the GRAAL light up on a bench that is finally hers. Then she counted what was missing. The proof of concept A&O holds is half a chip — the master schematic, the file that says how the rest is fabricated and proves the work was hers first, is still filed in the company that filed her in a cell.\n\nNobody else can find it. Nobody else can authenticate it. So she is going back in — by choice this time. Down into the records annex at the loading dock, up the long service corridor through every guard A&O can stand in a line, into the archive to pull the one file that turns a clever idea into something the world can build. Then out the north line before they understand what left with them.\n\nNo funding. No factory. No reinforcements. Just the crew you walked in with, the architect who refuses to be the only one who knows, and a corridor full of people paid to keep her from the fence. If she falls, the master goes back in the drawer forever....',
+      summary:'M.D.C. deployment: the GRAAL works on a bench but not at scale — A&O still holds the master schematic in its archive, and only BIBA can find it and prove it real. She is leading a strike team back into the stage that caged her, up A&O\'s locked-down service corridor to the extraction line. No economy and no reinforcements: only the squad you walk in with. Get her and the file out the north line — there is no second copy.' },
+    objective:'Escort BIBA up A&O\'s service corridor, pull the GRAAL master file from the archive, and reach the north extraction line — or raze the checkpoint to force the door. If she falls, the blueprint dies with her.',
     winCondition:{ type:'escort', vipHero:'Biba', to:{x:17,y:4}, radius:3 },
     // winsAlone razeAll preserves the pre-quest shortcut: razing the checkpoint also ends the map
     quests:[
-      { id:'escort', text:'Walk BIBA to the extraction line',             type:'escort', required:true },
-      { id:'raze',   text:'Or raze A&O\'s corridor checkpoint outright',  type:'razeAll', winsAlone:true, reward:75 },
-      { id:'nobody', text:'Lose nobody on the corridor',                  type:'maxUnitsLost', count:0, reward:100 },
+      { id:'escort', text:'Walk BIBA to the extraction line with the master file', type:'escort', required:true },
+      { id:'raze',   text:'Or raze A&O\'s corridor checkpoint and force the line',  type:'razeAll', winsAlone:true, reward:75 },
+      { id:'nobody', text:'Lose nobody on the corridor',                            type:'maxUnitsLost', count:0, reward:100 },
     ],
     w:34, h:88, seed:10510,
     player:{ x:17, y:82 },
@@ -965,8 +965,8 @@ Weaponize your buzzwords, circle back, and disrupt MegaCorp into bankruptcy. The
       { x:17, y:26, comp:[['soldier',2],['ranger',2],['lobbyist',1]] },
     ],
     events:[
-      { atTime:75,  toast:'Perimeter alert — A&O retrieval teams converging on the corridor.', spawnSquad:{ comp:[['hustler',3]] }, at:{x:17,y:70} },
-      { atTime:170, toast:'They found her trail. MOVE.', spawnSquad:{ comp:[['soldier',3],['ranger',2]] }, at:{x:17,y:40} },
+      { atTime:75,  toast:'Unscheduled query flagged in the archive — A&O records security converging on the corridor.', spawnSquad:{ comp:[['hustler',3]] }, at:{x:17,y:70} },
+      { atTime:170, toast:'They know the master file is walking. Get her to the line. MOVE.', spawnSquad:{ comp:[['soldier',3],['ranger',2]] }, at:{x:17,y:40} },
     ],
     thickets:[ {x:4,y:30,w:11,h:22,density:0.74,mix:0.2,trail:'v'}, {x:20,y:52,w:10,h:18,density:0.7,mix:0.3,trail:'v'} ],
     lakes:[], rockClusters:[ {x:8,y:18,n:10}, {x:26,y:70,n:10} ], forests:[],
