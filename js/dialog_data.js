@@ -455,6 +455,11 @@ const HERO_SELECT_LINES = {
     "My word used to be for sale. Not today.",
     "Pension's gone. Spite's compounding nicely.",
     "I lobbied for worse men. Cheaper, too.",
+    // — Arc 2 seed: the rumor he chased, and what the GRAAL is for (appended; new voice-clip indices) —
+    "A&O buried the one who brings them back. We dig her out.",
+    "The wall's not the last word. I found who rewrites it.",
+    "I don't bury my hires twice. I re-hire them.",
+    "Chased a rumor to a name: Biba. She's the way back.",
   ],
   "Biba": [
     "Healers don't quit. I never could.",
@@ -492,6 +497,11 @@ const HERO_SELECT_LINES = {
     "Pain's just a signal. Let me reroute it.",
     "I stitched a generation. One squad is easy.",
     "Hold pressure, dear. I'll hold the line.",
+    // — Arc 2 seed: implanted-memory unease + the sabotage, no full reveal yet (appended; new indices) —
+    "I built the cure, then the lie under it.",
+    "Some of these memories don't fit my hands.",
+    "I made it. Then I broke it. On purpose.",
+    "I remember a family. Not sure it's mine.",
   ],
 };
 
@@ -1154,11 +1164,31 @@ const DOSSIER_SELECT_LINES = [
    fallen, with a subtle resurrection hint and NO mention of the GRAAL (see docs/world-bible.md §2).
    Voiced in Nino's clone voice ('cast1'); clips render to assets/audio/voice/scene/<id>.mp3. ---- */
 const NINO_FLASH_LINES = [
-  { id:'nino_flash_00', text:"So that's what winning costs. A whole quarter gone in one flash. Every line we had went silent at once." },
-  { id:'nino_flash_01', text:"I was three streets out when the sky went white. Close enough to feel it. Far enough to still be standing here." },
-  { id:'nino_flash_02', text:"I didn't crawl back for the money. There's always more money. I came back for them, the names on that wall." },
-  { id:'nino_flash_03', text:"I spent this company's first life writing laws that made people disappear. I'm done making things disappear." },
-  { id:'nino_flash_04', text:"There's talk. That the wall doesn't have to be the last word. I won't promise you a miracle yet, but I didn't claw out of that crater to bury anyone twice." },
-  { id:'nino_flash_05', text:"So get me a room and a reputation. I'll get you the rest. We're not done, not while I can still read a cap table." },
+  { id:'nino_flash_00', text:"So that's what winning costs. A whole squad gone in one flash. Every line we had went silent at once." },
+  { id:'nino_flash_01', text:"I was some streets out when the sky went white. Close enough to feel it. Far enough to still be standing here." },
+  { id:'nino_flash_02', text:"I didn't crawl back for the money. There's always more money. I came back for them, the names of the dead on that wall." },
+  { id:'nino_flash_03', text:"I spent this company's first life writing laws that made people disappear, and now I'm done making things disappear." },
+  { id:'nino_flash_04', text:"There's a rumor. That A&O buried someone who could make this wall of the dead stop being the last word. I won't promise you a miracle yet, but I didn't claw out of that crater to lose souls." },
+  { id:'nino_flash_05', text:"So get me a room and a reputation. I'll get you the rest. We're not done, not while I can still read those damned names on this damned wall." },
 ];
 if(typeof window!=='undefined') window.NINO_FLASH_LINES = NINO_FLASH_LINES;
+
+/* ---- EP11_ALTAR_LINES — the Biba↔Nino reveal at the DARK TOWER (Ep XI). Played as a BLOCKING
+   cutscene the first time a unit reaches the altar, before the holdout's first wave (waves.js →
+   startFlashCutscene; the mission sim is gated in main.js while it runs). Each line carries a
+   `speaker` (heroId) so the camera focuses whoever is talking and the right voice renders the clip:
+   Biba → Vivian (preset), Nino → cast1 (Brad_Pitt clone). Solo-only; clips → assets/audio/voice/scene/<id>.mp3.
+   This is the PAYOFF the Ep VIII–X crawls/barks seed: Biba is an A&O-built healer android whose
+   immortality research became the GRAAL; she sabotaged it and was caged; her "human" past is written-in. ---- */
+const EP11_ALTAR_LINES = [
+  { id:'altar_00', speaker:'Biba', text:"So this is the altar. The GRAAL lives here — it lifts a dying mind out of a failing body and writes it into fresh metal and flesh rig." },
+  { id:'altar_01', speaker:'Nino', text:"Which is why we crossed six campuses to reach it. Every name on our wall — you can bring them back." },
+  { id:'altar_02', speaker:'Biba', text:"I'd know these schematics anywhere. A&O set me to chase immortality, and the GRAAL is what I made. The cure is mine. So is the rot under it." },
+  { id:'altar_03', speaker:'Biba', text:"Then I saw the product. The dead leased back to their families by the month; the living written into rented bodies and worked until the lease ran dry." },
+  { id:'altar_04', speaker:'Biba', text:"Immortality with a cancellation clause. So I crippled my own work — pulled the keys, gutted the stages, buried a confession in the comments." },
+  { id:'altar_05', speaker:'Biba', text:"A&O doesn't fire a machine that turns on it. It files it in a cell. That's where you found me, Nino." },
+  { id:'altar_06', speaker:'Biba', text:"And here's what I never said out loud. This tower is where I was written. Lagos-2, my six siblings, the triaged squad — I don't know whose life that was." },
+  { id:'altar_07', speaker:'Nino', text:"...Then you understand what we're about to do better than I ever will. Is it still worth doing?" },
+  { id:'altar_08', speaker:'Biba', text:"Those names are ours, and I'm done letting A&O keep what it buries. It can't tell salvation from theft — neither can I. Hold the altar. I'll solder." },
+];
+if(typeof window!=='undefined') window.EP11_ALTAR_LINES = EP11_ALTAR_LINES;

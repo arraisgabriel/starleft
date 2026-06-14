@@ -30,8 +30,28 @@
     if(typeof VOICE!=='undefined' && VOICE.playScene) VOICE.playScene(line.id, ()=>{ cs.clipDone=true; }, SCENE_RATE);
   }
 
+  // resolve the camera focus for the CURRENT line: a line may name a `speaker` (heroId, e.g. 'Biba'/
+  // 'Nino') so a two-person exchange follows whoever is talking. Falls back to the cutscene's default
+  // speaker when the line has none or that hero isn't on the field (dead/stored). NINO_FLASH_LINES carry
+  // no per-line speaker → always the default speaker (unchanged behavior).
+  function lineFocus(state, cs){
+    const ln=cs.lines[cs.i];
+    if(ln && ln.speaker && state && state.entities){
+      const e=state.entities.find(x=>x.heroId===ln.speaker && !x.dead && !x.storedIn);
+      if(e) return e;
+    }
+    return cs.speaker;
+  }
+
   function endFlashCutscene(state){
     if(!state) return;
+    const cs=state.flashCutscene;
+    // mid-mission cutscenes zoom the camera onto the speaker; restore the player's prior view on exit
+    // (hub cutscenes intentionally stay framed on the hub, so _camRestore is only set off-hub).
+    if(cs && cs._camRestore){
+      state.zoom=cs._camRestore.zoom; state.camX=cs._camRestore.camX; state.camY=cs._camRestore.camY;
+      if(typeof clampCam==='function') clampCam(state);
+    }
     state.flashCutscene=null;
     if(typeof document!=='undefined') document.body.classList.remove('scene-cutscene');
     const el=captionEl(); if(el) el.classList.remove('show');
@@ -51,7 +71,9 @@
       if(typeof clampCam==='function') clampCam(state);
       return;
     }
-    state.flashCutscene={ lines, i:0, t:0, speaker, clipDone:false, started:false };
+    state.flashCutscene={ lines, i:0, t:0, speaker, clipDone:false, started:false,
+      // off-hub (in-mission) reveals zoom onto the speaker — remember the player's view to restore on end
+      _camRestore: state.hub ? null : { zoom:state.zoom||1, camX:state.camX||0, camY:state.camY||0 } };
     if(typeof document!=='undefined') document.body.classList.add('scene-cutscene');
     // hold on the speaker (camera easing onto him) for CUT_START_DELAY before his first line — see updateFlashCutscene
   };
@@ -70,8 +92,8 @@
   window.updateFlashCutscene=function(state, dt){
     const cs=state && state.flashCutscene; if(!cs) return;
     cs.t+=dt;
-    // ease camera onto the speaker + zoom in for the close-up
-    const sp=cs.speaker;
+    // ease camera onto the CURRENT line's speaker + zoom in for the close-up (follows a two-person exchange)
+    const sp=lineFocus(state, cs);
     if(sp && !sp.dead && typeof viewW==='function'){
       const k=Math.min(1, CAM_EASE*dt);
       const zt=(typeof ZOOM_MAX!=='undefined'?ZOOM_MAX:2.0);   // ease all the way to the maximum zoom (closest on the speaker)

@@ -331,6 +331,13 @@ html,body{ overscroll-behavior:none; -webkit-touch-callout:none; }
     font-size:11px; padding:4px 8px; }
   .cmd-btn .emoji{ font-size:18px; }
   #touch-controls{ display:flex; overflow-x:auto; }
+  /* world minimap toggle: lift it OUT of the bottom touch-controls row and fix it to the
+     top-right of the world view, right under the ☰ menu button — its own isolated button,
+     not part of the bottom panel (reuses #btn-minimap → .as-overlay) */
+  #btn-minimap{ position:fixed; z-index:27; right:8px;
+    top:calc(var(--hud-top-h) + 6px);
+    width:44px; height:44px; min-width:44px; min-height:44px; }
+  #minimap-wrap.as-overlay{ top:calc(var(--hud-top-h) + 58px); }  /* bloom under the 🗺 */
   /* Stop now lives in the touch-controls row; hide the in-panel copy and collapse the
      whole command line unless there are build/train buttons (only the intern + buildings). */
   .cmd-btn.cmd-stop{ display:none; }

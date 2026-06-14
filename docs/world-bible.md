@@ -72,7 +72,7 @@ is just another thing capital has already priced.
 | VII | The Dunes and the Drifts | THE DUNES AND THE DRIFTS | THE CONGLOMERATE | desert+ice, dead sea | Apocalyptic finale of Arc 1. Every survivor merges into one; eight campuses ring a dead sea. The last quarter — and it ends in **the flash** (a nuke that takes everything and everyone). |
 | VIII | The Down Round | THE DOWN ROUND | A&O | tech+grass (the crater) | **Hard reset.** The flash erased the campuses, the war chest, and the names you carried. You come to broke in the crater of your own empire. A&O bought your wreckage at auction. NINO walks back in. Rebuild from nothing. |
 | IX | The Proof of Concept | THE PROOF OF CONCEPT | A&O | tech+ice (cryo lab) | Regrowth on a stolen blueprint: the **GRAAL** — a chip that writes a dying mind into another body, metal if it has to be. The names on the memorial stop looking final. First chapter of the long immortality arc; ship a proof of concept before A&O repossesses it. |
-| X | The Acquihire | THE ACQUIHIRE | A&O | tech (prison-office) | **Infiltration / rescue.** No economy, no funding — only Nino and the veterans you carried this far. Punch down A&O's open-plan prison to free **BIBA**, the engineer who first dreamed the GRAAL. The carried roster's time to shine. |
+| X | The Acquihire | THE ACQUIHIRE | A&O | tech (prison-office) | **Infiltration / rescue.** No economy, no funding — only Nino and the veterans you carried this far. Punch down A&O's open-plan prison to free **BIBA**, the architect A&O built the GRAAL around — and who sabotaged it. The carried roster's time to shine. |
 | XI | The Launch | THE LAUNCH | A&O | tech (coolant-sea peninsula) | **The pilgrimage.** A blueprint isn't a factory, and A&O owns the only one that works: the **DARK TOWER**, a black spire on a peninsula where the GRAAL writes the dying into fresh metal and the dead into product. Seize it before the keynote ships. *"It's time to bring them back."* |
 | XII | The Continuity Farm | THE CONTINUITY FARM | A&O | tech+ice | **The ironic twist.** The company you rebuilt was never alive — "a cap table wearing a grief mask." A&O already monetized resurrection: it leases the dead into refrigerated bodies and bills subscriptions for memories that used to belong to people. Crack the farm, seize the **transfer lattice**, and decide which ghost gets equity again. |
 
@@ -249,11 +249,19 @@ and **auto-deploys every map until the hero dies**):
   *Dream:* to see one thing he helped build outlast the money that funded it. *Crime:* authoring the
   legislation that made a hundred rivals simply vanish. He walks back into the crater in **Episode VIII** to
   help rebuild, and leads the break-in in **Episode X**.
-- **BIBA** — a **Level-10 Recruiter** (🧑‍🏫) from **the flooded arcologies of Lagos-2**. The engineer who
-  first **dreamed the GRAAL**, before A&O folded her lab into a portfolio and folded her into a cell.
-  *Trauma:* watching her first squad triaged out of existence by an algorithm. *Dream:* to keep one team
-  alive long enough to age. *Crime:* designing the chip A&O now kills to keep. Freed in **Episode X** (clear
-  the enemies around her cell) and carries from **Episode XI** onward.
+- **BIBA** — a **Level-10 Recruiter** (🧑‍🏫), and the arc's deepest secret: a **healer android A&O built to
+  research immortality**. Her work *became* **the GRAAL**, and she may be its first success — the "human"
+  past she carries (the flooded arcologies of **Lagos-2**, six younger siblings raised on relief credits, a
+  first squad triaged out of existence by an algorithm) reads as memory but was very likely **written into
+  her**. When she saw what the cure was *for* — the dead leased back by the month, the living worked in
+  rented bodies until the lease ran dry — she **sabotaged her own research**, so A&O **filed her in a cell**
+  rather than fire the machine that turned on it. *Dream:* to keep one team alive long enough to age.
+  *Crime:* designing the chip A&O built to chase immortality — then crippling it when she saw who would pay.
+  Freed in **Episode X** (Nino chased the rumor under the sabotage to her); carries from **Episode XI**
+  onward, where she names all of this at the Dark Tower. **Seed it, then pay it off:** Eps VIII–X only hint
+  (Nino's rumor, a sabotaged blueprint, her own unease) — the full reveal (android origin, written-in
+  memories) lands in the Ep XI altar cutscene (`EP11_ALTAR_LINES`). Keep earlier crawls/dialogue from
+  stating the android truth outright.
 
 When it's natural, let crawls and objectives acknowledge these living systems — the **named survivors** the
 player arrives with, the **mounting fallen**, the **dreams** the war keeps deferring. A line like "the ones
@@ -293,8 +301,10 @@ standing enemy for the rest of the campaign).
   every career unit. Referenced as the column of light / the blast.
 - **the crater** — what's left of your empire; the setting of Ep VIII, where you rebuild broke.
 - **the GRAAL** — A&O's consciousness-transfer brain chip: lifts a mind out of a failing body and writes it
-  into another (metal, if it has to be). The cure for *"the only churn that ever mattered."*
+  into another (metal, if it has to be). The cure for *"the only churn that ever mattered."* It is the
+  product of A&O's immortality research on **Biba** — her work, which she later sabotaged.
 - **the Dark Tower** — A&O's GRAAL factory, a black spire on a coolant-sea peninsula; the altar/goal of Ep XI.
+  Also where **Biba** herself was written — the site of the Ep XI reveal.
 - **the transfer lattice** — the consciousness-transfer infrastructure inside the Continuity Farm; the prize
   of Ep XII.
 - **the Continuity Farm** — A&O's subscription-immortality service: the dead leased into refrigerated bodies,

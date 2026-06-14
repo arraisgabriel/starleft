@@ -138,6 +138,30 @@ function holdoutAbort(state, msg){
   holdoutToast(state, msg);
 }
 
+// Optional one-shot reveal cutscene the first time the player reaches the anchor (before wave 0).
+// SOLO only — it blocks the mission sim (main.js gates update() while G.flashCutscene && !G.hub), which
+// co-op can't afford; clients/host keep the existing toast framing. Returns true if it armed a cutscene
+// (caller then returns and stays in `idle`; the next tick, after the cutscene ends, spawns wave 0). Needs
+// at least one named speaker alive to anchor the camera, else returns false and the hold proceeds normally.
+function holdoutTryCutscene(state){
+  const hd=state.cfg.holdout||{}, name=hd.framing&&hd.framing.cutscene;
+  if(!name) return false;
+  if(typeof netRole!=='undefined' && netRole!=='solo') return false;
+  if(typeof window!=='undefined' && window._rbReplaying) return false;
+  if(typeof startFlashCutscene!=='function') return false;
+  const lines=(typeof window!=='undefined' && window[name]) || null;
+  if(!lines || !lines.length) return false;
+  let focus=null;
+  for(const ln of lines){
+    if(!ln.speaker) continue;
+    const e=state.entities.find(x=>x.heroId===ln.speaker && !x.dead && !x.storedIn);
+    if(e){ focus=e; break; }
+  }
+  if(!focus) return false;
+  startFlashCutscene(state, focus, lines);
+  return true;
+}
+
 // main per-tick driver — call from update() (host/solo). Guarded for hub / over / extraction.
 function holdoutTick(state, dt){
   const cfg=state.cfg; if(!cfg || !cfg.holdout || !(cfg.holdout.waves||[]).length) return;
@@ -153,6 +177,9 @@ function holdoutTick(state, dt){
 
   if(H.phase==='idle'){
     if(reqMet && holdoutReached(state)){
+      // first arrival: play the reveal cutscene before wave 0 (solo only). It freezes the sim, so this
+      // tick just arms it and returns; the NEXT tick (cutscene ended) falls through to spawn wave 0.
+      if(!H._cutscenePlayed && holdoutTryCutscene(state)){ H._cutscenePlayed=1; return; }
       H.phase='fighting'; H.wave=0; H.cleared=0;
       holdoutSpawnWave(state, hd.waves[0]);
       holdoutToast(state, hd.framing&&hd.framing.startToast ? hd.framing.startToast
