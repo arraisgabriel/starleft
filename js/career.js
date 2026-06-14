@@ -70,6 +70,17 @@ function careerTitle(lvl){
   return CAREER_TITLES[tier] + (sub>1 ? ' '+sub : '');
 }
 
+// career level as tier-tinted text — the DOM twin of drawStars()'s coloring, for the HUB/dossier unit cards.
+// full=true → 'Senior 3 · Lv 17' (dossier); full=false → 'Lv 17' (compact HUB card). Returns '' below level 1,
+// so workers, NPCs and un-promoted recruits show nothing, exactly like the over-unit rank pips. The tier color
+// rides in via the --rank-col CSS var so the glow lives in screens.css (.rank-lvl).
+function careerLevelHTML(lvl, full){
+  lvl = lvl|0; if(lvl<1) return '';
+  const col = CAREER_COLORS[Math.min(5, Math.floor((lvl-1)/5))];   // same 5-level tier banding as drawStars
+  const title = full ? careerTitle(lvl) : '';
+  return '<span class="rank-lvl" style="--rank-col:'+col+'">'+(title?title+' · ':'')+'Lv '+lvl+'</span>';
+}
+
 // (re)bake maxHp from base + level, preserving current HP ratio (or full-heal on request)
 function applyVetHp(u, fullHeal){
   const base = DEF[u.type].hp, ratio = fullHeal ? 1 : (u.maxHp ? u.hp/u.maxHp : 1);

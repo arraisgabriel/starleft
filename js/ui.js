@@ -653,11 +653,13 @@ function dossierCardHTML(u){
   let name='';
   try{ const d=(u.lore && typeof buildDossier==='function')?buildDossier(u):null; name=(d&&d.full)?d.full:(u.heroId||def.name); }
   catch(e){ name=u.heroId||def.name; }
-  const type=(def.icon?def.icon+' ':'')+(lvl>0?careerTitle(lvl)+' ':'')+def.name+' · Lv '+lvl;
+  const type=(def.icon?def.icon+' ':'')+def.name;   // role only — the level rides on its own .dcard-rank row below
+  const rank=(typeof careerLevelHTML==='function')?careerLevelHTML(lvl,true):'';
   return `<div class="dcard">`
     + `<canvas class="dcard-spr" width="220" height="220" data-type="${u.type}" data-sprite="${u.spriteType||''}"></canvas>`
     + `<div class="dcard-name">${name}</div>`
     + `<div class="dcard-type">${type}</div>`
+    + (rank?`<div class="dcard-rank">${rank}</div>`:``)
     + `<div class="dcard-bars">`
     +   `<div class="dcard-bar dcard-hp"><i></i><span class="dcard-bar-cap">HP</span><span class="dcard-bar-val"></span></div>`
     +   `<div class="dcard-bar dcard-mad"><i></i><span class="dcard-bar-cap">Madosis</span><span class="dcard-bar-val"></span></div>`
@@ -807,6 +809,9 @@ function hubMenuUnitCard(u, opts){
   const cv=document.createElement('canvas'); cv.width=200; cv.height=200; cv.className='train-spr';
   cv.dataset.type=u.type; cv.dataset.sprite=u.spriteType||''; card.appendChild(cv);
   const cap=document.createElement('div'); cap.className='train-cap'; cap.innerHTML=opts.caption||trainTypeName(u); card.appendChild(cap);
+  // career level — tier-tinted text twin of the over-unit rank pips; nothing below Lv 1 (workers/NPCs/recruits).
+  const _rank=(typeof careerLevelHTML==='function')?careerLevelHTML(u.stars||0,false):'';
+  if(_rank){ const rk=document.createElement('div'); rk.className='train-rank'; rk.innerHTML=_rank; card.appendChild(rk); }
   // HP: a compact green bar showing effective max HP (incl. condo/implant bonuses) so the player can
   // watch HP climb as they upgrade the condo. Units rest at full HP in the H.U.B., so it reads full.
   const _maxHp=hubUnitMaxHp(u);
@@ -1096,7 +1101,7 @@ function buildTrainingBody(body){
   } else {
     left.appendChild(hubMenuUnitGrid(staged, s=>({
       sel: trainSel.includes(s.key),
-      caption: trainTypeName(s)+'<br>'+(typeof careerTitle==='function'?careerTitle(s.stars||0):'')+' · Lv '+(s.stars||0),
+      caption: trainTypeName(s),   // level now shown by the card's built-in .train-rank row
       onClick: ()=>toggleTrainSel(s.key)
     })));
 
@@ -1229,8 +1234,7 @@ function buildWakeBody(body){
         const d=buildDossier({type:f.type, lore:fallenDossierSnap(f)});
         if(d&&d.dream) dreamLine='<br><i style="color:#9fb6c8">'+(f.dreamDone?'✓ ':'✗ ')+'“'+d.dream+'”</i>'; } }catch(e){}
       return {
-        caption: trainTypeName(snap)+'<br>'+(typeof careerTitle==='function'?careerTitle(snap.stars||0):'')+' · Lv '+(snap.stars||0)
-          +' · fell at '+(f.map||'the front')+(already?' · <i>reborn</i>':'')+dreamLine,
+        caption: trainTypeName(snap)+'<br>fell at '+(f.map||'the front')+(already?' · <i>reborn</i>':'')+dreamLine,   // level → built-in .train-rank row
         action: { label: already ? 'Reborn' : ('Resurrect · M3$ '+cost),
           onClick: ()=>{ if(typeof hubWakeStart==='function' && hubWakeStart(fallenStableId(f))) buildHubMenuBody(); } }
       };
@@ -1304,7 +1308,7 @@ function buildHealingBody(body){
     left.appendChild(hubMenuUnitGrid(staged, s=>{
       const cost=(typeof hubHealCost==='function')?hubHealCost(s):0;
       return {
-        caption: trainTypeName(s)+'<br>'+(typeof careerTitle==='function'?careerTitle(s.stars||0):'')+' · Lv '+(s.stars||0),
+        caption: trainTypeName(s),   // level now shown by the card's built-in .train-rank row
         action: { label:'Start · M3$ '+cost, onClick:()=>{ if(typeof hubHealStartSession==='function' && hubHealStartSession(s.key)) buildHubMenuBody(); } }
       };
     }));
@@ -1410,7 +1414,7 @@ function openMdcMenu(poi){
         m.textContent='Walk veterans into a red M.D.C. to enlist them for the next deployment.'; left.appendChild(m); }
       else {
         left.appendChild(hubMenuUnitGrid(live, u=>({
-          caption: trainTypeName(u)+'<br>'+(typeof careerTitle==='function'?careerTitle(u.stars||0):'')+' · Lv '+(u.stars||0)+(u.hero?' · ⭐ hero':''),
+          caption: trainTypeName(u)+(u.hero?'<br>⭐ hero':''),   // level now shown by the card's built-in .train-rank row
           action: u.hero?null:{ label:'↩ Release', onClick:()=>{ if(hubReleaseFromMdc(hubUnitKey(u))) buildHubMenuBody(); } }
         })));
       }
