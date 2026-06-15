@@ -122,6 +122,39 @@ function serializeGame(){
   if(typeof serializeHubCampaign==='function') s.campaign=serializeHubCampaign();
   return s;
 }
+// Auto-migrate an OLD campaign save to the CURRENT map's editor-authored override layers: the Dark Tower
+// placement (cfg.scenery) and the per-tile terrain paint (cfg.paint). The map editor only rewrites
+// js/maps_data.js, but saves froze the old terrain + scenery as data — so without this an old save keeps
+// the stale layout. NOT a full terrain regen: the in-progress battlefield (player/enemy buildings, units,
+// resources, fog) is preserved; anything the new terrain would bury is moved to valid ground near its old
+// spot (js/map.js relocateBuriedEntities). Idempotent (scenery removed-then-respawned; paint deterministic
+// + dimension-guarded), so it's safe to run on every load. No-op for maps with neither layer, and it adds
+// no save fields — every old save still loads (backward-compatible). Solo/host only (deserializeGame runs
+// from loadGame, gated netRole==='solo'); co-op clients regen terrain via their own newMap + host entities.
+function migrateCampaignTerrain(g){
+  const cfg = g.cfg; if(!cfg) return;
+  const hasScenery = Array.isArray(cfg.scenery) && cfg.scenery.length>0;
+  const hasPaint   = !!cfg.paint;
+  if(!hasScenery && !hasPaint) return;
+
+  // (1) SCENERY: drop existing scenery props (clearing their old footprint), respawn at current positions.
+  if(hasScenery && typeof applyScenery==='function'){
+    for(const e of g.entities){ if(e && e.scenery){ if(typeof markBuilding==='function') markBuilding(g, e, 0); e.dead=true; } }
+    g.entities = g.entities.filter(e=> !(e && e.scenery && e.dead));
+    applyScenery(g, cfg);
+  }
+
+  // (2) PAINT: re-apply tile/biome/feature overrides + re-carve bridges, then rebuild the water depth field.
+  if(hasPaint && typeof applyPaintLayer==='function'){
+    const bases = (cfg.enemies || (cfg.enemy ? [cfg.enemy] : [])).filter(Boolean);
+    applyPaintLayer(g, cfg, (cfg.goldNodes||[]).concat(bases));
+    if(typeof buildWaterDepth==='function') buildWaterDepth(g);
+  }
+
+  // (3) Relocate anything the new terrain/tower buried, re-stamp every building+node footprint over the
+  //     painted blocked[] grid (footprints win over paint), and eject stranded ground units.
+  if(typeof relocateBuriedEntities==='function') relocateBuriedEntities(g);
+}
 function deserializeGame(s){
   const g={};
   const META={v:1, mapIndex:1, savedAt:1, mapName:1, gameTime:1, hubMap:1, campaign:1, fallen:1};
@@ -180,6 +213,10 @@ function deserializeGame(s){
   // funding nodes carry a 3x3 footprint; feat[] was rebuilt from features[] only, so
   // restamp each node's mask (blocked[] was serialized and is already correct).
   if(typeof markFundingNode==='function') g.entities.forEach(e=>{ if(e.type==='goldmine'&&!e.dead) markFundingNode(g, e); });
+  // campaign equivalent of the HUB auto-migrate block above: re-apply the current map's editor-authored
+  // Dark Tower placement + terrain paint so an OLD save reflects map-editor edits (relocating any buried
+  // unit/building near its origin). Runs after terrain/feat/blocked + entity footprints are restored.
+  if(!g.hub) migrateCampaignTerrain(g);
   // back-fill hero sprite overrides for saves written before heroes[].sprite existed (e.g. a
   // carried Nino restored as a plain lobbyist) — derive it from the map configs by heroId.
   if(typeof heroSpriteFor==='function') g.entities.forEach(e=>{

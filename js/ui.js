@@ -1201,7 +1201,7 @@ function buildWakeBody(body){
   if(!unlocked){
     // T1-7: pre-XIII the Wake is still the MEMORIAL — every hub visit walks past the dead.
     const m=document.createElement('div'); m.className='muted';
-    m.innerHTML='Take A&O’s transfer lattice and pull your dead’s backups out of the purge (Episodes XII–XIII). Then the storm has something to write.';
+    m.innerHTML='Seize the GRAAL at the Dark Tower (Episode XI). Then the stolen lattice has something to write — and your dead a way back into fresh metal.';
     body.appendChild(m);
     body.appendChild(hubMenuSection('The fallen ('+fallen.length+')'));
     if(!fallen.length){

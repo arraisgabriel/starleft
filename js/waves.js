@@ -72,6 +72,17 @@ function holdoutDefendersPresent(state){
   return state.entities.some(e=>e.owner==='player'&&e.kind==='unit'&&!e.dead&&!e.storedIn
     && Math.hypot(e.x-z.x,e.y-z.y)<=z.r);
 }
+// Abort ONLY after defenders have been absent from the (large) hold zone for a sustained grace window
+// (graceSec, default 12s) — a brief push-out mid-fight or chasing a straggler just outside the zone
+// never costs progress; only a genuine abandonment resets. undefendedT accumulates on H so absence
+// spanning a fighting↔gap transition still counts, and rides save/rollback like gapT.
+function holdoutUndefendedAbort(state, dt){
+  const hd=state.cfg.holdout, H=state.holdout;
+  if(hd.resetOnUndefended===false) return false;
+  if(holdoutDefendersPresent(state)){ H.undefendedT=0; return false; }
+  H.undefendedT=(H.undefendedT||0)+dt;
+  return H.undefendedT >= (hd.graceSec!=null ? hd.graceSec : 12);
+}
 function holdoutToast(state, msg){
   if(typeof window!=='undefined' && window._rbReplaying) return;
   if(typeof eventToast==='function') eventToast(msg, 8000);
@@ -133,7 +144,7 @@ function holdoutDespawnWave(state){
 function holdoutAbort(state, msg){
   const H=state.holdout;
   holdoutDespawnWave(state);
-  H.phase='idle'; H.wave=0; H.cleared=0; H.gapT=0;
+  H.phase='idle'; H.wave=0; H.cleared=0; H.gapT=0; H.undefendedT=0;
   holdoutSyncQuest(state);
   holdoutToast(state, msg);
 }
@@ -169,7 +180,7 @@ function holdoutTick(state, dt){
   const cfg=state.cfg; if(!cfg || !cfg.holdout || !(cfg.holdout.waves||[]).length) return;
   if(state.hub || state.over || state.extractReady) return;
   const hd=cfg.holdout, total=hd.waves.length;
-  const H=state.holdout || (state.holdout={ phase:'idle', wave:0, cleared:0, waveIds:[], bossId:null, gapT:0 });
+  const H=state.holdout || (state.holdout={ phase:'idle', wave:0, cleared:0, waveIds:[], bossId:null, gapT:0, undefendedT:0 });
   holdoutSyncQuest(state);
   if(H.phase==='done') return;
 
@@ -182,7 +193,7 @@ function holdoutTick(state, dt){
       // first arrival: play the reveal cutscene before wave 0 (solo only). It freezes the sim, so this
       // tick just arms it and returns; the NEXT tick (cutscene ended) falls through to spawn wave 0.
       if(!H._cutscenePlayed && holdoutTryCutscene(state)){ H._cutscenePlayed=1; return; }
-      H.phase='fighting'; H.wave=0; H.cleared=0;
+      H.phase='fighting'; H.wave=0; H.cleared=0; H.undefendedT=0;
       holdoutSpawnWave(state, hd.waves[0]);
       holdoutToast(state, hd.framing&&hd.framing.startToast ? hd.framing.startToast
         : '📡 The hold begins — defend the position.');
@@ -191,7 +202,7 @@ function holdoutTick(state, dt){
     return;
   }
   if(H.phase==='fighting'){
-    if(hd.resetOnUndefended!==false && !holdoutDefendersPresent(state)){
+    if(holdoutUndefendedAbort(state, dt)){
       holdoutAbort(state, hd.framing&&hd.framing.abortToast ? hd.framing.abortToast
         : '⚠ Position lost — the hold resets. Re-secure it.');
       return;
@@ -207,7 +218,7 @@ function holdoutTick(state, dt){
     return;
   }
   if(H.phase==='gap'){
-    if(hd.resetOnUndefended!==false && !holdoutDefendersPresent(state)){
+    if(holdoutUndefendedAbort(state, dt)){
       holdoutAbort(state, hd.framing&&hd.framing.abortToast ? hd.framing.abortToast
         : '⚠ Position lost — the hold resets. Re-secure it.');
       return;

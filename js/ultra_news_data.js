@@ -45,7 +45,6 @@ const ULTRA_NEWS = {
     "B.I.G. PAPA: EPISODE 8.5 closes the file on THE LAND GRAB. Losses become learnings; learnings become invoices.",
     "B.I.G. PAPA: EPISODE 9.5 closes the file on THE RECOVERY AGENT. Losses become learnings; learnings become invoices.",
     "B.I.G. PAPA: EPISODE 10.5 closes the file on THE EXTRACTION CLAUSE. Losses become learnings; learnings become invoices.",
-    "B.I.G. PAPA: EPISODE 11.5 closes the file on THE GROUNDS DISPUTE. Losses become learnings; learnings become invoices.",
     "B.I.G. PAPA: EPISODE 12.5 closes the file on THE BRIDGE ROUND. Losses become learnings; learnings become invoices."
   ],
   foreshadow: [

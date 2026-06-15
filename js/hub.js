@@ -24,7 +24,7 @@ const HUB = Object.assign({
   rebornTotalCap:3,       // how many Reborn Cyborgs may EVER exist across the whole campaign (hard cap)
   rebornSlotCap:1,        // how many may be in the lattice at once (one soul at a time)
   wakeAppearIdx:11,       // The Wake spire is ABSENT from the H.U.B. until CAMPAIGN.nextMapIndex >= this (it only rises once Episode XI is behind you). Distinct from rebornUnlockIdx, which gates the resurrection *function* — the tower can stand "cold" before then.
-  rebornUnlockIdx:13,     // inert until CAMPAIGN.nextMapIndex >= this (after Ep XIII: you hold lattice+backups)
+  rebornUnlockIdx:11,     // inert until CAMPAIGN.nextMapIndex >= this (after Ep XI: you seize the GRAAL at the Dark Tower)
   rebornBaseHours:6,      // base in-game hours to reassemble a body
   rebornHoursPerStar:0.5, // + per veteran level
   rebornBaseCost:300,     // M3$ floor
@@ -435,7 +435,7 @@ function enterHubFromCombat(state){
   CAMPAIGN.mode='hub'; CAMPAIGN.visit++; CAMPAIGN.gambled=false; CAMPAIGN.dispatch={mdcId:null, staged:[]};
   if(typeof hubSyncNpcs==='function') hubSyncNpcs();   // living city: mint/refresh the persistent NPC population for this visit
   if(typeof TELE!=='undefined') TELE.event('hub_entered', { visit: CAMPAIGN.visit });
-  // T4-1: the moment The Wake comes online (post-XIII) gets its narrative beat — once
+  // T4-1: the moment The Wake comes online (post-XI, when you seize the GRAAL) gets its narrative beat — once
   if(typeof rebornUnlocked==='function' && rebornUnlocked() && !CAMPAIGN._wakeAnnounced){
     CAMPAIGN._wakeAnnounced=true;
     if(typeof eventToast==='function') eventToast('⚡ <b>LATTICE ONLINE.</b> The stolen coils hum over the Wake. You can bring <b>ONE</b> of them back — the storm holds three writes, ever. Walk to The Wake and choose.', 16000);

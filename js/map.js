@@ -259,6 +259,39 @@ function thicketReachOK(state, anchor, mustReach){
   return true;
 }
 
+// ---- map-editor OVERRIDE LAYERS (scenery + paint), factored out of newMap so the save loader can
+// re-apply them to an OLD save when the map definition changed since it was written (the editor only
+// rewrites js/maps_data.js; saves froze the old terrain). See js/save.js migrateCampaignTerrain. ----
+
+// Land biome for a cfg — mirrors newMap's derivation below (used when carving bridges re-skins
+// water/mountain back to land). Stays in sync with the local `landBiome` newMap computes.
+function cfgLandBiome(cfg){
+  const P = Object.assign({}, TERRAIN_DEFAULTS, (cfg && cfg.terrain) || {});
+  return (P.biomes && CLIMATE[P.biomes[0]]!=null) ? CLIMATE[P.biomes[0]] : B_GRASS;
+}
+
+// Spawn cfg.scenery props (indestructible neutral landmarks, e.g. A&O's Dark Tower) and reveal the
+// terrain around each so the landmark always reads. mkBuilding stamps the blocking footprint; the
+// `scenery` flag makes them unselectable + damage-immune (input.js / units.js). Reused on save-load.
+function applyScenery(state, cfg){
+  const W=state.W, H=state.H, inB=(x,y)=> x>=0&&y>=0&&x<W&&y<H;
+  (cfg.scenery||[]).forEach(s=>{
+    const e = mkBuilding(state, s.type, 'neutral', s.x, s.y, true);
+    e.scenery = true;
+    for(let y=-6;y<=8;y++)for(let x=-6;x<=8;x++){ if(inB(s.x+x,s.y+y)) state.explored[(s.y+y)*W+(s.x+x)]=1; }   // reveal terrain so the landmark always reads
+  });
+}
+
+// Apply cfg.paint per-tile tile/biome/feature overrides, then re-carve reachability bridges so a
+// painted barrier can't strand a gold node / base. `targets` = post-scale [{x,y}] (gold nodes + bases).
+// Deterministic (fixed-seed rng); MAP_PAINT.apply self-guards on a W/H mismatch. Returns whether it ran.
+function applyPaintLayer(state, cfg, targets){
+  if(!(cfg.paint && typeof MAP_PAINT!=='undefined')) return false;
+  MAP_PAINT.apply(state, cfg.paint, makeRng((cfg.seed||0)*1000+1973));
+  carveBridgesToTargets(state, targets, cfgLandBiome(cfg));
+  return true;
+}
+
 function newMap(idx){
   const cfg = scaleCfg(MAPS[idx]);
   const bases = (cfg.enemies || (cfg.enemy ? [cfg.enemy] : [])).filter(Boolean);   // villain arenas have no bases → empty, never [undefined]
@@ -444,10 +477,7 @@ function newMap(idx){
   // despeckle passes so lone painted tiles survive, then the reachability carve re-runs so a painted
   // barrier can't strand a gold node/base. Deterministic (direct assignment + fixed-seed rng).
   // No-op when unset → fully backward compatible. (js/map_paint.js)
-  if(cfg.paint && typeof MAP_PAINT!=='undefined'){
-    MAP_PAINT.apply(state, cfg.paint, makeRng((cfg.seed||0)*1000+1973));
-    carveBridgesToTargets(state, cfg.goldNodes.concat(bases), landBiome);
-  }
+  applyPaintLayer(state, cfg, cfg.goldNodes.concat(bases));
 
   // distance-to-shore depth field for smooth (non-blocky) water/magma rendering + tide buffers
   // (js/water.js). MUST run after ALL tiles[] water mutation (despeckle + bridge carve + paint above).
@@ -544,11 +574,7 @@ function newMap(idx){
   // `scenery` so damage() can't hurt them and they can't be selected. markBuilding still blocks the
   // footprint, so units route around the base. The 'ao' (black+green) art + storm FX are forced in
   // render.js regardless of the neutral owner.
-  (cfg.scenery||[]).forEach(s=>{
-    const e = mkBuilding(state, s.type, 'neutral', s.x, s.y, true);
-    e.scenery = true;
-    for(let y=-6;y<=8;y++)for(let x=-6;x<=8;x++){ if(inB(s.x+x,s.y+y)) state.explored[(s.y+y)*W+(s.x+x)]=1; }   // reveal terrain so the landmark always reads
-  });
+  applyScenery(state, cfg);
 
   // ---- loose guard squads (Episode X corridor + the ring around the cell) ----
   // Enemy units with NO base, flagged `guard` so the wave/cap logic in ai.js leaves them at their post
@@ -937,6 +963,106 @@ function markBuilding(state,e,blockedVal){
   for(let y=0;y<e.h;y++)for(let x=0;x<e.w;x++){
     const tx=e.tx+x, ty=e.ty+y;
     if(tx>=0&&ty>=0&&tx<state.W&&ty<state.H) state.blocked[ty*state.W+tx]=blockedVal?1:baseBlocked(state, ty*state.W+tx);
+  }
+}
+
+// ---- SAVE-MIGRATION relocation (js/save.js migrateCampaignTerrain) ----
+// When re-applied paint/scenery would bury an existing entity under new water/rock (or the moved Dark
+// Tower's footprint), nudge it to the nearest valid ground near its old position instead of leaving it
+// stuck. Buildings move first (so their footprints land in blocked[]); units are ejected LAST so one can
+// never land inside a relocated building / the tower.
+
+// True if building b (footprint b.w×b.h) fits at top-left (tx,ty): every cell is land terrain
+// (baseBlocked 0, no topo feature) and overlaps no OTHER living building/goldmine. Unlike canPlaceAt this
+// ignores `explored` (the entity already exists; fog mustn't block its rescue) and ignores b itself.
+function footprintBuildable(state, b, tx, ty){
+  const W=state.W, H=state.H;
+  for(let y=0;y<b.h;y++)for(let x=0;x<b.w;x++){
+    const cx=tx+x, cy=ty+y;
+    if(cx<0||cy<0||cx>=W||cy>=H) return false;
+    const i=cy*W+cx;
+    if(baseBlocked(state,i)) return false;                 // water / rock / mountain terrain
+    if(state.feat && state.feat[i]) return false;          // under a 2x2 topography feature
+  }
+  for(const e of state.entities){
+    if(e===b || e.dead) continue;
+    if(e.kind==='building'){
+      if(tx< e.tx+e.w && tx+b.w>e.tx && ty< e.ty+e.h && ty+b.h>e.ty) return false;
+    } else if(e.type==='goldmine'){
+      const gx=(e.x/TILE-0.5)|0, gy=(e.y/TILE-0.5)|0;
+      if(tx<=gx && tx+b.w>gx && ty<=gy && ty+b.h>gy) return false;
+    }
+  }
+  return true;
+}
+
+// Nearest tile to (tx,ty) whose blocked[]===0, searching across walls (BFS). Returns {tx,ty} or null.
+function nearestOpenTile(state, tx, ty){
+  const W=state.W, H=state.H, B=state.blocked;
+  if(tx<0||ty<0||tx>=W||ty>=H) return null;
+  const start=ty*W+tx;
+  if(!B[start]) return {tx,ty};
+  const seen=new Uint8Array(W*H), q=[start]; seen[start]=1;
+  for(let h=0; h<q.length; h++){
+    const k=q[h], x=k%W, y=(k/W)|0;
+    for(const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1]]){
+      const nx=x+dx, ny=y+dy;
+      if(nx<0||ny<0||nx>=W||ny>=H) continue;
+      const j=ny*W+nx; if(seen[j]) continue; seen[j]=1;
+      if(!B[j]) return {tx:nx, ty:ny};
+      q.push(j);
+    }
+  }
+  return null;
+}
+
+// True if any cell of building b's current footprint sits on land-blocking terrain (i.e. paint buried it).
+function buildingBuried(state, b){
+  const W=state.W, H=state.H;
+  for(let y=0;y<b.h;y++)for(let x=0;x<b.w;x++){
+    const cx=b.tx+x, cy=b.ty+y;
+    if(cx<0||cy<0||cx>=W||cy>=H) continue;
+    if(baseBlocked(state, cy*W+cx)) return true;
+  }
+  return false;
+}
+
+function relocateBuriedEntities(state){
+  // (1) BUILDINGS — relocate any whose footprint is now on water/rock to the nearest valid spot near origin.
+  for(const b of state.entities){
+    if(b.dead || b.kind!=='building' || b.scenery) continue;   // scenery (the tower) is placed deliberately
+    if(!buildingBuried(state, b)) continue;
+    markBuilding(state, b, 0);                                  // free old cells so the search doesn't self-clash
+    let moved=null;
+    for(let r=1; r<=24 && !moved; r++){
+      for(let dy=-r; dy<=r && !moved; dy++)for(let dx=-r; dx<=r && !moved; dx++){
+        if(Math.max(Math.abs(dx),Math.abs(dy))!==r) continue;  // only the ring at radius r (nearest-first)
+        const ntx=b.tx+dx, nty=b.ty+dy;
+        if(footprintBuildable(state, b, ntx, nty)) moved={tx:ntx, ty:nty};
+      }
+    }
+    if(moved){ b.tx=moved.tx; b.ty=moved.ty; b.x=(b.tx+b.w/2)*TILE; b.y=(b.ty+b.h/2)*TILE; }
+    // re-stamped below with every other building (in place if no spot was found — never lose an entity)
+  }
+  // (2) FOOTPRINTS WIN OVER PAINT — re-stamp every building (incl. the tower) onto the freshly-painted
+  //     blocked[] grid; paint recomputed blocked per-tile from terrain alone, ignoring entities.
+  for(const e of state.entities){ if(!e.dead && e.kind==='building') markBuilding(state, e, true); }
+  // (3) GOLDMINES — keep a painted-over node minable: relocate its center to the nearest open tile, restamp.
+  for(const e of state.entities){
+    if(e.dead || e.type!=='goldmine') continue;
+    const gx=(e.x/TILE)|0, gy=(e.y/TILE)|0;
+    if(baseBlocked(state, gy*state.W+gx)){ const spot=nearestOpenTile(state, gx, gy); if(spot){ e.x=(spot.tx+0.5)*TILE; e.y=(spot.ty+0.5)*TILE; } }
+    if(typeof markFundingNode==='function') markFundingNode(state, e);
+  }
+  // (4) UNITS — eject any ground unit now on a blocked tile (new terrain / building / tower). Last, so every
+  //     footprint is already stamped and a unit never lands inside one. Flyers ignore terrain → skip.
+  for(const u of state.entities){
+    if(u.dead || u.kind!=='unit' || u.air || u.storedIn) continue;
+    const ux=(u.x/TILE)|0, uy=(u.y/TILE)|0;
+    if(ux<0||uy<0||ux>=state.W||uy>=state.H) continue;
+    if(!state.blocked[uy*state.W+ux]) continue;
+    const spot=nearestOpenTile(state, ux, uy);
+    if(spot){ u.x=(spot.tx+0.5)*TILE; u.y=(spot.ty+0.5)*TILE; if(typeof resetMotion==='function') resetMotion(u); u.path=null; u.pathIdx=0; u.dest=null; u.cmd=null; }
   }
 }
 

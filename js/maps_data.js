@@ -493,7 +493,7 @@ Weaponize your buzzwords, circle back, and disrupt MegaCorp into bankruptcy. The
         "type": "darktower"
       },
       "zone": {
-        "radius": 6
+        "radius": 32
       },
       "trigger": {
         "reachRadius": 3
@@ -523,6 +523,7 @@ Weaponize your buzzwords, circle back, and disrupt MegaCorp into bankruptcy. The
       "resetOnUndefended": true,
       "scaleWithRoster": true,
       "gapSec": 3,
+      "graceSec": 12,
       "framing": {
         "label": "GRAAL TRANSFER",
         "cutscene": "EP11_ALTAR_LINES",
@@ -1013,32 +1014,6 @@ Weaponize your buzzwords, circle back, and disrupt MegaCorp into bankruptcy. The
     thickets:[ {x:4,y:30,w:11,h:22,density:0.74,mix:0.2,trail:'v'}, {x:20,y:52,w:10,h:18,density:0.7,mix:0.3,trail:'v'} ],
     lakes:[], rockClusters:[ {x:8,y:18,n:10}, {x:26,y:70,n:10} ], forests:[],
     goldNodes:[ {x:5,y:84,amt:1200} ],
-  },
-  {
-    name:'THE GROUNDS DISPUTE',                  // tower_guardian lieutenant duel (T2-7, win-by-boss per T2-1) — between XI and XII
-    isVillain:true, gateAfter:10, returnTo:11, displayEp:'11.5',
-    enemyName:'A&O', enemyFaction:'ao',
-    aggression:1.0, startGold:900, startWorkers:5, startSoldiers:6, startBarracks:true,
-    graceTime:9999, waveTimer:9999,              // boss duel — no enemy waves
-    crawl:{ episode:'EPISODE 11.5', title:'THE GROUNDS DISPUTE',
-      text:'The Dark Tower is yours on paper. The foundation disagrees.\n\nSomething A&O bolted into the bedrock has unmoored itself — a warden core in a five-meter chassis, violet light bleeding from the seams, walking the perimeter it was built to keep. It does not recognize the transfer of title. It does not recognize anything anymore.\n\nThe tower writes the dying into fresh metal. First, evict the metal that refuses to die....',
-      summary:'You hold the Dark Tower, but its buried warden has unbolted itself from the foundations and contests the deed. A five-meter chassis with violet light in its seams walks your new perimeter. Evict it.' },
-    objective:'Destroy A&O\'s DARK TOWER GUARDIAN — it quakes the ground when it lands, so spread your line.',
-    quests:[
-      { id:'duel', text:'Scrap the DARK TOWER GUARDIAN',                  type:'defeatVillain', required:true },
-      { id:'wall', text:'Evict it without adding names to the wall',      type:'noVetDeaths', reward:100 },
-      { id:'fast', text:'Settle the dispute inside 7 minutes',            type:'winBy', by:420, reward:75 },
-    ],
-    w:38, h:30, seed:11511,
-    player:{ x:6, y:24 },
-    terrain:{ biomes:['tech'], seaFrac:0.05, mtnFrac:0.08, forest:0 },
-    enemies:[],
-    villain:{ id:'tower_guardian', x:29, y:8 },
-    // the duel is fought at the Dark Tower's foundation — the GIGANTIC indestructible spire looms over
-    // the arena as a backdrop (top-centre, clear of the player start and the guardian spawn).
-    scenery:[ { type:'darktower', x:18, y:2 } ],
-    lakes:[ {x:13,y:7,r:3} ], rockClusters:[ {x:11,y:12,n:10}, {x:25,y:23,n:10} ], forests:[],
-    goldNodes:[ {x:7,y:26,amt:2200}, {x:4,y:21,amt:1800}, {x:11,y:27,amt:1800}, {x:19,y:15,amt:2400} ],
   },
   {
     name:'THE BRIDGE ROUND',                     // starved-economy survive (T2-1 + T2-9 "down round" map) — between XII and XIII
