@@ -469,6 +469,7 @@ function epSevenFlashAftermath(state){
   window._massMemorialize=false;
   if(typeof ACH!=='undefined') ACH.fire('flash');   // T3-5: Down Round
   CAMPAIGN.roster=[];
+  for(const cid in (CAMPAIGN.condos||{})) CAMPAIGN.condos[cid].residents=[];   // the flash empties the towers too — drop stale resident keys
   if(typeof setCarryover==='function') setCarryover([]);   // no veterans carry to Episode VIII
   if(typeof resetHeroes==='function') resetHeroes();        // (no heroes exist before Ep VIII; defensive)
 }
@@ -497,6 +498,16 @@ function enterHubFlashAftermath(state){
     _placeHero(G, G.cfg.player, 0, type, (nc&&nc.name)||'Nino', lvl,
                (typeof CAREER!=='undefined'?CAREER.xpFor(lvl):0), null, (nc&&nc.dossier)||{name:'Nino'}, (nc&&nc.sprite)||'nino');
     nino=G.entities.find(e=>e.hero && e.heroId==='Nino');
+    // Register Nino as a hub resident so a condo lists him and hubLocateUnit can pan to him. He's
+    // spawned directly above (after hubSpawnRoster already ran on the cleared roster), so without this
+    // bookkeeping no condo owns his key and the player can't find him post-flash. Mirrors hubWakeComplete.
+    if(nino){
+      const key=hubUnitKey(nino);
+      CAMPAIGN.roster=(CAMPAIGN.roster||[]).filter(r=>r.key!==key);
+      CAMPAIGN.roster.push(hubSnapUnit(nino));
+      const cids=Object.keys(CAMPAIGN.condos||{});
+      if(cids.length){ const c=CAMPAIGN.condos[cids[0]]; c.residents=c.residents||[]; if(!c.residents.includes(key)) c.residents.push(key); }
+    }
   }
   clampCam(G); computeFog(G); refreshUI(); running=true;
   if(typeof syncPauseBtn==='function') syncPauseBtn();
