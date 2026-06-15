@@ -137,6 +137,8 @@ const DEF = {
   /* ---- People Ops (Barracks) tier ---- */
   recruiter:{ name:'Recruiter', icon:'🧑‍🏫', kind:'unit', hp:80, cost:99, build:14, sight:6, supply:1, speed:2.5, dmg:0, range:4.0, cd:1.0, r:9, action:'heal',
               heal:9, flavor:'Heals burnout. "We\'re like a family." Mends teammates instead of fighting.' },
+  psychologist:{ name:'Mindfulness Facilitator', icon:'🛋️', kind:'unit', hp:90, cost:1000, build:40, sight:6, supply:2, speed:2.2, dmg:0, range:4.0, cd:1.0, r:9, action:'heal',
+              madHeal:true, flavor:'Company psychologist. Channels TEMPORARY calm into one frayed mind at a time — a field stopgap that wears off (and is lost the moment they\'re extracted). Never a real cure, and can\'t fight.' },
   hustler:  { name:'Hustler', icon:'🛹', kind:'unit', hp:70, cost:70, build:11, sight:7, supply:1, speed:3.5, dmg:10, range:1.6, cd:0.7, r:9,
               splash:14, splashR:1.2, flavor:'Moves fast and breaks things. Cheap, fast, harasses your economy.' },
   lobbyist: { name:'Lobbyist', icon:'🎩', kind:'unit', hp:70, cost:196, build:20, sight:9, supply:2, speed:2.2, dmg:36, range:7.5, cd:2.3, r:9,
@@ -178,7 +180,7 @@ const DEF = {
    committing Funding. Keys mirror the train buttons in ui.js buildCommands. */
 const BUILD_HIRES = {
   hq:        ['worker'],
-  barracks:  ['soldier','ranger','recruiter','hustler','lobbyist'],
+  barracks:  ['soldier','ranger','recruiter','hustler','lobbyist','psychologist'],
   garage:    ['foodtruck','auditor','founder'],
   launchpad: ['courier','bomber'],
 };
@@ -245,6 +247,13 @@ const MADOSIS = {
   // --- HUB Mental Health Facility (madosis healing — panel + session) ---
   heal: { baseCost:200, costPerStar:24 }, // cost = base + perStar·stars; a completed mission treatment FULLY clears madosis (to 0)
   healCap: 6,             // max units in the facility at once (mirrors HUB.trainPairCap)
+  // --- field relief (Mindfulness Facilitator unit): a TEMPORARY in-mission madosis suppression. The unit
+  //     channels on ONE ally at a time, lowering its EFFECTIVE madosis by `ratePerTick` of the value-at-
+  //     engagement-start every `tickSec`, up to `frac` of it (0.30 → 30% over 60s at 1%/2s). The relief
+  //     holds for `durationSec` then fades over the final `fadeSec`. It is a read-time subtraction kept
+  //     SEPARATE from the true madosis stat (u.madRelief/madReliefT), so it is LOST on extraction to the
+  //     HUB (hubSnapUnit captures only the true madosis) and is never a permanent cure. ---
+  fieldRelief: { frac:0.30, ratePerTick:0.01, tickSec:2, durationSec:300, fadeSec:30 },
   // --- accelerated treatment: pay M3$ to recover madosis on the HUB CITY clock, no mission needed. Each
   //     purchase recovers `points` madosis over `minutes` IN-GAME (city) minutes for `merits` M3$ (rate =
   //     merits/points per point, so a partial last chunk is charged fairly). "In-game minute" = the 🕘 HUB

@@ -377,6 +377,7 @@ function buildCommands(sel){
     addCmd(DEF.recruiter.icon,'Recruiter',DEF.recruiter.cost,()=>train('barracks','recruiter'));
     addCmd(DEF.hustler.icon,'Hustler',DEF.hustler.cost,()=>train('barracks','hustler'));
     addCmd(DEF.lobbyist.icon,'Lobbyist',DEF.lobbyist.cost,()=>train('barracks','lobbyist'));
+    addCmd(DEF.psychologist.icon,DEF.psychologist.name,DEF.psychologist.cost,()=>train('barracks','psychologist'));
   }
   if(owned.some(e=>e.type==='garage'&&!e.constructing)){
     addCmd(DEF.foodtruck.icon,'Food Truck',DEF.foodtruck.cost,()=>train('garage','foodtruck'));

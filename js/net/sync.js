@@ -132,6 +132,7 @@ window.NET = window.NET || {};
       if(e.shootFx && e.shootFx.t>0){ o.sf=1; o.sfx=Math.round(e.shootFx.x*10)/10; o.sfy=Math.round(e.shootFx.y*10)/10; }  // ranged shot endpoint while LIVE → client rebuilds the laser-bolt transient (start derived from synced type/pos/_face). t>0 gate: the expired shootFx object lingers on the host, so without it o.sf would fire forever → client re-loops the beam.
       // MADOSIS (sanity): client renders the bars / feral aura / rescue cue purely from these (it never simulates)
       if(e.madosis) o.mad=Math.round(e.madosis);
+      if(typeof madReliefActive==='function'){ const _mr=madReliefActive(e); if(_mr>0) o.mrl=Math.round(_mr); }   // TEMPORARY field relief (fade already applied) → client subtracts for the bar
       if(e.sanityThreshold) o.sth=Math.round(e.sanityThreshold);
       if(e.scarred) o.scr=1;
       if(e.madDog) o.md=1;
@@ -210,6 +211,7 @@ window.NET = window.NET || {};
       if(o.sf) e.shootFx = (e.shootFx && e.shootFx.t>0) ? e.shootFx : { x:(o.sfx!=null?o.sfx:e.x), y:(o.sfy!=null?o.sfy:e.y), t:SHOOTFX_LIFE };
       // MADOSIS (render-only on the client)
       e.madosis=o.mad||0; e.sanityThreshold=o.sth||0; e.scarred=!!o.scr;
+      e.madRelief=o.mrl||0; e.madReliefT=null;   // host already fade-applied o.mrl → madReliefActive carries it straight (no client sim)
       e.madDog=!!o.md; e.subdued=!!o.sub; e.calmStage=o.cs||0; e._rescue=!!o.rsc;
       e.madEpisode = o.ep ? { phase:(o.ep===3?'feral':o.ep===2?'defiance':'tremor'), t:0 } : null;
       // VILLAIN (render-only on the client) — bossScale MUST land here or unitDrawH draws a tiny boss

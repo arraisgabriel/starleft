@@ -1692,8 +1692,9 @@ function drawUnit(state,u,ox,oy){
   // near the edge (static under prefers-reduced-motion). Pure draw of already-computed state.
   if(u.owner==='player' && typeof madThreshold==='function'){
     const thr=madThreshold(u);
-    if(u.madEpisode || u.madDog || (thr>0 && ((u.madosis||0) >= thr*0.6 || u.selected))){
-      const frac = u.madDog ? 1 : (thr>0 ? Math.min(1,(u.madosis||0)/thr) : 1);
+    const _mad = (typeof madEffective==='function') ? madEffective(u) : (u.madosis||0);   // field relief (Mindfulness Facilitator) shows here
+    if(u.madEpisode || u.madDog || (thr>0 && (_mad >= thr*0.6 || u.selected))){
+      const frac = u.madDog ? 1 : (thr>0 ? Math.min(1,_mad/thr) : 1);
       const col = madColor(frac);
       const _rm=(typeof megaReducedMotion==='function'&&megaReducedMotion());
       if(frac>0.85 && !_rm) ctx.globalAlpha=0.7+0.3*Math.sin((state.time||0)*12.57);   // ~2Hz, not a strobe

@@ -36,6 +36,22 @@ function madThreshold(u){
   return u.scarred ? base * MADOSIS.scarThresholdMul : base;
 }
 
+// TEMPORARY field relief (Mindfulness Facilitator unit): active (fade-applied) suppression points on a
+// unit. The buff holds full while madReliefT > fadeSec, then ramps to 0 over the final fadeSec (set/
+// refreshed to durationSec while channelled, ticked down in madGlobalTick). On a co-op CLIENT the value
+// arrives already fade-applied from the host (madReliefT===null), so it's carried straight through. 0 = none.
+function madReliefActive(u){
+  const r = (u && u.madRelief) || 0; if(!(r>0)) return 0;
+  const fade = (MADOSIS.fieldRelief && MADOSIS.fieldRelief.fadeSec) || 30, t = u.madReliefT;
+  if(t==null) return r;                                   // client: host already applied the fade at sync time
+  return r * Math.max(0, Math.min(1, t/fade));
+}
+// EFFECTIVE madosis for breakdown checks + display = true accrued madosis minus active temporary relief.
+// The true u.madosis stat is never lowered by relief, so extraction (which snapshots u.madosis) drops it.
+function madEffective(u){
+  return Math.max(0, ((u && u.madosis) || 0) - madReliefActive(u));
+}
+
 // short display name for toasts/barks (dossier first name, else unit-type name).
 function madName(u){
   if(typeof buildDossier==='function' && u.lore){ const d=buildDossier(u); if(d && d.first) return d.first; }
@@ -148,7 +164,7 @@ function updateMadosis(state, u, dt){
     if(madEpisodeNo() < MADOSIS.firstEpisodeEpisode) return;   // no breakdowns before Episode 6
     if(!u.sanityThreshold) return;
     const thr = madThreshold(u);
-    if(!(thr>0 && (u.madosis||0) >= thr)) return;
+    if(!(thr>0 && madEffective(u) >= thr)) return;              // field relief (Mindfulness Facilitator) holds onset off
     // one-at-a-time + post-episode cooldown gates — pure reads of shared sim state BEFORE the
     // simRandom roll, so skipping is deterministic across save/load/rollback/co-op.
     if(MADOSIS.maxConcurrentEpisodes){
@@ -325,6 +341,15 @@ function madCollectEcho(state, dog, echo, collector){
    2) walk-over collection: ANY player unit standing on an unreached memory echo recovers it,
       regardless of its command — the auto-pilot rescue stays the guided (and protected) path. */
 function madGlobalTick(state, dt){
+  // TEMPORARY field relief (Mindfulness Facilitator): age out the suppression buff. Held full while
+  // madReliefT>0 (it's refreshed to durationSec each channel tick), then madReliefActive fades it over
+  // the final fadeSec; once fully elapsed the buff is cleared so effective madosis returns to true. The
+  // relief is transient mission state (never snapshotted), so it's also lost the instant a unit extracts.
+  for(const u of state.entities){
+    if(u.dead || u.kind!=='unit' || !(u.madRelief>0)) continue;
+    u.madReliefT = (u.madReliefT||0) - dt;
+    if(u.madReliefT <= 0){ u.madRelief = 0; u.madReliefT = 0; }
+  }
   const active = state.entities.some(o=> !o.dead && o.kind==='unit' && (o.madEpisode||o.madDog));
   if(state._madWasActive && !active)
     state._madCalmUntil = (state.time||0) + (MADOSIS.episodeCooldown||75);
@@ -486,6 +511,7 @@ function madosisBackfill(g, mapIdx){
 if(typeof window!=='undefined'){
   window.updateMadosis=updateMadosis; window.madosisEvent=madosisEvent; window.addMadosis=addMadosis;
   window.mintSanityThreshold=mintSanityThreshold; window.madThreshold=madThreshold; window.madDmgMul=madDmgMul;
+  window.madEffective=madEffective; window.madReliefActive=madReliefActive;
   window.madosisRestDecay=madosisRestDecay; window.madEpisodeNo=madEpisodeNo;
   window.madCanRescue=madCanRescue; window.madBeginRescue=madBeginRescue; window.madResolveRescue=madResolveRescue;
   window.madDropEchoes=madDropEchoes;

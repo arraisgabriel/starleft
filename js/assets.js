@@ -274,6 +274,7 @@ function loadNpcPart(src, fw, fh){
 const UNIT_WALK = {
   worker:walkPair('worker','walk'),       soldier:walkPair('soldier','walk'),   ranger:walkPair('ranger','walk'),
   recruiter:walkPair('recruiter','walk'), hustler:walkPair('hustler','walk'),   lobbyist:walkPair('lobbyist','walk'),
+  psychologist:walkPair('psychologist','walk'),   // white recolor of the recruiter art (Mindfulness Facilitator)
   foodtruck:walkPair('foodtruck','walk'), auditor:walkPair('auditor','walk'),   founder:walkPair('founder','walk'),
   courier:walkPair('courier','walk'),     bomber:walkPair('bomber','walk'),
   // Hero-only recolor of the Lobbyist (purple suit / red accents / golden rifle) for Nino —
@@ -287,7 +288,7 @@ const UNIT_WALK = {
 };
 // drawn sprite HEIGHT per type — ~2× the old values (bigger on screen). Collision
 // radius r / speed / range in DEF are UNCHANGED, so gameplay is unaffected.
-const UNIT_SPRITE_H = { worker:46, soldier:68, ranger:62, recruiter:54, hustler:56, lobbyist:64, foodtruck:64, auditor:72, founder:92, courier:36, bomber:96, biba:60.6, ninja:44, rex:92 };
+const UNIT_SPRITE_H = { worker:46, soldier:68, ranger:62, recruiter:54, psychologist:54, hustler:56, lobbyist:64, foodtruck:64, auditor:72, founder:92, courier:36, bomber:96, biba:60.6, ninja:44, rex:92 };
 // ninja:44 → ×bossScale 2.1 ≈ 92px drawn, the same on-screen size as a Founder Mech (visual only; bossScale/collision r unchanged).
 // rex:92 → ×bossScale 4.0 keeps REX huge.
 // biba:60.6 (not 54): her walk & heal strips share a 341px frame height (see slice_biba.py STRIP_CANVAS_H);
@@ -320,6 +321,7 @@ function unitHitBox(u){ const h=unitDrawH(u), alt=u.air?16:0;
 const UNIT_ACTION = {
   worker:{ mine:walkPair('worker','mine') },           soldier:{ attack:walkPair('soldier','attack') },
   ranger:{ attack:walkPair('ranger','attack') },       recruiter:{ heal:walkPair('recruiter','heal') },
+  psychologist:{ heal:walkPair('psychologist','heal') },   // reuse the recruiter heal pose for the calming channel
   hustler:{ attack:walkPair('hustler','attack') },     lobbyist:{ attack:walkPair('lobbyist','attack') },
   foodtruck:{ attack:walkPair('foodtruck','attack') }, auditor:{ attack:walkPair('auditor','attack') },
   founder:{ attack:walkPair('founder','attack') },     courier:{ heal:walkPair('courier','heal') },

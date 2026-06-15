@@ -792,6 +792,48 @@ function updateUnit(state,u,dt){
     } else u._toHeal=false;   // nothing to heal → fall through to move/idle (healers don't fight)
   }
 
+  // ---- auto-channel (Mindfulness Facilitator): TEMPORARY madosis relief, ONE ally at a time ----
+  // Lowers a frayed ally's EFFECTIVE madosis by MADOSIS.fieldRelief.ratePerTick of its value-at-
+  // engagement-start every tickSec, up to `frac` of it, then releases and moves to the next un-relieved
+  // ally. Writes a transient buff (madRelief/madReliefT) — the TRUE madosis stat is untouched, so the
+  // relief wears off (madGlobalTick) and is lost on extraction. Missions only; host/solo (this path is).
+  if(def.madHeal && !u.sprinting && !state.hub){
+    const FR=(typeof MADOSIS!=='undefined'&&MADOSIS.fieldRelief)||{};
+    const frac=FR.frac||0.30, tickSec=FR.tickSec||2, ratePerTick=FR.ratePerTick||0.01, dur=FR.durationSec||300;
+    const eff=(o)=> (typeof madEffective==='function')?madEffective(o):(o.madosis||0);
+    const capLeft=()=> (u._madHealBase||0)*frac - (u._madHealAdded||0);
+    let t=u._madHealTarget;
+    const lockOk = t && !t.dead && !t.storedIn && t.owner===u.owner && eff(t)>1e-4 && capLeft()>1e-6;
+    if(!lockOk){
+      // acquire the most-frayed ally NOT already relieved, within sight (deterministic; dist breaks ties)
+      u._madHealTarget=null; u._madHealAdded=0; u._madHealBase=0; u._madHealTick=0;
+      const R2=(u.sight*TILE)**2; let best=null,bm=0,bd=Infinity;
+      for(const o of state.entities){
+        if(o.dead||o.storedIn||o.owner!==u.owner||o.kind!=='unit'||o===u) continue;
+        if(o.madReliefT>0) continue;                            // already calmed → leave it until it wears off
+        const e=eff(o); if(!(e>0)) continue;
+        const dx=o.x-u.x,dy=o.y-u.y,dd=dx*dx+dy*dy; if(dd>R2) continue;
+        if(e>bm+1e-9 || (Math.abs(e-bm)<=1e-9 && dd<bd)){ bm=e; bd=dd; best=o; } }
+      if(best){ t=u._madHealTarget=best; u._madHealBase=bm; u._madHealAdded=0; u._madHealTick=0; }
+    }
+    t=u._madHealTarget;
+    if(t && !t.dead){
+      const reach=u.range*TILE+entRadius(t);
+      if(dist(u,t)<=reach){
+        u.path=null; faceTo(u,t); u._actState='heal'; u._face=t.x<u.x?-1:1;
+        u._madHealTick=(u._madHealTick||0)+dt;
+        if(u._madHealTick>=tickSec){
+          u._madHealTick-=tickSec;
+          const room=(t.madosis||0)-(t.madRelief||0);                       // can't suppress below 0 effective
+          const add=Math.max(0, Math.min((u._madHealBase||0)*ratePerTick, capLeft(), room));
+          if(add>0){ t.madRelief=(t.madRelief||0)+add; t.madReliefT=dur; u._madHealAdded=(u._madHealAdded||0)+add; }
+          if(capLeft()<=1e-6 || room-add<=1e-6) u._madHealTarget=null;      // engagement done → release, move on
+        }
+      } else { if(!u._toHeal||(u._healRepath||0)<=0){ issueMoveKeepCmd(state,u,t.x,t.y); u._toHeal=true; u._healRepath=0.5; } u._healRepath-=dt; followPath(state,u,dt); }
+      return;
+    } else u._toHeal=false;   // no one to calm → fall through to move/idle (it can't fight)
+  }
+
   // ---- auto-acquire for any combat unit (not workers, not healers) ----
   // (a balking/subdued MADOSIS unit doesn't fight; a feral mad dog DOES — cmd was cleared above)
   // T2-3 stances: 'hold' only acquires what it can hit WITHOUT moving; 'def'/default acquire normally
