@@ -2195,22 +2195,30 @@ function hubHealCancel(key){
   }
   return false;
 }
-/* ---- Accelerated treatment — pay M3$ to recover madosis on the HUB clock (no mission needed) ----
+/* ---- Accelerated treatment — pay M3$ to recover madosis on the HUB CITY clock (no mission needed) ----
    A unit garrisoned in the facility (awaiting treatment OR mid mission-session) can have merits spent
-   to recover madosis in HUB-time: MADOSIS.accel.points madosis over MADOSIS.accel.minutes in-game
-   minutes per MADOSIS.accel.merits M3$. Each purchase queues one chunk onto the snapshot
-   (accelQueue = madosis points still owed to drain, accelUsed = was ever bought); the clock drains
-   it continuously in updateMentalHealthAccel(). State rides the healing snapshot, which is part of
-   CAMPAIGN (cloned wholesale on save) — missing on legacy saves → falsy → no acceleration (correct).
-   Host/solo gate the spend (hubCanAct) and the drain (netRole!=='client'); clients are panel-cosmetic. */
+   to recover madosis in IN-GAME HUB time: MADOSIS.accel.points madosis over MADOSIS.accel.minutes
+   CITY minutes per MADOSIS.accel.merits M3$. "In-game minute" = the 🕘 HUB time-of-day clock, which
+   FLIES (a city day ≈ 420 real sec), so a chunk recovers in ~3 real sec — NOT 10 real minutes (that
+   wall-clock pacing made it useless). The clock only advances in the HUB, so recovery progresses while
+   the player is in the H.U.B. and pauses on missions. Each purchase queues one chunk onto the snapshot
+   (accelQueue = madosis points still owed to drain, accelUsed = was ever bought); updateMentalHealthAccel
+   drains it continuously. State rides the healing snapshot, part of CAMPAIGN (cloned wholesale on save)
+   — missing on legacy saves → falsy → no acceleration (correct). Host/solo gate the spend (hubCanAct)
+   and the drain (netRole!=='client'); clients are panel-cosmetic. */
 
-// real recovered-madosis points per real second, derived from the Training-Grounds time scale so an
-// "in-game minute" means the same thing everywhere. 0 if misconfigured (disables the feature safely).
+// recovered-madosis points per REAL second, paced to the HUB CITY clock (the 🕘 time-of-day the player
+// reads), NOT wall-clock. A city day is short (hub_npcs.js DAY≈420 real sec = 24 city-hours), so a city
+// minute ≈ 0.29 real sec and "10 in-game minutes" is ≈3 real sec — fast, as a paid accelerator should be
+// (the merit COST is the balance gate, not the wait). dayReal is read live from HUBNPC.clock() so it
+// tracks the actual clock if the day length ever changes (frac=C/dayReal ⇒ dayReal=C/frac, exact for C>0).
 function madAccelPtsPerSec(){
   const A=(typeof MADOSIS!=='undefined' && MADOSIS.accel)||null; if(!A) return 0;
-  const minSec=((typeof HUB!=='undefined' && HUB.trainHourSeconds)||3600)/60;   // real sec per in-game minute
-  const denom=(A.minutes||10)*minSec; if(!(denom>0)) return 0;
-  return (A.points||10)/denom;
+  const mins=(A.minutes||10); if(!(mins>0)) return 0;
+  let dayReal=420;   // real seconds per city day — hub_npcs.js DAY fallback
+  if(typeof HUBNPC!=='undefined' && HUBNPC.clock){ const c=HUBNPC.clock(); if(c && c.frac>0 && c.C>0) dayReal=c.C/c.frac; }
+  const cityMinPerRealSec = 1440/dayReal;             // in-game (city) minutes elapsed per real second
+  return (A.points||10) * cityMinPerRealSec / mins;   // pts/real-sec → drains `points` over `minutes` CITY minutes
 }
 // find a garrisoned healing snapshot by hubUnitKey (staged OR in a mission session), or null.
 function hubHealFindSnap(key){
@@ -2242,17 +2250,21 @@ function hubHealSpeedUp(key){
   snap.accelQueue=(snap.accelQueue||0)+chunk;
   snap.accelUsed=true;
   const nm=(typeof trainUnitName==='function')?trainUnitName(snap):((DEF[snap.type]&&DEF[snap.type].name)||'Unit');
-  toast('⚡ '+nm+' — accelerated treatment: recovering '+chunk+' madosis over '+(A.minutes||10)+' min.');
+  toast('⚡ '+nm+' — accelerated treatment: recovering '+chunk+' madosis over '+(A.minutes||10)+' in-game min.');
   refreshUI();
   return true;
 }
 // Per-tick accelerated-recovery clock — drains queued madosis on facility-garrisoned units at the
-// configured rate. Runs in the HUB and missions (active play only); host/solo simulate, clients skip.
+// city-clock rate. HUB ONLY: in-game HUB time (the 🕘 clock) only advances in the H.U.B., so recovery
+// progresses while the player is here and pauses on missions (queue persists, resumes on return).
+// Host/solo simulate; clients skip (they never operate the H.U.B.). dt is real seconds; `rate` already
+// converts real→city time, and the city clock tracks real time 1:1 in the HUB, so rate*dt is correct.
 function updateMentalHealthAccel(dt){
   if(typeof netRole!=='undefined' && netRole==='client') return;   // clients don't simulate campaign state
+  if(!(typeof G!=='undefined' && G && G.hub)) return;              // in-game HUB time only flows in the H.U.B.
   if(typeof CAMPAIGN==='undefined' || !CAMPAIGN || !CAMPAIGN.healing) return;
   const rate=madAccelPtsPerSec(); if(!(rate>0)) return;
-  const h=CAMPAIGN.healing, inHub=(typeof G!=='undefined' && G && G.hub);
+  const h=CAMPAIGN.healing;
   // Continuous drain: lower madosis and the points-owed queue in lockstep at `rate` pts/sec. Converges
   // cleanly to fully-recovered from either side (madosis is a float — hero accrual / mutators) so a unit
   // always lands on exactly 0 and can auto-release; a partial purchase just lowers madosis and stops.
@@ -2262,35 +2274,32 @@ function updateMentalHealthAccel(dt){
     if(step>0){
       snap.madosis=Math.max(0, (snap.madosis||0)-step);
       snap.accelQueue=snap.accelQueue-step;
-      const u=inHub?hubHealLiveUnit(G, snap):null; if(u) u.madosis=snap.madosis;
+      const u=hubHealLiveUnit(G, snap); if(u) u.madosis=snap.madosis;
     }
     if((snap.madosis||0)<=1e-6){ snap.madosis=0; snap.accelQueue=0; }            // nothing left to recover
     else if(snap.accelQueue<=1e-6){ snap.accelQueue=0; if((snap.madosis||0)<1) snap.madosis=0; }  // queue spent (snap sub-point residue)
   };
   for(const s of (h.staged||[])) drain(s);
   for(const ses of (h.sessions||[])) drain(ses.unit);
-  // Release any unit accelerated to full recovery — only in the HUB, where the facility + live entity
-  // exist. Mid-mission a fully-drained snapshot just sits at madosis 0 until the player returns (then
-  // this path, or hubSpawnHealers for a completed session, releases it). accelUsed gates it to units
-  // recovered by acceleration; staged intake already requires madosis>0, so 0 here means accel did it.
-  if(inHub){
-    const fac=hubFindMentalHealth(G);
-    let changed=false;
-    const releaseDone=(snap, fromSessions)=>{
-      if(!snap || !snap.accelUsed || (snap.madosis||0)>0 || (snap.accelQueue||0)>0) return;
-      if(fromSessions) h.sessions=(h.sessions||[]).filter(x=>x.unit!==snap);
-      else h.staged=(h.staged||[]).filter(x=>x!==snap);
-      hubHealReleaseSnap(G, fac, snap);
-      changed=true;
-      if(!window._rbReplaying){
-        const nm=(typeof trainUnitName==='function')?trainUnitName(snap):((DEF[snap.type]&&DEF[snap.type].name)||'Unit');
-        toast('💜 '+nm+' completed accelerated treatment — fully recovered.');
-      }
-    };
-    for(const s of (h.staged||[]).slice()) releaseDone(s, false);
-    for(const ses of (h.sessions||[]).slice()) releaseDone(ses.unit, true);
-    if(changed && typeof refreshUI==='function') refreshUI();
-  }
+  // Release any unit accelerated to full recovery (the facility + live entity exist here in the HUB).
+  // accelUsed gates it to units recovered by acceleration; staged intake already requires madosis>0,
+  // so madosis 0 here means acceleration did it.
+  const fac=hubFindMentalHealth(G);
+  let changed=false;
+  const releaseDone=(snap, fromSessions)=>{
+    if(!snap || !snap.accelUsed || (snap.madosis||0)>0 || (snap.accelQueue||0)>0) return;
+    if(fromSessions) h.sessions=(h.sessions||[]).filter(x=>x.unit!==snap);
+    else h.staged=(h.staged||[]).filter(x=>x!==snap);
+    hubHealReleaseSnap(G, fac, snap);
+    changed=true;
+    if(!window._rbReplaying){
+      const nm=(typeof trainUnitName==='function')?trainUnitName(snap):((DEF[snap.type]&&DEF[snap.type].name)||'Unit');
+      toast('💜 '+nm+' completed accelerated treatment — fully recovered.');
+    }
+  };
+  for(const s of (h.staged||[]).slice()) releaseDone(s, false);
+  for(const ses of (h.sessions||[]).slice()) releaseDone(ses.unit, true);
+  if(changed && typeof refreshUI==='function') refreshUI();
 }
 
 // Re-materialise facility occupants when a fresh HUB map is built (after the roster spawns).

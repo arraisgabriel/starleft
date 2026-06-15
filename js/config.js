@@ -245,11 +245,12 @@ const MADOSIS = {
   // --- HUB Mental Health Facility (madosis healing — panel + session) ---
   heal: { baseCost:200, costPerStar:24, fracOfMax:0.70 }, // cost = base + perStar·stars; heals up to fracOfMax·sanityThreshold over one mission
   healCap: 6,             // max units in the facility at once (mirrors HUB.trainPairCap)
-  // --- accelerated treatment: pay M3$ to recover madosis on the HUB clock, no mission needed. Each
-  //     purchase recovers `points` madosis over `minutes` IN-GAME minutes for `merits` M3$ (rate =
-  //     merits/points per point, so a partial last chunk is charged fairly). "In-game minute" is the
-  //     Training-Grounds time scale (HUB.trainHourSeconds/60 real sec); the clock advances in the HUB
-  //     AND missions like Training/The Wake. State lives on the healing snapshot (auto-serialized). ---
+  // --- accelerated treatment: pay M3$ to recover madosis on the HUB CITY clock, no mission needed. Each
+  //     purchase recovers `points` madosis over `minutes` IN-GAME (city) minutes for `merits` M3$ (rate =
+  //     merits/points per point, so a partial last chunk is charged fairly). "In-game minute" = the 🕘 HUB
+  //     time-of-day clock (hub_npcs.js, a city day ≈ 420 real sec), which flies — so 10 in-game minutes is
+  //     ≈3 real seconds, NOT 10 real minutes. The clock only advances IN THE HUB, so recovery pauses on
+  //     missions. State lives on the healing snapshot (auto-serialized). ---
   accel: { merits:100, points:10, minutes:10 },
 };
 
