@@ -500,24 +500,24 @@ Weaponize your buzzwords, circle back, and disrupt MegaCorp into bankruptcy. The
       },
       "spawns": [
         {
-          "x": 45,
-          "y": 136
+          "x": 41,
+          "y": 135
         },
         {
-          "x": 39,
+          "x": 55,
+          "y": 135
+        },
+        {
+          "x": 44,
           "y": 140
+        },
+        {
+          "x": 48,
+          "y": 141
         },
         {
           "x": 51,
           "y": 140
-        },
-        {
-          "x": 43,
-          "y": 132
-        },
-        {
-          "x": 49,
-          "y": 132
         }
       ],
       "resetOnUndefended": true,
@@ -807,58 +807,39 @@ Weaponize your buzzwords, circle back, and disrupt MegaCorp into bankruptcy. The
     "lostBases": [],
     "guards": [],
     "captives": [],
-    "paint": "163x265;w:q7j,1,1,1,1,1,1,1,1,4b,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,3p,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,3n,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,3n,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,3n,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,3n,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,3n,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,3s,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,3x,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,4c,1,1,1,1,1,m1,1,1,1,4e,1,1,1,1,1,4d,1,1,1,1,1,1,4a,1,1,1,1,1,1,1,1,1,48,1,1,1,1,1,1,1,1,1,1,1,1,41,1,1,3,1,1,1,1,1,1,1,1,1,1,1,1,1,41,1,1,2,1,1,1,1,1,1,1,1,1,1,1,1,1,1,41,1,1,1,1,1,1,1,1,2,1,1,1,1,1,1,1,1,41,1,1,1,1,1,1,1,2,1,1,1,1,1,1,1,1,1,3y,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,3v,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,3,1,1,1,2,1,1,1,1,1,1,1,1,3f,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,3,1,1,1,1,1,1,1,1,1,1,1,1,1,1,3o,1,1,1,1,1,1,1,1,1,1,1,1,1,1,3,1,1,1,1,1,1,1,1,1,1,1,1,1,1,3o,1,1,1,1,1,1,1,1,1,1,1,1,1,1,3,1,1,1,1,1,1,1,1,1,1,1,1,1,1,3o,1,1,1,1,1,1,1,1,1,1,1,1,1,1,3,1,1,1,1,1,1,1,1,1,1,1,1,1,3p,1,1,1,1,1,1,1,1,1,1,1,1,1,1,3,1,1,1,1,1,1,1,1,1,1,1,1,1,3n,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,3,1,1,1,1,1,1,1,1,1,1,1,1,1,3k,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,3,1,1,1,1,1,1,1,1,1,1,1,1,1,3k,1,1,1,1,1,1,1,1,1,1,1,1,2,1,1,1,1,4,1,1,1,1,1,1,1,1,1,1,1,1,3l,1,1,1,1,1,1,1,1,1,1,1,5,1,1,4,1,1,1,1,1,1,1,1,1,1,1,3q,1,1,1,1,1,1,4d,1,1,1,4g,1,1,1|s:rln,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,42,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,41,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,41,1,1,1,1,b,1,1,1,41,1,1,d,1,1,1,41,1,1,d,1,1,42,1,1,d,1,1,42,1,1,d,1,1,43,1,d,1,1,43,1,c,1,1,1,43,1,1,1,1,8,1,1,1,1,43,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,43,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,47,1,1,1,1,1,1,1,1,1,1,1,48,1,4i,1,4i,1,4i,1,4i,1,4i,1,4i,1,4i,1,4h,1,1,4h,1,1"
+    "paint": "163x265;w:q7j,1,1,1,1,1,1,1,1,4b,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,3p,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,3n,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,3n,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,3n,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,3n,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,3n,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,3s,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,3x,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,4c,1,1,1,1,1,m3,1,4e,4,1,4d,1,4f,1,1,1,1,4d,1,1,1,1,1,1,47,1,1,3,1,1,1,1,1,1,1,1,1,45,1,1,2,1,1,1,1,1,1,1,48,1,1,1,1,1,1,1,1,2,1,48,1,1,1,1,1,1,1,2,1,1,45,1,1,1,1,1,1,1,1,1,1,1,1,1,1,45,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,43,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,4d,1,1,1,1,1,1,4d,1,1,1,1,1,1,4d,1,1,1,1,1,1,1,4c,1,1,1,1,1,1,1,m,1,3n,1,1,1,1,1,1,1,1,1,m,1,3k,1,1,1,1,1,1,1,1,1,1,1,1,1,l,1,3k,1,1,1,1,1,1,1,1,1,1,1,1,m,3l,1,1,1,1,1,1,1,1,1,1,1,4c,1,1,1,1,1,1,4d,1,1,1,4g,1,1,1|s:rln,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,42,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,41,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,41,1,1,1,1,b,1,1,1,3w,1,1,3,1,1,d,1,1,1,3w,1,1,3,1,1,d,1,1,3x,1,1,1,1,1,1,1,d,1,1,3x,1,1,1,1,1,1,1,d,1,1,3x,1,1,1,1,1,1,1,d,1,1,3z,1,1,1,1,1,c,1,1,1,3w,1,1,1,1,1,1,1,1,1,1,1,8,1,1,1,1,4,1,1,3q,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,3,1,1,1,3q,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,3,1,1,1,3q,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,3s,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,3t,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,3t,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,3v,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,3w,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,3w,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,3z,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,40,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,40,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,41,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,48,1,1"
   },
-  {name:'XII — The Continuity Farm',enemyName:'A&O',enemyFaction:'ao',aggression:2.00,startGold:3600,startWorkers:12,startSoldiers:12,startBarracks:true,graceTime:118,waveTimer:112,crawl:{episode:'EPISODE XII',title:'THE CONTINUITY FARM',text:'You rebuilt after the flash, but the new company was never alive. It was a cap table wearing a grief mask.\n\nA&O now leases the dead into refrigerated prototype bodies, charging subscription fees for memories that used to belong to people. Their Continuity Farm hums under black ice and server heat, promising immortality with a cancellation clause.\n\nYour veterans carry names. Your memorial carries more. Crack the farm, steal the transfer lattice, and decide which ghost gets equity again....',summary:`You rebuilt after the flash, but the new company was never alive — just a cap table wearing a grief mask. A&O now leases the dead into refrigerated bodies and bills subscriptions for memories that used to belong to people. Crack the six campuses of its Continuity Farm, seize the transfer lattice, and decide which ghost gets equity again.`},reachCutscene:{name:'EP12_FARM_LINES',at:{x:55,y:48},radius:6},objective:'A&O holds SIX continuity campuses — liquidate all six and seize the transfer lattice.',quests:[{id:'raze',text:'Crack all six continuity campuses',type:'razeAll',required:true},{id:'kills',text:'Decommission 150 A&O personnel',type:'killUnits',count:150,reward:125},{id:'churn',text:'Hold churn under 20 while the farm burns',type:'maxUnitsLost',count:19,reward:100}],w:118,h:96,seed:12012,terrain:{biomes:['tech','ice'],temp:{axis:'diag',base:0.26,gradient:0.18,noise:0.14},freeze:0.24,seaFrac:0.14,mtnFrac:0.08,forest:0,beach:true},player:{x:8,y:88},enemies:[{x:106,y:8,defenders:7,extraBarracks:true},{x:106,y:84,defenders:7,extraBarracks:true},{x:58,y:10,defenders:6,extraBarracks:true},{x:62,y:84,defenders:6},{x:92,y:48,defenders:7,extraBarracks:true},{x:34,y:28,defenders:5}],goldNodes:[{x:6,y:90,amt:3600},{x:13,y:88,amt:3200},{x:9,y:80,amt:2800},{x:22,y:82,amt:2400},{x:55,y:52,amt:4200},{x:42,y:44,amt:3000},{x:76,y:42,amt:3000},{x:96,y:54,amt:2500},{x:110,y:12,amt:1900},{x:110,y:82,amt:1900},{x:58,y:6,amt:1900},{x:64,y:90,amt:1900}],lakes:[{x:56,y:48,r:7},{x:86,y:26,r:5},{x:30,y:66,r:4},{x:74,y:72,r:4}],rockClusters:[{x:48,y:25,n:18},{x:70,y:30,n:16},{x:88,y:62,n:18},{x:24,y:48,n:14},{x:60,y:68,n:16}],forests:[],thickets:[{x:38,y:34,w:22,h:14,density:0.72,mix:0.25,trail:'h'},{x:80,y:34,w:18,h:18,density:0.66,mix:0.15,trail:'v'}]},
+  {name:'XII — The Siege Line',enemyName:'A&O',enemyFaction:'ao',aggression:2.00,startGold:3600,startWorkers:12,startSoldiers:12,startBarracks:true,graceTime:118,waveTimer:112,crawl:{episode:'EPISODE XII',title:'THE SIEGE LINE',text:'You hold the GRAAL now, and the Wake in your H.U.B. hums with it — your dead, written back into metal, one at a time. A&O cannot abide a rival who gives the product away.\n\nSo it stops litigating and starts marching. Forward bases bloom across the approaches to the H.U.B. — staging yards, armor depots, artillery sheds — each one a step closer to the altar they mean to level before you can scale it. Let the line reach the gates and the Wake goes dark.\n\nBreak their forward bases. Shatter the assault at its staging grounds and the whole column loses its nerve and falls back. Push them off the approach....',summary:`A&O can't abide that you hold the GRAAL and a working Wake, so it stops sending lawyers and sends an army — forward bases creeping up the approaches to your H.U.B. to level the altar before you can scale it. Shatter all six staging bases and break the assault before it reaches the gates.`},reachCutscene:{name:'EP12_SIEGE_LINES',at:{x:55,y:48},radius:6},objective:'A&O is marching on the H.U.B. to destroy the Wake — liquidate all SIX of its forward staging bases to shatter the assault and force a retreat.',quests:[{id:'raze',text:'Shatter all six forward staging bases',type:'razeAll',required:true},{id:'kills',text:'Repel the assault — decommission 150 A&O troops',type:'killUnits',count:150,reward:125},{id:'churn',text:'Hold the line — keep losses under 20',type:'maxUnitsLost',count:19,reward:100}],w:118,h:96,seed:12012,terrain:{biomes:['tech','ice'],temp:{axis:'diag',base:0.26,gradient:0.18,noise:0.14},freeze:0.24,seaFrac:0.14,mtnFrac:0.08,forest:0,beach:true},player:{x:8,y:88},enemies:[{x:106,y:8,defenders:7,extraBarracks:true},{x:106,y:84,defenders:7,extraBarracks:true},{x:58,y:10,defenders:6,extraBarracks:true},{x:62,y:84,defenders:6},{x:92,y:48,defenders:7,extraBarracks:true},{x:34,y:28,defenders:5}],goldNodes:[{x:6,y:90,amt:3600},{x:13,y:88,amt:3200},{x:9,y:80,amt:2800},{x:22,y:82,amt:2400},{x:55,y:52,amt:4200},{x:42,y:44,amt:3000},{x:76,y:42,amt:3000},{x:96,y:54,amt:2500},{x:110,y:12,amt:1900},{x:110,y:82,amt:1900},{x:58,y:6,amt:1900},{x:64,y:90,amt:1900}],lakes:[{x:56,y:48,r:7},{x:86,y:26,r:5},{x:30,y:66,r:4},{x:74,y:72,r:4}],rockClusters:[{x:48,y:25,n:18},{x:70,y:30,n:16},{x:88,y:62,n:18},{x:24,y:48,n:14},{x:60,y:68,n:16}],forests:[],thickets:[{x:38,y:34,w:22,h:14,density:0.72,mix:0.25,trail:'h'},{x:80,y:34,w:18,h:18,density:0.66,mix:0.15,trail:'v'}]},
   {
-    name:'XIII — The Vesting Cliff',
-    enemyName:'A&O', enemyFaction:'ao',
-    // Penultimate Arc-2 chapter. You hold the transfer lattice from Ep XII but it is inert — bodies,
-    // no souls: A&O kept the minds upstream as encrypted backups ("inventory"), files an injunction
-    // calling your dead delinquent assets, and schedules a purge. You raid SEVEN backup-vault
-    // campuses to extract the dead before the "cliff" zeroes them — running A&O's own billing engine
-    // one last time (Biba: "salvation from theft"). Sets up the Ep XIV resurrection choice ("you can
-    // still only write one home"); the Reborn-Cyborg unit/death-reset is SEPARATE code work, not this
-    // map. Carried roster + Nino/Biba arrive by carryover (no cfg.heroes) → contextual crawl vars.
-    // aggression eased to 1.6 (below Ep XII's 2.0): with SEVEN vault campuses the difficulty is the
-    // T2-9: the campaign's hardest conventional fight — Arc 2 peaks HERE (1.2 → … → 2.0 → 2.2).
-    // Seven vault campuses AND per-base ferocity: a maxed carried roster meets a real finale, with
-    // the Arc-2 vetScaling cap (balance.js) mustering bigger garrisons against it.
-    aggression:2.2,
-    startGold:3600, startWorkers:12, startSoldiers:12, startBarracks:true,
-    graceTime:120, waveTimer:112,
-    crawl:{ episode:'EPISODE XIII', title:'THE VESTING CLIFF',
-      text:'The transfer lattice is yours, and it is empty. You stole the machine that writes a mind into metal and learned, the way you always learn, one quarter too late: a lattice is not a soul. You have the bodies. The cold racks hum, addressed and waiting, and no one is home.\n\nThe minds were never in the farm. A&O keeps them upstream — every churned name backed up, encrypted, booked as inventory on the servers of the fund that owns the beginning and the end. And A&O filed before you finished the manual: an injunction that calls your dead delinquent assets, your rescue an act of churn, the only theft on record the one chip you took. The purge is scheduled. After the cliff, the backups vest to zero.\n\n{?party}They walk the vaults with you: {party} — the ones who reached the cliff alive, here to drag the rest back over it.{/party}{^party}You walk the vaults alone. Everyone who carried you this far is already inside them, filed and waiting.{/party}{?fallen} You came for these names: {fallen} — churn on A&O\'s ledger, the wall on yours.{/fallen}{?biba} Biba says you are not saving them, you are repossessing them — A&O\'s word, A&O\'s machine. She runs the extraction anyway.{/biba}\n\nBreak the SEVEN vault campuses, turn A&O\'s billing engine against itself, and pull every backup out before the cliff zeroes it. You can still only write one of them home. That ledger waits. Tonight, you carry them out of the fire....',
-      summary:`You hold A&O's transfer lattice at last — and it is an empty machine: prototype bodies with no minds to wake in them. The minds are upstream, backed up and booked as inventory by the fund that owns the beginning and the end, and A&O has filed to purge them as delinquent assets. Crack its seven backup-vault campuses and pull your dead out of the billing engine before the deadline zeroes them.` },
-    // story-polish §5: the vault reveal (Nino/Biba) plays when a unit reaches the deep archive at the east-centre
-    reachCutscene:{ name:'EP13_VAULT_LINES', at:{x:88,y:46}, radius:6 },
-    objective:'A&O has filed to purge your dead and holds SEVEN backup-vault campuses — liquidate all seven and pull every backup out before the cliff zeroes them.',
+    name:'XIII — The Liquidation',
+    // Arc-2 FINALE. After the siege breaks (Ep XII), A&O forecloses the hard way and fields REX — the
+    // walking-foreclosure superboss — marching on the H.U.B. to level the Wake. This is the REX duel:
+    // a LINEAR episode carrying finale:true (the IPO ending fires here via bossOutcome's cfg.finale
+    // branch + onVictory's finaleWon = !!MAPS[i].finale). The standalone REX "FINALE" map is retired
+    // to a spacer; the rex villain def stays in villains.js, reserved for the Arc-3 (Ep XXIII) re-skin.
+    // Carried roster + Nino/Biba arrive by carryover (no cfg.heroes); the prelude plays as the fight opens.
+    isVillain:false, finale:true, displayEp:'XIII',
+    enemyName:'A&O', enemyFaction:'ao',          // → founder _ao green sheet + A&O ground treatment
+    aggression:1.0, startGold:1800, startWorkers:6, startSoldiers:8, startBarracks:true,
+    graceTime:9999, waveTimer:9999,              // boss duel — no enemy waves; the villain IS the encounter
+    crawl:{ episode:'EPISODE XIII', title:'THE LIQUIDATION',
+      text:'A&O stops sending bases. It sends a building that walks.\n\nThe siege broke on your forward line and the fund did the math: cheaper to foreclose the whole property than to keep losing crews to it. So it fields REX — five stories of black alloy and toxic light, the foreclosure made flesh — and it is walking straight for the H.U.B. and the Wake humming inside it. It does not negotiate the vesting cliff. It IS the cliff.\n\nCrack its core before it overclocks and goes feral, or be the next name on the wall. Bring everyone. Bring everything....',
+      summary:`The siege failed, so A&O forecloses the hard way: REX — a five-story mech of black alloy and toxic-green light, the foreclosure made flesh — marches on the H.U.B. to level the Wake and everyone guarding it. Survive the assault, then the enrage when its core goes critical. This is the biggest, longest fight of the war.` },
+    // story-polish §5: the finale prelude (Nino/Biba) plays once as the fight opens (carryover heroes present)
+    introCutscene:'REX_PRELUDE_LINES',
+    objective:"Destroy A&O's REX before it reaches the Wake. It hits like a foreclosure and turns berserk below 40% — spread out and keep your healers alive.",
     quests:[
-      { id:'raze', text:'Liquidate all seven backup-vault campuses',     type:'razeAll', required:true },
-      { id:'fast', text:'Beat the purge — close inside 25 minutes',      type:'winBy', by:1500, reward:150 },
-      { id:'wall', text:'Pull every backup out — zero veterans lost',    type:'noVetDeaths', reward:150 },
+      { id:'rex',    text:'Destroy REX — crack the core before it cracks you',   type:'defeatVillain', required:true },
+      { id:'heroes', text:'Bring NINO and BIBA through the foreclosure',         type:'heroesAlive', reward:150 },
+      { id:'lean',   text:'Keep the final invoice under 12 names',               type:'maxUnitsLost', count:11, reward:150 },
     ],
-    w:112, h:92,
-    seed:13013,
-    // deep cold storage: the tech server-farm refrozen into cryo backup vaults — colder than the
-    // Continuity Farm, pure tech under heavy ice, coolant pools in the margins, nothing growing.
-    terrain:{ biomes:['tech','ice'], temp:{base:0.22,noise:0.14}, freeze:0.52, seaFrac:0.13, mtnFrac:0.09, forest:0 },
-    player:{ x:8, y:84 },
-    // seven backup-vault campuses: three hardened (extraBarracks) corner/core vaults guard the deep
-    // archive at the east-centre (88,46); four lighter forward vaults make first contact. Tuned to
-    // ~40 total defenders so the carryover swing sits beside Ep XII on the shipping curve.
-    enemies:[ {x:104,y:8, defenders:7, extraBarracks:true}, {x:104,y:84, defenders:7, extraBarracks:true},
-              {x:58,y:8, defenders:6}, {x:60,y:84, defenders:5},
-              {x:88,y:46, defenders:7, extraBarracks:true}, {x:38,y:24, defenders:4},
-              {x:40,y:62, defenders:4} ],
-    goldNodes:[ {x:6,y:86,amt:3000},{x:13,y:84,amt:2800},{x:9,y:78,amt:2600},{x:20,y:80,amt:2200},
-                {x:54,y:48,amt:4000},{x:70,y:40,amt:3000},{x:44,y:46,amt:2600},
-                {x:106,y:12,amt:1900},{x:106,y:80,amt:1900},{x:58,y:12,amt:1900},{x:62,y:80,amt:1900},
-                {x:90,y:50,amt:2400},{x:38,y:28,amt:1900},{x:40,y:58,amt:1900} ],
-    lakes:[ {x:50,y:46,r:7},{x:80,y:24,r:5},{x:28,y:54,r:4},{x:74,y:70,r:5},{x:96,y:64,r:4} ],
-    rockClusters:[ {x:44,y:24,n:16},{x:72,y:30,n:16},{x:86,y:60,n:18},{x:26,y:40,n:14},{x:58,y:60,n:16},{x:100,y:44,n:14} ],
-    forests:[],
-    thickets:[ {x:30,y:30,w:20,h:14,density:0.70,mix:0.20,trail:'h'},{x:70,y:54,w:18,h:18,density:0.66,mix:0.18,trail:'v'} ],
+    w:40, h:34, seed:13013,
+    player:{ x:6, y:28 },
+    terrain:{ biomes:['tech'], seaFrac:0.05, mtnFrac:0.06, forest:0 },
+    enemies:[],                                  // boss duel — no enemy bases; the villain IS the encounter
+    villain:{ id:'rex', x:30, y:9 },
+    lakes:[ {x:14,y:6,r:3} ], rockClusters:[ {x:12,y:12,n:10}, {x:26,y:26,n:10} ], forests:[],
+    goldNodes:[ {x:7,y:30,amt:2400}, {x:4,y:25,amt:2000}, {x:11,y:31,amt:2000}, {x:20,y:18,amt:2600} ],
   },
   /* ============================ VILLAINS (BIG BOSSES) ============================
      APPENDED past the linear campaign so indices 0–12 (Episodes I–XIII) never shift — save compat,
@@ -896,9 +877,11 @@ Weaponize your buzzwords, circle back, and disrupt MegaCorp into bankruptcy. The
   },
   {
     name:'REX',
-    // T2-7: REX is the TRUE FINALE — the campaign routes THROUGH him after Episode XIII and the
-    // IPO only shows once he falls (finale routing in ui.js onVictory / villains.js finaleVillainIndex).
-    isVillain:true, finale:true, displayEp:'FINALE',
+    // RETIRED as the standalone finale: the REX fight now lives in the linear Ep XIII (MAPS[12],
+    // finale:true). This entry is kept ONLY as an index spacer (no finale / gateAfter / returnTo →
+    // unreachable) so appended-villain indices and saved villainCleared keys don't shift. The rex
+    // villain def stays in villains.js, reserved for the Arc-3 (Ep XXIII) Tusk-piloted REX re-skin.
+    isVillain:true, hidden:true, displayEp:'FINALE',
     enemyName:'A&O', enemyFaction:'ao',          // → founder _ao green sheet + A&O ground treatment
     aggression:1.0, startGold:1800, startWorkers:6, startSoldiers:8, startBarracks:true,
     graceTime:9999, waveTimer:9999,
@@ -1016,8 +999,8 @@ Weaponize your buzzwords, circle back, and disrupt MegaCorp into bankruptcy. The
     goldNodes:[ {x:5,y:84,amt:1200} ],
   },
   {
-    name:'THE BRIDGE ROUND',                     // starved-economy survive (T2-1 + T2-9 "down round" map) — between XII and XIII
-    isVillain:true, gateAfter:11, returnTo:12, displayEp:'12.5',
+    name:'THE BRIDGE ROUND',                     // RETIRED interlude (was 12.5 between XII and XIII) — its story rode the deleted stolen-lattice plot
+    isVillain:true, hidden:true, displayEp:'12.5',   // no gateAfter/returnTo → never routed; kept as an index spacer (save-compat)
     enemyName:'A&O', enemyFaction:'ao',
     aggression:2.0, startGold:250, startWorkers:4, startSoldiers:6, startBarracks:true,
     graceTime:45, waveTimer:55,

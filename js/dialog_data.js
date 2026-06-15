@@ -1294,30 +1294,22 @@ if(typeof window!=='undefined') window.HERO_MENTOR_LINES = HERO_MENTOR_LINES;
 
 /* ---- In-mission scripted cutscenes (story-polish §5.2), same shape as EP11_ALTAR_LINES
    ({id,speaker,text}; clip → assets/audio/voice/scene/<id>.mp3, silent-safe). Triggered by the
-   generic map-cutscene tick (js/cutscene.js mapCutsceneTick): EP12/EP13 fire on reaching the
-   objective (cfg.reachCutscene); REX_PRELUDE fires at the finale start (cfg.introCutscene). Solo-only.
-   Each carries an oblique Voss seed (story-polish §3 B.3); speakers are present via carryover. ---- */
-const EP12_FARM_LINES = [
-  { id:'farm_00', speaker:'Biba', text:"Refrigerated bodies. Addressed, racked, waiting. But the minds aren't here." },
-  { id:'farm_01', speaker:'Nino', text:"Then where? We crossed six campuses for an empty warehouse?" },
-  { id:'farm_02', speaker:'Biba', text:"Upstream. On his servers. We're cracking a catalog, not a crypt." },
-  { id:'farm_03', speaker:'Nino', text:"'His.' You keep saying his." },
-  { id:'farm_04', speaker:'Biba', text:"There's a perpetual license on one account. No renewal. Somebody built himself an exit and billed everyone else for theirs." },
+   generic map-cutscene tick (js/cutscene.js mapCutsceneTick): EP12_SIEGE fires on reaching the A&O
+   staging area (cfg.reachCutscene); REX_PRELUDE fires at the Ep XIII finale start (cfg.introCutscene).
+   Solo-only. Each carries an oblique Tusk seed (story-polish §3 B.3); speakers present via carryover.
+   (EP12_FARM_LINES / EP13_VAULT_LINES retired with the old Continuity-Farm/Vesting-Cliff plot.) ---- */
+const EP12_SIEGE_LINES = [
+  { id:'siege_00', speaker:'Biba', text:"Staging yards. Armor depots. They're not raiding us — they're moving in. This is a march on the H.U.B." },
+  { id:'siege_01', speaker:'Nino', text:"They want the Wake. Of course they do. We gave the dead away for free." },
+  { id:'siege_02', speaker:'Biba', text:"Every order signed off the same desk. One account, perpetual license, no renewal." },
+  { id:'siege_03', speaker:'Nino', text:"'No renewal.' Somebody built himself an exit and billed everyone else for theirs." },
+  { id:'siege_04', speaker:'Biba', text:"Break the staging bases and the column loses its nerve. Then we find that desk." },
 ];
-if(typeof window!=='undefined') window.EP12_FARM_LINES = EP12_FARM_LINES;
-
-const EP13_VAULT_LINES = [
-  { id:'vault_00', speaker:'Nino', text:"Every name on our wall is in these racks. Filed as 'delinquent.'" },
-  { id:'vault_01', speaker:'Biba', text:"We're not saving them. We're repossessing them. A&O's word. A&O's machine." },
-  { id:'vault_02', speaker:'Nino', text:"Then we steal them back and call it something else." },
-  { id:'vault_03', speaker:'Biba', text:"You can still only write one of them home. The rest stay data. Remember that when you choose." },
-  { id:'vault_04', speaker:'Nino', text:"Whoever scheduled this purge never signed it. Like he's somewhere we can't reach yet." },
-];
-if(typeof window!=='undefined') window.EP13_VAULT_LINES = EP13_VAULT_LINES;
+if(typeof window!=='undefined') window.EP12_SIEGE_LINES = EP12_SIEGE_LINES;
 
 const REX_PRELUDE_LINES = [
-  { id:'rexpre_00', speaker:'Nino', text:"The vaults are empty. A&O stopped sending lawyers." },
-  { id:'rexpre_01', speaker:'Biba', text:"Because it sent a building. Five stories of foreclosure — and it's warm. Something's alive in there." },
+  { id:'rexpre_00', speaker:'Nino', text:"The siege broke on our line. A&O stopped sending crews." },
+  { id:'rexpre_01', speaker:'Biba', text:"Because it sent a building. Five stories of foreclosure, walking for the Wake — and it's warm. Something's alive in there." },
   { id:'rexpre_02', speaker:'Nino', text:"Bring everyone. Bring everything." },
 ];
 if(typeof window!=='undefined') window.REX_PRELUDE_LINES = REX_PRELUDE_LINES;

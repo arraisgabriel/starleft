@@ -960,10 +960,17 @@ function mkUnit(state,type,owner,tx,ty){
 }
 
 function markBuilding(state,e,blockedVal){
-  for(let y=0;y<e.h;y++)for(let x=0;x<e.w;x++){
-    const tx=e.tx+x, ty=e.ty+y;
-    if(tx>=0&&ty>=0&&tx<state.W&&ty<state.H) state.blocked[ty*state.W+tx]=blockedVal?1:baseBlocked(state, ty*state.W+tx);
+  const stamp=(tx,ty)=>{ if(tx>=0&&ty>=0&&tx<state.W&&ty<state.H) state.blocked[ty*state.W+tx]=blockedVal?1:baseBlocked(state, ty*state.W+tx); };
+  // Optional data-driven non-rectangular footprint (e.g. DEF.darktower.collide — the wide stone base under a sprite
+  // far bigger than its w×h ground rect). Rows are [dy,dxMin,dxMax] relative to the footprint top-left; dy/dx may be
+  // negative (above/left of it). Read from DEF (never the entity) so it's looked up at stamp time, never serialized.
+  const mask=DEF[e.type]&&DEF[e.type].collide;
+  if(mask){
+    for(let i=0;i<mask.length;i++){ const ty=e.ty+mask[i][0], xa=mask[i][1], xb=mask[i][2];
+      for(let dx=xa;dx<=xb;dx++) stamp(e.tx+dx, ty); }
+    return;
   }
+  for(let y=0;y<e.h;y++)for(let x=0;x<e.w;x++) stamp(e.tx+x, e.ty+y);
 }
 
 // ---- SAVE-MIGRATION relocation (js/save.js migrateCampaignTerrain) ----

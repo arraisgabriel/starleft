@@ -29,7 +29,7 @@ function updateBossBar(){
   document.getElementById('bossbar-fill').style.width=(frac*100)+'%';
   const hpEl=document.getElementById('bossbar-hp'); if(hpEl) hpEl.textContent=Math.round(frac*100)+'%';
 }
-// T2-5: income/sec — a rolling ~3s delta of gold_collected (deposits + Satellite trickle).
+// T2-5: income/sec — a rolling ~3s delta of gold_collected (intern deposits).
 // Local HUD read only; pruned sample window, no sim impact.
 let _incomeSamples=[];
 function incomePerSec(eco){
@@ -1988,7 +1988,10 @@ function onVictory(){
   // so the war ends on its best fight; beating the finale villain (or replaying it cleared) IPOs.
   const lastEp = (typeof lastEpisodeIndex==='function') ? lastEpisodeIndex() : (MAPS.length-1);
   const isVillainMap = !!(MAPS[mapIndex] && MAPS[mapIndex].isVillain);
-  const finaleWon = isVillainMap && MAPS[mapIndex].finale;
+  // The finale (REX) is now the linear Ep XIII — a non-villain map carrying finale:true — so the IPO
+  // fires on ANY finale:true map, not just appended villain ones. bossOutcome already routes a
+  // cfg.finale win straight here regardless of isVillain.
+  const finaleWon = !!(MAPS[mapIndex] && MAPS[mapIndex].finale);
   if(finaleWon && typeof markVillainCleared==='function') markVillainCleared(mapIndex);
   const fvIdx = (!isVillainMap && mapIndex>=lastEp && typeof finaleVillainIndex==='function') ? finaleVillainIndex() : -1;
   if(!finaleWon && (mapIndex < lastEp || isVillainMap || fvIdx>=0)){

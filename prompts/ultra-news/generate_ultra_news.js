@@ -55,7 +55,7 @@ const episodes = data.maps.map(episodeHeadline);
 
 // --- Hand-authored REACTIVE pools (story-polish §3/§8). NOT derived from tips/crawls; authored
 //     here so a regen preserves them. `foreshadow` is indexed by MAPS index (entry i fires when the
-//     player enters MAPS[i]); Voss/Arc-3 seeds stay oblique and only appear in Arc-2 entries. ---
+//     player enters MAPS[i]); Tusk/Arc-3 seeds stay oblique and only appear in Arc-2 entries. ---
 const foreshadow = [
   "B.I.G. PAPA: There are bigger fish up the food chain than DISRUPTR. There always are — and they are watching this one with interest.",                 // 0  Ep I
   "B.I.G. PAPA: Unicorn status logged. Two rival decks just opened merger talks; synergy is coming, and it has teeth.",                                    // 1  Ep II
@@ -64,12 +64,12 @@ const foreshadow = [
   "B.I.G. PAPA: The board smells blood in its own portfolio. Governance is no longer a metaphor.",                                                         // 4  Ep V
   "B.I.G. PAPA: Everyone you broke is fusing into one last entity — and older money than all of it is already watching the dunes.",                          // 5  Ep VI
   "B.I.G. PAPA: Someone always profits from the dead. Whoever it is has already filed the paperwork for what comes after the fire.",                         // 6  Ep VII (A&O/flash seed)
-  "B.I.G. PAPA: A&O's managing partner never shows at auctions. He just buys what is left. No one has seen him age.",                                       // 7  Ep VIII (Voss)
-  "B.I.G. PAPA: Sources say A&O did not invent the cure — it copied the founder's own notes. And the founder, oddly, is still here.",                       // 8  Ep IX (Voss)
-  "B.I.G. PAPA: Once a decade A&O archives a person instead of firing them. Nobody has ever come back from archive.",                                       // 9  Ep X (Rust/Zé)
-  "B.I.G. PAPA: The tower writing the dead into metal is the new wing. Repairing old shells in the sub-basement has quietly run for years.",                // 10 Ep XI (Voss)
-  "B.I.G. PAPA: A&O's Diaspora Initiative — off-world soul-server capacity — is operational and scaling. Details redacted.",                                // 11 Ep XII (Voss/offsite)
-  "B.I.G. PAPA: Every backup is locked with the founder's cipher. Nothing deletes until he says so. And he never dies.",                                    // 12 Ep XIII (Voss/purge)
+  "B.I.G. PAPA: A&O's managing partner never shows at auctions. He just buys what is left. No one has seen him age.",                                       // 7  Ep VIII (Tusk)
+  "B.I.G. PAPA: Sources say A&O did not invent the cure — it copied the founder's own notes. And the founder, oddly, is still here.",                       // 8  Ep IX (Tusk)
+  "B.I.G. PAPA: Once a decade A&O archives a person instead of firing them. Nobody has ever come back from archive.",                                       // 9  Ep X (Rust/Zeca)
+  "B.I.G. PAPA: The tower writing the dead into metal is the new wing. Repairing old shells in the sub-basement has quietly run for years.",                // 10 Ep XI (Tusk)
+  "B.I.G. PAPA: A&O's Diaspora Initiative — off-world soul-server capacity — is operational and scaling. Details redacted.",                                // 11 Ep XII (Tusk/offsite)
+  "B.I.G. PAPA: Every backup is locked with the founder's cipher. Nothing deletes until he says so. And he never dies.",                                    // 12 Ep XIII (Tusk/purge)
 ];
 // fired from a vet-death tick once each, when the memorial crosses these gates (handled in lns.js).
 const memorialDread = [

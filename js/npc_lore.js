@@ -165,7 +165,7 @@ function buildNpcDossier(id){
 
 /* Ambient spoken line for a passing NPC (story-polish §8.2). Pure read of the NPC's persisted
    flags + dossier + campaign progress — never mutates state, never stored. Category: a mourning/
-   reborn-flagged NPC speaks to that; ULTRA commuters carry a Voss seed only in Arc 2 and only for a
+   reborn-flagged NPC speaks to that; ULTRA commuters carry a Tusk seed only in Arc 2 and only for a
    deterministic third of them (oblique, ≤1 channel/episode); providers get facility lines; everyone
    else gets the war-from-home pool. Returns a filled string, or null if nothing fits. */
 function npcAmbientLine(id){
@@ -178,7 +178,7 @@ function npcAmbientLine(id){
   let pool;
   if(rec.fl & 1) pool=A.mourning;                                   // a linked vet fell
   else if(rec.fl & 2) pool=A.reborn;                                // a linked vet was written back
-  else if(desc.role==='ultra') pool=(idx>=7 && A.voss && A.voss.length && (npcStrHash(id)%3===0)) ? A.voss : A.commuter;
+  else if(desc.role==='ultra') pool=(idx>=7 && A.tusk && A.tusk.length && (npcStrHash(id)%3===0)) ? A.tusk : A.commuter;
   else if(desc.role==='provider') pool=A.staff;
   else pool=A.general;
   if(!pool || !pool.length) pool=A.general;

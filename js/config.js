@@ -120,7 +120,7 @@ const DEF = {
   intel:    { name:'Market Research', icon:'🕵️', kind:'building', w:1,h:1, hp:600, cost:1999, build:30, sight:7, supply:0, color:'#8a5aa8',
               flavor:'Runs one "totally anonymous" industry survey and publishes every rival campus it can triangulate — well, the parts Legal would sign off on. Yes, that\'s a Legal Team bolted to the roof: it has never fired a shot, but the consent forms practically notarize themselves.' },
   outpost:  { name:'Satellite Office', icon:'📡', kind:'building', w:3,h:3, hp:650, cost:175, build:16, sight:5, supply:8, color:'#5a6b8a',
-              deposit:true, trickle:3.5, flavor:'A scrappy forward branch — Interns deposit here, its rig auto-extracts Funding, and it houses +8 Headcount. The mid-game expansion pivot: cheaper and flimsier than a second HQ.' },   // T2-5: supply + fatter trickle make the forward branch a real tradeoff
+              deposit:true, flavor:'A scrappy forward branch — Interns deposit here instead of trekking back to HQ, and it houses +8 Headcount. The mid-game expansion pivot: cheaper and flimsier than a second HQ.' },   // T2-5: supply makes the forward branch a real tradeoff (deposit point + headcount, no passive income)
   condo:    { name:'Unit Condo', icon:'🏙️', kind:'building', w:5,h:4, hp:1200, cost:0, build:1, sight:6, supply:0, color:'#4b6b8f',
               flavor:'A vertical dormitory for employees who survived quarterly planning.' },
   mdc:      { name:'Mission Dispatch Center M.D.C.', icon:'🛰️', kind:'building', w:3,h:3, hp:900, cost:0, build:1, sight:6, supply:0, color:'#5a6b8a',
@@ -169,6 +169,18 @@ const DEF = {
      never buildable, never a combat target). The giant look comes from BUILDING_TYPE_SCALE in assets.js;
      w/h here is only the collision footprint so units route around its base. ---- */
   darktower:{ name:'The Dark Tower', icon:'🗼', kind:'building', w:6,h:5, hp:1, cost:0, build:1, sight:9, supply:0, color:'#0c0a12',
+              // The drawn sprite is ~17×42 tiles (BUILDING_TYPE_SCALE) but w/h above is only the tiny ground rect that
+              // drives the DRAW anchor + holdout anchor — leaving it untouched keeps both identical. `collide` is the
+              // SOLID lower-fort footprint, decoupled from draw and stamped by markBuilding so units route AROUND the
+              // visible stone base. Tiles are [dyFromTy,dxMin,dxMax] relative to the footprint top-left; dy<0 = ABOVE
+              // the footprint top (the base flares up-and-out from the ground rect). The fort is a SOLID block with a
+              // FLAT front (no inward taper) column-filled down to the footprint-bottom row (dy=+4): because the whole
+              // tower is one bottom-anchored sprite at a single depth, any walkable tile UNDER the drawn stone (sorting
+              // behind it) shows a unit half-occluded ("legs sticking out"). Filling the front/sides to the base line
+              // forces units to stand SOUTH of the fort (sort on top → fully visible), BESIDE it (no stone above), or
+              // BEHIND the thin upper spire (dy<=-10, left passable → fully occluded walk-behind). Derived from alpha.
+              collide:[ [-9,-2,7],[-8,-2,7],[-7,-2,7],[-6,-5,10],[-5,-5,10],
+                        [-4,-6,11],[-3,-6,11],[-2,-6,11],[-1,-6,11],[0,-6,11],[1,-6,11],[2,-6,11],[3,-6,11],[4,-6,11] ],
               flavor:'A&O\'s black altar — the GRAAL writes the dying into fresh metal and the dead into product.' },
   /* ---- H.U.B.-only Training Grounds (level-cloning facility; never built in combat) ---- */
   training: { name:'Training Grounds', icon:'🎯', kind:'building', w:28,h:22, hp:4000, cost:0, build:1, sight:8, supply:0, color:'#5a6b8a',

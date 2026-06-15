@@ -41,8 +41,6 @@ function update(state, dt){
         damage(state,tgt,dmg, b); b.cd=cd; b.shootFx={x:tgt.x,y:tgt.y,t:SHOOTFX_LIFE};
       }
     }
-    // passive auto-extraction (Satellite Office trickles Funding for the player)
-    if(bd.trickle && b.owner==='player'){ const eco=playerEco(state, b.ctrl); eco.gold += bd.trickle*dt; eco.gold_collected += bd.trickle*dt; }
     // Market Research survey clock (host/solo authoritative; both peers in rollback)
     if(b.type==='intel' && b.scanTotal>0 && b.owner==='player'){
       b.scanProg+=dt;

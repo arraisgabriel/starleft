@@ -16,7 +16,7 @@ const NPC_LORE = {
   // read fresh at speak-time, never stored on an NPC record — so this key is EXEMPT from the
   // append-only/`versions` contract and may grow freely. Tokens per buildNpcDossier's fill.
   // Category is chosen in npcAmbientLine() by NPC flags (mourning/reborn) and role (provider/ultra);
-  // `voss` is an Arc-2-only, oblique CEO seed (felt, never seen) — gated by progress in npcAmbientLine.
+  // `tusk` is an Arc-2-only, oblique CEO seed (felt, never seen) — gated by progress in npcAmbientLine.
   ambient: {
     mourning: [   // a linked veteran fell — humanize the cost (fl & 1)
       "{me} keeps {vet}'s comm unit charged. Nobody has told them it stopped answering.",
@@ -39,7 +39,7 @@ const NPC_LORE = {
       "{me} keeps a resignation letter in the desk drawer, updated every quarter, in case ULTRA ever asks.",
       "Synergy tastes like rust on {me}'s tongue lately. The paycheck is still real, so {me} swallows it.",
     ],
-    voss: [       // Arc-2 only, oblique: the ageless, unseen managing partner (story-polish §3 B.3)
+    tusk: [       // Arc-2 only, oblique: the ageless, unseen managing partner (story-polish §3 B.3)
       "{me} swears the managing partner's office has been sealed since '87 — no birth, no death, no retirement on file.",
       "{me} processed a perpetual license upstream once. 'Founder's, no renewal.' Nobody would say whose.",
       "Word in the ULTRA elevators: A&O is shipping souls off-world now. They call it the Diaspora. {me} doesn't ask who boards first.",

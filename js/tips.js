@@ -16,9 +16,9 @@ const GAME_TIPS = [
   "“Your veterans carry names. Your memorial carries more.”",
   "“Free cold brew is not compensation.” — strike flyer, The Garage",
   "“It's not a layoff. It's a graduation.” — DISRUPTR INC. HR",
-  "“Immortality with a cancellation clause.” — A&O Continuity Farm",
+  "“We are recovering an asset, not besieging a shrine.” — A&O field order",
   "“Every quarter ends. Some of us ship.”",
-  "“A cap table wearing a grief mask.”",
+  "“The Wake writes three, ever. The rest stay names.”",
   "“We pivoted to weapons. The metrics improved.”",
   "“Move fast, break things. The things are other startups. The people are collateral.”",
   "“Your interns have names now. The casualty feed has their names. The difference is narrowing.”",
@@ -29,7 +29,7 @@ const GAME_TIPS = [
 /* Per-tip campaign phase for the title/loading carousel (story-polish §8.3): 'early' | 'mid' | 'late' | 'any'.
    Index-aligned to GAME_TIPS (APPEND-ONLY — never reorder). gameTipsForPhase() biases the carousel to the
    player's progress when a run is active; with no campaign it returns the full all-voice pool (the title
-   screen sells the VOICE, T0-11). The last 4 entries are the new arc-phased seeds (the final is a Voss seed). */
+   screen sells the VOICE, T0-11). The last 4 entries are the new arc-phased seeds (the final is a Tusk seed). */
 const GAME_TIP_PHASE = [
   'any','any','early','any','early','early','mid','any','early','mid','early','early','late','any','late','mid',
   'early','mid','late','late'
@@ -51,7 +51,7 @@ const MECH_TIPS = [
   "<b>Grab an army fast:</b> Shift-drag a selection box — or tap the ▭ Select-box button, then drag — to scoop up every unit inside it at once.",
   "<b>Control groups:</b> bind a squad with Ctrl/⌘ + 1–9, then tap that number to reselect it. Double-tap the number to snap the camera straight to them.",
   "<b>Funding wins games.</b> Keep every Intern 🧑‍💻 mining and hire a second wave early — an idle Intern is wasted runway.",
-  "<b>Satellite Office 📡:</b> mining a far-off crystal? Drop one beside it — Interns deposit there instead of trekking home, and its rig auto-trickles a little Funding on its own.",
+  "<b>Satellite Office 📡:</b> mining a far-off crystal? Drop one beside it — Interns deposit there instead of trekking all the way home.",
   "<b>Hitting your Headcount cap?</b> Build another Open-Plan HQ 🏢 — each one raises how many units you can field.",
   "<b>Mix your army.</b> Never mass one unit type: a blob of melee melts to a Food Truck's flames. Put Growth Cyborgs 🚀 up front and Consultants 💼 + Lobbyists 🎩 firing from behind.",
   "<b>Lobbyist 🎩:</b> devastating from extreme range but a slow reload — keep them safe behind the front line and let tankier units soak the hits.",
