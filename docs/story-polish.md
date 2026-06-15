@@ -43,7 +43,7 @@ render pass (§10).
 **Seed-discipline rule (hard).** **≤ 1 clue per channel per episode.** Clues must be **oblique** — casual
 players miss them, attentive players catch them, and on replay they read as inevitable. **Never state a
 withheld twist early:** Biba's android truth stays *implied* until the Ep XI altar (`EP11_ALTAR_LINES`);
-Voss is *felt before seen* (no name/face in Arc 2 — only an ageless, unseen "managing partner").
+Tusk is *felt before seen* (no name/face in Arc 2 — only an ageless, unseen "managing partner").
 
 **Tone (hard, from the bible).** Dark / devastated / Hades — never bright. Hollow victories. Satire with a
 beating heart (a human stake under every gag). No redemption arcs for villains. Reborn scarcity is sacred.
@@ -55,7 +55,7 @@ beating heart (a human stake under every gag). No redemption arcs for villains. 
 1. **Rebuild Arc 1's spine** — rewrite Eps I–VII so each enemy is *causally produced by your last victory*,
    with **THE BOARD as the watching constant** (Ep I → coup at VI → "older money" buys the wreckage at VIII).
    Turns seven names into one rising tragedy. *(§2)*
-2. **Seed Voss/Arc 3 across Arc 2** via free channels (ticker/NPC/tips/barks) — today he has **zero**
+2. **Seed Tusk/Arc 3 across Arc 2** via free channels (ticker/NPC/tips/barks) — today he has **zero**
    foreshadowing anywhere. Biggest setup gap; cheapest fix. *(§3, §7, §8)*
 3. **Make the Reborn/Wake choice a moral beat**, not a one-line toast — the campaign's emotional climax. *(§7)*
 4. **Give Nino & Biba an evolving, context-aware voice** + the first **hero↔hero and hero↔unit banter**;
@@ -201,23 +201,23 @@ android truth.**
 | X | Biba first-rescue bark *(tier to fire FIRST)* | "I remember a family. Not sure it's mine." *(exists, `:502`)* | `altar_06` written memories |
 | X | Nino post-rescue bark | "You weren't imprisoned. You were *stored*. There's a difference. I think." | "filed in a cell" / inventory-not-prisoner |
 
-### B.3 — Arc 2 → Arc 3 (Voss · Rust · Zé · Project Chapter Eleven)  *(the biggest gap — all FREE)*
+### B.3 — Arc 2 → Arc 3 (Tusk · Rust · Zeca · Project Chapter Eleven)  *(the biggest gap — all FREE)*
 
-Voss must be **felt, never seen** in Arc 2: an ageless, absent "managing partner." No name, no face.
+Tusk must be **felt, never seen** in Arc 2: an ageless, absent "managing partner." No name, no face.
 
 | Ep | Artifact | Drafted clue | Pays off |
 |----|----------|--------------|----------|
-| VIII | ticker | "A&O's managing partner never shows at auctions. He just buys what's left. No one's seen him age." | Voss = first GRAAL write (XIV+) |
-| VIII | NPC (commuter) | "Managing partner's offices? Sealed. No birth, no death, no retirement on file since '87." | Voss's impossible age (XVI seed→XXII reveal) |
-| IX | Biba bark | "A&O didn't invent this cure. It copied the founder's own notes — and the founder is still here." | Voss solved death *on himself* |
-| X | captured-A&O bark | "Once a decade A&O *archives* someone instead of firing them. Nobody comes back from archive." | Rust & Zé as archived cast-offs (XV/XVII) |
-| XI | ticker | "The tower writes the dead into metal — that part's new. Repairing old shells in the sub-basement has run for years." | Voss re-instantiating in secret |
+| VIII | ticker | "A&O's managing partner never shows at auctions. He just buys what's left. No one's seen him age." | Tusk = first GRAAL write (XIV+) |
+| VIII | NPC (commuter) | "Managing partner's offices? Sealed. No birth, no death, no retirement on file since '87." | Tusk's impossible age (XVI seed→XXII reveal) |
+| IX | Biba bark | "A&O didn't invent this cure. It copied the founder's own notes — and the founder is still here." | Tusk solved death *on himself* |
+| X | captured-A&O bark | "Once a decade A&O *archives* someone instead of firing them. Nobody comes back from archive." | Rust & Zeca as archived cast-offs (XV/XVII) |
+| XI | ticker | "The tower writes the dead into metal — that part's new. Repairing old shells in the sub-basement has run for years." | Tusk re-instantiating in secret |
 | XI | tip | "The transfer tech is generic — mind into metal, flesh, a drive, a schedule. Only the market differs." | orbital soul-servers (XXI) |
-| XII | NPC | "Subscription's simple: one soul, one body, one billing cycle. Except the line-item: 'Founder's License — perpetual, no renewal.'" | Voss exempt from his own model |
+| XII | NPC | "Subscription's simple: one soul, one body, one billing cycle. Except the line-item: 'Founder's License — perpetual, no renewal.'" | Tusk exempt from his own model |
 | XII | ticker | "A&O's 'Diaspora Initiative' — off-world soul-server capacity — is operational and scaling. Details redacted." | THE OFFSITE (XXI) |
-| XIII | A&O enforcer bark | "Every backup's locked with the founder's cipher. Nothing deletes until he says. And he never dies." | killing Voss needs his custody key (XIX) |
+| XIII | A&O enforcer bark | "Every backup's locked with the founder's cipher. Nothing deletes until he says. And he never dies." | killing Tusk needs his custody key (XIX) |
 | XIII | ticker | "The purge is a 'data-hygiene op' — unclaimed assets zeroed by default unless the owner surrenders the key." | Chapter Eleven mechanics (XIV) |
-| 12.5 | crawl summary *(free)* | "A&O stopped relying on lawyers. Something's being built under the black ice." | REX / Voss-pilots-REX (finale) |
+| 12.5 | crawl summary *(free)* | "A&O stopped relying on lawyers. Something's being built under the black ice." | REX / Tusk-pilots-REX (finale) |
 
 ### B.4 — Orphans (setups with no payoff / payoffs with thin setup) — close these
 
@@ -225,7 +225,7 @@ Voss must be **felt, never seen** in Arc 2: an ageless, absent "managing partner
   A&O the *older money behind the Board*, paying it off.
 - **The flash** is total and shocking but barely foreshadowed. → B.1 Ep VII close + late-Arc-1 ticker plant it.
 - **Subscription-immortality / "cancellation clause"** (Ep XII) arrives cold. → B.1 Ep II & VI barks plant it.
-- **Voss** (entire Arc 3) has no setup at all. → B.3 plants him across VIII–XIII + 12.5.
+- **Tusk** (entire Arc 3) has no setup at all. → B.3 plants him across VIII–XIII + 12.5.
 - **Biba's android reveal** is well-set-up already; B.2 just sharpens the firing order so the Ep X bark lands
   before the Ep XI altar.
 
@@ -253,8 +253,8 @@ the interim, but the *voice* is wrong:
   - **7.5 Cyan Ninja:** "A&O filed a cleanup contract before the ash cooled. This is the contractor." (B.1)
   - **8.5 Land Grab / 9.5 Recovery Agent / 11.5 Grounds Dispute:** one summary line each framing the duel as
     an A&O enforcement action against your resurrection project (keeps the standing-enemy logic, world-bible §3).
-  - **10.5 Extraction Clause:** already a Biba-escort beat — add a Voss seed to its summary (B.3 register).
-  - **12.5 Bridge Round:** the REX/Voss bridge seed (B.3).
+  - **10.5 Extraction Clause:** already a Biba-escort beat — add a Tusk seed to its summary (B.3 register).
+  - **12.5 Bridge Round:** the REX/Tusk bridge seed (B.3).
 - **REX finale:** bridge it from a crawl/taunt re-skin per `docs/story-next-steps-ceo-arc.md` §2/§6 when Arc 3
   ships; until then, a pre-fight ticker/toast ("Something's alive in there.") plants the pilot (B.3, `REX_PRELUDE_LINES` §5).
 
@@ -286,7 +286,7 @@ or attach to the existing raze flow via a future trigger; flag the dependency):
 {id:'farm_01', speaker:'Nino',  text:"Then where? We crossed six campuses for an empty warehouse?"}
 {id:'farm_02', speaker:'Biba', text:"Upstream. On his servers. We're cracking a catalog, not a crypt."}
 {id:'farm_03', speaker:'Nino',  text:"'His.' You keep saying his."}
-{id:'farm_04', speaker:'Biba', text:"There's a perpetual license on one account. No renewal. Somebody built himself an exit and billed everyone else for theirs."}  // Voss seed (B.3)
+{id:'farm_04', speaker:'Biba', text:"There's a perpetual license on one account. No renewal. Somebody built himself an exit and billed everyone else for theirs."}  // Tusk seed (B.3)
 ```
 
 **`EP13_VAULT_LINES`** — The Vesting Cliff (Ep XIII already has the cold-vault setting; add a holdout/"reach
@@ -296,7 +296,7 @@ the deep archive" beat to host it):
 {id:'vault_01', speaker:'Biba', text:"We're not saving them. We're repossessing them. A&O's word. A&O's machine."}
 {id:'vault_02', speaker:'Nino',  text:"Then we steal them back and call it something else."}
 {id:'vault_03', speaker:'Biba', text:"You can still only write one of them home. The rest stay data. Remember that when you choose."}  // Reborn-dilemma setup (§7)
-{id:'vault_04', speaker:'Nino',  text:"Whoever scheduled this purge never signed it. Like he's somewhere we can't reach yet."}  // Voss seed (B.3)
+{id:'vault_04', speaker:'Nino',  text:"Whoever scheduled this purge never signed it. Like he's somewhere we can't reach yet."}  // Tusk seed (B.3)
 ```
 
 **`REX_PRELUDE_LINES`** — finale bridge + pilot seed (attach to the REX arena's entry):
@@ -435,60 +435,60 @@ any                         → Biba: "One off the wall. Don't make me tell you 
 quest / Eps XII–XIII), set a `CAMPAIGN` flag and play a 2-line hub beat on next entry (free, no sequencer):
 *Nino: "Every name. None left on the wall for A&O to bill." / Biba: "They're ours now. Not inventory."*
 
-### §7.3 — The moral core: you and Voss run the same machine
+### §7.3 — The moral core: you and Tusk run the same machine
 This is the theme that gives the Reborn weight and binds it to Arc 3. **Resurrecting someone uses the exact
 machine Biba sabotaged and the Continuity Farm monetized** — so the player becomes *complicit* in the thing
 they spent Arc 2 condemning. The doc makes this explicit (in Biba's late barks and the Wake copy): the GRAAL
 "can't tell salvation from theft" (`altar_08`) — and now *you* are running it.
 
-**Voss is the dark mirror.** He is the **first successful GRAAL write** — he resurrected *himself*, perfectly,
+**Tusk is the dark mirror.** He is the **first successful GRAAL write** — he resurrected *himself*, perfectly,
 indefinitely, for free, because he *owns* the machine. You get three-ever-one-at-a-time, each returning
 wrong. The contrast IS the moral spine of Arc 3:
 
-| | The player | Voss |
+| | The player | Tusk |
 |---|---|---|
 | How many | 3, ever | unlimited |
 | Cadence | 1 at a time, slow | instant, on death |
 | Condition | comes back *wrong* | comes back *whole* |
 | Price | M3$ + the wall's other names | exempt — "perpetual, no renewal" |
 
-Defeating Voss does **not** redeem the machine or expand the player's gift. The wall keeps most of its names.
+Defeating Tusk does **not** redeem the machine or expand the player's gift. The wall keeps most of its names.
 That permanence is the engine — **do not soften it** (world-bible §2, story-next-steps §7).
 
 ### §7.4 — Arc 3 narrative design (woven with the dilemma)
 Full beats per `docs/story-next-steps-ceo-arc.md` §4 (12 maps, XIV–XXIII + 2 interludes), here re-centered on
 the Reborn stakes:
 
-- **The stakes ARE the dilemma.** Voss's **PROJECT CHAPTER ELEVEN / the PURGE** zeroes the upstream **backup
+- **The stakes ARE the dilemma.** Tusk's **PROJECT CHAPTER ELEVEN / the PURGE** zeroes the upstream **backup
   pool** — the very names you might still write home. Arc 3 is a fight to **preserve the dilemma itself**:
   keep the wall's names recoverable at all. (Reborn is **never** re-gated/unlocked/expanded by Arc 3 — its
   stakes are the *pool*, per the bible's hard rule.)
-- **XIV — THE RECALL NOTICE:** Voss surfaces (voice only, never pitied), declares the company + dead
+- **XIV — THE RECALL NOTICE:** Tusk surfaces (voice only, never pitied), declares the company + dead
   delinquent inventory, starts the purge clock. *Reborn tie:* the clock = names that can no longer be written
   home if he wins. (Pays off B.3 XIII ticker.)
 - **XV / XV.5 — THE FOUNDRY RAID / NON-COMPETE:** recruit **RUST** (boss-duel→defection): his raid strips
-  Voss's foreclosure-mech swarm so the finale fields *one* REX; his chassis is the only body that tanks REX's
+  Tusk's foreclosure-mech swarm so the finale fields *one* REX; his chassis is the only body that tanks REX's
   stomp. *He makes the finale survivable.* (Pays off B.3 X "archived" bark.)
-- **XVI — THE SEVERANCE PACKAGE:** first hard Voss seed pays — Rust scans Voss's marketing render: "hasn't
+- **XVI — THE SEVERANCE PACKAGE:** first hard Tusk seed pays — Rust scans Tusk's marketing render: "hasn't
   aged in a render since the year he supposedly died." (Pays off B.3 VIII NPC.)
-- **XVII / XVII.5 — THE GROWTH TEAM / PERFORMANCE REVIEW:** rescue **ZÉ** (Nino-proximity, the Biba pattern):
-  a prodigy "paid in exposure and a memorial slot," her throughput is the engine of the purge. Overclock aura
-  previews. *She makes Voss killable.*
-- **XVIII / XIX — THE VELOCITY TRAP / THE DATA VAULT:** Zé's Overclock cracks Upstream Custody — **the backup
+- **XVII / XVII.5 — THE GROWTH TEAM / PERFORMANCE REVIEW:** rescue **ZECA** (Nino-proximity, the Biba pattern):
+  a prodigy "paid in exposure and a memorial slot," his throughput is the engine of the purge. Overclock aura
+  previews. *He makes Tusk killable.*
+- **XVIII / XIX — THE VELOCITY TRAP / THE DATA VAULT:** Zeca's Overclock cracks Upstream Custody — **the backup
   pool is saved from the purge**, and inside sits one more backup: **the founder's**. *The keys to the dead
-  are the keys to the man.* Now Voss can die for good. Hollow note: the dead are yours **as data**; the Wake
+  are the keys to the man.* Now Tusk can die for good. Hollow note: the dead are yours **as data**; the Wake
   still writes only 3. (Pays off B.3 XIII enforcer bark.)
-- **XX / XXI — THE BURN RATE / THE OFFSITE:** Voss triggers the manual purge and comes for the keys; then you
+- **XX / XXI — THE BURN RATE / THE OFFSITE:** Tusk triggers the manual purge and comes for the keys; then you
   burn his off-world **soul-server** launch site so he can't flee his own death. (Pays off B.3 XI tip + XII
   Diaspora ticker — the Musk-satire register: death-as-migration.)
-- **XXII / XXIII — THE GOLDEN PARACHUTE / THE LIQUIDATION EVENT:** full Voss reveal — Biba names it at his own
+- **XXII / XXIII — THE GOLDEN PARACHUTE / THE LIQUIDATION EVENT:** full Tusk reveal — Biba names it at his own
   keynote ("he is what I built, wearing the man who paid for it"); he flees into **REX**, re-skinned as his
   escape vehicle (`finale:true` routing 1:1, no `villains.js` rewrite). You can only end him **because you
   hold his backup**. *No triumph:* the IPO is yours and hollow; **you saved the pool but still only wrote
   three home.** The wall is still the wall.
 
-**Guardrails (story-next-steps §7, restated):** dark/Hades, hollow victory; Voss never redeemed or pitied
-(his defeat is a *write-off*); Rust's humor is gallows not hope-core; Zé's speed is grief with a stopwatch;
+**Guardrails (story-next-steps §7, restated):** dark/Hades, hollow victory; Tusk never redeemed or pitied
+(his defeat is a *write-off*); Rust's humor is gallows not hope-core; Zeca's speed is grief with a stopwatch;
 **Reborn stays scarce (3 ever) and never arc-gated.**
 
 ---
@@ -500,7 +500,7 @@ breadth way to carry foreshadowing (§3) and Arc-1 connective tissue (§2) with 
 
 ### §8.1 — News ticker (B.I.G. PAPA) — `js/ultra_news_data.js` + a hook in `js/lns.js`
 Add a fire-on-state layer (today the pool is static): trigger on **episode-unlock**, **visit-count gates**,
-and **achievements** (one line in `ACH.fire()`, `js/achievements.js`). All B.3 Voss seeds route here.
+and **achievements** (one line in `ACH.fire()`, `js/achievements.js`). All B.3 Tusk seeds route here.
 
 **Arc 1 faction Chekhov-guns (fire on the *next* episode's unlock):**
 - (after I) "B.I.G. PAPA: Unicorn status confirmed. The incumbent noticed. The litigation army is mobilizing."
@@ -512,13 +512,13 @@ and **achievements** (one line in `ACH.fire()`, `js/achievements.js`). All B.3 V
 - (≥6 fallen) "B.I.G. PAPA: The memorial is growing faster than the org chart. The board calls it cost optimization."
 - (≥10 fallen) "B.I.G. PAPA: The wall hit double digits. The board sent flowers. The condos sent grief." *(also the `ACH.fire('wall')` hook)*
 
-**Voss seeds (Arc 2; see B.3 for placement):** "A&O's managing partner never shows at auctions…", "the
+**Tusk seeds (Arc 2; see B.3 for placement):** "A&O's managing partner never shows at auctions…", "the
 Diaspora Initiative is operational…", "the purge is a 'data-hygiene op'…".
 
 ### §8.2 — Hub NPC ambient chatter — `js/npc_lore_data.js` + `js/npc_lore.js`
 NPCs have deep lore but **no ambient lines** today. Add chatter tied to **life-event flags + arc progress** —
 make the city *react* to your descent. (≤1 per archetype per visit.)
-- **Commuter (Voss seed):** "Managing partner's offices are sealed. No death on file since '87."
+- **Commuter (Tusk seed):** "Managing partner's offices are sealed. No death on file since '87."
 - **Mourning household (humanize):** "She keeps his comm charged. Nobody tells her it's off forever."
 - **Facility staff (memorial weight):** "Found a helmet in the parts bin. Name scratched inside. Didn't ask who owned it."
 - **ULTRA analyst (war-weariness):** "Casualty numbers started trending up in the quarterly slides. I stopped sleeping right after."
@@ -529,7 +529,7 @@ Today all tips are static. Select by campaign phase:
 - **Early (I–II):** "Move fast, break things. The things are other startups. The people are collateral."
 - **Mid (V–VII):** "Your interns have names now. The casualty feed has their names. The difference is narrowing."
 - **Late (IX–XIII):** "Immortality costs a subscription. The quarterly earnings call is in hell." · "A backup
-  can't die. Only instances can. One man knows the difference." *(Voss seed)*
+  can't die. Only instances can. One man knows the difference." *(Tusk seed)*
 
 ### §8.4 — Achievements & sharecard
 - **Achievement → ticker hook** (`js/achievements.js` `ACH.fire`): one line pushes a matching B.I.G. PAPA
@@ -545,9 +545,9 @@ Today all tips are static. Select by campaign phase:
 - Dark / devastated / Hades — **never bright.** Deep blacks, cold teals, red/violet; coolant-as-death.
 - **Hollow victories.** No clean triumph, no sunrise, no team-hug. Wins are grim necessity.
 - **Satire with a beating heart.** Every gag sits on a human stake; comedy never undercuts grief.
-- **Villains are never redeemed or pitied.** A&O is faceless capital; Voss is capital wearing a man — his
+- **Villains are never redeemed or pitied.** A&O is faceless capital; Tusk is capital wearing a man — his
   defeat is a write-off.
-- **Rust = gallows humor, not hope-core; Zé = speed as grief.**
+- **Rust = gallows humor, not hope-core; Zeca = speed as grief.**
 - **Reborn scarcity (3 ever) is sacred.** The wall keeping most of its names is the emotional engine — do not
   soften it, and never let any chapter expand or re-gate resurrection.
 
@@ -579,7 +579,7 @@ Today all tips are static. Select by campaign phase:
     `HERO_MENTOR_LINES`, unit seeds), cutscene line arrays (`EP12_FARM_LINES`/`EP13_VAULT_LINES`/
     `REX_PRELUDE_LINES`/`EP75_NINJA_LINES`), `REBORN_CHOICE_LINES` + the Reborn bark pool, ticker/NPC/tip lines,
     and the text→TTS pipeline + the **hard approval gate** before any voice is recorded.
-  - **`starleft-unit-forge`** — only if Arc-3 Rust/Zé/Voss (and the optional distinct Reborn sprite) are built
+  - **`starleft-unit-forge`** — only if Arc-3 Rust/Zeca/Tusk (and the optional distinct Reborn sprite) are built
     (sprites/DEF/stats; lore-forge owns their voice).
 - **Risk — over-seeding.** Enforce the §0 rule (≤1 clue/channel/episode). Too many clues turns mystery into
   exposition and breaks the "guess what's coming" payoff the author wants.
@@ -594,7 +594,7 @@ Today all tips are static. Select by campaign phase:
 | Phase | Work | Owner | TTS |
 |------|------|-------|-----|
 | **0 — Correctness** | Fix the 4 base-count mismatches (Eps III/IV/V/VI); queue the re-render. | mapmaker | re-render (batched) |
-| **1 — Free foreshadowing layer** | All §8 reactive ticker/NPC/tip lines + the `ACH.fire()` ticker hook; plant every B.3 Voss seed + B.1/B.2 seeds. Fixes Voss-invisibility & the subscription/inventory orphans in one pass. | lore-forge | none |
+| **1 — Free foreshadowing layer** | All §8 reactive ticker/NPC/tip lines + the `ACH.fire()` ticker hook; plant every B.3 Tusk seed + B.1/B.2 seeds. Fixes Tusk-invisibility & the subscription/inventory orphans in one pass. | lore-forge | none |
 | **2 — Hero voice arc** | Episode-tiered `HERO_SELECT_LINES`, `HERO_DUET_LINES`, `HERO_MENTOR_LINES`, Biba VIII–X android-seed tier + post-altar tier; retire anachronistic lines. | lore-forge (+ `dialogs.js` picker) | additive clips |
 | **3 — Arc 1 spine** | §2 crawl rewrites (causal chain + Board spine) — into the Phase-0 re-render batch; post-mission debrief beats. | mapmaker | re-render (batched) |
 | **4 — In-mission beats** | Wire the cutscene arrays via the holdout recipe (+ any needed holdout beats) and the §5.3 event banter, solo-gated. | mapmaker wires + lore-forge writes | additive clips |

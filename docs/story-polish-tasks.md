@@ -8,7 +8,7 @@
 A task is `[x]` only after its **verification gate** passes. Audio tasks are `[x]` only after `verify_clips.mjs` + a browser listen.
 
 ## Decisions (locked)
-- Shipped-game pass only — **Arc 3 maps/heroes (Rust/Zé/Voss) are OUT of scope** (only the Arc-3 *seeds* in shipped eps).
+- Shipped-game pass only — **Arc 3 maps/heroes (Rust/Zeca/Tusk) are OUT of scope** (only the Arc-3 *seeds* in shipped eps).
 - Add the missing in-mission **cutscene triggers**.
 - **Render audio this pass** (twilightZone Qwen3-TTS), behind the approval gate.
 
@@ -30,11 +30,11 @@ A task is `[x]` only after its **verification gate** passes. Audio tasks are `[x
 - [x] **P0.V** Verify: `node --check js/config.js` passes; counts now generic so no objective conflict. *(Browser crawl read + validator → Phase 6 P6.4; voiced edits feed the Phase 6 crawl render batch.)*
 
 ## Phase 1 — Free foreshadowing layer (no TTS) · owner: lore-forge
-- [x] **P1.1** Ticker reactivity — `foreshadow[idx]` (per-episode seed, incl. Voss B.3) + `memorialDread` gates (6/10 fallen) + recap, wired in `LNS.ultraEvent` (`js/lns.js`); pools authored in the generator (`prompts/ultra-news/generate_ultra_news.js`) and regenerated into `js/ultra_news_data.js`. *(2026-06-14)*
+- [x] **P1.1** Ticker reactivity — `foreshadow[idx]` (per-episode seed, incl. Tusk B.3) + `memorialDread` gates (6/10 fallen) + recap, wired in `LNS.ultraEvent` (`js/lns.js`); pools authored in the generator (`prompts/ultra-news/generate_ultra_news.js`) and regenerated into `js/ultra_news_data.js`. *(2026-06-14)*
 - [x] **P1.2** Achievement→ticker hook in `ACH.fire()` (`js/achievements.js:54`); `achievement` map (the-wall/ghost-equity/architect/down-round/4 boss kills) in ticker data. *(2026-06-14)*
-- [x] **P1.3** Hub NPC ambient chatter — `NPC_LORE.ambient` (mourning/reborn/staff/commuter/voss/general) in `js/npc_lore_data.js`; `npcAmbientLine(id)` in `js/npc_lore.js`; scheduler `_ambientTrySpeak` in `js/hub_npcs.js update()` (≤1/NPC/visit, ~9s throttle, position-proxy bubble via `pushDialog`). *(2026-06-14 · in-browser visual check → P6.4)*
-- [x] **P1.4** Arc-phased tips — `GAME_TIP_PHASE` + `gameTipsForPhase()` in `js/tips.js` (early 12 / mid 9 / late 9; full pool when no run); `pickTip` + loading-tip picker in `js/ui.js` route through it; 4 new tips incl. Voss seed. *(2026-06-14)*
-- [x] **P1.5** Free `summary:` seeds + `.5` framing — Ep VI "older money"; 7.5 A&O contractor; 10.5 Voss managing-partner; 12.5 REX/under-the-ice contingency (`js/config.js`). *(2026-06-14)*
+- [x] **P1.3** Hub NPC ambient chatter — `NPC_LORE.ambient` (mourning/reborn/staff/commuter/tusk/general) in `js/npc_lore_data.js`; `npcAmbientLine(id)` in `js/npc_lore.js`; scheduler `_ambientTrySpeak` in `js/hub_npcs.js update()` (≤1/NPC/visit, ~9s throttle, position-proxy bubble via `pushDialog`). *(2026-06-14 · in-browser visual check → P6.4)*
+- [x] **P1.4** Arc-phased tips — `GAME_TIP_PHASE` + `gameTipsForPhase()` in `js/tips.js` (early 12 / mid 9 / late 9; full pool when no run); `pickTip` + loading-tip picker in `js/ui.js` route through it; 4 new tips incl. Tusk seed. *(2026-06-14)*
+- [x] **P1.5** Free `summary:` seeds + `.5` framing — Ep VI "older money"; 7.5 A&O contractor; 10.5 Tusk managing-partner; 12.5 REX/under-the-ice contingency (`js/config.js`). *(2026-06-14)*
 - [x] **P1.6** `CAMPAIGN.storyFlags{altarSeen,perfectExtraction}` in `hubDefaultCampaign()` + legacy-safe merge in `deserializeHubCampaign()`; `altarSeen` set on the Ep XI altar reveal (`js/waves.js`). *(2026-06-14)*
 - [x] **P1.V** Verify: `node --check` all touched files pass; ticker data validated (foreshadow=13, memorialDread=2, achievement=8, dreamFulfilled=2); tips pools resolve (12/9/9/20). *(Browser visual + legacy-save load → P6.4)*
 
@@ -77,7 +77,7 @@ A task is `[x]` only after its **verification gate** passes. Audio tasks are `[x
 - [x] **P6.0** Validator freeze-break **diagnosed + fixed (user-authorized).** It was a pre-existing **false positive**: the identity check minted the HEAD side at `_latestVersion()` (v4) but built the working side with no `v` (→ v1), so after drop 2 grew the background pools a v4 dossier correctly differed from a v1 one. Fixed `validate_lore_append.mjs` to compare the **same version** → **identity freeze 300/300 ✓**; append-only/alignment/versions all green. In-game freeze was never broken. *(2026-06-14)*
 - [x] **P6.1** Crawl render batch — `build_voice_manifests.mjs` (extended for the new speaker keys) → `gen_voices.sh crawl` → **20 crawls rendered** (incl. the 6 rewritten Arc-1 spine crawls + the 4 count fixes). *(2026-06-14)*
 - [x] **P6.2** Clip render — **75 barks + 28 scene + 20 crawls + 56 per-voice reborn** rendered & transcoded; `verify_clips.mjs` ✓ (56/56 present, durations sane); representative clips spot-checked on disk (scene farm/vault/rexpre, Nino_ally/Biba_postAltar/Biba_duet/Nino_grief, reborn_Uncle_Fu, ranger_35, ep_05). Totals: barks 586 · scene 28 · crawl 20. *(2026-06-14)*
-- [x] **P6.3** Self-consistency audit (Appendix B): Arc-1 cohesion ✓ (faction in crawl+objective on all 7; base count == placed enemies; no stale numbers). Setup→payoff ledger has no orphans (every §3 seed maps to a named payoff; Voss/subscription/flash now seeded). Seed-discipline (≤1 oblique clue/channel/ep) honored; Reborn scarcity untouched. *(2026-06-14)*
+- [x] **P6.3** Self-consistency audit (Appendix B): Arc-1 cohesion ✓ (faction in crawl+objective on all 7; base count == placed enemies; no stale numbers). Setup→payoff ledger has no orphans (every §3 seed maps to a named payoff; Tusk/subscription/flash now seeded). Seed-discipline (≤1 oblique clue/channel/ep) honored; Reborn scarcity untouched. *(2026-06-14)*
 - [x] **P6.4** Headless smoke test (playwright): `rts.html` loads & initializes; **zero JS errors** (only pre-existing asset-404s/CORS feeds); all new globals live (`HERO_TIER_LINES`, `sayHeroEvent`, `mapCutsceneTick`, `npcAmbientLine`, `gameTipsForPhase`, `NINO_RETIRE_WHEN_BIBA=[35,38]`, `ULTRA_NEWS.foreshadow=13`, `storyFlags`). *(2026-06-14 · interactive playthrough remains a manual pass per CLAUDE.md)*
 
 > **AUDIO — COMPLETE.** Validator freeze-break fixed (user-authorized; it was a false positive). `build_voice_manifests.mjs` extended (composite-key resolver + per-voice reborn). Rendered & verified: hero tiers/duets/mentor/event barks (`Nino_*`/`Biba_*`), the cutscenes (`farm_*`/`vault_*`/`rexpre_*`), the 6 rewritten Arc-1 crawls (+ all 20), unit-bark seeds, and the **reborn pool in all 7 unit voices** (`reborn_<voice>_<idx>`, runtime `VOICE.playReborn`). Final headless smoke: game loads, 0 JS errors, `VOICE.playReborn` live.

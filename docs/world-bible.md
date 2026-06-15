@@ -112,16 +112,16 @@ written back from, never about granting the player resurrection they already hav
 
 **Arc 3 — A&O strikes back (planned, Episodes XIV–XXIII; see `docs/story-next-steps-ceo-arc.md`).** With
 the resurrection cycle closed (Biba + the cyborgs aboard, the Wake live), A&O finally gives capital a
-face: **DELLAN "DELL" VOSS**, its managing partner — and secretly **the first successful GRAAL write**, a
+face: **DELL TUSK**, its managing partner — and secretly **the first successful GRAAL write**, a
 re-instantiating backup who wants to *own* the cure because he *is* it (the player's dark mirror; never
 redeemed). His **PROJECT CHAPTER ELEVEN** moves to foreclose the company that stole the GRAAL and **purge
 the upstream backup pool** so the dead can never be written home again. Across ten episodes the player
-reaches and recruits two A&O cast-offs who are literally the keys that dismantle his plan: **HOLT "RUST"
-ARMAND**, a sarcastic Mechfounder hero (a hero Founder Mech, recruited by boss-duel→defection) whose
-foundry raid strips Voss's mech army so the finale is survivable; and **MEI "ZÉ" OKONKWO**, a gifted Intern
+reaches and recruits two A&O cast-offs who are literally the keys that dismantle his plan: **PEDRO "RUST"**,
+a sarcastic Mechfounder hero (a hero Founder Mech, recruited by boss-duel→defection) whose
+foundry raid strips Tusk's mech army so the finale is survivable; and **ZECA OKONKWO**, a gifted Intern
 hero (an Overclock-aura + Crunch-burst tempo accelerator, rescued Biba-style) whose vault heist seizes the
-custody keys — including Voss's own backup — so Voss can finally stay dead. The finale **re-skins the
-existing REX superboss as Voss's escape vehicle** (`finale:true` routing unchanged). Stay honest to the
+custody keys — including Tusk's own backup — so Tusk can finally stay dead. The finale **re-skins the
+existing REX superboss as Tusk's escape vehicle** (`finale:true` routing unchanged). Stay honest to the
 descent: hollow victory, the wall still keeps most of its names.
 
 ---
@@ -193,8 +193,8 @@ currency spent between missions is **M3rit$ / M3$** — see §5.)
   Consultants." (Hires soldier, ranger, recruiter, hustler, lobbyist.)
 - **Legal Team** (⚖️ `turret`) — "Fires cease-and-desist letters at anything that trespasses on your IP."
 - **Satellite Office** (📡 `outpost`) — "A scrappy forward branch — Interns drop Funding here instead of
-  trekking back to HQ, and its rig slowly auto-extracts a little on its own. Cheaper and flimsier than a
-  second HQ." (Deposit point + slow trickle.)
+  trekking back to HQ, and it houses extra Headcount. Cheaper and flimsier than a
+  second HQ." (Deposit point + supply/headcount; no passive income.)
 - **The Garage** (🔧 `garage`) — "Vehicle bay. Turns Funding into Food Trucks, Auditors and Founder Mechs."
 - **Launch Pad** (🚀 `launchpad`) — "Starport. Assembles Drugztore Delivery Drones and Buzzword Bombers.
   Requires a Garage."
