@@ -117,8 +117,8 @@ window.HUB_MAP_DATA = {
       "kind": "mdc",
       "name": "M.D.C. Downtown",
       "type": "mdc",
-      "x": 57,
-      "y": 54,
+      "x": 51,
+      "y": 52,
       "w": 5,
       "h": 5,
       "visual": {
@@ -151,7 +151,7 @@ window.HUB_MAP_DATA = {
       "name": "Training Grounds",
       "type": "training",
       "x": 96,
-      "y": 27,
+      "y": 28,
       "w": 28,
       "h": 22,
       "visual": {
@@ -167,8 +167,8 @@ window.HUB_MAP_DATA = {
       "kind": "mentalhealth",
       "name": "Mental Health Facility",
       "type": "outpost",
-      "x": 22,
-      "y": 39,
+      "x": 26,
+      "y": 42,
       "w": 13,
       "h": 10,
       "visual": {
@@ -322,8 +322,8 @@ window.HUB_MAP_DATA = {
     {
       "id": "mdc_nw_bridge",
       "x": 19,
-      "y": 20,
-      "w": 4,
+      "y": 21,
+      "w": 3,
       "h": 10
     },
     {
@@ -336,9 +336,9 @@ window.HUB_MAP_DATA = {
     {
       "id": "condo_ne_bridge",
       "x": 110,
-      "y": 19,
-      "w": 4,
-      "h": 8
+      "y": 20,
+      "w": 13,
+      "h": 13
     },
     {
       "id": "southwest_bridge",
@@ -363,9 +363,9 @@ window.HUB_MAP_DATA = {
     },
     {
       "id": "east_crossing_bridge",
-      "x": 95,
+      "x": 93,
       "y": 52,
-      "w": 4,
+      "w": 11,
       "h": 8
     }
   ],
@@ -451,8 +451,8 @@ window.HUB_MAP_DATA = {
       "poiId": "mentalhealth",
       "cat": "megabuilding",
       "variant": 4,
-      "tx": 22,
-      "ty": 39,
+      "tx": 26,
+      "ty": 43,
       "w": 13,
       "h": 10,
       "overhang": 1.3,
@@ -1408,8 +1408,8 @@ window.HUB_MAP_DATA = {
       "poiId": null,
       "type": "garage",
       "owner": "neutral",
-      "tx": 36,
-      "ty": 33,
+      "tx": 41,
+      "ty": 31,
       "w": 3,
       "h": 3,
       "visual": null
@@ -2510,7 +2510,7 @@ window.HUB_MAP_DATA = {
     {
       "id": "rock_11",
       "slot": "rock",
-      "tx": 38,
+      "tx": 39,
       "ty": 42,
       "w": 3,
       "h": 3,
