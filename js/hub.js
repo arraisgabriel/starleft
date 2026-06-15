@@ -2080,8 +2080,9 @@ function hubSpawnReborn(state, key){
 /* =====================================================================
    MENTAL HEALTH FACILITY — madosis healing. A unit walks in; the player pays
    up-front to enroll it; it spends ONE mission-dispatch occupied inside, and on
-   return is released having recovered up to MADOSIS.heal.fracOfMax of its MAX
-   madosis. Single-unit (no pairing); timed by mission visits, not a real clock.
+   return is released FULLY recovered (madosis 0). Single-unit (no pairing); timed
+   by mission visits, not a real clock. For an instant cure without spending a
+   mission, the player can instead pay merits to accelerate (hubHealSpeedUp, also to 0).
    Reuses the Training-Grounds garrison / lock / respawn machinery.
    ===================================================================== */
 function hubFindMentalHealth(state){
@@ -2141,10 +2142,10 @@ function hubHealStartSession(key){
   if(!(snap.madosis>0)){ toast('Nothing to treat.'); return false; }
   const cost=hubHealCost(snap);
   if(!hubSpend(cost)) return false;   // hubSpend toasts if M3$ is short
-  const heal=Math.min(snap.madosis, Math.round((MADOSIS.heal.fracOfMax||0.7) * (snap.sanityThreshold||0)));
+  const heal=snap.madosis;   // FULL cure — a completed treatment brings the unit's madosis to exactly 0
   h.staged=h.staged.filter(s=>s!==snap);
   h.sessions.push({ id:'hs_'+(HUB.nextId++), unit:snap, startMadosis:snap.madosis, heal, startVisit:CAMPAIGN.visit, slot:snap.slot });
-  toast('🧠 Treatment started — recovers '+heal+' madosis after the next mission.');
+  toast('🧠 Treatment started — fully clears '+Math.round(heal)+' madosis after the next mission.');
   refreshUI();
   return true;
 }

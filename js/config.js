@@ -243,7 +243,7 @@ const MADOSIS = {
   rescuerShield: 60,                       // one-time absorb pool granted to the healer when the rescue begins
   dogPlayerDmgMul: 0.12,                   // damage the in-rescue dog takes from the PLAYER's own units (so a clumsy guarding squad can't frag the unit being saved); enemies hurt it normally
   // --- HUB Mental Health Facility (madosis healing — panel + session) ---
-  heal: { baseCost:200, costPerStar:24, fracOfMax:0.70 }, // cost = base + perStar·stars; heals up to fracOfMax·sanityThreshold over one mission
+  heal: { baseCost:200, costPerStar:24 }, // cost = base + perStar·stars; a completed mission treatment FULLY clears madosis (to 0)
   healCap: 6,             // max units in the facility at once (mirrors HUB.trainPairCap)
   // --- accelerated treatment: pay M3$ to recover madosis on the HUB CITY clock, no mission needed. Each
   //     purchase recovers `points` madosis over `minutes` IN-GAME (city) minutes for `merits` M3$ (rate =
@@ -520,11 +520,18 @@ Weaponize your buzzwords, circle back, and disrupt MegaCorp into bankruptcy. The
               {x:74,y:94, defenders:3}, {x:10,y:50, defenders:3} ],
     // two abandoned player outposts flanking the central sea — walk a unit up to reclaim them
     lostBases:[ {x:36,y:50}, {x:84,y:50} ],
-    objective:'THE CONGLOMERATE holds EIGHT campuses around a dead sea — liquidate all eight. TWO abandoned outposts sit in the middle: reach them with a unit to reclaim them and fight from the front.',
+    // THE SEVERANCIER (internal id cyan_ninja) — A&O's lone cleanup contractor. DEFERRED: he does not
+    // exist at map load; villainDeferredSpawn (villains.js) surfaces him the moment the `raze` quest
+    // completes (all eight campuses razed), at a mid-map tile snapped to open ground, fog revealed.
+    // Defeating (or routing) him is the `duel` quest; victory then runs the existing Ep VII flash.
+    villain:{ id:'cyan_ninja', x:48, y:72, after:'raze' },
+    objective:'THE CONGLOMERATE holds EIGHT campuses around a dead sea — liquidate all eight to draw out THE SEVERANCIER, A&O\'s cleanup contractor, then put him down. TWO abandoned outposts sit in the middle: reach them with a unit to reclaim them and fight from the front.',
     quests:[
-      { id:'raze',    text:'Raze all eight CONGLOMERATE campuses',     type:'razeAll', required:true },
-      { id:'reclaim', text:'Reclaim BOTH outposts on the dead sea',    type:'reclaimOutposts', count:2, reward:150 },
-      { id:'peak',    text:'Keep peak headcount above 20',             type:'peakSupply', count:21, reward:75 },
+      { id:'raze',    text:'Raze all eight CONGLOMERATE campuses',                 type:'razeAll', required:true },
+      { id:'duel',    text:'Put down THE SEVERANCIER — A&O\'s cleanup contractor', type:'defeatVillain', required:true },
+      { id:'reclaim', text:'Reclaim BOTH outposts on the dead sea',                type:'reclaimOutposts', count:2, reward:150 },
+      { id:'peak',    text:'Keep peak headcount above 20',                         type:'peakSupply', count:21, reward:75 },
+      { id:'noflee',  text:'No escape clause — finish him before he slips away',   type:'bossNoFlee', reward:100 },
     ],
     lakes:[ {x:28,y:24,r:3},{x:96,y:78,r:3},{x:24,y:74,r:3},{x:98,y:26,r:3} ],
     rockClusters:[ {x:50,y:24,n:16},{x:74,y:78,n:16},{x:30,y:64,n:14},{x:92,y:38,n:14},{x:20,y:30,n:12},{x:104,y:66,n:12} ],
@@ -842,20 +849,24 @@ Weaponize your buzzwords, circle back, and disrupt MegaCorp into bankruptcy. The
      /`returnTo` route the campaign (villains.js: villainGateBefore/villainNextLinear). The win
      condition is "defeat the villain" (core.js checkWinLose → villainCheckWinLose). */
   {
-    name:'THE CYAN NINJA',                       // isVillain → no Roman-numeral requirement
-    isVillain:true, gateAfter:6, returnTo:7, displayEp:'7.5',
-    enemyName:'THE CYAN NINJA',
+    // RETIRED arena. THE SEVERANCIER (cyan_ninja) is now the climax of Episode VII (MAPS[6], deferred
+    // villain spawned when `raze` completes). This standalone entry is kept ONLY to preserve appended
+    // villain indices (REX etc. must not shift — save compat). `hidden:true` removes it from the map
+    // pickers; dropping gateAfter/returnTo makes villainGateBefore never route the campaign through it.
+    name:'THE SEVERANCIER',                      // isVillain → no Roman-numeral requirement
+    isVillain:true, hidden:true, displayEp:'7.5',
+    enemyName:'THE SEVERANCIER',
     aggression:1.0, startGold:600, startWorkers:4, startSoldiers:4, startBarracks:true,
     graceTime:9999, waveTimer:9999,              // boss duel — no enemy waves
-    crawl:{ episode:'EPISODE 7.5', title:'THE CYAN NINJA',
-      text:'The blast still rings in the dark when a single blade of cyan light unfolds from the smoke. No company. No army. One operator, fast as rumor, paid to make sure nothing crawls out of the crater.\n\nThe cyan ninja answers to no name and moves like the network itself — there, then gone. Pin him on this scorched slab and put him down, or the next quarter never opens. He does not intend to die here. He intends to leave.',
+    crawl:{ episode:'EPISODE 7.5', title:'THE SEVERANCIER',
+      text:'The blast still rings in the dark when a single blade of cyan light unfolds from the smoke. No company. No army. One operator, fast as rumor, paid to make sure nothing crawls out of the crater.\n\nTHE SEVERANCIER answers to no name and moves like the network itself — there, then gone. Pin him on this scorched slab and put him down, or the next quarter never opens. He does not intend to die here. He intends to leave.',
       summary:`A&O filed a cleanup contract before the ash cooled, and this is the contractor: a lone operator in cyan, impossibly fast, paid to bury whatever crawled out of the flash. There is no campus to raze here, only the duel. Break him before he slips the net and vanishes into the sprawl.` },
     w:30, h:24, seed:7050,
     player:{ x:5, y:18 },
     terrain:{ biomes:['tech'], seaFrac:0.04, mtnFrac:0.06, forest:0 },
-    objective:'Defeat THE CYAN NINJA — he is fast and will flee when wounded. Corner and finish him.',
+    objective:'Defeat THE SEVERANCIER — he is fast and will flee when wounded. Corner and finish him.',
     quests:[
-      { id:'duel',   text:'End THE CYAN NINJA\'s contract',                          type:'defeatVillain', required:true },
+      { id:'duel',   text:'End THE SEVERANCIER\'s contract',                         type:'defeatVillain', required:true },
       { id:'noflee', text:'No escape clause — finish him before he slips away',      type:'bossNoFlee', reward:100 },
       { id:'lean',   text:'Lose no more than 5 staff to one contractor',             type:'maxUnitsLost', count:5, reward:50 },
     ],

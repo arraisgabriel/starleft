@@ -40,7 +40,7 @@ const ULTRA_NEWS = {
     "B.I.G. PAPA: EPISODE XI closes the file on THE LAUNCH. Losses become learnings; learnings become invoices.",
     "B.I.G. PAPA: EPISODE XII closes the file on THE CONTINUITY FARM. Losses become learnings; learnings become invoices.",
     "B.I.G. PAPA: EPISODE XIII closes the file on THE VESTING CLIFF. Losses become learnings; learnings become invoices.",
-    "B.I.G. PAPA: EPISODE 7.5 closes the file on THE CYAN NINJA. Losses become learnings; learnings become invoices.",
+    "B.I.G. PAPA: A&O closes the file on THE SEVERANCIER, the cleanup contract that couldn't keep the crater shut. Losses become learnings; learnings become invoices.",
     "B.I.G. PAPA: EPISODE 15 closes the file on REX. Losses become learnings; learnings become invoices.",
     "B.I.G. PAPA: EPISODE 8.5 closes the file on THE LAND GRAB. Losses become learnings; learnings become invoices.",
     "B.I.G. PAPA: EPISODE 9.5 closes the file on THE RECOVERY AGENT. Losses become learnings; learnings become invoices.",

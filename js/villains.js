@@ -33,7 +33,7 @@
    Effective HP ≈ hp * (1 + vpi*hpVpiScale) / (1 - dmgReduce). Tune HERE — one file. */
 const VILLAINS = {
   cyan_ninja: {
-    name:'THE CYAN NINJA',
+    name:'THE SEVERANCIER',    // display name (internal id stays cyan_ninja — save/achievement/sprite keys)
     base:'soldier',            // Growth Cyborg sprite (melee range fits a ninja); stats overridden below
     spriteType:'ninja',        // bespoke cyborg-ninja sprite (assets/units/ninja); gameplay still soldier via base
     spriteFaction:'player',    // render the CYAN player variant (not enemy-red) so the body's own cyan lights match the glow
@@ -73,7 +73,7 @@ const VILLAINS = {
       death:['A clean… exit.'],
     },
   },
-  // A&O black+green recolor of the cyan ninja — a MINI-boss for the Episode XI "Seize the GRAAL"
+  // A&O black+green recolor of THE SEVERANCIER's sprite — a MINI-boss for the Episode XI "Seize the GRAAL"
   // holdout (waves.js spawns it on the final wave). Same hit-and-run AI/abilities as cyan_ninja but
   // half the HP and the 'ao' sprite set (black body + toxic-green neon — needs ninja/walk_ao+attack_ao).
   ao_ninja: {
@@ -167,7 +167,58 @@ const VILLAINS = {
 function spawnVillain(state){
   const cfg=state.cfg; if(!cfg || !cfg.villain) return;
   const list = Array.isArray(cfg.villain) ? cfg.villain : [cfg.villain];
-  for(const v of list) spawnVillainEntry(state, v);
+  for(const v of list){ if(v.after) continue; spawnVillainEntry(state, v); }   // `after` → DEFERRED (villainDeferredSpawn waits for that quest); immediate ones spawn now
+}
+
+/* ---- DEFERRED spawn (called every authoritative tick from core.js update) ---- the boss appears
+   mid-mission once its `after` quest completes (e.g. THE SEVERANCIER surfaces on Episode VII the moment
+   all eight campuses are razed), at a chosen mid-map tile snapped to open ground, with the arena fog
+   revealed and a toast so the player can find him. _villainSpawned auto-persists (not in save.js SKIP),
+   so a reload never double-spawns. Mirrors the holdoutRequiresMet quest-gate pattern (waves.js). */
+function villainDeferredSpawn(state){
+  const cfg=state.cfg; if(!cfg || !cfg.villain || state._villainSpawned) return;
+  const list = Array.isArray(cfg.villain) ? cfg.villain : [cfg.villain];
+  for(const v of list){
+    if(!v.after) continue;                                              // immediate villains handled by spawnVillain() at load
+    const q = state.quests && state.quests[v.after];
+    if(!(q && q.done)) continue;                                        // the gating quest isn't complete yet
+    const at = villainSnapOpen(state, v.x|0, v.y|0);                    // deterministic nearest passable tile
+    spawnVillainEntry(state, { id:v.id, x:at.x, y:at.y });             // sets state._villainSpawned=true
+    // light the arena ~8s so the player SEES where he surfaced (computeFog honors _bossReveal; explored
+    // persists after the window, so the minimap keeps the spot). Local fog only — safe outside the FX guard.
+    state._bossReveal={ x:at.x, y:at.y, r:9, until:(state.time||0)+8 };
+    if(!window._rbReplaying){                                           // cosmetics only on the live path (skipped in rollback re-sim)
+      if(typeof computeFog==='function') computeFog(state);             // apply the reveal this tick
+      if(typeof viewW==='function' && typeof viewH==='function'){       // one-time camera focus so the arrival is seen (mirrors hubFocusUltra)
+        const z=state.zoom||1, cx=at.x*TILE+TILE/2, cy=at.y*TILE+TILE/2;
+        state.camX=cx-(viewW()/z)/2; state.camY=cy-(viewH()/z)/2;
+        if(typeof clampCam==='function') clampCam(state);
+      }
+      const def=VILLAINS[v.id];
+      if(typeof toast==='function') toast('🥷 '+((def&&def.name)||'A contractor')+' has surfaced — find and finish him.');
+    }
+    break;                                                             // one deferred villain per map
+  }
+}
+
+// deterministic nearest OPEN-GROUND tile to (tx,ty) — a ring search modelled on ninjaUnstick (no RNG,
+// so host/client/rollback agree). Prefers a roomy tile, then any passable tile, else the map interior.
+function villainSnapOpen(state, tx, ty){
+  const W=state.W, H=state.H, B=state.blocked;
+  const open =(x,y)=> x>=1&&y>=1&&x<W-1&&y<H-1 && !(B && B[y*W+x]);
+  const roomy=(x,y)=> open(x,y) && open(x-1,y)&&open(x+1,y)&&open(x,y-1)&&open(x,y+1);
+  for(const test of [roomy, open]){
+    let best=null, bd=1e9;
+    for(let r=0;r<=24 && !best;r++){
+      for(let dy=-r;dy<=r;dy++) for(let dx=-r;dx<=r;dx++){
+        if(r>0 && Math.max(Math.abs(dx),Math.abs(dy))!==r) continue;   // current ring only
+        const x=tx+dx, y=ty+dy; if(!test(x,y)) continue;
+        const d=dx*dx+dy*dy; if(d<bd){ bd=d; best={x,y}; }
+      }
+    }
+    if(best) return best;
+  }
+  return { x:W>>1, y:H>>1 };                                           // last resort → map interior
 }
 // one villain from a {id,x,y} entry — shared by map load and scripted mid-mission events (T2-8)
 function spawnVillainEntry(state, v){
@@ -187,7 +238,7 @@ function spawnVillainEntry(state, v){
     u._bossCd=def.cd; u.cd=0; u.bossDmgMul=1;
     u.r = Math.round((DEF[def.base].r||12) * def.bossScale * 0.6);   // collision grows sub-linearly (pathing stays sane)
     u._abilCd={};                                            // {blink:0, slam:0}
-    if(def.aiKind==='ninja'){ u._ninjaAI=true; u._ninjaState='approach'; u._zig=1; u._exposeMul=(def.ninja&&def.ninja.exposeMul)||0.4; }   // hand the cyan ninja to updateNinja
+    if(def.aiKind==='ninja'){ u._ninjaAI=true; u._ninjaState='approach'; u._zig=1; u._exposeMul=(def.ninja&&def.ninja.exposeMul)||0.4; }   // hand ninja-AI villains (THE SEVERANCIER et al.) to updateNinja
     if((def.abilities||[]).some(a=>a.k==='missile'||a.k==='stomp')){ u._mech=true; u._mechImpacts=[]; }   // Rex: multi-tick area specials (updateMech)
     state._villainSpawned=true;
     if(!window._rbReplaying) bossTaunt(state, u, 'intro');
@@ -428,7 +479,8 @@ function stepStomp(state, u, dt, def){
 }
 
 /* =====================================================================
-   THE CYAN NINJA — a bespoke hit-and-run AI (authoritative path only; clients render the
+   THE SEVERANCIER (internal id cyan_ninja) and the other ninja-AI villains — a bespoke hit-and-run AI
+   (authoritative path only; clients render the
    replicated x/y + the synced _ninjaHidden dim). It glide-dashes IN on a diagonal staircase,
    lands ONE guaranteed strike during a rooted, EXPOSED wind-up (the player's punish window),
    weaves AWAY from whatever is shooting it (emergency blink if cornered point-blank), then drops
@@ -858,7 +910,7 @@ function hubNextDeployIndex(){
 
 /* expose for core.js / hub.js / ui.js / map.js (classic-script shared scope) and the console. */
 if(typeof window!=='undefined'){
-  window.VILLAINS=VILLAINS; window.spawnVillain=spawnVillain; window.updateVillain=updateVillain; window.updateNinja=updateNinja; window.ninjaUnstick=ninjaUnstick; window.startNinjaEscape=startNinjaEscape;
+  window.VILLAINS=VILLAINS; window.spawnVillain=spawnVillain; window.villainDeferredSpawn=villainDeferredSpawn; window.villainSnapOpen=villainSnapOpen; window.updateVillain=updateVillain; window.updateNinja=updateNinja; window.ninjaUnstick=ninjaUnstick; window.startNinjaEscape=startNinjaEscape;
   window.mechUpkeep=mechUpkeep; window.stepMech=stepMech; window.bossAreaDamage=bossAreaDamage;
   window.bossTaunt=bossTaunt; window.nearestMapEdge=nearestMapEdge;
   window.villainCheckWinLose=villainCheckWinLose; window.bossOutcome=bossOutcome; window.bossDefeatChecks=bossDefeatChecks;

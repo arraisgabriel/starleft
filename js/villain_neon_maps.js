@@ -9,7 +9,7 @@
    One emitter set per action is enough — the lookup wraps any animation-frame index onto frame 0,
    and the torso/head lights barely move across the walk/attack cycle. | STARLEFT */
 
-// THE CYAN NINJA — Growth Cyborg sprite (rendered in its CYAN player variant via spriteFaction).
+// THE SEVERANCIER (cyan_ninja) — Growth Cyborg sprite (rendered in its CYAN player variant via spriteFaction).
 // Dominant glow = the big lower-torso blade/core; plus visor, arm vents, and a ground wash.
 const NINJA_GLOWS = [
   { id:0, kind:'spot', x:0.50, y:0.63, rx:0.18, ry:0.16, color:[95,242,255],  alpha:1.00, pulse:1.30, phase:0.00 },  // lower-torso blade/core (dominant)
@@ -31,7 +31,7 @@ const REX_GLOWS = [
   { id:6, kind:'spot', x:0.50, y:0.93, rx:0.20, ry:0.07, color:[90,232,70],   alpha:0.60, pulse:1.00, phase:0.15 }, // heavy ground wash
 ];
 
-// ---- BESPOKE-ART BOSSES (THE CYAN NINJA → 'ninja', REX → 'rexBoss') ----
+// ---- BESPOKE-ART BOSSES (THE SEVERANCIER/cyan_ninja → 'ninja', REX → 'rexBoss') ----
 // Separate maps so the lieutenants that STILL reuse the soldier/founder art keep their original
 // anchors: ao_enforcer→'cyanNinja' (soldier), tower_guardian→'rex' (founder). Coords eyeballed
 // against the new strips; fine-tune live (no villain calibrator — hand-edit these normalized x/y).

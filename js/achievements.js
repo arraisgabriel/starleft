@@ -27,7 +27,7 @@ const ACH = (function(){
     { id:'architect',  ev:'architect',icon:'🧠', name:'The Architect',           desc:'Break BIBA out of the open-plan prison.' },
     { id:'ghost-equity',ev:'reborn',  icon:'⚡', name:'Ghost Equity',            desc:'Bring one of the fallen back through The Wake.' },
     // ---- bosses & the new verbs ----
-    { id:'knife-net',  ev:'victory',  icon:'🥷', name:'Knife the Network',       desc:'Put down THE CYAN NINJA.',                    test:c=>c.villainId==='cyan_ninja' },
+    { id:'knife-net',  ev:'victory',  icon:'🥷', name:'Knife the Network',       desc:'Put down THE SEVERANCIER.',                   test:c=>c.villainId==='cyan_ninja' },
     { id:'unrecovered',ev:'victory',  icon:'🟢', name:'Asset Unrecovered',       desc:'Put down THE A&O ENFORCER.',                  test:c=>c.villainId==='ao_enforcer' },
     { id:'evicted',    ev:'victory',  icon:'🏚', name:'Evicted',                 desc:'Scrap THE DARK TOWER GUARDIAN.',              test:c=>c.villainId==='tower_guardian' },
     { id:'foreclosed', ev:'victory',  icon:'🦖', name:'Foreclosure Foreclosed',  desc:'Destroy REX and end the war.',                test:c=>!!c.finale },

@@ -96,6 +96,12 @@ function update(state, dt){
   // clients see the spawned waves/boss as synced entities and the progress via synced G.quests. ----
   if(!state.hub && typeof holdoutTick==='function') holdoutTick(state, dt);
 
+  // ---- DEFERRED villain (villains.js): a boss whose cfg.villain has an `after` quest surfaces mid-
+  // mission once that quest is done (THE SEVERANCIER on Episode VII when all eight campuses are razed).
+  // Host/solo only; clients see the spawned boss as a synced entity. defeatVillain can't complete until
+  // the boss is both spawned and gone, so the one-tick lag vs questsTick can't trigger an early win. ----
+  if(!state.hub && typeof villainDeferredSpawn==='function') villainDeferredSpawn(state);
+
   // ---- generic map cutscenes (story-polish §5): intro at mission start / reach-the-objective beats ----
   if(!state.hub && typeof mapCutsceneTick==='function') mapCutsceneTick(state);
 

@@ -1314,7 +1314,6 @@ function buildHealingBody(body){
   const h=(typeof CAMPAIGN!=='undefined'&&CAMPAIGN.healing)||{staged:[],sessions:[]};
   const staged=h.staged||[], sessions=h.sessions||[];
   const cap=(typeof MADOSIS!=='undefined'&&MADOSIS.healCap)||6;
-  const fracPct=Math.round((((typeof MADOSIS!=='undefined'&&MADOSIS.heal&&MADOSIS.heal.fracOfMax)||0.7))*100);
 
   const sum=document.createElement('div'); sum.className='hub-stat';
   sum.innerHTML='In care <b>'+(staged.length+sessions.length)+' / '+cap+'</b> · M3$ <b>'+((CAMPAIGN.m3|0))+'</b>';
@@ -1341,8 +1340,8 @@ function buildHealingBody(body){
     }));
     const note=document.createElement('div'); note.className='muted';
     const A=(typeof MADOSIS!=='undefined'&&MADOSIS.accel)||{merits:100,points:10,minutes:10};
-    note.innerHTML='Treatment recovers up to '+fracPct+'% of a unit’s maximum madosis and occupies it for one mission.'
-      +' Or ⚡ <b>Speed up</b>: M3$ '+(A.merits||100)+' recovers '+(A.points||10)+' madosis over '+(A.minutes||10)+' in-game minutes — no mission needed.';
+    note.innerHTML='Treatment <b>fully clears</b> a unit’s madosis (to 0) and occupies it for one mission.'
+      +' Or ⚡ <b>Speed up</b>: M3$ '+(A.merits||100)+' recovers '+(A.points||10)+' madosis over '+(A.minutes||10)+' in-game minutes — no mission needed (repeat to fully cure).';
     left.appendChild(note);
   }
 
@@ -1352,7 +1351,7 @@ function buildHealingBody(body){
   for(const ses of sessions){
     const who=ses.unit||{};
     const card=document.createElement('div'); card.className='train-session'; card.dataset.healid=ses.id;
-    card.appendChild(hubMenuUnitGrid([who], s=>({ caption: trainTypeName(s)+'<br>recovering <b>'+(ses.heal||0)+'</b> madosis'+healAccelCaption(s) })));
+    card.appendChild(hubMenuUnitGrid([who], s=>({ caption: trainTypeName(s)+'<br>recovering <b>'+Math.round(ses.heal||0)+'</b> madosis'+healAccelCaption(s) })));
     const meta=document.createElement('div'); meta.className='train-meta';
     meta.innerHTML='<div class="train-countdown">IN CARE</div><div class="train-bar"><i style="width:30%"></i></div>'
       +'<div class="muted">Completes after the next mission.</div>';
@@ -1706,7 +1705,7 @@ function showSkirmish(){
   const wrap=document.getElementById('skirmishMapButtons');
   if(wrap){ wrap.innerHTML='';
     MAPS.forEach((m,i)=>{
-      if(m.skirmish) return;                         // the transient generated-map slot
+      if(m.skirmish || m.hidden) return;             // the transient generated-map slot / retired (orphaned) maps
       const sub=(m.name.split('\u2014')[1]||m.name).trim();
       const label=m.isVillain ? ((m.villain?'Boss ':'Op ')+(m.displayEp||'')) : ('Quarter '+(i+1));
       const b=document.createElement('button'); b.className='map-btn'+(m.isVillain?' map-btn--boss':'');
@@ -1723,6 +1722,7 @@ function buildMapSelect(){
   const wrap=document.getElementById('mapButtons'); if(!wrap) return;
   wrap.innerHTML='';
   MAPS.forEach((m,i)=>{
+    if(m.skirmish || m.hidden) return;             // transient generated-map slot / retired (orphaned) maps
     const sub=(m.name.split('—')[1]||m.name).trim();
     const label = m.isVillain ? ((m.villain?'Boss ':'Op ')+(m.displayEp||'')) : ('Quarter '+(i+1));   // gated maps show their display episode (boss duel vs side op), not an array-index Quarter
     const b=document.createElement('button'); b.className='map-btn'+(m.isVillain?' map-btn--boss':'');

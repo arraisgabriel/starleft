@@ -684,7 +684,7 @@ function updateUnit(state,u,dt){
   if(u.captive){ u._actState=null; u.vx=0; u.vy=0; u.path=null; return; }   // imprisoned: stands inert until freed
   if(u.abilCd>0) u.abilCd=Math.max(0, u.abilCd-dt);     // T2-2: manual-ability cooldown (sim state; legacy saves → undefined = ready)
   if(u._dashT>0) u._dashT=Math.max(0, u._dashT-dt);     // Caffeine Dash burst window
-  // CYAN NINJA: its movement+combat are fully owned by updateNinja (runs later this tick). Yield here so
+  // NINJA-AI villains (THE SEVERANCIER et al.): movement+combat are fully owned by updateNinja (runs later this tick). Yield here so
   // normal auto-acquire/melee-camp never touches it. Flee (low HP) drops back to the standard move handler.
   if(u._ninjaAI && !u._fleeing) return;
   // REX: while it's mid jump-stomp it must not walk or fire — updateMech owns those ticks.

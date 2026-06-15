@@ -29,6 +29,19 @@ function computeFog(state){
       state.visible[ny*W+nx]=1; state.explored[ny*W+nx]=1;
     }
   }
+  // transient reveal window — a short-lived player-side vision patch (e.g. a deferred boss's dramatic
+  // arrival: THE SEVERANCIER surfacing on Episode VII), so the player SEES where he appeared before
+  // normal fog resumes (he is already closing in). Tile-space {x,y,r,until}; expires by state.time.
+  const rv=state._bossReveal;
+  if(rv && (state.time||0) < rv.until){
+    const cx=rv.x|0, cy=rv.y|0, rr=rv.r||7, r2=rr*rr;
+    for(let y=-rr;y<=rr;y++)for(let x=-rr;x<=rr;x++){
+      if(x*x+y*y>r2) continue;
+      const nx=cx+x, ny=cy+y;
+      if(nx<0||ny<0||nx>=W||ny>=H) continue;
+      state.visible[ny*W+nx]=1; state.explored[ny*W+nx]=1;
+    }
+  }
 }
 function isVisiblePix(state,x,y){
   const tx=(x/TILE)|0, ty=(y/TILE)|0;
@@ -1514,7 +1527,7 @@ function drawUnit(state,u,ox,oy){
   const r=u.r;
   const alt = u.air?16:0;   // flyers are drawn raised
   const vh = unitDrawH(u);   // drawn sprite height (incl. hero 15% bump) — HUD/ring scale to this, not collision r
-  const _vdef = (u.villain && typeof VILLAINS!=='undefined') ? VILLAINS[u.villainId] : null;   // villains can force a sprite variant (cyan ninja → player set)
+  const _vdef = (u.villain && typeof VILLAINS!=='undefined') ? VILLAINS[u.villainId] : null;   // villains can force a sprite variant (THE SEVERANCIER → player set)
   const fac = (_vdef && _vdef.spriteFaction) || (aoSide(state, u.owner) ? 'ao' : null);   // A&O alien sprite set, else owner-keyed (render-only)
   const jz = u._jumpZ||0;   // REX jump-stomp: lifts the sprite off the ground (shadow drawn at the foot below)
 
@@ -1619,7 +1632,7 @@ function drawUnit(state,u,ox,oy){
     const pyB = (py-alt)+bShift-jz;   // sprite/glow baseline, lifted by a REX leap (jz)
     if(u.hero) drawHeroGlowLayer(state, u, useAnim, px, pyB, S*bScale, 'aura');   // halo behind
     else if(u.villain) drawVillainGlow(state, u, useAnim, px, pyB, S*bScale, 'aura');
-    // CYAN NINJA dash / SPRINT afterimage (T2-6): faint additive ghosts of the current frame at recent
+    // NINJA-AI villain dash / SPRINT afterimage (T2-6): faint additive ghosts of the current frame at recent
     // positions; ghosts coincident with the live sprite (idle) are skipped, so a streak only appears
     // while actually moving fast — which makes a sprinting squad read as sprinting at a glance.
     if((u._ninjaAI || u.sprinting) && u._trailBuf && u._trailBuf.length>1 && !(typeof megaReducedMotion==='function'&&megaReducedMotion())){
