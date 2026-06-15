@@ -510,6 +510,7 @@
      config FIRST (constants/DEF/MAPS); main LAST (the only file with top-level executing
      code: event listeners + RAF loop). See js/<file>.js headers. -->
 <script src="js/config.js"></script>
+<script src="js/maps_data.js"></script><!-- campaign MAP DEFINITIONS (`const MAPS`), extracted from config.js so the map editor can rewrite it in isolation -->
 <script src="js/telemetry.js"></script><!-- cookieless funnel events (T0-10): consent + DNT gated, endpoint empty by default → sends nothing -->
 <script src="js/achievements.js"></script><!-- startup-satire achievements (T3-5): localStorage-only, ACH.fire(event) hooks -->
 <script src="js/perf.js"></script><!-- render benchmark + instrumentation harness; OFF (zero hot-loop cost) unless ?perf=1 -->
@@ -525,6 +526,7 @@
 <script src="js/building_neon_maps.js"></script>
 <script src="js/hero_neon_maps.js"></script><!-- per-frame hero glow anchors (Nino gun / Biba healing mech); rendered via drawMegaNeonLayer, code-synth auras in render.js -->
 <script src="js/megasprites.js"></script>
+<script src="js/map_paint.js"></script><!-- per-tile terrain paint overrides (cfg.paint); newMap applies them deterministically -->
 <script src="js/map.js"></script>
 <script src="js/hub_map_schema.js"></script>
 <script src="js/hub_map_data.js"></script>

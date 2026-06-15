@@ -58,6 +58,7 @@ function bootstrap() {
   const s = { innerWidth:1280, innerHeight:800, Math, Array, Object, Uint8Array, Map, Set, Float32Array,
     isFinite, parseInt, parseFloat, console, JSON, Date, setTimeout, clearTimeout, setInterval, clearInterval,
     location:{protocol:'file:',href:'',origin:'',search:'',hash:''}, Image:ImageStub, navigator:{userAgent:'node'},
+    LOADER: new Proxy({}, { get:()=>noop }),   // assets.js touches LOADER.register / LOADER.T_* at load; stub it (headless: no real image loading)
     requestAnimationFrame:noop, cancelAnimationFrame:noop, fetch:()=>Promise.resolve({}),
     localStorage:{getItem:()=>null,setItem:noop,removeItem:noop,clear:noop}, addEventListener:noop, removeEventListener:noop, alert:noop,
     document:{ getElementById:()=>fakeEl, createElement:()=>fakeEl, querySelector:()=>fakeEl, querySelectorAll:()=>[], addEventListener:noop, body:fakeEl },
@@ -68,8 +69,8 @@ function bootstrap() {
                    'onVictory','onDefeat','render','updateCamera','drawAll','buildMapSelect','showRoster'])
     s[k] = noop;
   vm.createContext(s);
-  const FILES = ['js/state.js','js/config.js','js/assets.js','js/megasprites.js','js/units.js',
-                 'js/career.js','js/balance.js','js/lore_data.js','js/lore.js','js/ai.js','js/core.js','js/map.js'];
+  const FILES = ['js/state.js','js/config.js','js/maps_data.js','js/assets.js','js/megasprites.js','js/units.js',
+                 'js/career.js','js/balance.js','js/lore_data.js','js/lore.js','js/ai.js','js/core.js','js/map_paint.js','js/map.js'];   // MAPS lives in maps_data.js; map_paint.js applies cfg.paint (LOADER stubbed in the sandbox)
   const src = FILES.map(f => fs.readFileSync(path.join(ROOT, f), 'utf8')).join('\n;\n')
     + '\n;globalThis.__api={ newMap, update, MAPS, DEF, CAREER, TILE,'
     + '   setCarryover, resetHeroes, computePlayerVPI, vetScalingBonus, vetCarryCountFor,'

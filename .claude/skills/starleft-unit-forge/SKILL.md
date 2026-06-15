@@ -42,8 +42,8 @@ Read these so you're matching the game, not re-deriving it:
 - For lore/faction tone (especially heroes), skim `docs/world-bible.md` (the canonical world bible).
 
 Then read the live source so your edits match reality:
-- `js/config.js` — the `DEF` table (and `BUILD_HIRES` just below it) and, for heroes, the `MAPS`
-  `heroes[]` entries.
+- `js/config.js` — the `DEF` table (and `BUILD_HIRES` just below it). For heroes, the `MAPS`
+  `heroes[]` entries live in `js/maps_data.js` (the campaign maps, extracted from config.js).
 - `js/assets.js` — `UNIT_WALK` / `UNIT_ACTION` / `UNIT_SPRITE_H`. `js/ui.js` — `buildCommands()`.
 
 ## The phases

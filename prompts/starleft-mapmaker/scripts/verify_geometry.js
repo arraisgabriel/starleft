@@ -46,6 +46,7 @@ const sandbox = { innerWidth: 1280, innerHeight: 800, Math, Array, Object, Uint8
   // browser globals the asset/lore/career layers touch at load — stubbed so newMap() can run headless:
   location: { protocol: 'file:', href: '', origin: '', search: '', hash: '' },
   Image: ImageStub, navigator: { userAgent: 'node' },
+  LOADER: new Proxy({}, { get: () => noop }),   // assets.js touches LOADER.register / LOADER.T_* at load; stub it (headless: no real image loading)
   requestAnimationFrame: noop, cancelAnimationFrame: noop, fetch: () => Promise.resolve({}),
   localStorage: { getItem: () => null, setItem: noop, removeItem: noop, clear: noop },
   addEventListener: noop, removeEventListener: noop, alert: noop,
@@ -58,7 +59,7 @@ vm.createContext(sandbox);
  * closure resolves: makeRng/noise (state), MAPS/DEF/consts (config), ASSET_BASE (assets),
  * placeMegaSprites (megasprites), spawnVets (career), and the lore data/runtime. The game's own
  * _dev/verify_maps.js loads only config+state+map — which is why newMap() throws there. */
-const FILES = ['js/state.js', 'js/config.js', 'js/assets.js', 'js/megasprites.js', 'js/career.js', 'js/lore_data.js', 'js/lore.js', 'js/map.js'];
+const FILES = ['js/state.js', 'js/config.js', 'js/maps_data.js', 'js/assets.js', 'js/megasprites.js', 'js/career.js', 'js/lore_data.js', 'js/lore.js', 'js/map_paint.js', 'js/map.js'];   // MAPS lives in maps_data.js; map_paint.js applies cfg.paint (LOADER stubbed in the sandbox)
 const present = FILES.filter(f => fs.existsSync(path.join(ROOT, f)));
 const src = present.map(f => fs.readFileSync(path.join(ROOT, f), 'utf8')).join('\n;\n')
   + '\n;globalThis.__api={MAPS,newMap,T_WATER,T_ROCK,T_TREE,B_GRASS,B_MOUNTAIN,B_WATER,B_TECH,B_DESERT,B_ICE,B_VOLCANIC};';

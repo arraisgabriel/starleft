@@ -7,8 +7,8 @@ this file, and so should any future tool that writes story.
 
 Source of truth in code (when code and this file disagree, **code wins** — but the *spirit* below is
 what keeps the campaign coherent):
-- **`js/config.js`** — the `MAPS` campaign array (every episode's `crawl`, `summary`, `objective`,
-  enemy, biome, heroes/captives) and `DEF` (unit/building stats + flavor).
+- **`js/maps_data.js`** — the `MAPS` campaign array (every episode's `crawl`, `summary`, `objective`,
+  enemy, biome, heroes/captives), extracted from config.js. **`js/config.js`** — `DEF` (unit/building stats + flavor) and terrain/biome constants.
 - **`js/lore.js` + `js/career.js`** — the career/XP, dossier, memorial, hero-carryover, and
   veteran-carryover runtime.
 - **`js/lore_data.js` + `js/dialog_data.js`** — the append-only life-event corpus, hometown/name
@@ -56,7 +56,7 @@ cure for death — only to find your enemy has already turned the afterlife into
 
 ## 2. The moral-descent arc (current campaign)
 
-**Twelve episodes ship today** (`js/config.js`, `MAPS[0..11]`). The throughline of Arc 1: **you win by
+**Twelve episodes ship today** (`js/maps_data.js`, `MAPS[0..11]`). The throughline of Arc 1: **you win by
 becoming the thing you fought.** Each enemy is a mirror of a later stage of your own corruption. Arc 2
 inverts it: having destroyed everyone, including yourself, you try to undo death — and discover death
 is just another thing capital has already priced.

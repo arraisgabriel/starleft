@@ -3,23 +3,27 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>STARLEFT HUB Map Editor</title>
+  <title>STARLEFT Map Editor</title>
   <link rel="icon" href="favicon.ico">
-  <link rel="stylesheet" href="css/hub-map-editor.css">
+  <link rel="stylesheet" href="css/map-editor.css">
 </head>
 <body>
   <main class="hme-shell">
     <header class="hme-topbar">
       <div class="hme-brand">
         <strong>STARLEFT</strong>
-        <span>HUB Map Editor</span>
+        <span>Map Editor</span>
       </div>
+      <label class="hme-mapsel" title="Choose which map to edit">Map
+        <select id="mapSelect"></select>
+      </label>
       <nav class="hme-tools" aria-label="Editor tools">
         <button class="hme-tool is-active" data-tool="select" title="Select and move">Select</button>
         <button class="hme-tool" data-tool="topography" title="Place topography">Topo</button>
         <button class="hme-tool" data-tool="mega" title="Place megasprites">Mega</button>
         <button class="hme-tool" data-tool="building" title="Place buildings">Build</button>
         <button class="hme-tool" data-tool="poi" title="Place HUB POIs">POI</button>
+        <button class="hme-tool" data-tool="paint" title="Paint terrain (campaign maps)">Paint</button>
         <button class="hme-tool" data-tool="erase" title="Erase placement">Erase</button>
       </nav>
       <div class="hme-actions">
@@ -51,6 +55,29 @@
           <label>Biome
             <select id="biomePick"></select>
           </label>
+        </section>
+        <section id="paintSection" hidden>
+          <h2>Terrain Paint</h2>
+          <label>Target
+            <select id="paintTarget">
+              <option value="grass">grass</option>
+              <option value="snow">snow</option>
+              <option value="tech">tech</option>
+              <option value="desert">desert</option>
+              <option value="water">water</option>
+              <option value="lava">lava</option>
+              <option value="rock">rock (3×3)</option>
+              <option value="tree">tree (3×3)</option>
+            </select>
+          </label>
+          <label>Brush
+            <select id="brushSize">
+              <option value="1">1×1</option>
+              <option value="3" selected>3×3</option>
+              <option value="5">5×5</option>
+            </select>
+          </label>
+          <p class="hme-muted hme-fineprint">Paints explicit per-tile overrides (saved as <code>cfg.paint</code>). Rock/tree become 3×3 walk-under features.</p>
         </section>
         <section>
           <h2>Placement Size</h2>
@@ -86,6 +113,7 @@
       <section class="hme-stage">
         <canvas id="cv"></canvas>
         <canvas id="minimap" width="154" height="124" aria-hidden="true"></canvas>
+        <div id="procWarning" class="hme-procwarn" hidden></div>
         <div id="statusLine" class="hme-status">Ready</div>
       </section>
 
@@ -108,6 +136,7 @@
   </main>
 
   <script src="js/config.js"></script>
+  <script src="js/maps_data.js"></script><!-- campaign MAP DEFINITIONS (`const MAPS`) -->
   <script src="js/perf.js"></script><!-- render.js reads PERF; inert without ?perf=1 -->
   <script src="js/loader.js"></script><!-- assets.js/megasprites.js register every sprite through LOADER -->
   <script src="js/assets.js"></script>
@@ -115,13 +144,30 @@
   <script src="js/mega_neon_maps.js"></script>
   <script src="js/building_neon_maps.js"></script>
   <script src="js/megasprites.js"></script>
+  <script src="js/map_paint.js"></script><!-- per-tile terrain paint overrides (cfg.paint) -->
   <script src="js/map.js"></script>
   <script src="js/hub_map_schema.js"></script>
   <script src="js/hub_map_data.js"></script>
   <script src="js/hub.js"></script>
   <script src="js/units.js"></script>
+  <!-- campaign-preview deps: newMap() spawns vets/heroes (career), villains, etc.; render draws hero/villain
+       glow + muzzles. Side-effect-heavy modules (music/sfx/telemetry/tutorial/main) are intentionally omitted. -->
+  <script src="js/muzzle_data.js"></script>
+  <script src="js/hero_neon_maps.js"></script>
+  <script src="js/sprint.js"></script>
+  <script src="js/career.js"></script>
+  <script src="js/balance.js"></script>
+  <script src="js/lore_data.js"></script>
+  <script src="js/dialog_data.js"></script>
+  <script src="js/lore.js"></script>
+  <script src="js/madosis.js"></script>
+  <script src="js/villains.js"></script>
+  <script src="js/villain_neon_maps.js"></script>
+  <script src="js/quests.js"></script>
+  <script src="js/waves.js"></script>
+  <script src="js/ai.js"></script>
   <script src="js/render.js"></script>
   <script src="js/water.js"></script>
-  <script src="js/hub-map-editor.js"></script>
+  <script src="js/map-editor.js"></script>
 </body>
 </html>

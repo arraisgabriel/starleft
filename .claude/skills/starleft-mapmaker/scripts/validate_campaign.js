@@ -47,7 +47,9 @@ function loadMaps(root) {
   };
   sandbox.window = sandbox; sandbox.globalThis = sandbox;
   vm.createContext(sandbox);
+  const mapsPath = path.join(root, 'js', 'maps_data.js');   // MAPS was extracted from config.js → maps_data.js
   const src = fs.readFileSync(path.join(root, 'js', 'config.js'), 'utf8')
+    + '\n;\n' + (fs.existsSync(mapsPath) ? fs.readFileSync(mapsPath, 'utf8') : '')
     + '\n;globalThis.__MAPS = (typeof MAPS!=="undefined") ? MAPS : null;';
   vm.runInContext(src, sandbox, { filename: 'config.js' });
   return sandbox.__MAPS;

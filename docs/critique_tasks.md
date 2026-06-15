@@ -50,7 +50,7 @@ These come from `CLAUDE.md` / `AGENTS.md` and the engine's three-path simulation
 - [x] Reorder the `STEPS` array in `js/tutorial.js` to combat-first: look → **select fighters & attack the lone target** (step 2–3) → then mine/hire/build as "now sustain it."
 - [x] Add a stall-detection hint (reusable): if `stepT > ~6s` with no progress on a step, fire a one-time guiding toast.
 
-**Where in code.** New-Campaign button in `rts.html` + handler in `js/ui.js`; `MAPS[0]` in `js/config.js`; `STEPS` + `prompt`/`choosePrompt` in `js/tutorial.js`.
+**Where in code.** New-Campaign button in `rts.html` + handler in `js/ui.js`; `MAPS[0]` in `js/maps_data.js`; `STEPS` + `prompt`/`choosePrompt` in `js/tutorial.js`.
 
 **Constraints & gotchas.** `[VERIFY]` read the real menu region before assuming button labels. `[MOBILE]` the combat-first step must be completable by touch (don't gate it on a desktop-only box-select — see T4-4). Keep the crawl skippable.
 
@@ -449,7 +449,7 @@ These come from `CLAUDE.md` / `AGENTS.md` and the engine's three-path simulation
 - [x] Implement reusing existing systems: **'survive'** (win when `state.time > cfg.surviveFor` while a designated building lives — reuse the wave spawner, don't grace-gate it); **'escort'** (win when a flagged unit reaches a target tile — reuse captive/abandoned tagging + `reclaimOutposts`' proximity loop); **'reachAndHold'** (hold a tile/building N seconds).
 - [x] Author 3–4 maps using the new verbs (timed defense of a captured Dark Tower; escort Biba's lattice convoy to the edge).
 
-**Where in code.** `checkWinLose` in `js/core.js:~170`; schema + maps in `js/config.js`; wave spawner in `js/ai.js`; proximity in the reclaim path.
+**Where in code.** `checkWinLose` in `js/core.js:~170`; schema in `js/config.js`/maps in `js/maps_data.js`; wave spawner in `js/ai.js`; proximity in the reclaim path.
 
 **Constraints & gotchas.** `[SAVE]` missing `winCondition` must default to `razeAll`. `[NET]` win checks run on host/solo; clients receive the result via snapshot — don't compute win client-side. Use the `starleft-mapmaker` skill for the new maps.
 
@@ -521,12 +521,12 @@ These come from `CLAUDE.md` / `AGENTS.md` and the engine's three-path simulation
 **Motivation.** Macro has zero tension because the home cluster funds a winning army and supply is a wall, not a choice. Making Funding scarce and the Satellite Office a real mid-game pivot adds the single decision the macro layer is missing ("expand to the contested node, or push?").
 
 **What to do.**
-- [x] Rebalance the `goldNodes` arrays in `MAPS` (`config.js`): cut home-node amounts ~40–50% so they fund roughly one army cycle; place 1–2 high-value nodes (~3000–4000) in contested mid-map no-man's-land (Ep XII's `{x:55,y:52,amt:4200}` already gestures at this — make it the norm).
+- [x] Rebalance the `goldNodes` arrays in `MAPS` (`maps_data.js`): cut home-node amounts ~40–50% so they fund roughly one army cycle; place 1–2 high-value nodes (~3000–4000) in contested mid-map no-man's-land (Ep XII's `{x:55,y:52,amt:4200}` already gestures at this — make it the norm).
 - [x] Give the Satellite Office `supply` (e.g. `supply:8`) + a fatter trickle so a forward branch is a real tradeoff vs. a fortress HQ; surface supply in the tutorial since it's currently untaught.
 - [x] Add an **income/sec readout** to the top bar (rolling delta of `eco.gold_collected` over ~3s — it already increments on deposit and trickle). One accumulator + one HUD span.
 - [x] Optional: smooth gather accrual (`u.carrying += rate*dt`) so interruption never loses a batch, and add a saturation cue on over-mined nodes.
 
-**Where in code.** `goldNodes` + Satellite Office `DEF` in `js/config.js`; supply summation/`recomputeSupply`; HUD in `js/ui.js` `refreshUI`; gather in `js/units.js:~641`.
+**Where in code.** `goldNodes` (per-map) in `js/maps_data.js`; Satellite Office `DEF` in `js/config.js`; supply summation/`recomputeSupply`; HUD in `js/ui.js` `refreshUI`; gather in `js/units.js:~641`.
 
 **Constraints & gotchas.** `[NET]` the income readout is a local HUD read; supply changes affect sim — keep deterministic. Re-balance carefully so early maps don't become unwinnable.
 
@@ -544,7 +544,7 @@ These come from `CLAUDE.md` / `AGENTS.md` and the engine's three-path simulation
 - [x] Use terrain + objectives to force specific units in specific missions: an A&O flyer wave (enemy `air` units) that requires anti-air (flyers already gate to `def.antiAir`); a turret-ringed vault that wants a sieged Auditor's splash. Surface as one-time hints via the existing `CONTEXTUAL` tip pipeline (add `auditor-siege`, `antiair-needed`).
 - [x] Make Sprint legible: draw a speed-streak/afterimage on actively-sprinting units (reuse the ninja afterimage `render.js:~1335–1344`); add a contextual trigger the first time the player is chased by 2+ enemies with combat units ("Double-tap past your turret to bait them into the crossfire"); add a "sprinting" label on the selection panel.
 
-**Where in code.** Enemy `air` waves via `js/ai.js` + maps in `js/config.js` (mapmaker skill); hints in `js/tutorial.js` (~164–175); afterimage in `js/render.js`.
+**Where in code.** Enemy `air` waves via `js/ai.js` + maps in `js/maps_data.js` (mapmaker skill); hints in `js/tutorial.js` (~164–175); afterimage in `js/render.js`.
 
 **Constraints & gotchas.** `[NET]` afterimage is cosmetic; the forced-unit maps add enemy air — verify anti-air targeting holds in co-op. `[PERF]` afterimages pooled/culled.
 
@@ -563,7 +563,7 @@ These come from `CLAUDE.md` / `AGENTS.md` and the engine's three-path simulation
 - [x] Add 2–3 mid-tier "lieutenant" duels using the existing villain framework (`cfg.villain` → boss arena, no enemy bases needed; `hpVpiScale`/phases/flee `villains.js:~42–65` scale to roster power for free): an A&O enforcer between Ep IX–X (the entity hunting Biba), a Dark-Tower guardian boss **as** the Ep XI climax (also satisfies T2-1 for that map).
 - [x] Promote REX into the mainline: change `returnTo`/sequencing so the campaign routes **through** him as the true finale.
 
-**Where in code.** `js/villains.js` (boss config); map sequencing in `js/config.js` (mapmaker skill).
+**Where in code.** `js/villains.js` (boss config); map sequencing in `js/maps_data.js` (mapmaker skill).
 
 **Constraints & gotchas.** `[NET]` boss AI runs on host/solo; verify the boss path replays deterministically in rollback (existing bosses already do). Don't break the career-limit/episode gating (see `docs/episodes-career-limit.md`).
 
@@ -582,7 +582,7 @@ These come from `CLAUDE.md` / `AGENTS.md` and the engine's three-path simulation
 - [x] Build 1–2 more corridor/infiltration maps in Arc 2 (a data-heist into an A&O backup vault that escorts a stolen-lattice unit **out** — combine with T2-1's escort verb; or a "rescue a captured veteran from your own memorial" beat tying the corridor to the resurrection plot). Mostly map authoring.
 - [x] Add a `cfg.events` array of `{atTime, action}` processed in `update()` right after the AI tick (`core.js:~61`): spawn a guard squad, raise aggression, drop a one-time toast + objective change, trigger a mini-boss. Authored pacing on top of the procedural AI.
 
-**Where in code.** Maps in `js/config.js` (mapmaker skill); event hook in `js/core.js` after the AI tick.
+**Where in code.** Maps in `js/maps_data.js` (mapmaker skill); event hook in `js/core.js` after the AI tick.
 
 **Constraints & gotchas.** `[NET]` process events on host/solo only; clients receive results via snapshot (don't run the event loop client-side). Keep actions deterministic.
 
@@ -598,12 +598,12 @@ These come from `CLAUDE.md` / `AGENTS.md` and the engine's three-path simulation
 **Motivation.** The difficulty curve plateaus (the code comments admit it without justifying it). A player who carried a strong roster should feel Episode XIII as the *hardest* fight, not a victory lap.
 
 **What to do.**
-- [x] Ramp Ep VIII–XIII aggression to a clean 1.2 → 1.4 → 1.6 → 1.8 → 2.0 → 2.2 in `config.js`.
+- [x] Ramp Ep VIII–XIII aggression to a clean 1.2 → 1.4 → 1.6 → 1.8 → 2.0 → 2.2 in `maps_data.js`.
 - [x] Bump `VET_MAXBONUS` per-arc using the **reserved `idx` param** in `vetScalingBonus` (`balance.js` — the comment says "idx is reserved for future per-arc tuning") so Arc-2 bases muster more defenders against a maxed roster; let the wave spawner read VPI to send larger/faster reinforcement waves (extend `vetMintFactor` `balance.js:~82` to also raise the wave-size cap).
 - [x] Standardize `graceTime` to a documented formula (larger maps → proportionally more grace).
 - [x] Author 1–2 deliberately economy-starved "down round" maps (pure config) so the single-resource economy matters as a difficulty knob.
 
-**Where in code.** Per-map `aggression`/`graceTime`/`goldNodes` in `js/config.js`; `VET_MAXBONUS`/`vetScalingBonus`/`vetMintFactor` in `js/balance.js`; wave cap in `js/ai.js`.
+**Where in code.** Per-map `aggression`/`graceTime`/`goldNodes` in `js/maps_data.js`; `VET_MAXBONUS`/`vetScalingBonus`/`vetMintFactor` in `js/balance.js`; wave cap in `js/ai.js`.
 
 **Constraints & gotchas.** Avoid continuous rescaling (degenerate stalling + co-op/rollback complexity) — raise headroom at spawn instead. Re-verify each Arc-2 map is still winnable.
 
@@ -884,7 +884,7 @@ These come from `CLAUDE.md` / `AGENTS.md` and the engine's three-path simulation
 - [x] Add an "Open Games" public lobby (reuse the open-room beacon in `lobby.js`/`mp-ui.js`).
 - [x] (Low priority, XL) Replays via the rollback input log (`rollback-input.js`).
 
-**Where in code.** `js/net/mp.js`, `js/net/commands.js`, `js/net/sync.js`, `js/net/lobby.js`; PvP maps in `js/config.js`.
+**Where in code.** `js/net/mp.js`, `js/net/commands.js`, `js/net/sync.js`, `js/net/lobby.js`; PvP maps in `js/maps_data.js`.
 
 **Constraints & gotchas.** `[NET]` the hardest path — PvP needs strict authority/anti-cheat thinking the co-op model doesn't; verify determinism and snapshot packing for two hostile human factions. `[SAVE]` PvP shouldn't touch the campaign save.
 

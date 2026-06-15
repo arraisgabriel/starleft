@@ -15,7 +15,8 @@ This file is repo-specific context for coding agents. Keep it current when the a
 ## Main Runtime Flow
 
 - `rts.html` defines the canvas, HUD, menus, multiplayer lobby, save/load UI, roster/events screens, intro crawl, and script includes.
-- `js/config.js` defines constants, canvas refs, terrain/biome constants, unit/building definitions in `DEF`, and campaign maps in `MAPS`.
+- `js/config.js` defines constants, canvas refs, terrain/biome constants, and unit/building definitions in `DEF`.
+- `js/maps_data.js` holds the campaign maps (`MAPS` array) — extracted from config.js (loaded right after it) so the map editor can rewrite this file in isolation. `js/map_paint.js` defines the per-tile `cfg.paint` terrain-override codec applied by `newMap`.
 - `js/state.js` defines global game/session state, deterministic RNG helpers, multiplayer role globals, and economy helpers.
 - `js/map.js` creates maps with `newMap(idx)`: scales map config, generates terrain/biomes, builds passability grids, places resources, player/enemy bases, co-op starts, captives, outposts, and entities.
 - `js/main.js` registers input listeners, wires UI buttons, starts menu features, and runs the `requestAnimationFrame` loop.
@@ -87,7 +88,7 @@ This file is repo-specific context for coding agents. Keep it current when the a
 
 ## Common Edit Targets
 
-- Unit/building stats, costs, names, flavor, map definitions: `js/config.js`.
+- Unit/building stats, costs, names, flavor: `js/config.js`. Map definitions (`MAPS`): `js/maps_data.js` (per-tile terrain overrides: `js/map_paint.js`).
 - New terrain/map-generation behavior: `js/map.js`.
 - Unit behavior, combat, gathering, building, production, pathfinding: `js/units.js`.
 - Overall per-frame simulation sequencing: `js/core.js`.

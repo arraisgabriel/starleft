@@ -9,7 +9,7 @@ description: >-
   crawl, mission briefing, or objective, or rebalancing/renumbering the campaign sequence. Treat
   references to the campaign, episodes, missions, quarters, battlefields, chapters, or its enemy
   factions (DISRUPTR INC., MEGACORP, A&O, THE BOARD, …) as STARLEFT even when the game isn't named.
-  This skill knows the map schema in js/config.js, the procedural generator, the career/dossier lore
+  This skill knows the map schema in js/maps_data.js (the MAPS array, extracted from js/config.js), the procedural generator, the career/dossier lore
   system, the campaign's moral-descent arc, and the TTS pipeline that voices each chapter's opening
   crawl. Reach for it before hand-editing the MAPS array, so
   the new map fits the schema, validates, and lands on the right story beat. Skip only non-campaign
@@ -42,7 +42,7 @@ Read these at the start of any mapmaking task so you don't re-derive the world f
   escalation table, feature-placement guidance, and a full worked example.
 
 Then read the live source so you're matching reality, not a summary:
-- `js/config.js` — the `MAPS` array (the maps you'll be inserting into) and the unit/building `DEF`.
+- `js/maps_data.js` — the `MAPS` array (the maps you'll be inserting into). `js/config.js` — the unit/building `DEF` and terrain/biome constants the maps are authored against.
 - Skim `js/map.js` only if you need to understand how a field is consumed by the generator.
 
 ## The phases
@@ -52,7 +52,7 @@ Work through these in order. Each one ends with something concrete the user can 
 ### Phase 1 — Read the campaign, then place the map
 
 You cannot write a coherent chapter without reading the book. Read every map's `crawl` and
-`objective` in `js/config.js` so you hold the whole arc in mind, and skim the arc summary in the
+`objective` in `js/maps_data.js` so you hold the whole arc in mind, and skim the arc summary in the
 world bible.
 
 Then settle **where** the new map goes, because that decision drives everything downstream:
@@ -129,9 +129,9 @@ player→enemy distances, so you can catch an enemy crammed in a corner, gold st
 a start that's too exposed — *before* running the full generator. (Add the map to `MAPS` first, even
 as a draft, since the previewer reads the live array.)
 
-### Phase 5 — Insert into config.js and renumber
+### Phase 5 — Insert into maps_data.js and renumber
 
-Edit `js/config.js` to place the new object in `MAPS` at the correct **array position = play
+Edit `js/maps_data.js` to place the new object in `MAPS` at the correct **array position = play
 order**. If you inserted rather than appended, renumber every subsequent map so the campaign stays
 sequential:
 - `name` Roman numeral (`'VIII — ...'`),

@@ -149,6 +149,29 @@ function dropFeaturesAt(state, cells){
   state.features = state.features.filter(f=>!kill.has(f));
 }
 
+// Flood from the player start; for any target tile (gold node / base) not reachable over state.blocked,
+// carve a thin straight land bridge to the mainland (T_DIRT, unblock, re-skin water/mountain biome) and
+// drop any feature the bridge tunnels through. Deterministic. Extracted from newMap so it can ALSO re-run
+// after paint overrides — a painted barrier can never strand an objective. `targets` = [{x,y}] post-scale.
+function carveBridgesToTargets(state, targets, landBiome){
+  const W=state.W, H=state.H, B=state.blocked, tiles=state.tiles, biome=state.biome;
+  const sx=state.cfg.player.x, sy=state.cfg.player.y, seen=new Uint8Array(W*H), st=[[sx,sy]];
+  const carved=new Set();             // feature-base cells a bridge tunnels through → drop those features
+  seen[sy*W+sx]=1;
+  while(st.length){ const [x,y]=st.pop();
+    for(const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1]]){ const nx=x+dx,ny=y+dy;
+      if(nx<0||ny<0||nx>=W||ny>=H) continue; const k=ny*W+nx; if(seen[k]||B[k]) continue; seen[k]=1; st.push([nx,ny]); } }
+  for(const g of targets){
+    if(!g || seen[g.y*W+g.x]) continue;
+    let x=g.x,y=g.y,guard=0;
+    while(!seen[y*W+x] && guard++<W+H){
+      const k=y*W+x; if(B[k]){ if(state.feat[k]===2) carved.add(k); B[k]=0; tiles[k]=T_DIRT; if(biome[k]===B_WATER||biome[k]===B_MOUNTAIN) biome[k]=landBiome; }
+      if(Math.abs(sx-x)>=Math.abs(sy-y)) x+=Math.sign(sx-x); else y+=Math.sign(sy-y);
+    }
+  }
+  dropFeaturesAt(state, carved);      // clear any feature the bridge cut through (rare path)
+}
+
 // Stamp a funding node's 3x3 footprint into the topography masks so it occupies 9 slots
 // exactly like a tree/rock feature: the bottom FEAT_BLOCK_FROM rows block, the upper rows
 // are passable walk-under, and the center row stays passable so Interns can still reach it.
@@ -409,32 +432,25 @@ function newMap(idx){
   // build blocked grid from terrain + feature bases
   for(let i=0;i<W*H;i++) state.blocked[i] = baseBlocked(state,i);
 
-  // guarantee every gold node is reachable from the player's start — if a sea or
-  // range happened to wall one off, carve a thin land bridge to the mainland.
-  {
-    const B=state.blocked, sx=cfg.player.x, sy=cfg.player.y, seen=new Uint8Array(W*H), st=[[sx,sy]];
-    const carved=new Set();             // feature-base cells a bridge tunnels through → drop those features
-    seen[sy*W+sx]=1;
-    while(st.length){ const [x,y]=st.pop();
-      for(const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1]]){ const nx=x+dx,ny=y+dy;
-        if(nx<0||ny<0||nx>=W||ny>=H) continue; const k=ny*W+nx; if(seen[k]||B[k]) continue; seen[k]=1; st.push([nx,ny]); } }
-    for(const g of cfg.goldNodes.concat(bases)){
-      if(seen[g.y*W+g.x]) continue;
-      let x=g.x,y=g.y,guard=0;
-      while(!seen[y*W+x] && guard++<W+H){
-        const k=y*W+x; if(B[k]){ if(state.feat[k]===2) carved.add(k); B[k]=0; tiles[k]=T_DIRT; if(biome[k]===B_WATER||biome[k]===B_MOUNTAIN) biome[k]=landBiome; }
-        if(Math.abs(sx-x)>=Math.abs(sy-y)) x+=Math.sign(sx-x); else y+=Math.sign(sy-y);
-      }
-    }
-    dropFeaturesAt(state, carved);      // clear any feature the bridge cut through (rare path)
-  }
+  // guarantee every gold node + base is reachable from the player's start — if a sea or range
+  // walled one off, carve a thin land bridge to the mainland.
+  carveBridgesToTargets(state, cfg.goldNodes.concat(bases), landBiome);
 
   // final visual tidy: remove any strict single-tile biome orphans left by the
   // climate seams, cleared areas, or carved bridges (biome-only; passability set)
   despeckleBiome(biome, W, H);
 
+  // explicit per-tile PAINT overrides authored in the map editor (cfg.paint). Applied AFTER both
+  // despeckle passes so lone painted tiles survive, then the reachability carve re-runs so a painted
+  // barrier can't strand a gold node/base. Deterministic (direct assignment + fixed-seed rng).
+  // No-op when unset → fully backward compatible. (js/map_paint.js)
+  if(cfg.paint && typeof MAP_PAINT!=='undefined'){
+    MAP_PAINT.apply(state, cfg.paint, makeRng((cfg.seed||0)*1000+1973));
+    carveBridgesToTargets(state, cfg.goldNodes.concat(bases), landBiome);
+  }
+
   // distance-to-shore depth field for smooth (non-blocky) water/magma rendering + tide buffers
-  // (js/water.js). MUST run after ALL tiles[] water mutation (despeckle + bridge carve above).
+  // (js/water.js). MUST run after ALL tiles[] water mutation (despeckle + bridge carve + paint above).
   if(typeof buildWaterDepth==='function') buildWaterDepth(state);
 
   // big animated landmarks (megabuildings / mountains / volcanoes / ruins). Placed

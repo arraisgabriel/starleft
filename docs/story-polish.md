@@ -25,9 +25,9 @@ finale (`finale:true`).
 
 | Channel | File | TTS cost |
 |---|---|---|
-| Crawl `text:` (opening scroll) | `js/config.js` MAPS | **VOICED — editing = re-render** |
-| Crawl `summary:` (MDC briefing, on-screen) | `js/config.js` MAPS | **free** |
-| `objective:` (HUD line) | `js/config.js` MAPS | **free** |
+| Crawl `text:` (opening scroll) | `js/maps_data.js` MAPS | **VOICED — editing = re-render** |
+| Crawl `summary:` (MDC briefing, on-screen) | `js/maps_data.js` MAPS | **free** |
+| `objective:` (HUD line) | `js/maps_data.js` MAPS | **free** |
 | Unit/hero barks | `js/dialog_data.js` | free (text); a new clip is an *additive* render |
 | In-mission cutscene lines | `js/dialog_data.js` + `holdout.framing.cutscene` | free (text); clips additive |
 | News ticker (B.I.G. PAPA) | `js/ultra_news_data.js` + `js/lns.js` | **free** |
@@ -605,7 +605,7 @@ Today all tips are static. Select by campaign phase:
 
 ## Appendix A — Critical files (reference)
 
-- `js/config.js` — `MAPS`: crawls/summaries/objectives/quests; `holdout.framing.cutscene` wiring.
+- `js/maps_data.js` — `MAPS`: crawls/summaries/objectives/quests; `holdout.framing.cutscene` wiring.
 - `js/dialog_data.js` — `SELECT_LINES`, `HERO_SELECT_LINES` (`:421`), `LORE_SAY`, cutscene arrays (`:1164`, `:1181`).
 - `js/dialogs.js` — bark producers + selection refresh (where tier/duet/mentor logic hooks).
 - `js/cutscene.js` + `js/waves.js` — the sequencer + its only trigger (`holdoutTryCutscene`, `:146`).

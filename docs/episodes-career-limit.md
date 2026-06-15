@@ -10,7 +10,7 @@ Episode VIII currently allows **5 normal veteran units** to carry over into the 
 function vetCarryCountFor(idx){ return 2 + Math.floor(Math.max(0, idx-1)/2); }
 ```
 
-- Episode VIII is map index `7` in [`js/config.js`](/Users/gabriel.bussular/Workspace/starleft/js/config.js), so:
+- Episode VIII is map index `7` in [`js/maps_data.js`](/Users/gabriel.bussular/Workspace/starleft/js/maps_data.js), so:
 
 ```js
 vetCarryCountFor(7) === 5
@@ -24,13 +24,13 @@ vetCarryCountFor(7) === 5
 ## Where To Change It
 
 1. Edit [`js/career.js`](/Users/gabriel.bussular/Workspace/starleft/js/career.js) if you want to change the carry rule itself.
-2. Edit [`js/config.js`](/Users/gabriel.bussular/Workspace/starleft/js/config.js) if you want to reorder maps or change which episode index a mission uses.
+2. Edit [`js/maps_data.js`](/Users/gabriel.bussular/Workspace/starleft/js/maps_data.js) if you want to reorder maps or change which episode index a mission uses.
 3. Update [`js/ui.js`](/Users/gabriel.bussular/Workspace/starleft/js/ui.js) and [`js/net/mp.js`](/Users/gabriel.bussular/Workspace/starleft/js/net/mp.js) if you change the rule in a way that should stay in sync with the victory chooser or multiplayer host flow.
 
 ## How To Find The Relevant Code Quickly
 
 - Search for `vetCarryCountFor` to find the source of truth for the cap.
-- Search for `Episode VIII` in `js/config.js` to confirm the episode index and map entry.
+- Search for `Episode VIII` in `js/maps_data.js` to confirm the episode index and map entry.
 - Search for `setCarryover(` to see where the selected units are truncated before the next mission starts.
 
 ## Practical Change Examples

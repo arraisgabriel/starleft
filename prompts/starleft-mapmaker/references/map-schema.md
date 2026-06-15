@@ -1,6 +1,6 @@
 # STARLEFT — Map Schema & Cookbook
 
-Everything needed to write a valid `MAPS[]` entry in `js/config.js`. A map is **pure data**: you
+Everything needed to write a valid `MAPS[]` entry in `js/maps_data.js` (the `MAPS` array, extracted from `js/config.js`). A map is **pure data**: you
 define a skeleton, and `newMap()` (`js/map.js`) procedurally generates terrain from a seed, validates
 reachability, carves bridges to any stranded objective, places landmark megasprites, and spawns all
 entities. You never write tiles by hand.

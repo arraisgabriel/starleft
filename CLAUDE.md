@@ -17,7 +17,7 @@ There is no build, lint, or test command — nothing to compile and no automated
 python3 -m http.server 8000        # then open http://localhost:8000/rts.html
 ```
 
-- Open `rts.html` for the game; `hub-map-editor.html` is a standalone tool for editing `js/hub_map_data.js`.
+- Open `rts.html` for the game; `map-editor.html` is a standalone tool for editing **all** maps — the HUB (`js/hub_map_data.js`) and every campaign map (the `MAPS` array in `js/maps_data.js`, incl. per-tile terrain paint).
 - All runtime paths are **relative** so the game works from a GitHub Pages subpath — keep them relative.
 - **Verification is manual.** After gameplay changes, in a browser confirm: load a map, select units, issue move/attack/gather, place a building, train a unit, and (if touched) save/load and co-op. After render/layout changes, check both desktop and a narrow/mobile viewport — HUD height drives canvas viewport math.
 - Console helpers exist for quick checks (e.g. `mkUnit(G, 'worker', 'player', x, y); refreshUI();` spawns a unit at tile x,y). See `docs/`.
@@ -31,8 +31,10 @@ python3 -m http.server 8000        # then open http://localhost:8000/rts.html
 Per-frame flow: `main.js` runs the `requestAnimationFrame` loop → `core.js` (`update(G, dt)`) sequences one tick (production, unit AI, separation, fog, particles, water, dialogs, death cleanup, win/loss) → `render.js` draws the canvas → `ui.js` refreshes the DOM HUD.
 
 Key files (full list in `AGENTS.md`):
-- `js/config.js` — `TILE`, terrain/biome constants, `DEF` (unit/building stats), and the `MAPS` campaign array. Most stat/cost/map edits live here.
-- `js/map.js` — `newMap(idx)` procedural terrain/biome/passability/resource/base generation.
+- `js/config.js` — `TILE`, terrain/biome constants, and `DEF` (unit/building stats). Most stat/cost edits live here.
+- `js/maps_data.js` — the `MAPS` campaign array (terrain recipe, coords, crawl, quests per episode). Extracted from config.js so the map editor rewrites **only** this file. Most map edits live here.
+- `js/map_paint.js` — codec + `newMap` apply for the optional per-tile `cfg.paint` terrain-override layer authored in the map editor.
+- `js/map.js` — `newMap(idx)` procedural terrain/biome/passability/resource/base generation (applies `cfg.paint` after the despeckle passes).
 - `js/units.js` — pathfinding, command execution, movement/combat/gather/build, production, entity factories.
 - `js/input.js` — selection, commands, camera, control groups (listeners wired in `main.js`).
 - `js/render.js` — fog-of-war + all canvas drawing + minimap.
