@@ -112,7 +112,7 @@ function dispatchTap(e, opts){
 
   // healer focus-heal: with a healer selected, tapping a friendly UNIT mends it instead of
   // reselecting (⌘/Shift+tap above still aggregates selection — the escape hatch to select one).
-  const selHasHealer = G.selection.some(s=>!s.dead && !s.storedIn && s.owner==='player' && s.kind==='unit' && DEF[s.type] && DEF[s.type].heal>0);
+  const selHasHealer = G.selection.some(s=>!s.dead && !s.storedIn && s.owner==='player' && s.kind==='unit' && DEF[s.type] && (DEF[s.type].heal>0 || DEF[s.type].madHeal));
   if(friendlyFinished && ent.kind==='unit' && selHasHealer && !(G.selection.length===1 && G.selection[0]===ent)){
     netCommand(G, w.x, w.y, ent); return;
   }

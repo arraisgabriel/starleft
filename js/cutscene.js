@@ -11,8 +11,7 @@
 (function(){
   'use strict';
   const MIN_LINE=4.0, MAX_LINE=12.0;   // seconds: floor before a finished clip may advance; hard cap if it never reports
-  const CAM_EASE=2.4;                  // the cutscene zooms the camera to the game's ZOOM_MAX (max close-up on the speaker)
-  const CUT_START_DELAY=2.0;           // seconds to hold on the speaker (camera easing in) before the first line
+  const CUT_START_DELAY=2.0;           // seconds to hold on the speaker (already snapped to ZOOM_MAX) before the first line
   const SCENE_RATE=0.90;               // the speaker's HUB speech plays at 0.90× (10% slower); the caption follows the slowed clip
 
   function captionEl(){ return (typeof document!=='undefined') ? document.getElementById('cutsceneCaption') : null; }
@@ -42,6 +41,22 @@
     }
     return cs.speaker;
   }
+
+  // All the live ENTITIES taking part in the active cutscene — the default focus (cs.speaker, already
+  // an entity) plus every distinct per-line `speaker` (heroId) resolved the same way lineFocus does.
+  // De-duped by entity. Used by the camera (frame everyone) and by render.js (hide any sprite that
+  // would draw over a participant). Returns null when there's no cutscene / no one on the field.
+  function cutsceneParticipants(state){
+    const cs=state && state.flashCutscene; if(!cs) return null;
+    const ents=state.entities, out=[], seen=new Set();
+    const add=e=>{ if(e && e.kind==='unit' && !e.dead && !e.storedIn && !seen.has(e)){ seen.add(e); out.push(e); } };
+    add(cs.speaker);
+    const ids=new Set();
+    for(const ln of cs.lines) if(ln && ln.speaker) ids.add(ln.speaker);
+    for(const id of ids) add(ents && ents.find(x=>x.heroId===id && !x.dead && !x.storedIn));
+    return out.length ? out : null;
+  }
+  window.cutsceneParticipants=cutsceneParticipants;
 
   function endFlashCutscene(state){
     if(!state) return;
@@ -92,16 +107,24 @@
   window.updateFlashCutscene=function(state, dt){
     const cs=state && state.flashCutscene; if(!cs) return;
     cs.t+=dt;
-    // ease camera onto the CURRENT line's speaker + zoom in for the close-up (follows a two-person exchange)
-    const sp=lineFocus(state, cs);
-    if(sp && !sp.dead && typeof viewW==='function'){
-      const k=Math.min(1, CAM_EASE*dt);
-      const zt=(typeof ZOOM_MAX!=='undefined'?ZOOM_MAX:2.0);   // ease all the way to the maximum zoom (closest on the speaker)
-      state.zoom += (zt-(state.zoom||1))*k;
-      const vw=viewW()/state.zoom, vh=viewH()/state.zoom;
-      state.camX += ((sp.x - vw/2) - state.camX)*k;
-      state.camY += ((sp.y - vh/2) - state.camY)*k;
-      if(typeof clampCam==='function') clampCam(state);
+    // ABRUPT CUT (no easing): snap the camera to ZOOM_MAX framing the scene's characters. If every
+    // participant fits at max zoom, frame them together (centered on their bounding box); if they're
+    // too far apart to share the frame, cut to whoever is speaking THIS line (lineFocus). Re-evaluated
+    // each frame, so a line change that crosses to a far speaker reads as a hard cut, not a pan.
+    if(typeof viewW==='function'){
+      const zt=(typeof ZOOM_MAX!=='undefined'?ZOOM_MAX:2.0);
+      state.zoom=zt;
+      const vw=viewW()/zt, vh=viewH()/zt;
+      const parts=cutsceneParticipants(state);
+      const sp=lineFocus(state, cs);
+      let cx, cy;
+      if(parts && parts.length>1){
+        let a=Infinity,b=-Infinity,c=Infinity,d=-Infinity;
+        for(const p of parts){ if(p.x<a)a=p.x; if(p.x>b)b=p.x; if(p.y<c)c=p.y; if(p.y>d)d=p.y; }
+        if((b-a)<=vw*0.82 && (d-c)<=vh*0.82){ cx=(a+b)/2; cy=(c+d)/2; }   // all fit at max zoom → frame together
+      }
+      if(cx==null){ const f=(sp && !sp.dead)?sp:(parts&&parts[0]); if(f){ cx=f.x; cy=f.y; } }   // else cut to the speaker
+      if(cx!=null){ state.camX=cx-vw/2; state.camY=cy-vh/2; if(typeof clampCam==='function') clampCam(state); }
     }
     // opening hold: keep the camera on the speaker for CUT_START_DELAY, THEN begin the first line (showLine resets cs.t)
     if(!cs.started){ if(cs.t>=CUT_START_DELAY){ cs.started=true; showLine(cs); } return; }

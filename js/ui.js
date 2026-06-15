@@ -93,9 +93,12 @@ function refreshUI(){
       let madSt='';
       if(e.owner==='player' && typeof madThreshold==='function'){
         const thr=madThreshold(e);
-        if(thr>0){ const fr=Math.min(1,(e.madosis||0)/thr);
+        if(thr>0){ const me=(typeof madEffective==='function')?madEffective(e):(e.madosis||0);   // EFFECTIVE: field relief (Mindfulness Facilitator) visibly suppresses the readout
+          const fr=Math.min(1,me/thr);
           const col=(typeof madColor==='function')?madColor(fr):(fr>0.85?'#ff5b6b':fr>0.6?'#ffb13f':'#b08cff');
-          madSt=`<span class="st" style="color:${col}" title="Madosis — trauma vs. breaking point">🧠 ${Math.round(e.madosis||0)}/${Math.round(thr)}</span>`; }
+          const calmed=(typeof madReliefActive==='function') && madReliefActive(e)>0.5;
+          const ttl=calmed?'Madosis — temporarily calmed (wears off; lost on extraction)':'Madosis — trauma vs. breaking point';
+          madSt=`<span class="st" style="color:${col}" title="${ttl}">🧠 ${Math.round(me)}/${Math.round(thr)}</span>`; }
       }
       // T2-4: surface the counter axis — armor shrugs small-arms, pierce ignores armor
       let counterSt='';
@@ -691,7 +694,7 @@ function dossierTick(){
     const hpV=body.querySelector('.dcard-hp .dcard-bar-val'); if(hpV) hpV.textContent=(hp|0)+' / '+(maxHp|0);
     // Madosis — accumulated points vs the unit's effective break threshold (0 = no mind to break yet).
     const thr=(typeof madThreshold==='function')?madThreshold(u):(u.sanityThreshold||0);
-    const mad=u.madosis||0, madFrac=thr>0?Math.max(0,Math.min(1,mad/thr)):0;
+    const mad=(typeof madEffective==='function')?madEffective(u):(u.madosis||0), madFrac=thr>0?Math.max(0,Math.min(1,mad/thr)):0;   // EFFECTIVE: reflects active field relief
     const madBar=body.querySelector('.dcard-mad');
     const madI=body.querySelector('.dcard-mad>i'); if(madI) madI.style.width=(madFrac*100)+'%';
     const madV=body.querySelector('.dcard-mad .dcard-bar-val'); if(madV) madV.textContent=thr>0?(Math.round(mad)+' / '+Math.round(thr)):'—';
@@ -831,7 +834,7 @@ function hubMenuUnitCard(u, opts){
   // MADOSIS: a compact purple sanity bar under the name/type, once a unit can break (has a threshold).
   const _thr=(typeof madThreshold==='function')?madThreshold(u):(u.sanityThreshold||0);
   if(_thr>0){
-    const mad=u.madosis||0, frac=Math.max(0,Math.min(1, mad/_thr)), over=mad>=_thr;
+    const mad=(typeof madEffective==='function')?madEffective(u):(u.madosis||0), frac=Math.max(0,Math.min(1, mad/_thr)), over=mad>=_thr;   // EFFECTIVE: reflects active field relief
     const bar=document.createElement('div');
     bar.style.cssText='position:relative;width:86%;height:7px;margin:3px auto 1px;background:rgba(0,0,0,.5);border:1px solid #5a2f3a;border-radius:4px;overflow:hidden';
     bar.title='Madosis '+Math.round(mad)+' / '+Math.round(_thr)+(u.scarred?' · scarred':'');

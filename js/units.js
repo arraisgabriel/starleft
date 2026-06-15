@@ -244,13 +244,15 @@ function commandUnits(state, wx, wy, target){
   // then reverts to auto-heal once it is full (see updateUnit's healunit handler). Non-healers
   // in the selection escort to the target. HQ/buildings/mad-dogs/captives are handled above.
   if(target && !_pvpFoe && target.owner==='player' && target.kind==='unit' && !target.storedIn && !target.madDog){
-    const healers = units.filter(u=> u!==target && DEF[u.type] && DEF[u.type].heal>0);
+    const healers = units.filter(u=> u!==target && DEF[u.type] && (DEF[u.type].heal>0 || DEF[u.type].madHeal));
     if(healers.length){
       healers.forEach(u=>{ resetMotion(u); u.sprinting=false; u.cmd={type:'healunit', target}; u.state='heal'; u._toHeal=false; });
       units.filter(u=> healers.indexOf(u)<0).forEach((u,i)=>{ resetMotion(u); issueMove(state,u, target.x+((i%3)-1)*24, target.y+26); });
       spawnRing(target.x,target.y,'#8effb0');
       const nm=(DEF[target.type]&&DEF[target.type].name)||'ally';
-      toast(healers.length===1 ? ('Healer mending '+nm) : (healers.length+' healers mending '+nm));
+      // Mindfulness Facilitators "calm" the mind (madosis); HP-healers "mend" the body. Pick the verb by what's selected.
+      const verb = healers.every(u=> DEF[u.type] && DEF[u.type].madHeal && !(DEF[u.type].heal>0)) ? 'calming' : 'mending';
+      toast(healers.length===1 ? ('Healer '+verb+' '+nm) : (healers.length+' healers '+verb+' '+nm));
       return;
     }
     // no healer selected → fall through to the normal move handler (squad escorts to the ally)
@@ -802,9 +804,17 @@ function updateUnit(state,u,dt){
     const frac=FR.frac||0.30, tickSec=FR.tickSec||2, ratePerTick=FR.ratePerTick||0.01, dur=FR.durationSec||300;
     const eff=(o)=> (typeof madEffective==='function')?madEffective(o):(o.madosis||0);
     const capLeft=()=> (u._madHealBase||0)*frac - (u._madHealAdded||0);
+    // a player can DIRECT the channel: right-clicking an ally issues a 'healunit' cmd (input → commandUnits).
+    // An explicit, still-frayed target OVERRIDES auto-acquire (and bypasses the "already calmed" skip, so a
+    // commanded unit can be tended continuously down toward calm); a fully-calm or gone target drops the
+    // order and reverts to auto-triage.
+    const forced = (cmd && cmd.type==='healunit' && cmd.target && !cmd.target.dead && !cmd.target.storedIn
+                    && cmd.target.owner===u.owner && cmd.target!==u && eff(cmd.target)>1e-4) ? cmd.target : null;
+    if(cmd && cmd.type==='healunit' && !forced) cmd=u.cmd=null;   // commanded target calmed/gone → release the order
     let t=u._madHealTarget;
-    const lockOk = t && !t.dead && !t.storedIn && t.owner===u.owner && eff(t)>1e-4 && capLeft()>1e-6;
-    if(!lockOk){
+    const lockOk = !forced && t && !t.dead && !t.storedIn && t.owner===u.owner && eff(t)>1e-4 && capLeft()>1e-6;
+    if(forced && t!==forced){ t=u._madHealTarget=forced; u._madHealBase=eff(forced); u._madHealAdded=0; u._madHealTick=0; }
+    else if(!lockOk && !forced){
       // acquire the most-frayed ally NOT already relieved, within sight (deterministic; dist breaks ties)
       u._madHealTarget=null; u._madHealAdded=0; u._madHealBase=0; u._madHealTick=0;
       const R2=(u.sight*TILE)**2; let best=null,bm=0,bd=Infinity;
@@ -826,7 +836,8 @@ function updateUnit(state,u,dt){
           u._madHealTick-=tickSec;
           const room=(t.madosis||0)-(t.madRelief||0);                       // can't suppress below 0 effective
           const add=Math.max(0, Math.min((u._madHealBase||0)*ratePerTick, capLeft(), room));
-          if(add>0){ t.madRelief=(t.madRelief||0)+add; t.madReliefT=dur; u._madHealAdded=(u._madHealAdded||0)+add; }
+          if(add>0){ t.madRelief=(t.madRelief||0)+add; t.madReliefT=dur; u._madHealAdded=(u._madHealAdded||0)+add;
+            if(!window._rbReplaying && typeof spawnFloater==='function') spawnFloater(state,t,add,'calm'); }  // visible purple relief tick (merges into one rising −N)
           if(capLeft()<=1e-6 || room-add<=1e-6) u._madHealTarget=null;      // engagement done → release, move on
         }
       } else { if(!u._toHeal||(u._healRepath||0)<=0){ issueMoveKeepCmd(state,u,t.x,t.y); u._toHeal=true; u._healRepath=0.5; } u._healRepath-=dt; followPath(state,u,dt); }

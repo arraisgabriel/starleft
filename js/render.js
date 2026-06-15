@@ -245,6 +245,31 @@ function drawHealBeam(state, h, t, ox, oy){
   ctx.restore(); ctx.globalAlpha=1;
 }
 
+// Drawn WORLD-px sprite box of a depth entry that is a PROP (building / topography feature / mega
+// landmark), or null for anything else (units, echoes, NPCs, goldmines). Used to detect which sprites
+// would draw over a cutscene participant so they can be hidden for the cutscene's duration. Mirrors
+// each draw path's box math: drawBuilding (incl. the Dark Tower's 'ao' art — buildingDrawBox without a
+// sprite would fall back to the SHORT footprint box and miss a unit standing north of it), drawFeature,
+// and drawOneMega — all bottom-anchored on the footprint ground line.
+function csPropBox(state, d){
+  if(d.b){
+    const e=d.b, isTower=e.type==='darktower';
+    const ao=(typeof aoSide==='function') && aoSide(state, e.owner);
+    const spr=buildingSprite(e.type, e.owner, (ao||isTower)?'ao':null);
+    return buildingDrawBox(e, spr);
+  }
+  if(d.f){
+    const f=d.f, fw=Math.max(1,(f.w||FEAT_SIZE)|0), fh=Math.max(1,(f.h||FEAT_SIZE)|0);
+    const bw=fw*TILE, bh=fh*TILE, ov=f.overhang||1.08, dw=bw*ov, dh=bh*ov*(f.heightScale||1);
+    return { x:f.tx*TILE+(bw-dw)/2, y:(f.ty+fh)*TILE-dh+2, w:dw, h:dh };
+  }
+  if(d.m){
+    const m=d.m, spr=(typeof megaSprite==='function') && megaSprite(m.cat, m.variant); if(!spr) return null;
+    const w=m.w*TILE, h=m.h*TILE, dw=w*(m.overhang||1.3), dh=dw*(spr.fh/spr.fw)*(m.heightScale||1);
+    return { x:m.tx*TILE+(w-dw)/2, y:m.ty*TILE+h-dh+2, w:dw, h:dh };
+  }
+  return null;
+}
 function render(state){
   // REX jump-stomp / missile impacts / death FX set state._shake; offset the camera with a quick
   // decaying rumble (cosmetic). Decays HERE (render rate) so it works on every map and on clients.
@@ -379,8 +404,30 @@ function render(state){
   }
   if(PERF.on){ PERF.lap('depthBuild'); PERF.mark('depthSort'); }
   depth.sort((a,b)=>a.y-b.y);
+  // ---- cutscene occluder suppression: while a flash cutscene plays, hide any building / landmark /
+  //      topography sprite that would draw OVER a participating character, so the scene's characters
+  //      are always visible (e.g. the Dark Tower vanishes while Biba & Nino speak at its base). A prop
+  //      occludes a participant when it sorts AFTER them (draws on top: p.sy < ground line) AND its
+  //      drawn box covers their body. Purely render-side, derived LIVE from state.flashCutscene each
+  //      frame onto the per-frame `depth` entries → the instant the cutscene ends the prop draws
+  //      normally again. No entity flags, nothing to restore, cannot leak. Solo off-hub only. ----
+  if(state.flashCutscene && !state.hub && typeof cutsceneParticipants==='function'){
+    const ps=cutsceneParticipants(state);
+    if(ps && ps.length){
+      const pts=ps.map(u=>{ const vh=unitDrawH(u); return { x:u.x, y:u.y-vh*0.35, sy:u.y }; });
+      for(const d of depth){
+        if(!(d.b||d.f||d.m)) continue;
+        const bx=csPropBox(state, d); if(!bx) continue;
+        const gy=bx.y+bx.h;
+        for(const p of pts){
+          if(p.sy<gy && p.x>=bx.x && p.x<=bx.x+bx.w && p.y>=bx.y && p.y<=bx.y+bx.h){ d._csHide=true; break; }
+        }
+      }
+    }
+  }
   if(PERF.on){ PERF.lap('depthSort'); PERF.mark('depthDraw'); }
   for(const d of depth){
+    if(d._csHide) continue;                            // cutscene: this sprite would cover a participant → hide it
     if(d.b) drawBuilding(state, d.b, ox,oy, d.dim);
     else if(d.m) drawOneMega(state, d.m, ox,oy, x0,y0,x1,y1);
     else if(d.f) drawFeature(state, d.f, ox,oy, d.dim);
@@ -396,7 +443,7 @@ function render(state){
   {
     let occ=null;
     for(const d of depth){
-      if(!d.b || d.b.hubSpriteVisual || d.b.hubMegaVisual) continue;
+      if(!d.b || d._csHide || d.b.hubSpriteVisual || d.b.hubMegaVisual) continue;   // _csHide: tower already suppressed for the cutscene
       const bb=buildingDrawBox(d.b);
       if(bb.w<=d.b.w*TILE) continue;                       // footprint fallback → no spill
       (occ||(occ=[])).push({x:bb.x, y:bb.y, w:bb.w, h:bb.h, gy:(d.b.ty+d.b.h)*TILE});
@@ -1833,7 +1880,7 @@ let rings=[], smokes=[], slashes=[], missiles=[], explosions=[], shockwaves=[];
    host/solo (gated !_rbReplaying) and from snapshot hp-deltas on co-op clients (js/net/sync.js). ---- */
 let floaters=[];
 const FLOATER_CAP=24, FLOATER_LIFE=0.8;
-function spawnFloater(state, tgt, amt, kind){   // kind: 'dmg' | 'crit' (killing blow) | 'heal'
+function spawnFloater(state, tgt, amt, kind){   // kind: 'dmg' | 'crit' (killing blow) | 'heal' | 'calm' (madosis relief)
   if(!state || state.hub || !tgt || amt<=0) return;
   const z=state.zoom||1, m=TILE*2;
   if(tgt.x<state.camX-m || tgt.x>state.camX+viewW()/z+m ||
@@ -1847,7 +1894,7 @@ function spawnFloater(state, tgt, amt, kind){   // kind: 'dmg' | 'crit' (killing
   const top = tgt.kind==='building' ? (tgt.h||2)*TILE*0.6 : ((typeof unitDrawH==='function')?unitDrawH(tgt)*0.8:(tgt.r||10)*2);
   floaters.push({tid:tgt.id, x:tgt.x+( (tgt.id||0)%5-2 )*2, y:tgt.y-top, amt, kind, t:0});
   // T0-3: a NEW floater = a damage/heal event actually shown → pair it with sound (rate-limited in SFX)
-  if(typeof SFX!=='undefined'){ if(kind==='heal') SFX.heal(); else SFX.impact(); }
+  if(typeof SFX!=='undefined'){ if(kind==='heal') SFX.heal(); else if(kind!=='calm') SFX.impact(); }   // 'calm' relief is silent (channels every tick — no audio spam)
 }
 function drawFloaters(state, ox, oy){
   if(!floaters.length) return;
@@ -1862,8 +1909,8 @@ function drawFloaters(state, ox, oy){
     const size=(crit?13:10)*s;
     ctx.font=(crit?'bold ':'')+size.toFixed(1)+'px '+GAME_FONT;
     ctx.globalAlpha=Math.min(0.85,a)* (f.kind==='dmg'?0.75:1);
-    ctx.fillStyle = f.kind==='heal' ? '#7dffa8' : crit ? '#ffe9b0' : '#ffb09a';
-    ctx.fillText((f.kind==='heal'?'+':'−')+n, f.x+ox, f.y+oy - 16*p*s);
+    ctx.fillStyle = f.kind==='heal' ? '#7dffa8' : f.kind==='calm' ? '#c9a0ff' : crit ? '#ffe9b0' : '#ffb09a';
+    ctx.fillText((f.kind==='heal'?'+':'−')+n, f.x+ox, f.y+oy - 16*p*s);   // 'calm' shows −N (madosis going down) in purple
   }
   ctx.restore(); ctx.globalAlpha=1;
   floaters=floaters.filter(f=>f.t<FLOATER_LIFE);
