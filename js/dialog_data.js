@@ -81,6 +81,8 @@ const SELECT_LINES = {
     "Hacking their churn rate to zero!",
     "I 10x the body count, baby!",
     "Going viral. Bring the body bags!",
+    "Move fast, break things. The things are people.",
+    "My equity vests right after I die. Convenient.",
   ],
   ranger: [
     "My rate is $400. Per glance.",
@@ -118,6 +120,8 @@ const SELECT_LINES = {
     "Recommendation: cease existing.",
     "Per my findings, you're terminal.",
     "Restructuring your headcount. To zero.",
+    "Even dead hardware stays on billing.",
+    "You own a thing, you pay for it forever.",
   ],
   recruiter: [
     "We're like a family. The kind you flee.",
@@ -229,6 +233,8 @@ const SELECT_LINES = {
     "Regulation? I wrote the exemption first.",
     "Vote with me, or vanish quietly.",
     "I grease palms. Then I grease graves.",
+    "Every name you write down, someone upstream reads.",
+    "Nobody buys senators retail. I'd know.",
   ],
   foodtruck: [
     "Free cold brew. Refills are flammable.",
@@ -1190,3 +1196,183 @@ const EP11_ALTAR_LINES = [
   { id:'altar_08', speaker:'Biba', text:"Those names are ours, and I'm done letting A&O keep what it buries. It can't tell salvation from theft — neither can I. Hold the altar. I'll solder." },
 ];
 if(typeof window!=='undefined') window.EP11_ALTAR_LINES = EP11_ALTAR_LINES;
+
+/* ---- Episode-tiered hero barks (story-polish §6.1). The flat HERO_SELECT_LINES above stays the
+   DEFAULT tier (its voice clips are index-keyed → never reorder it). These tiers are NEW pools with
+   their OWN voice speaker keys (heroId+'_'+tier) so indices never collide. The picker in dialogs.js
+   (_heroPool/_heroTier) consults a tier by campaign progress; for Nino's post-rescue tiers it also
+   suppresses the now-anachronistic flat "dig her out" lines (NINO_RETIRE_WHEN_BIBA). Keep ≤~52 chars. */
+const HERO_TIER_LINES = {
+  Nino: {
+    rumor: [   // Eps VIII–IX: hunting the buried architect
+      "A&O buried the answer. I'm digging.",
+      "No architect, no cure. Find her.",
+      "There's a name under the sabotage. I'll get it.",
+      "Rumor says she's alive. And caged.",
+      "One more lead, then we bring them home.",
+      "Buried people leave a paper trail.",
+    ],
+    ally: [    // Eps X–XI: Biba rescued, the alliance formed
+      "You killed their machine. They caged you. Respect.",
+      "The cure was yours. The debt's ours.",
+      "I dig my hires out once. You're the once.",
+      "Architect's aboard. The wall has a way home.",
+      "You solder, I'll hold the door.",
+      "Two of us walked out of A&O. Make it hurt.",
+    ],
+    wall: [    // Eps XII–XIII: carrying every name out
+      "Every name out, or none of it mattered.",
+      "I wrote them on that wall. Reading some off.",
+      "A&O calls them inventory. I knew their kids.",
+      "Vesting cliff? Nobody zeroes my people.",
+      "Bought the first votes. Buying back the dead.",
+      "Hold the line. My list is long.",
+    ],
+  },
+  Biba: {
+    preAltar: [   // Eps X–XI before the altar reveal: oblique unease, never the android truth
+      "I was the cure. Then the cage. Ask which took.",
+      "Six siblings, one flood. Real? I can't tell.",
+      "They don't fire a machine that says no.",
+      "I built a door past dying. Then saw the price.",
+      "Hold still. Keeping you alive is my clean thing.",
+      "Some memories don't sit right in my hands.",
+    ],
+    postAltar: [  // Ep XI+ after the reveal (gated on storyFlags.altarSeen)
+      "Not the first one resurrected. First one free of it.",
+      "I built the way home. And the lie under it.",
+      "Salvation, theft — the chip can't tell. Nor can I.",
+      "Hold the altar. I'll solder them back myself.",
+      "A&O wrote me. Done letting it keep its dead.",
+      "Whatever I am, these names are ours.",
+    ],
+  },
+};
+if(typeof window!=='undefined') window.HERO_TIER_LINES = HERO_TIER_LINES;
+// flat-pool indices that read as anachronistic once Biba is aboard (the pre-rescue "dig her out" /
+// "rumor to a name: Biba" barks at HERO_SELECT_LINES.Nino[35] and [38]). Suppressed by the picker.
+const NINO_RETIRE_WHEN_BIBA = [35, 38];
+if(typeof window!=='undefined') window.NINO_RETIRE_WHEN_BIBA = NINO_RETIRE_WHEN_BIBA;
+
+/* ---- HERO_DUET_LINES (story-polish §6.2): two-hander barks that only fire when BOTH Nino & Biba
+   are alive on the field (~50% in dialogs.js _heroPool). Each line is self-contained (one speaker)
+   but implies the relationship, so the player learns they have history. Own voice key heroId+'_duet'. */
+const HERO_DUET_LINES = {
+  Nino: [
+    "Biba says back out. She never has.",
+    "Cure's ours. She wants it dead. We'll talk.",
+    "Nobody bought ME back, doc. Your move.",
+    "She makes my dead walk. I just owe them.",
+    "I open doors. She shuts the wrong ones.",
+  ],
+  Biba: [
+    "Healers don't quit. I keep telling Nino.",
+    "He bought senators. I unbuilt a god.",
+    "He says I can back out. He knows better.",
+    "The cure's not ours to keep. He'll learn.",
+    "I patch his people. He won't count them.",
+  ],
+};
+if(typeof window!=='undefined') window.HERO_DUET_LINES = HERO_DUET_LINES;
+
+/* ---- HERO_MENTOR_LINES (story-polish §6.3): a watching hero acknowledges a rank-and-file milestone
+   (first dossier at Lv2, or Director rank). Spoken by the on-field hero (career.js → sayHeroMentor).
+   Own voice key heroId+'_mentor'. */
+const HERO_MENTOR_LINES = {
+  Nino: [
+    "You've got a name now. Keep it off the wall.",
+    "Another hire I mean to keep. Don't prove me wrong.",
+    "Still breathing after all this. Buy yourself something.",
+  ],
+  Biba: [
+    "Big-sister rule: nobody gets left behind. Not again.",
+    "You're not on the wall today. Keep it that way.",
+    "I stitched a generation. You're easy. Stay up.",
+  ],
+};
+if(typeof window!=='undefined') window.HERO_MENTOR_LINES = HERO_MENTOR_LINES;
+
+/* ---- In-mission scripted cutscenes (story-polish §5.2), same shape as EP11_ALTAR_LINES
+   ({id,speaker,text}; clip → assets/audio/voice/scene/<id>.mp3, silent-safe). Triggered by the
+   generic map-cutscene tick (js/cutscene.js mapCutsceneTick): EP12/EP13 fire on reaching the
+   objective (cfg.reachCutscene); REX_PRELUDE fires at the finale start (cfg.introCutscene). Solo-only.
+   Each carries an oblique Voss seed (story-polish §3 B.3); speakers are present via carryover. ---- */
+const EP12_FARM_LINES = [
+  { id:'farm_00', speaker:'Biba', text:"Refrigerated bodies. Addressed, racked, waiting. But the minds aren't here." },
+  { id:'farm_01', speaker:'Nino', text:"Then where? We crossed six campuses for an empty warehouse?" },
+  { id:'farm_02', speaker:'Biba', text:"Upstream. On his servers. We're cracking a catalog, not a crypt." },
+  { id:'farm_03', speaker:'Nino', text:"'His.' You keep saying his." },
+  { id:'farm_04', speaker:'Biba', text:"There's a perpetual license on one account. No renewal. Somebody built himself an exit and billed everyone else for theirs." },
+];
+if(typeof window!=='undefined') window.EP12_FARM_LINES = EP12_FARM_LINES;
+
+const EP13_VAULT_LINES = [
+  { id:'vault_00', speaker:'Nino', text:"Every name on our wall is in these racks. Filed as 'delinquent.'" },
+  { id:'vault_01', speaker:'Biba', text:"We're not saving them. We're repossessing them. A&O's word. A&O's machine." },
+  { id:'vault_02', speaker:'Nino', text:"Then we steal them back and call it something else." },
+  { id:'vault_03', speaker:'Biba', text:"You can still only write one of them home. The rest stay data. Remember that when you choose." },
+  { id:'vault_04', speaker:'Nino', text:"Whoever scheduled this purge never signed it. Like he's somewhere we can't reach yet." },
+];
+if(typeof window!=='undefined') window.EP13_VAULT_LINES = EP13_VAULT_LINES;
+
+const REX_PRELUDE_LINES = [
+  { id:'rexpre_00', speaker:'Nino', text:"The vaults are empty. A&O stopped sending lawyers." },
+  { id:'rexpre_01', speaker:'Biba', text:"Because it sent a building. Five stories of foreclosure — and it's warm. Something's alive in there." },
+  { id:'rexpre_02', speaker:'Nino', text:"Bring everyone. Bring everything." },
+];
+if(typeof window!=='undefined') window.REX_PRELUDE_LINES = REX_PRELUDE_LINES;
+
+/* ---- Event-triggered hero banter (story-polish §5.3): a watching hero reacts to a battlefield
+   event. Cosmetic + local, throttled per kind in dialogs.js sayHeroEvent(). Voice key <hero>_<kind>.
+     grief — a veteran fell while a hero was on the field (lore.js recordFallen)
+     heal  — Biba pulled an ally back from <20% HP (units.js heal tick)
+     raze  — a rival HQ went down (units.js killEntity) ---- */
+const HERO_EVENT_LINES = {
+  grief: {
+    Nino: ["Another name. Another debt.", "Add them to the list. I'm collecting.", "I hired them. Now I carry them."],
+    Biba: ["Not this one. ...Keep moving.", "I couldn't reach them in time.", "One more I couldn't keep."],
+  },
+  heal: {
+    Biba: ["You're not on the wall today. Keep it.", "Back on your feet. Don't waste it.", "Stay with me. We're not done."],
+  },
+  raze: {
+    Nino: ["Acquihired. Next.", "That campus is a write-off now.", "One down. The board's still upstairs."],
+    Biba: ["One less factory for the dead.", "Good. Fewer of their machines.", "Tear it all down."],
+  },
+};
+if(typeof window!=='undefined') window.HERO_EVENT_LINES = HERO_EVENT_LINES;
+
+/* ---- Reborn-Cyborg voice (story-polish §7.2). The Wake gives back only 3, ever, one at a time, and
+   each comes back WRONG. A flat, shared pool (any reborn unit, one eerie 'reborn' voice key): fragmentary,
+   haunted, the dream broken. Selected in dialogs.js when u.reborn; also spoken once on hub-spawn. ---- */
+const SELECT_LINES_REBORN = [
+  "I remember the wall. I remember being on it.",
+  "You wrote me home. Home is colder than I left it.",
+  "My dream came back blank. Was there one?",
+  "Thank you. I think. I used to know how to mean it.",
+  "Nothing churns now. That's not the same as alive.",
+  "Half of me is solder. The half that remembers, mostly.",
+  "I died. The paperwork disagreed.",
+  "Don't grieve me twice. Once was the expensive one.",
+];
+if(typeof window!=='undefined') window.SELECT_LINES_REBORN = SELECT_LINES_REBORN;
+
+/* ---- REBORN_CHOICE_LINES (story-polish §7.2): a hero's reaction when a fallen vet is written back,
+   shown as a toast at hubWakeComplete (heroes aren't always live in the hub → text, not a bubble).
+   Keyed by the raised vet's dream status; hero attribution is baked into each line. ---- */
+const REBORN_CHOICE_LINES = {
+  dreamFulfilled: [
+    "Biba: They got their wish — then we dragged them back. I hope that's mercy.",
+    "Nino: They were finished. We un-finished them. My call.",
+  ],
+  dreamUnfulfilled: [
+    "Nino: Unfinished business. Maybe that's why the machine took.",
+    "Biba: They never got their wish. Now they get a second shift.",
+  ],
+  any: [
+    "Nino: One off the wall. Don't make me say how many are left.",
+    "Biba: They come back wrong. But they come back. I'll take wrong.",
+    "Nino: They come back. On my debt. I'll cover it.",
+  ],
+};
+if(typeof window!=='undefined') window.REBORN_CHOICE_LINES = REBORN_CHOICE_LINES;

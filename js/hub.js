@@ -99,6 +99,10 @@ function hubDefaultCampaign(){
     visit:0,
     gambled:false,
     lastReward:null,
+    // narrative gates (story-polish §6/§7). Legacy saves default these false via the deserialize merge.
+    // altarSeen: the Ep XI Biba↔Nino reveal has played (gates Biba's post-altar bark tier).
+    // perfectExtraction: last extraction lost zero veterans (arms the hub memorial-clearing beat).
+    storyFlags:{ altarSeen:false, perfectExtraction:false },
   };
 }
 function resetHubCampaign(){ CAMPAIGN = hubDefaultCampaign(); }
@@ -125,6 +129,8 @@ function deserializeHubCampaign(data){
     if(!Array.isArray(CAMPAIGN.reborn.done)) CAMPAIGN.reborn.done=[];
     // legacy-safe: saves predating the living-city NPCs load unminted (population mints on next hub entry)
     CAMPAIGN.npc = Object.assign({seed:0, byId:{}}, data.npc||{});
+    // legacy-safe: saves predating the narrative gates load with both flags false
+    CAMPAIGN.storyFlags = Object.assign({altarSeen:false, perfectExtraction:false}, data.storyFlags||{});
     if(!CAMPAIGN.npc.byId || typeof CAMPAIGN.npc.byId!=='object') CAMPAIGN.npc.byId={};
   }
 }
@@ -417,6 +423,14 @@ function enterHubFromCombat(state){
   } else {
     hubBuildRosterFromCombat(state);
     if(typeof captureHeroes==='function') captureHeroes(state);
+    // story-polish §7.2: a clean extraction — no veteran joined the wall this mission. Arc-2+ only
+    // (Nino/Biba are in the story by then); a hub beat names it. The flag tracks the latest extraction.
+    const clean = !state._vetLost;
+    if(CAMPAIGN.storyFlags) CAMPAIGN.storyFlags.perfectExtraction = clean;
+    if(clean && CAMPAIGN.nextMapIndex>=7 && typeof toast==='function'){
+      setTimeout(()=>{ try{ toast('Nino: Not one new name on the wall today.', 6500); }catch(e){} }, 1600);
+      setTimeout(()=>{ try{ toast("Biba: We all walked out. Savor it — it won't last.", 6500); }catch(e){} }, 3200);
+    }
   }
   CAMPAIGN.mode='hub'; CAMPAIGN.visit++; CAMPAIGN.gambled=false; CAMPAIGN.dispatch={mdcId:null, staged:[]};
   if(typeof hubSyncNpcs==='function') hubSyncNpcs();   // living city: mint/refresh the persistent NPC population for this visit
@@ -1989,7 +2003,7 @@ function hubWakeStart(fid){
   CAMPAIGN.reborn.sessions.push({ id:'rb_'+(HUB.nextId++), fid, type:f.type, stars:rebornLvlOf(f),
     lore:(typeof fallenDossierSnap==='function')?fallenDossierSnap(f):(f.lore||null),
     heroId:f.heroId||null, spriteType:f.spriteType||null, name:f.name||'A veteran',
-    sanityThreshold:f.sanityThreshold||0, xp:f.xp||0,
+    sanityThreshold:f.sanityThreshold||0, xp:f.xp||0, dreamDone:!!f.dreamDone,   // dreamDone → the Reborn reaction line (story-polish §7.2)
     hoursTotal:rebornHours(f), secElapsed:0, done:false, cost });
   f.reborn=true;   // dim the wall immediately + prevent a double-enqueue across a save
   if(typeof eventToast==='function') eventToast('⚡ <b>'+(f.name||'A veteran')+'</b> is fed into The Wake. The lightning takes them.', 9000);
@@ -2012,6 +2026,15 @@ function updateRebornProduction(dt){
     }
   }
 }
+// A hero's reaction to WHO was just written back (story-polish §7.2), keyed by dream status. Text only
+// (heroes aren't always live in the hub). Returns a "Hero: line" string or null.
+function rebornChoiceLine(ses){
+  if(typeof REBORN_CHOICE_LINES==='undefined') return null;
+  const k = (ses && ses.dreamDone===true) ? 'dreamFulfilled' : (ses && ses.dreamDone===false ? 'dreamUnfulfilled' : 'any');
+  let pool = (Math.random()<0.6 && REBORN_CHOICE_LINES[k] && REBORN_CHOICE_LINES[k].length) ? REBORN_CHOICE_LINES[k] : REBORN_CHOICE_LINES.any;
+  if(!pool || !pool.length) pool = REBORN_CHOICE_LINES.any;
+  return (pool && pool.length) ? pool[(Math.random()*pool.length)|0] : null;
+}
 // A write finishes: permanent record, add the Reborn to the roster, spawn it live if we're in the HUB.
 function hubWakeComplete(state, ses){
   if(!CAMPAIGN.reborn) CAMPAIGN.reborn={sessions:[],done:[]};
@@ -2028,6 +2051,14 @@ function hubWakeComplete(state, ses){
   CAMPAIGN.reborn.sessions=(CAMPAIGN.reborn.sessions||[]).filter(x=>x!==ses);
   if(state && state.hub) hubSpawnReborn(state, key);
   if(typeof toast==='function') toast('⚡ '+(ses.name||'A veteran')+' rises from The Wake — a Reborn Cyborg. Nothing came back whole.');
+  // story-polish §7.2: a hero names the cost of the choice (text; heroes aren't always live in the hub)
+  const choice = rebornChoiceLine(ses);
+  if(choice && typeof toast==='function') setTimeout(()=>{ try{ toast(choice, 7000); }catch(e){} }, 1300);
+  // the Reborn speaks its first haunted line, if it spawned live in the hub
+  if(state && state.hub && typeof pushDialog==='function' && typeof SELECT_LINES_REBORN!=='undefined' && SELECT_LINES_REBORN.length){
+    const u=(state.entities||[]).find(e=>e&&!e.dead&&e.kind==='unit'&&e.owner==='player'&&typeof hubUnitKey==='function'&&hubUnitKey(e)===key);
+    if(u) setTimeout(()=>{ try{ if(!u.dead) pushDialog(u, SELECT_LINES_REBORN[(Math.random()*SELECT_LINES_REBORN.length)|0], { type:'lore', tone:'neutral' }); }catch(e){} }, 2200);
+  }
 }
 // Spawn one Reborn roster member as a live unit near The Wake (in-HUB live completion). Idempotent by key.
 function hubSpawnReborn(state, key){

@@ -108,4 +108,35 @@
     // advance when the clip has finished (and the floor has elapsed) or the hard cap is hit
     if((cs.clipDone && cs.t>=MIN_LINE) || cs.t>=MAX_LINE) advanceFlashCutscene();
   };
+
+  /* Generic per-tick driver for MAP-level scripted cutscenes (story-polish §5). Solo-only; the sim is
+     frozen by main.js while a cutscene plays, so this only fires between cutscenes. One-shot per name.
+       cfg.introCutscene : 'NAME'                       → play once at mission start (state.time < 4s)
+       cfg.reachCutscene : { name, at:{x,y}, radius }   → play once when a player unit reaches the spot
+     If no named speaker is on the field, the beat is silently skipped (still marked done — no retry loop). */
+  function armByName(state, name){
+    const lines = (typeof window!=='undefined' && window[name]) || null;
+    if(!lines || !lines.length) return;
+    let focus=null;
+    for(const ln of lines){ if(!ln.speaker) continue; const e=state.entities.find(x=>x.heroId===ln.speaker && !x.dead && !x.storedIn); if(e){ focus=e; break; } }
+    if(focus) window.startFlashCutscene(state, focus, lines);
+  }
+  window.mapCutsceneTick=function(state){
+    if(!state || state.hub || state.over || state.flashCutscene) return;
+    if(typeof netRole!=='undefined' && netRole!=='solo') return;               // solo-only (co-op keeps toast framing)
+    if(typeof window!=='undefined' && window._rbReplaying) return;
+    const cfg=state.cfg; if(!cfg) return;
+    const played = state._csPlayed || (state._csPlayed={});                    // transient one-shot guard (per session)
+    const intro=cfg.introCutscene;
+    if(intro && !played[intro] && (state.time||0) < 4){ played[intro]=1; armByName(state, intro); return; }
+    const rc=cfg.reachCutscene;
+    if(rc && rc.name && rc.at && !played[rc.name]){
+      const T=(typeof TILE!=='undefined')?TILE:32, rad=((rc.radius||3))*T, ax=(rc.at.x+0.5)*T, ay=(rc.at.y+0.5)*T, r2=rad*rad;
+      for(const e of state.entities){
+        if(e.dead || e.owner!=='player' || e.kind!=='unit') continue;
+        const dx=e.x-ax, dy=e.y-ay;
+        if(dx*dx+dy*dy<=r2){ played[rc.name]=1; armByName(state, rc.name); return; }
+      }
+    }
+  };
 })();

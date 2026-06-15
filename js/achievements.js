@@ -55,6 +55,8 @@ const ACH = (function(){
       if(!window._rbReplaying){
         if(typeof eventToast==='function') eventToast(`🏆 <b>${a.icon} ${a.name}</b> — ${a.desc}`, 9000);
         else if(typeof toast==='function') toast('🏆 '+a.name, 6000);
+        // the world's ticker reacts to story milestones (story-polish §8.4); silent if the id is unmapped
+        if(typeof LNS!=='undefined' && LNS.ultraEvent) LNS.ultraEvent('achievement', { id:a.id });
       }
     }
     if(any) save();

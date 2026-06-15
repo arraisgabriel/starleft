@@ -12,6 +12,45 @@
    Template slots (resolved by buildNpcDossier's fill): {me} {full} {home} {rel} {vet}
    {vetFull} {prof} {poi} {condo}. */
 const NPC_LORE = {
+  // Ambient spoken lines (story-polish §8.2). NOT part of the versioned/indexed dossier pools —
+  // read fresh at speak-time, never stored on an NPC record — so this key is EXEMPT from the
+  // append-only/`versions` contract and may grow freely. Tokens per buildNpcDossier's fill.
+  // Category is chosen in npcAmbientLine() by NPC flags (mourning/reborn) and role (provider/ultra);
+  // `voss` is an Arc-2-only, oblique CEO seed (felt, never seen) — gated by progress in npcAmbientLine.
+  ambient: {
+    mourning: [   // a linked veteran fell — humanize the cost (fl & 1)
+      "{me} keeps {vet}'s comm unit charged. Nobody has told them it stopped answering.",
+      "They say grief takes weeks. {me} is still on the first one, and the door to {condo} stays shut.",
+      "The wake at {condo} is over. The grieving hasn't started. Neither have the flowers.",
+      "{me} still hasn't updated the family tree. Deleting {vet} is harder than adding them was.",
+    ],
+    reborn: [     // a linked veteran came back through The Wake (fl & 2)
+      "{me} opens the door for {vet} and can't name what came back wearing that face.",
+      "{vet} is home. {me} swears the smile sits a little wrong now.",
+      "They wrote {vet} back off the wall. {me} sets a plate and doesn't ask what it cost.",
+    ],
+    staff: [      // facility service providers — the machine grinding on
+      "{me} found a helmet in the parts bin at {poi}. A name was scratched inside. They didn't ask whose.",
+      "The intake queue at {poi} is longer than the coffee is hot. {me} stopped counting last quarter.",
+      "{me} runs {poi} on overtime now. The scorch marks come in faster than the paperwork.",
+    ],
+    commuter: [   // ULTRA HQ commuters — detached corporate dread
+      "{me} commutes two hours to update spreadsheets about other spreadsheets. The elevator is where the pretending stops.",
+      "{me} keeps a resignation letter in the desk drawer, updated every quarter, in case ULTRA ever asks.",
+      "Synergy tastes like rust on {me}'s tongue lately. The paycheck is still real, so {me} swallows it.",
+    ],
+    voss: [       // Arc-2 only, oblique: the ageless, unseen managing partner (story-polish §3 B.3)
+      "{me} swears the managing partner's office has been sealed since '87 — no birth, no death, no retirement on file.",
+      "{me} processed a perpetual license upstream once. 'Founder's, no renewal.' Nobody would say whose.",
+      "Word in the ULTRA elevators: A&O is shipping souls off-world now. They call it the Diaspora. {me} doesn't ask who boards first.",
+    ],
+    general: [    // relatives & friends — the war seen from home
+      "{me} came from {home}. Swears the wasteland was kinder. Probably lying, but quietly.",
+      "{me} waits on word from the front. The org chart keeps growing; the letters home don't.",
+      "{me} finally heard what 'disruption' means out west. {me} stopped clapping at the keynotes.",
+      "{me} lights a candle for {vet} every dispatch. The candles are getting expensive.",
+    ],
+  },
   professions: {
     // service-provider job titles, keyed by the POI kind they staff
     training: [

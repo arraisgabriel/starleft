@@ -92,6 +92,15 @@ const VOICE = (function(){
       const voice = SPEAKER_VOICE[speakerKey]; if(!voice) return;
       playClip(lorePath(voice, sayIdx));
     },
+    // Reborn barks: shared text spoken in the unit's OWN voice (story-polish §7.2). Like lore, clips are
+    // keyed by VOICE (barks/reborn_<voice>_<idx>), so a male Founder Mech reborn never speaks in a
+    // female voice. The reborn unit's type resolves the voice via SPEAKER_VOICE.
+    playReborn(speakerKey, idx){
+      if(!enabled || idx == null || typeof barkPath !== 'function') return;
+      const voice = SPEAKER_VOICE[speakerKey]; if(!voice) return;
+      if(!barkAllowed('reborn')) return;
+      playClip(barkPath('reborn_'+voice, idx));
+    },
     playCrawl(idx){
       this.stopCrawl();
       if(!enabled || typeof crawlPath !== 'function') return;

@@ -159,6 +159,8 @@ function holdoutTryCutscene(state){
   }
   if(!focus) return false;
   startFlashCutscene(state, focus, lines);
+  // narrative gate (story-polish §6): the Ep XI altar reveal has now played → Biba may speak post-altar
+  if(name==='EP11_ALTAR_LINES' && typeof CAMPAIGN!=='undefined' && CAMPAIGN && CAMPAIGN.storyFlags) CAMPAIGN.storyFlags.altarSeen=true;
   return true;
 }
 

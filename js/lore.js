@@ -235,6 +235,10 @@ function recordFallen(u){
     eventToast(`🕯 <b>${d.full}</b> has fallen — ${u.dreamDone?'their dream fulfilled':'dream unfulfilled: '+_loCap(d.dream)}.`, 10000);
   if(typeof fallenSceneMaybe==='function') fallenSceneMaybe(u);   // T1-1: brief solo memorial beat (gates live inside)
   if(typeof ACH!=='undefined' && !window._rbReplaying) ACH.fire('fallen',{count:fallenVets.length});   // T3-5
+  // story-polish §5.3: a watching hero marks the loss (cosmetic, throttled, skips on rollback)
+  if(typeof sayHeroEvent==='function' && !window._rbReplaying) sayHeroEvent('grief');
+  // story-polish §7.2: a vet joined the wall this mission → clears the clean-extraction beat at the hub
+  if(typeof G!=='undefined' && G) G._vetLost=true;
 }
 // ---- The Wake: stable identity + dossier reconstruction for fallen records ----
 // A stable id used to dedup resurrection across save/load + rollback. Prefer the frozen lore seed

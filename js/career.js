@@ -149,6 +149,9 @@ function promoteIfReady(u, state){
     }
     // in-world dialog: the unit speaks its freshest life-event in a box above its head (+ voice clip)
     if(last && last.say && typeof sayLoreEvent==='function') sayLoreEvent(u, last.say, last.tone, last.sayIdx);
+    // a watching hero acknowledges a milestone (story-polish §6.3): first dossier (Lv2) or Director rank
+    if(last && !u.hero && typeof sayHeroMentor==='function' && (u.lore.events.length<=1 || (u.stars||0)>=25) && Math.random()<0.6)
+      sayHeroMentor(u);
   }
 }
 

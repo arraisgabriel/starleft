@@ -50,6 +50,7 @@ var LNS = (function(){
 
   let realItems = [];                         // RSS [{title, link, ts, source}], deduped + sorted
   let ultraEvents = [];                       // session-only [{title, ts, source}], newest first
+  let ultraDreadFired = new Set();            // memorial-dread gates already pushed this session (story-polish §8.1)
   let loading  = true;
   let fetching = false;
   let lastFetchAt   = 0;
@@ -189,15 +190,29 @@ var LNS = (function(){
       const u=payload.unit||payload.u||null, name=payload.name||unitDisplayName(u);
       const tpl=chooseTemplate('unitDeath', (u&&u.id)||Date.now());
       pushUltra(expandTemplate(tpl, { name, unit:(DEF[u&&u.type]&&DEF[u.type].name)||payload.unitType||'unit', map:payload.map||((typeof G!=='undefined'&&G&&G.cfg&&G.cfg.name)||'the map') }));
+      // memorial-dread gates: as the wall grows, the world notices (story-polish §8.1). Once each per session.
+      if(typeof fallenVets!=='undefined' && Array.isArray(fallenVets) && d.memorialDread){
+        const n=fallenVets.length, gates=[6,10];
+        for(let gi=0; gi<gates.length; gi++){
+          if(n>=gates[gi] && !ultraDreadFired.has(gates[gi]) && d.memorialDread[gi]){ ultraDreadFired.add(gates[gi]); pushUltra(d.memorialDread[gi]); }
+        }
+      }
     } else if(kind==='heroLifeEvent'){
       const u=payload.unit||payload.u||null, name=payload.name||unitDisplayName(u);
       const tpl=chooseTemplate('heroLifeEvent', ((u&&u.id)||0)+((u&&u.stars)||0));
       pushUltra(expandTemplate(tpl, { name, unit:(DEF[u&&u.type]&&DEF[u.type].name)||payload.unitType||'unit' }));
+    } else if(kind==='dreamFulfilled'){
+      const u=payload.unit||payload.u||null, name=payload.name||unitDisplayName(u);
+      const tpl=chooseTemplate('dreamFulfilled', (u&&u.id)||0);
+      if(tpl) pushUltra(expandTemplate(tpl, { name, unit:(DEF[u&&u.type]&&DEF[u.type].name)||payload.unitType||'unit' }));
+    } else if(kind==='achievement'){
+      // ACH unlock → the world reacts (story-polish §8.4). Keyed by achievement id; silent if unmapped.
+      const line=d.achievement && payload.id && d.achievement[payload.id];
+      if(line) pushUltra(line);
     } else if(kind==='episodeReached'){
       const idx=payload.idx|0;
-      if(idx<=0) return;
-      const ep=d.episodes && d.episodes[idx-1];
-      if(ep) pushUltra(ep);
+      if(idx>0){ const ep=d.episodes && d.episodes[idx-1]; if(ep) pushUltra(ep); }                 // recap of the prior chapter
+      if(d.foreshadow && d.foreshadow[idx]) pushUltra(d.foreshadow[idx]);                           // forward seed for THIS chapter (story-polish §3/§8.1)
     }
   }
   function ultraItems(need){

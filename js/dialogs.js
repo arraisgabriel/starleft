@@ -32,28 +32,123 @@ function resetDialogs(){ _dialogs.length = 0; _lastSel.id = null; }
 /* ---------------- public producers ---------------- */
 function sayUnitSelected(u){
   if(!u || u.kind!=='unit' || u.owner!=='player') return;
-  // named heroes (Nino, Biba) speak from their OWN pool keyed by heroId; everyone else
-  // falls back to their unit type's pool.
-  const heroPool = (u.hero && u.heroId && typeof HERO_SELECT_LINES!=='undefined') ? HERO_SELECT_LINES[u.heroId] : null;
-  const usedHero = !!(heroPool && heroPool.length);
-  // T0-5/T1-6: a unit with a dossier sometimes speaks from its OWN backstory instead of the type
-  // pool (~30%) — text-only (templated lines have no voice clip), so the bark stays silent audio-wise.
-  if(!usedHero && u.lore && typeof DOSSIER_SELECT_LINES!=='undefined' && DOSSIER_SELECT_LINES.length
+
+  // reborn veterans (story-polish §7.2): one shared haunted pool, spoken in the unit's OWN voice
+  // (clips keyed by voice → barks/reborn_<voice>_<idx>, so a male Founder reborn isn't voiced female).
+  if(!u.hero && u.reborn && typeof SELECT_LINES_REBORN!=='undefined' && SELECT_LINES_REBORN.length){
+    const rl=_pickLine(u, SELECT_LINES_REBORN);
+    pushDialog(u, rl, { type:'select', tone:'neutral' });
+    if(typeof VOICE!=='undefined' && VOICE.playReborn) VOICE.playReborn(u.type, (u._lastLineIdx!=null)?u._lastLineIdx:SELECT_LINES_REBORN.indexOf(rl));
+    return;
+  }
+
+  // named heroes (Nino, Biba): episode-tiered / duet / flat pools (story-polish §6.1/§6.2).
+  if(u.hero && u.heroId){
+    const sel=_heroPool(u);
+    if(sel && sel.pool && sel.pool.length){
+      const line=_pickLine(u, sel.pool, sel.skip);
+      pushDialog(u, line, { type:'select', tone:'neutral' });
+      if(typeof VOICE!=='undefined') VOICE.playBark(sel.voiceKey, (u._lastLineIdx!=null)?u._lastLineIdx:sel.pool.indexOf(line));
+      return;
+    }
+  }
+
+  // T0-5/T1-6: a dossier'd non-hero sometimes speaks its OWN backstory (~30%, text-only fallback).
+  if(u.lore && typeof DOSSIER_SELECT_LINES!=='undefined' && DOSSIER_SELECT_LINES.length
      && typeof buildDossier==='function' && Math.random()<0.30){
     const d=buildDossier(u);
     pushDialog(u, d.fill(DOSSIER_SELECT_LINES[(Math.random()*DOSSIER_SELECT_LINES.length)|0]), { type:'select', tone:'neutral' });
     return;
   }
-  const pool = usedHero ? heroPool : ((typeof SELECT_LINES!=='undefined' && SELECT_LINES[u.type]) || null);
+  const pool = (typeof SELECT_LINES!=='undefined' && SELECT_LINES[u.type]) || null;
   if(!pool || !pool.length) return;
   const line = _pickLine(u, pool);
   pushDialog(u, line, { type:'select', tone:'neutral' });
-  // voice bark: the clip is keyed by the SPEAKER (heroId or unit type) and the line's index
-  if(typeof VOICE!=='undefined'){
-    const idx = (u._lastLineIdx!=null) ? u._lastLineIdx : pool.indexOf(line);
-    VOICE.playBark(usedHero ? u.heroId : u.type, idx);
-  }
+  if(typeof VOICE!=='undefined'){ const idx=(u._lastLineIdx!=null)?u._lastLineIdx:pool.indexOf(line); VOICE.playBark(u.type, idx); }
 }
+
+// resolve a hero's bark pool + voice key for THIS selection: duet > episode tier > flat (story-polish §6)
+function _heroPool(u){
+  if(typeof HERO_SELECT_LINES==='undefined') return null;
+  const flat=HERO_SELECT_LINES[u.heroId]; if(!flat || !flat.length) return null;
+  const tier=_heroTier(u.heroId);
+  // duet: both heroes alive on the field → ~50% a two-hander (own voice key)
+  if(typeof HERO_DUET_LINES!=='undefined' && HERO_DUET_LINES[u.heroId] && HERO_DUET_LINES[u.heroId].length
+     && _bothHeroesPresent() && Math.random()<0.5)
+    return { pool:HERO_DUET_LINES[u.heroId], voiceKey:u.heroId+'_duet' };
+  // episode tier: arc-appropriate pool, mixed with flat for variety (~55%)
+  if(tier && typeof HERO_TIER_LINES!=='undefined' && HERO_TIER_LINES[u.heroId] && HERO_TIER_LINES[u.heroId][tier]
+     && HERO_TIER_LINES[u.heroId][tier].length && Math.random()<0.55)
+    return { pool:HERO_TIER_LINES[u.heroId][tier], voiceKey:u.heroId+'_'+tier };
+  // flat default — once Biba is aboard, suppress Nino's anachronistic pre-rescue lines
+  if(u.heroId==='Nino' && (tier==='ally' || tier==='wall') && typeof NINO_RETIRE_WHEN_BIBA!=='undefined')
+    return { pool:flat, voiceKey:'Nino', skip:NINO_RETIRE_WHEN_BIBA };
+  return { pool:flat, voiceKey:u.heroId };
+}
+
+// the campaign tier for a hero's barks, from the live map index / campaign progress
+function _heroTier(heroId){
+  const idx=(typeof mapIndex==='number') ? mapIndex
+          : ((typeof CAMPAIGN!=='undefined' && CAMPAIGN && typeof CAMPAIGN.nextMapIndex==='number') ? CAMPAIGN.nextMapIndex : -1);
+  if(heroId==='Nino'){ if(idx>=11) return 'wall'; if(idx>=9) return 'ally'; if(idx>=7) return 'rumor'; return null; }
+  if(heroId==='Biba'){
+    const altar=(typeof CAMPAIGN!=='undefined' && CAMPAIGN && CAMPAIGN.storyFlags && CAMPAIGN.storyFlags.altarSeen) || idx>=11;
+    return altar ? 'postAltar' : 'preAltar';
+  }
+  return null;
+}
+
+// both named heroes alive & on the field (not stored/dead) — gates the duet pool
+function _bothHeroesPresent(){
+  if(typeof G==='undefined' || !G || !G.entities) return false;
+  let nino=false, biba=false;
+  for(const e of G.entities){
+    if(e.dead || e.storedIn || e.owner!=='player' || !e.heroId) continue;
+    if(e.heroId==='Nino') nino=true; else if(e.heroId==='Biba') biba=true;
+    if(nino && biba) return true;
+  }
+  return false;
+}
+
+// a watching hero acknowledges a unit's milestone (story-polish §6.3). Cosmetic; solo/host; skip on rollback.
+function sayHeroMentor(u){
+  if(!u || (typeof window!=='undefined' && window._rbReplaying)) return;
+  if(typeof G==='undefined' || !G || !G.entities || typeof HERO_MENTOR_LINES==='undefined') return;
+  const heroes=[];
+  for(const e of G.entities){ if(e.dead||e.storedIn||e.owner!=='player'||!e.heroId||e===u) continue; if(HERO_MENTOR_LINES[e.heroId]) heroes.push(e); }
+  if(!heroes.length) return;
+  const h=heroes[(Math.random()*heroes.length)|0], pool=HERO_MENTOR_LINES[h.heroId];
+  if(!pool || !pool.length) return;
+  const line=_pickLine(h, pool);
+  pushDialog(h, line, { type:'select', tone:'pos' });
+  if(typeof VOICE!=='undefined') VOICE.playBark(h.heroId+'_mentor', (h._lastLineIdx!=null)?h._lastLineIdx:pool.indexOf(line));
+}
+if(typeof window!=='undefined') window.sayHeroMentor=sayHeroMentor;
+
+// event-triggered hero banter (story-polish §5.3): a watching hero reacts to a battlefield event.
+// Cosmetic + local; throttled per kind (≥6s) so frequent events (heal/raze) don't spam. `who` pins
+// the speaker (e.g. heal → Biba); otherwise any on-field hero with a line for this kind.
+const _heroEventLast = {};
+function sayHeroEvent(kind, who){
+  if(!kind || (typeof window!=='undefined' && window._rbReplaying)) return;
+  if(typeof G==='undefined' || !G || !G.entities || typeof HERO_EVENT_LINES==='undefined') return;
+  const byKind=HERO_EVENT_LINES[kind]; if(!byKind) return;
+  const now=(G && G.time) || 0;
+  if(_heroEventLast[kind] && (now - _heroEventLast[kind]) < 6) return;
+  const cands=[];
+  for(const e of G.entities){
+    if(e.dead||e.storedIn||e.owner!=='player'||!e.heroId) continue;
+    if(who && e.heroId!==who) continue;
+    if(byKind[e.heroId] && byKind[e.heroId].length) cands.push(e);
+  }
+  if(!cands.length) return;
+  const h=cands[(Math.random()*cands.length)|0], pool=byKind[h.heroId];
+  const line=_pickLine(h, pool);
+  _heroEventLast[kind]=now;
+  pushDialog(h, line, { type:'select', tone: kind==='grief'?'neg':(kind==='heal'?'pos':'neutral') });
+  if(typeof VOICE!=='undefined') VOICE.playBark(h.heroId+'_'+kind, (h._lastLineIdx!=null)?h._lastLineIdx:pool.indexOf(line));
+}
+if(typeof window!=='undefined') window.sayHeroEvent=sayHeroEvent;
 // sayIdx (when provided) is the LORE_SAY index of a variable-free line → it has a pre-rendered clip.
 function sayLoreEvent(u, say, tone, sayIdx){
   if(!u || !say) return;
@@ -105,10 +200,13 @@ function loreSayFallback(req, tone){
   return arr[(Math.random()*arr.length)|0];
 }
 
-// pick a pool line, avoiding an immediate repeat for the same unit
-function _pickLine(u, pool){
+// pick a pool line, avoiding an immediate repeat for the same unit (and any `skip` indices,
+// e.g. flat-pool lines retired as anachronistic once Biba is aboard — story-polish §6.1)
+function _pickLine(u, pool, skip){
   if(pool.length===1) return pool[0];
-  let i; do { i=(Math.random()*pool.length)|0; } while(i===u._lastLineIdx);
+  let i, tries=0;
+  do { i=(Math.random()*pool.length)|0; tries++; }
+  while((i===u._lastLineIdx || (skip && skip.indexOf(i)>=0)) && tries<12);
   u._lastLineIdx = i; return pool[i];
 }
 

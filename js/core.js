@@ -96,6 +96,9 @@ function update(state, dt){
   // clients see the spawned waves/boss as synced entities and the progress via synced G.quests. ----
   if(!state.hub && typeof holdoutTick==='function') holdoutTick(state, dt);
 
+  // ---- generic map cutscenes (story-polish §5): intro at mission start / reach-the-objective beats ----
+  if(!state.hub && typeof mapCutsceneTick==='function') mapCutsceneTick(state);
+
   // ---- reclaim abandoned outposts (a player unit walking up flips them) ----
   if(!state.hub) reclaimOutposts(state);
 

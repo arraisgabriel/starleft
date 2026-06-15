@@ -163,6 +163,33 @@ function buildNpcDossier(id){
   return d;
 }
 
+/* Ambient spoken line for a passing NPC (story-polish §8.2). Pure read of the NPC's persisted
+   flags + dossier + campaign progress — never mutates state, never stored. Category: a mourning/
+   reborn-flagged NPC speaks to that; ULTRA commuters carry a Voss seed only in Arc 2 and only for a
+   deterministic third of them (oblique, ≤1 channel/episode); providers get facility lines; everyone
+   else gets the war-from-home pool. Returns a filled string, or null if nothing fits. */
+function npcAmbientLine(id){
+  if(typeof NPC_LORE==='undefined' || !NPC_LORE.ambient) return null;
+  if(typeof CAMPAIGN==='undefined' || !CAMPAIGN || !CAMPAIGN.npc || !CAMPAIGN.npc.byId) return null;
+  const rec=CAMPAIGN.npc.byId[id]; if(!rec) return null;
+  const desc=(typeof buildNpcDossier==='function')?buildNpcDossier(id):null; if(!desc) return null;
+  const A=NPC_LORE.ambient;
+  const idx=(typeof CAMPAIGN.nextMapIndex==='number')?CAMPAIGN.nextMapIndex:0;
+  let pool;
+  if(rec.fl & 1) pool=A.mourning;                                   // a linked vet fell
+  else if(rec.fl & 2) pool=A.reborn;                                // a linked vet was written back
+  else if(desc.role==='ultra') pool=(idx>=7 && A.voss && A.voss.length && (npcStrHash(id)%3===0)) ? A.voss : A.commuter;
+  else if(desc.role==='provider') pool=A.staff;
+  else pool=A.general;
+  if(!pool || !pool.length) pool=A.general;
+  if(!pool || !pool.length) return null;
+  // deterministic-ish pick salted by id + hub visit → the same NPC varies its line across visits
+  const salt=(npcStrHash(id) ^ Math.imul((CAMPAIGN.visit||0)+1, 0x9e3779b1)) >>> 0;
+  const line=pool[salt % pool.length];
+  return (desc.fill?desc.fill(line):line) || null;
+}
+if(typeof window!=='undefined') window.npcAmbientLine = npcAmbientLine;
+
 /* ---- life-event log ---- */
 function _npcEvPush(rec, visit, code){
   rec.ev.push(visit|0, code|0);

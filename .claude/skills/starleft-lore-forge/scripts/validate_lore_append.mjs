@@ -112,9 +112,17 @@ if(H_LD && head_lore_src){
   let mism = 0; const SAMPLE = 300;
   for(let id=1; id<=SAMPLE; id++){
     const t = TYPES[id % TYPES.length];
-    const uh = {id, type:t}; headAPI.ensureDossier(uh); const dH = headAPI.buildDossier(uh);
-    const dW = workAPI.buildDossier({ id, type:t, lore:{ seed: uh.lore.seed, events:[] } }); // legacy unit: no v → v1
-    if(snap(dH) !== snap(dW)){ mism++; if(mism<=2) fail(`identity drift for saved unit id ${id} (${t}) — freeze broken\n    HEAD:    ${snap(dH)}\n    working: ${snap(dW)}`); }
+    // mint under HEAD to get this unit's frozen seed + the version it was saved at.
+    const uh = {id, type:t}; headAPI.ensureDossier(uh); const seed = uh.lore.seed;
+    // The freeze = a SAVED unit reproduces byte-identically under working code+data. Compare HEAD vs
+    // working at the SAME version. (Never v-mint-vs-v1: once a later drop grows a background pool, a
+    // freshly-minted v_latest unit SHOULD differ from a v1 legacy one — that divergence is the
+    // versioning feature, not drift.) Check both the unit's HEAD mint version and v1 (legacy saves).
+    for(const v of new Set([(uh.lore.v|0) || 1, 1])){
+      const dH = headAPI.buildDossier({ id, type:t, lore:{ seed, v, events:[] } });
+      const dW = workAPI.buildDossier({ id, type:t, lore:{ seed, v, events:[] } });
+      if(snap(dH) !== snap(dW)){ mism++; if(mism<=2) fail(`identity drift for saved unit id ${id} (${t}) at v${v} — freeze broken\n    HEAD:    ${snap(dH)}\n    working: ${snap(dW)}`); break; }
+    }
   }
   if(!mism) note(`identity freeze: ${SAMPLE}/${SAMPLE} sampled saved units unchanged ✓`);
 } else note('identity freeze: skipped (no HEAD lore.js).');

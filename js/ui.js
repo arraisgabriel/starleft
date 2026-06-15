@@ -1263,7 +1263,7 @@ function openWakeMenu(){
   if(CAMPAIGN.reborn==null) CAMPAIGN.reborn={sessions:[],done:[]};
   openHubMenu({
     id:'wake', icon:'⚡', title:'The Wake',
-    subtitle:'A bootleg of A&O’s tower — the stolen lattice, fed your rescued dead, powered by the storm. Nothing it gives back is whole.',
+    subtitle:'A bootleg of A&O’s tower — the stolen lattice, fed your rescued dead, powered by the storm. Three, ever; one at a time. The rest keep their place on the wall. Nothing it gives back is whole.',
     signature: wakeSignature,
     build: buildWakeBody,
     tick: function(body){
@@ -1732,12 +1732,14 @@ function buildMapSelect(){
   });
 }
 // ---- Field-Tip panel: show a random tip, rotating while the menu is up ----
-let _tipIdx=-1;
+let _tipIdx=-1, _tipLast=null;
 function pickTip(){
-  if(typeof GAME_TIPS==='undefined' || !GAME_TIPS.length) return;
-  let i; do { i=Math.floor(Math.random()*GAME_TIPS.length); } while(GAME_TIPS.length>1 && i===_tipIdx);
-  _tipIdx=i;
-  const el=document.getElementById('tip-text'); if(el) el.innerHTML=GAME_TIPS[i];
+  // arc-phased pool when a run is active; full all-voice pool otherwise (story-polish §8.3)
+  const pool=(typeof gameTipsForPhase==='function')?gameTipsForPhase():((typeof GAME_TIPS!=='undefined')?GAME_TIPS:null);
+  if(!pool || !pool.length) return;
+  let t,tries=0; do { t=pool[(Math.random()*pool.length)|0]; } while(pool.length>1 && t===_tipLast && ++tries<8);
+  _tipLast=t;
+  const el=document.getElementById('tip-text'); if(el) el.innerHTML=t;
 }
 function startTipRotation(){
   pickTip();   // first tip immediately
@@ -1799,7 +1801,7 @@ function gateMission(idx, enter, opts){
         ep=document.getElementById('lg-ep'), tip=document.getElementById('lg-tip');
   const cr=(typeof MAPS!=='undefined' && MAPS[idx] && MAPS[idx].crawl) || null;
   if(ep) ep.textContent = opts.label || (cr && cr.episode) || ((typeof MAPS!=='undefined' && MAPS[idx] && MAPS[idx].name) || 'DEPLOYMENT');
-  if(tip) tip.innerHTML = (typeof GAME_TIPS!=='undefined' && GAME_TIPS.length) ? GAME_TIPS[(Math.random()*GAME_TIPS.length)|0] : '';
+  if(tip){ const _tp=(typeof gameTipsForPhase==='function')?gameTipsForPhase():((typeof GAME_TIPS!=='undefined')?GAME_TIPS:[]); tip.innerHTML=(_tp&&_tp.length)?_tp[(Math.random()*_tp.length)|0]:''; }
   if(fill) fill.style.width='0%'; if(pct) pct.textContent='0%';
   if(stall) stall.style.display='none'; if(btn) btn.style.display='none';
   gate.style.display='flex';

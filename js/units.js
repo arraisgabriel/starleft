@@ -783,7 +783,10 @@ function updateUnit(state,u,dt){
         tgt.hp=Math.min(tgt.maxHp, before + def.heal*m*dt);
         const restored=tgt.hp-before;                                 // XP credits BASE output (÷m) so leveling pace stays flat
         if(restored>0 && !window._rbReplaying && typeof spawnFloater==='function') spawnFloater(state,tgt,restored,'heal');
-        if(u.hero && restored>0) gainHealXp(u, restored/m, state); }
+        if(u.hero && restored>0) gainHealXp(u, restored/m, state);
+        // story-polish §5.3: Biba quips when she pulls someone back from the brink (<20% → ≥20%)
+        if(u.hero && u.heroId==='Biba' && restored>0 && tgt.maxHp>0 && (before/tgt.maxHp)<0.20 && (tgt.hp/tgt.maxHp)>=0.20
+           && typeof sayHeroEvent==='function') sayHeroEvent('heal','Biba'); }
       else { if(!u._toHeal||(u._healRepath||0)<=0){ issueMoveKeepCmd(state,u,tgt.x,tgt.y); u._toHeal=true; u._healRepath=0.5; } u._healRepath-=dt; followPath(state,u,dt); }
       return;
     } else u._toHeal=false;   // nothing to heal → fall through to move/idle (healers don't fight)
@@ -1243,6 +1246,8 @@ function killEntity(state,e){
   if(!window._rbReplaying && e.kind==='building' && e.type==='hq' && e.owner==='enemy' && typeof ACH!=='undefined') ACH.fire('hq-raze');   // T3-5
   if(!window._rbReplaying && e.kind==='building' && e.type==='hq' && e.owner==='enemy' && typeof toast==='function')
     toast('📉 Rival HQ razed — '+(state.cfg&&state.cfg.enemyName?state.cfg.enemyName:'the competitor')+' has been acquihired.');
+  // story-polish §5.3: a watching hero spikes the ball when a rival HQ goes down (cosmetic, throttled)
+  if(!window._rbReplaying && e.kind==='building' && e.type==='hq' && e.owner==='enemy' && typeof sayHeroEvent==='function') sayHeroEvent('raze');
   if(e.kind==='building') markBuilding(state,e,false);
   // MADOSIS: a dog that dies mid-rescue drops its memory echoes.
   if(e.kind==='unit' && (e.madDog || e._rescue) && typeof madCleanupEchoes==='function') madCleanupEchoes(state,e);

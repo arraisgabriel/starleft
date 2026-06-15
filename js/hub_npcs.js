@@ -58,6 +58,8 @@
   /* ---- module state (never on G) ---- */
   let _lastState=null, _clock=0, _prevC=-1, _frozenC=null, _T0=0;
   let _slots=[], _bound=0;                  // bound slot objects (built per hub load)
+  let _ambientT=0, _spoken=null;            // ambient-chatter throttle + per-visit "already spoke" set (story-polish §8.2)
+  const AMBIENT_EVERY=9;                     // seconds of hub time between ambient NPC barks (one passing NPC speaks)
   let _descById=new Map();                  // ALL descriptors (even unbound / reduced-motion)
   let _nodes={};                            // nodeId → {id, tx, ty, x, y, name}
   let _legs={};                             // nodeId → trunk leg plaza→node {pts,cum,len,ready,broken}
@@ -373,6 +375,7 @@
   }
   function _reset(state){
     _clock=state.time||0; _prevC=-1; _frozenC=null;
+    _ambientT=0; _spoken=new Set();          // a fresh hub visit: nobody has spoken yet
     const visit=(typeof CAMPAIGN!=='undefined'&&CAMPAIGN)?(CAMPAIGN.visit|0):0;
     // anchor the clock so THIS moment lands in living daytime (09:00-16:00, visit-stable).
     // Relative to the current _clock, not absolute: a fresh hub entry has state.time 0, but a
@@ -401,6 +404,31 @@
       let i=s.segIdx;
       while(i<s.segs.length-1 && C>=s.segs[i].t1) i++;
       if(i!==s.segIdx){ s.segIdx=i; s.ci=0; }
+    }
+    // ambient chatter (story-polish §8.2): every ~AMBIENT_EVERY s a passing, on-map NPC says one line.
+    // Cosmetic + local (reuses the unit speech-bubble path, dialogs.js); skipped during rollback re-sim.
+    if(run && _slots.length && typeof pushDialog==='function' && typeof npcAmbientLine==='function'
+       && !(typeof window!=='undefined' && window._rbReplaying)){
+      _ambientT += dt;
+      if(_ambientT >= AMBIENT_EVERY){ _ambientT = 0; _ambientTrySpeak(); }
+    }
+  }
+  // pick a random on-map NPC who hasn't spoken this visit and pop one ambient line above them.
+  function _ambientTrySpeak(){
+    if(!_spoken) _spoken=new Set();
+    const C=_cityC();
+    for(let k=0;k<6 && _slots.length;k++){
+      const s=_slots[(Math.random()*_slots.length)|0];
+      if(!s || _spoken.has(s.id)) continue;
+      _evalSlot(s, C);
+      if(!s.onMap) continue;
+      const line=npcAmbientLine(s.id);
+      if(!line) continue;
+      _spoken.add(s.id);
+      // position-proxying bubble target: live x/y from the slot, sType → a sane bubble height in _drawBox
+      const bub={ get x(){ return s.x; }, get y(){ return s.y; }, spriteType:s.sType, r:14, air:false, _npc:true };
+      pushDialog(bub, line, { type:'say', tone:'neutral' });
+      return;
     }
   }
 

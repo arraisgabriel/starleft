@@ -20,7 +20,30 @@ const GAME_TIPS = [
   "“Every quarter ends. Some of us ship.”",
   "“A cap table wearing a grief mask.”",
   "“We pivoted to weapons. The metrics improved.”",
+  "“Move fast, break things. The things are other startups. The people are collateral.”",
+  "“Your interns have names now. The casualty feed has their names. The difference is narrowing.”",
+  "“Immortality is a subscription now. The quarterly earnings call is in hell.”",
+  "“A backup can't die. Only instances can. One man knows the difference.”",
 ];
+
+/* Per-tip campaign phase for the title/loading carousel (story-polish §8.3): 'early' | 'mid' | 'late' | 'any'.
+   Index-aligned to GAME_TIPS (APPEND-ONLY — never reorder). gameTipsForPhase() biases the carousel to the
+   player's progress when a run is active; with no campaign it returns the full all-voice pool (the title
+   screen sells the VOICE, T0-11). The last 4 entries are the new arc-phased seeds (the final is a Voss seed). */
+const GAME_TIP_PHASE = [
+  'any','any','early','any','early','early','mid','any','early','mid','early','early','late','any','late','mid',
+  'early','mid','late','late'
+];
+function gameTipsForPhase(phase){
+  if(typeof GAME_TIPS==='undefined' || !GAME_TIPS.length) return [];
+  if(!phase){
+    const idx = (typeof CAMPAIGN!=='undefined' && CAMPAIGN && typeof CAMPAIGN.nextMapIndex==='number') ? CAMPAIGN.nextMapIndex : -1;
+    if(idx < 0) return GAME_TIPS.slice();                       // no active run → full all-voice pool
+    phase = idx < 3 ? 'early' : (idx < 9 ? 'mid' : 'late');     // Arc 1 early · late-Arc-1/early-Arc-2 mid · deep Arc-2 late
+  }
+  const out = GAME_TIPS.filter((t,i)=> { const p=GAME_TIP_PHASE[i]||'any'; return p==='any' || p===phase; });
+  return out.length ? out : GAME_TIPS.slice();
+}
 
 /* mechanics tips — shown inside the Field Manual (#doc-tips), not on the title screen */
 const MECH_TIPS = [
