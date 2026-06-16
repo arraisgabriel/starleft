@@ -527,6 +527,26 @@ const HERO_SELECT_LINES = {
     "Foreman never clocks out. Not till it's done.",
     "Old steel, fresh grudge. Let's work.",
   ],
+  "Zeca": [
+    "I shipped six quarters in one. Paid in exposure.",
+    "Move faster. It's all they ever taught me.",
+    "Good, fast, cheap — I'm the cheap one.",
+    "I outran the algorithm. Never myself.",
+    "Speed's a wound. Watch me bleed deadlines.",
+    "They leased me as velocity. Taking it back.",
+    "Sleep is technical debt. I never pay it.",
+    "I refactor panic into throughput. Hold on.",
+    "My memorial slot's reserved. I'm late to it.",
+    "Crunch isn't culture. It's just my pulse.",
+    "Give me a deadline. I'll give you a miracle.",
+    "I shipped the purge clock. Now I break it.",
+    "Prodigy's just grief that hits the sprint.",
+    "I was the engine. Now I'm the wrench.",
+    "Faster than the clock, slower than the burnout.",
+    "They timed my keystrokes. I'll time their fall.",
+    "Exposure doesn't pay rent. Spite does.",
+    "Ship it. We grieve in the next sprint.",
+  ],
 };
 
 // index-aligned with LORE_DATA.events (lore_data.js) — APPEND-ONLY.

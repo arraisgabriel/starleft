@@ -846,9 +846,12 @@ function bossOutcome(state, kind){
   // He DEPLOYS as your hero from XV.5 onward via those maps' cfg.heroes (idiomatic first-appearance,
   // like Nino on Ep VIII) + the normal hero carryover thereafter — captureHeroes() rebuilds carryover
   // from on-field heroes at victory, so we can't just push him here; this is the defection toast only.
-  if(kind==='win' && state.cfg && state.cfg.villain && state.cfg.villain.id==='rust'
-     && typeof toast==='function' && !window._rbReplaying)
-    toast('🦾 Pedro "Rust" lays down his arms — the foreman is with you now.');
+  // NB: scaleCfg stores cfg.villain as an ARRAY (map.js) — read the id through the list form.
+  if(kind==='win' && typeof toast==='function' && !window._rbReplaying){
+    const vl = state.cfg && state.cfg.villain;
+    const vids = (Array.isArray(vl) ? vl : (vl ? [vl] : [])).map(v=>v && v.id);
+    if(vids.includes('rust')) toast('🦾 Pedro "Rust" lays down his arms — the foreman is with you now.');
+  }
   // T2-7: the FINALE boss (REX) ends the war on the spot — no extraction loop, straight to the
   // victory flow, where onVictory's finale routing shows the IPO.
   if(state.cfg && state.cfg.finale){

@@ -108,7 +108,11 @@
     let opts='<option value="hub">⌂ The H.U.B.</option>';
     if(typeof MAPS!=='undefined') MAPS.forEach((m,i)=>{
       const sub=((m.name||('Map '+i)).split('—')[1]||m.name||('Map '+i)).trim();
-      const tag=m.isVillain?('BOSS '+(m.displayEp||'')):('Q'+(i+1));
+      // Label by EPISODE number (displayEp, else the leading Roman in the name), NOT the raw array
+      // index: Arc-3 maps are appended past the villain block (indices 19-22), so "Q"+(i+1) showed
+      // Ep XIV as "Q20" / XVI as "Q23" and the new chapters were impossible to find in this list.
+      const ep=m.displayEp || ((m.name||'').trim().match(/^[IVXLCDM]+(?:\.\d+)?/)||[''])[0];
+      const tag=m.isVillain?('BOSS '+(m.displayEp||'')):('EP '+(ep||(i+1)));
       opts+=`<option value="${i}">${tag} · ${sub}</option>`;
     });
 
