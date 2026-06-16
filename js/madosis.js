@@ -344,7 +344,9 @@ function madGlobalTick(state, dt){
   // (stamped _madTendedAt each channel tick) the suppression holds; once tending stops it REVERTS SLOWLY
   // toward true madosis at fieldRelief.decayPerSec (1 pt / 5s by default) instead of snapping back, so a
   // brief stretch of calm is actually worth something. madReliefT just ages the auto-acquire "already-
-  // tended" skip window. The relief is transient mission state (never snapshotted) → still lost on extract.
+  // tended" skip window. The relief is mission-only: it's lost on EXTRACTION because the HUB roster carries
+  // only true madosis (not madRelief) — but, like every entity field, it DOES round-trip through saves and
+  // rollback snapshots (serializeEntity is a denylist), which is fine since the decay is RNG-free/deterministic.
   const _FR = (typeof MADOSIS!=='undefined' && MADOSIS.fieldRelief) || {};
   const _decayPerSec = _FR.decayPerSec!=null ? _FR.decayPerSec : 0.2;
   const _tendFresh = (_FR.tickSec||1) + 0.5;   // tended within this many sec → still being channelled, hold full
