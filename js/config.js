@@ -262,12 +262,14 @@ const MADOSIS = {
   // --- field relief (Mindfulness Facilitator unit): a TEMPORARY in-mission madosis suppression. The unit
   //     channels on ONE ally at a time, lowering its EFFECTIVE madosis by `ratePerTick` of the value-at-
   //     engagement-start every `tickSec`, up to `frac` of it (0.55 → suppress up to ~55%, reached in ~11s
-  //     at 5%/s — visibly drops the bar within a few seconds). While channelled the buff is refreshed to
-  //     `durationSec`; once the channel STOPS it fades to nothing over `fadeSec` (durationSec≈fadeSec ⇒ it
-  //     starts fading right away — "calm that wears off the moment you stop tending it"). It is a read-time
-  //     subtraction kept SEPARATE from the true madosis stat (u.madRelief/madReliefT), so it is LOST on
-  //     extraction to the HUB (hubSnapUnit captures only the true madosis) and is never a permanent cure. ---
-  fieldRelief: { frac:0.55, ratePerTick:0.05, tickSec:1, durationSec:30, fadeSec:30 },
+  //     at 5%/s — visibly drops the bar within a few seconds). While the facilitator keeps tending, the
+  //     suppression holds; once it STOPS, the suppressed madosis REVERTS SLOWLY toward the true value at
+  //     `decayPerSec` (0.2 = 1 point every 5s) — a calmed mind drifts back instead of snapping back, so a
+  //     short stretch of calm is still worth buying. `durationSec` is the auto-acquire skip window (how long
+  //     before the facilitator will re-tend the same ally). It is a read-time subtraction kept SEPARATE from
+  //     the true madosis stat (u.madRelief/madReliefT), so it is LOST on extraction to the HUB (hubSnapUnit
+  //     captures only the true madosis) and is never a permanent cure. ---
+  fieldRelief: { frac:0.55, ratePerTick:0.05, tickSec:1, durationSec:30, decayPerSec:0.2 },
   // --- accelerated treatment: pay M3$ to recover madosis on the HUB CITY clock, no mission needed. Each
   //     purchase recovers `points` madosis over `minutes` IN-GAME (city) minutes for `merits` M3$ (rate =
   //     merits/points per point, so a partial last chunk is charged fairly). "In-game minute" = the 🕘 HUB

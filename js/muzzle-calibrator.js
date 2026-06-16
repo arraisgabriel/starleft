@@ -10,7 +10,7 @@
 
   const UNIT_FRAMES = 10;
   // drawn sprite heights — mirror of UNIT_SPRITE_H in assets.js (drives preview scale + width)
-  const UNIT_SPRITE_H = { soldier:68, ranger:62, hustler:56, lobbyist:64, foodtruck:64, auditor:72, founder:92, bomber:96, nino:64 };
+  const UNIT_SPRITE_H = { soldier:68, ranger:62, hustler:56, lobbyist:64, foodtruck:64, auditor:72, founder:92, bomber:153.6, nino:64 };
   const FACES_LEFT = { bomber:true };
   // units that actually have an attack strip (ranged ones matter; melee shown for completeness)
   const UNITS = ['ranger','lobbyist','foodtruck','auditor','founder','bomber','soldier','hustler','nino'];

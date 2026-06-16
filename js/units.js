@@ -879,7 +879,7 @@ function updateUnit(state,u,dt){
           u._madHealTick-=tickSec;
           const room=(t.madosis||0)-(t.madRelief||0);                       // can't suppress below 0 effective
           const add=Math.max(0, Math.min((u._madHealBase||0)*ratePerTick, capLeft(), room));
-          if(add>0){ t.madRelief=(t.madRelief||0)+add; t.madReliefT=dur; u._madHealAdded=(u._madHealAdded||0)+add;
+          if(add>0){ t.madRelief=(t.madRelief||0)+add; t.madReliefT=dur; t._madTendedAt=state.time; u._madHealAdded=(u._madHealAdded||0)+add;
             if(!window._rbReplaying && typeof spawnFloater==='function') spawnFloater(state,t,add,'calm'); }  // visible purple relief tick (merges into one rising −N)
           if(capLeft()<=1e-6 || room-add<=1e-6) u._madHealTarget=null;      // engagement done → release, move on
         }

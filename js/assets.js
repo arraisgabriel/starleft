@@ -291,7 +291,7 @@ const UNIT_WALK = {
 };
 // drawn sprite HEIGHT per type — ~2× the old values (bigger on screen). Collision
 // radius r / speed / range in DEF are UNCHANGED, so gameplay is unaffected.
-const UNIT_SPRITE_H = { worker:46, soldier:68, ranger:62, recruiter:54, psychologist:54, hustler:56, lobbyist:64, foodtruck:64, auditor:72, founder:92, courier:36, bomber:96, biba:60.6, rust:92, ninja:44, rex:92 };
+const UNIT_SPRITE_H = { worker:46, soldier:68, ranger:62, recruiter:54, psychologist:54, hustler:56, lobbyist:64, foodtruck:64, auditor:72, founder:92, courier:36, bomber:153.6, biba:60.6, rust:92, ninja:44, rex:92 };
 // rust:92 matches the Founder Mech (he IS a founder chassis); his walk & attack strips share one 308px
 // frame height (slice_rust.py pad_top_to) so the crouched slam doesn't size-pop against the walk.
 // ninja:44 → ×bossScale 2.1 ≈ 92px drawn, the same on-screen size as a Founder Mech (visual only; bossScale/collision r unchanged).

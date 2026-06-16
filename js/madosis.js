@@ -36,15 +36,14 @@ function madThreshold(u){
   return u.scarred ? base * MADOSIS.scarThresholdMul : base;
 }
 
-// TEMPORARY field relief (Mindfulness Facilitator unit): active (fade-applied) suppression points on a
-// unit. The buff holds full while madReliefT > fadeSec, then ramps to 0 over the final fadeSec (set/
-// refreshed to durationSec while channelled, ticked down in madGlobalTick). On a co-op CLIENT the value
-// arrives already fade-applied from the host (madReliefT===null), so it's carried straight through. 0 = none.
+// TEMPORARY field relief (Mindfulness Facilitator unit): the CURRENT suppression points on a unit. While
+// the facilitator channels, this grows up to `frac` of the unit's madosis; once tending stops, madGlobalTick
+// reverts it toward 0 at fieldRelief.decayPerSec (1 pt / 5s by default), so a calmed mind drifts back to its
+// true madosis SLOWLY rather than snapping back. The decay is applied to u.madRelief itself, so this is just
+// a read of the live value — on a co-op CLIENT the host sends the already-current value (madReliefT===null),
+// carried straight through the same way. 0 = none.
 function madReliefActive(u){
-  const r = (u && u.madRelief) || 0; if(!(r>0)) return 0;
-  const fade = (MADOSIS.fieldRelief && MADOSIS.fieldRelief.fadeSec) || 30, t = u.madReliefT;
-  if(t==null) return r;                                   // client: host already applied the fade at sync time
-  return r * Math.max(0, Math.min(1, t/fade));
+  return (u && u.madRelief>0) ? u.madRelief : 0;
 }
 // EFFECTIVE madosis for breakdown checks + display = true accrued madosis minus active temporary relief.
 // The true u.madosis stat is never lowered by relief, so extraction (which snapshots u.madosis) drops it.
@@ -341,14 +340,21 @@ function madCollectEcho(state, dog, echo, collector){
    2) walk-over collection: ANY player unit standing on an unreached memory echo recovers it,
       regardless of its command — the auto-pilot rescue stays the guided (and protected) path. */
 function madGlobalTick(state, dt){
-  // TEMPORARY field relief (Mindfulness Facilitator): age out the suppression buff. Held full while
-  // madReliefT>0 (it's refreshed to durationSec each channel tick), then madReliefActive fades it over
-  // the final fadeSec; once fully elapsed the buff is cleared so effective madosis returns to true. The
-  // relief is transient mission state (never snapshotted), so it's also lost the instant a unit extracts.
+  // TEMPORARY field relief (Mindfulness Facilitator): while the facilitator is actively tending a unit
+  // (stamped _madTendedAt each channel tick) the suppression holds; once tending stops it REVERTS SLOWLY
+  // toward true madosis at fieldRelief.decayPerSec (1 pt / 5s by default) instead of snapping back, so a
+  // brief stretch of calm is actually worth something. madReliefT just ages the auto-acquire "already-
+  // tended" skip window. The relief is transient mission state (never snapshotted) → still lost on extract.
+  const _FR = (typeof MADOSIS!=='undefined' && MADOSIS.fieldRelief) || {};
+  const _decayPerSec = _FR.decayPerSec!=null ? _FR.decayPerSec : 0.2;
+  const _tendFresh = (_FR.tickSec||1) + 0.5;   // tended within this many sec → still being channelled, hold full
   for(const u of state.entities){
     if(u.dead || u.kind!=='unit' || !(u.madRelief>0)) continue;
-    u.madReliefT = (u.madReliefT||0) - dt;
-    if(u.madReliefT <= 0){ u.madRelief = 0; u.madReliefT = 0; }
+    if(u.madReliefT==null) continue;                                       // co-op client: host sends the current value
+    if(u.madReliefT>0) u.madReliefT = Math.max(0, u.madReliefT - dt);      // age the re-tend skip window
+    if((state.time||0) - (u._madTendedAt!=null?u._madTendedAt:-1e9) <= _tendFresh) continue;   // being tended → hold
+    u.madRelief = Math.max(0, u.madRelief - _decayPerSec*dt);              // otherwise drift back to true madosis
+    if(u.madRelief <= 1e-6){ u.madRelief = 0; u.madReliefT = 0; u._madTendedAt = null; }
   }
   const active = state.entities.some(o=> !o.dead && o.kind==='unit' && (o.madEpisode||o.madDog));
   if(state._madWasActive && !active)
