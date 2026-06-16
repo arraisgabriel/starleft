@@ -195,7 +195,13 @@ let carryoverHeroes = [];
 
 // how many veterans carry into a given (0-based) map index: 2 into map 2-3, 3 into map 4-5,
 // 4 into map 6-7, … — grows +1 every two maps, unbounded.
-function vetCarryCountFor(idx){ return 2 + Math.floor(Math.max(0, idx-1)/2); }
+function vetCarryCountFor(idx){
+  // per-map override (save-safe: legacy maps omit it → fall through to the default curve). Used by the
+  // late Arc-3 maps to freeze the carry cap so a maxed roster doesn't exceed HQ supply.
+  const m = (typeof MAPS!=='undefined' && MAPS[idx]) ? MAPS[idx] : null;
+  if(m && Number.isFinite(m.vetCarryOverride)) return m.vetCarryOverride;
+  return 2 + Math.floor(Math.max(0, idx-1)/2);
+}
 function vetCarryCount(){ return vetCarryCountFor(mapIndex); }   // count into the map being entered
 
 // surviving player veterans (UNIT objects, best first) — the carry candidates at victory.

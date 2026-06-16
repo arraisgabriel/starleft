@@ -283,12 +283,17 @@ const UNIT_WALK = {
   // Hero Recruiter "Biba" (Storm-likeness: white vest, silver hair) — visual override only;
   // gameplay stays a recruiter. Bespoke palette written to both faction keys (see slice_biba.py).
   biba:walkPair('biba','walk'),
+  // Hero Founder Mech "Pedro Rust" (foundry-orange scorched-steel exosuit) — visual override only;
+  // gameplay stays a founder. Bespoke palette written to both faction keys (see slice_rust.py).
+  rust:walkPair('rust','walk'),
   // VILLAIN BOSSES — bespoke sprites (visual-only via u.spriteType; gameplay stays soldier/founder).
   ninja:walkPair('ninja','walk'),         rex:walkPair('rex','walk'),
 };
 // drawn sprite HEIGHT per type — ~2× the old values (bigger on screen). Collision
 // radius r / speed / range in DEF are UNCHANGED, so gameplay is unaffected.
-const UNIT_SPRITE_H = { worker:46, soldier:68, ranger:62, recruiter:54, psychologist:54, hustler:56, lobbyist:64, foodtruck:64, auditor:72, founder:92, courier:36, bomber:96, biba:60.6, ninja:44, rex:92 };
+const UNIT_SPRITE_H = { worker:46, soldier:68, ranger:62, recruiter:54, psychologist:54, hustler:56, lobbyist:64, foodtruck:64, auditor:72, founder:92, courier:36, bomber:96, biba:60.6, rust:92, ninja:44, rex:92 };
+// rust:92 matches the Founder Mech (he IS a founder chassis); his walk & attack strips share one 308px
+// frame height (slice_rust.py pad_top_to) so the crouched slam doesn't size-pop against the walk.
 // ninja:44 → ×bossScale 2.1 ≈ 92px drawn, the same on-screen size as a Founder Mech (visual only; bossScale/collision r unchanged).
 // rex:92 → ×bossScale 4.0 keeps REX huge.
 // biba:60.6 (not 54): her walk & heal strips share a 341px frame height (see slice_biba.py STRIP_CANVAS_H);
@@ -327,6 +332,7 @@ const UNIT_ACTION = {
   founder:{ attack:walkPair('founder','attack') },     courier:{ heal:walkPair('courier','heal') },
   bomber:{ attack:walkPair('bomber','attack') },       nino:{ attack:walkPair('nino','attack') },
   biba:{ heal:walkPair('biba','heal') },               // hero Recruiter — custom heal animation
+  rust:{ attack:walkPair('rust','attack') },           // hero Founder Mech — custom foundry-orange slam
   ninja:{ attack:walkPair('ninja','attack') },         rex:{ attack:walkPair('rex','attack') },   // villain bosses
 };
 function actionAnim(type,action,owner,faction){ const t=UNIT_ACTION[type]; const a=t&&t[action]; if(!a) return null;

@@ -114,10 +114,20 @@
     if(netRole!=='client') return castAbility(state, state.selection);
     MP.send('mpcmd', { k:'ability', from:LOCAL_CTRL, ids, seq:(NET._cmdSeq=(NET._cmdSeq||0)+1) });
   }
+  // Arc-3 hero SECOND ability (e.g. Rust RECALL): same host-authoritative plumbing as netAbility,
+  // separate dispatch key so it doesn't collide with the type-keyed founder STOMP.
+  function netHeroAbility(state){
+    if(hubClientBlocked(state)) return;
+    const ids = state.selection.filter(e=>!e.dead && !e.storedIn && e.kind==='unit' && e.hero && isMine(e)).map(e=>e.id);
+    if(!ids.length) return;
+    if(window.USE_ROLLBACK){ NET.rbEnqueue({ k:'heroability', ids }); return; }
+    if(netRole!=='client') return castHeroAbility(state, state.selection);
+    MP.send('mpcmd', { k:'heroability', from:LOCAL_CTRL, ids, seq:(NET._cmdSeq=(NET._cmdSeq||0)+1) });
+  }
   window.netCommand=netCommand; window.netPlace=netPlace; window.netStop=netStop;
   window.netTrain=netTrain; window.netCancelTrain=netCancelTrain; window.netReleaseStored=netReleaseStored;
   window.netUpgrade=netUpgrade; window.netDemolish=netDemolish; window.netScan=netScan;
-  window.netAmove=netAmove; window.netStance=netStance; window.netAbility=netAbility;
+  window.netAmove=netAmove; window.netStance=netStance; window.netAbility=netAbility; window.netHeroAbility=netHeroAbility;
 
   /* ---------------- host: validate + replay a remote command ---------------- */
   function idIndex(state){ const m=new Map(); for(const e of state.entities) if(!e.dead) m.set(e.id,e); return m; }
@@ -194,6 +204,10 @@
       const mine=(cmd.ids||[]).map(id=>byId.get(id)).filter(e=>e&&!e.dead&&!e.storedIn&&e.owner==='player'&&(e.ctrl||'p1')===ctrl);
       if(!mine.length) return;
       quiet(()=> castAbility(G, mine));
+    } else if(cmd.k==='heroability'){
+      const mine=(cmd.ids||[]).map(id=>byId.get(id)).filter(e=>e&&!e.dead&&!e.storedIn&&e.owner==='player'&&e.hero&&(e.ctrl||'p1')===ctrl);
+      if(!mine.length) return;
+      quiet(()=> castHeroAbility(G, mine));
     }
   };
 

@@ -134,6 +134,48 @@ function castAbility(state, units){
   return any;
 }
 
+/* HERO-only SECOND active ability (Arc-3) — keyed by spriteType so it sits ALONGSIDE the ability the
+   hero already inherits from its base type (Rust is a `founder` skin → he keeps the founder STOMP
+   button AND gains this RECALL). Own cooldown (u.heroAbilCd; legacy/undefined = ready, auto-serialized
+   like abilCd), routed through netHeroAbility (js/net/commands.js) so solo/host/client/rollback agree,
+   and executed host-authoritatively — exactly the contract castAbility uses. */
+const HERO_ABILITY = {
+  rust: { name:'Recall', icon:'🧲', cd:18, hint:'rally your most-wounded crew to your side and patch them up' },
+};
+function castHeroAbility(state, units){
+  let any=false;
+  for(const u of (units||[])){
+    if(!u || u.dead || u.storedIn || u.kind!=='unit' || u.owner!=='player' || !u.hero) continue;
+    const spec=HERO_ABILITY[u.spriteType]; if(!spec) continue;
+    if((u.heroAbilCd||0)>0) continue;
+    const fxOk=!window._rbReplaying;
+    if(u.spriteType==='rust'){
+      // RECALL: blink the up-to-3 most-wounded NON-hero player units within range to Rust's side and
+      // patch each for 30% maxHp. Deterministic (sort by hp% then id) so host + rollback stay in sync.
+      const R=14*TILE, picked=[];
+      for(const o of state.entities){
+        if(o===u || o.dead || o.storedIn || o.kind!=='unit' || o.owner!=='player' || o.hero) continue;
+        if(!(o.maxHp>0) || (o.hp/o.maxHp)>=0.999) continue;     // only the wounded
+        if(dist(o,u)>R) continue;
+        picked.push(o);
+      }
+      picked.sort((a,b)=> (a.hp/a.maxHp)-(b.hp/b.maxHp) || (a.id||0)-(b.id||0));
+      for(const o of picked.slice(0,3)){
+        o.x=u.x; o.y=u.y;                                       // blink onto Rust; separation spreads them next tick
+        o.vx=0; o.vy=0; o.autoTarget=null; o.path=null; o.pathIdx=0; o.dest=null; o.cmd=null;   // drop orders so they regroup, not walk back
+        o.hp=Math.min(o.maxHp, o.hp + o.maxHp*0.30);
+        if(fxOk && typeof spawnRing==='function') spawnRing(o.x, o.y, '#ffb060');
+      }
+      if(fxOk){ if(typeof spawnShockwaveC==='function') spawnShockwaveC(u.x, u.y, 2.0*TILE, 'rgb(255,140,60)');
+        state._shake=Math.max(state._shake||0, 5); }
+    }
+    u.heroAbilCd=spec.cd; u._abilCastT=state.time;
+    any=true;
+  }
+  if(any && !window._rbReplaying){ if(typeof refreshUI==='function') refreshUI(); }
+  return any;
+}
+
 // T2-3: attack-move the current selection to (wx,wy) — units advance and engage anything en route.
 // The amove handler + auto-acquire respect already exist; this just issues the order with formation.
 function commandAttackMove(state, wx, wy){
@@ -685,6 +727,7 @@ function spawnTrained(state,b,type){
 function updateUnit(state,u,dt){
   if(u.captive){ u._actState=null; u.vx=0; u.vy=0; u.path=null; return; }   // imprisoned: stands inert until freed
   if(u.abilCd>0) u.abilCd=Math.max(0, u.abilCd-dt);     // T2-2: manual-ability cooldown (sim state; legacy saves → undefined = ready)
+  if(u.heroAbilCd>0) u.heroAbilCd=Math.max(0, u.heroAbilCd-dt);   // Arc-3: hero second-ability cooldown (Rust RECALL); legacy/undefined = ready
   if(u._dashT>0) u._dashT=Math.max(0, u._dashT-dt);     // Caffeine Dash burst window
   // NINJA-AI villains (THE SEVERANCIER et al.): movement+combat are fully owned by updateNinja (runs later this tick). Yield here so
   // normal auto-acquire/melee-camp never touches it. Flee (low HP) drops back to the standard move handler.

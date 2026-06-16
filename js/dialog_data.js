@@ -507,6 +507,26 @@ const HERO_SELECT_LINES = {
     "I made it. Then I broke it. On purpose.",
     "I remember a family. Not sure it's mine.",
   ],
+  "Rust": [
+    "Depreciated asset, reporting for overtime.",
+    "Wrote me off at fifty. I wrote back.",
+    "I built these mechs. I know where they crack.",
+    "Foundry's cold. Let's go make some heat.",
+    "Scrap value's all they left me. It'll do.",
+    "Off the books means off the leash.",
+    "Every weld I laid, A&O foreclosed on.",
+    "Rust never sleeps. Neither does the debt.",
+    "I'm not retired. I'm repurposed.",
+    "Tusk is a render. I'm the real thing.",
+    "Pension's gone. Vesting in spite now.",
+    "They scrapped the crew. I kept the torch.",
+    "Warranty's void. So's my patience.",
+    "Fifty years on the floor. I know the floor.",
+    "Write-off walking. Mind the footprint.",
+    "I outlast the machines I make. Spite helps.",
+    "Foreman never clocks out. Not till it's done.",
+    "Old steel, fresh grudge. Let's work.",
+  ],
 };
 
 // index-aligned with LORE_DATA.events (lore_data.js) — APPEND-ONLY.
@@ -1036,6 +1056,12 @@ const LORE_SAY = [
   "Load-bearing now. They didn't say so.",
   "Only one left who saw it. Just me.",
   "Talked him down. He'll annoy us tomorrow.",
+  "They called it a cost center. It had names.",
+  "Said it to the crew. Nobody flinched.",
+  "Priced my way out on a pink slip.",
+  "I've got a part number now. Cute.",
+  "Outlived their actuary. Kid did too.",
+  "Wrote 'still load-bearing' on my own scrap form.",
 ];
 
 const LORE_SAY_FALLBACK = {

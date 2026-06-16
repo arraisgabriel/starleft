@@ -91,6 +91,9 @@
       } else if(cmd.k === 'ability'){
         const sel = (cmd.ids||[]).map(id=>byId.get(id)).filter(e=>e&&!e.dead&&!e.storedIn&&e.owner==='player'&&(e.ctrl||'p1')===ctrl);
         if(sel.length && typeof castAbility==='function') quietApply(()=> castAbility(state, sel));
+      } else if(cmd.k === 'heroability'){
+        const sel = (cmd.ids||[]).map(id=>byId.get(id)).filter(e=>e&&!e.dead&&!e.storedIn&&e.owner==='player'&&e.hero&&(e.ctrl||'p1')===ctrl);
+        if(sel.length && typeof castHeroAbility==='function') quietApply(()=> castHeroAbility(state, sel));
       }
     } finally { state.selection = saveSel; state._cmdCtrl = saveCtrl; }
   }

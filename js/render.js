@@ -1486,6 +1486,7 @@ const SPRITE_LOD_ZOOM = 0.45;
 function heroAura(u){
   return u.spriteType==='nino' ? { color:[168,90,238],  rx:0.34, ry:0.30, alpha:0.50 }   // purple
        : u.spriteType==='biba' ? { color:[236,242,255], rx:0.34, ry:0.30, alpha:0.46 }   // white
+       : u.spriteType==='rust' ? { color:[255,140,60],  rx:0.34, ry:0.30, alpha:0.48 }   // PEDRO "RUST": foundry orange
        : null;
 }
 function drawHeroGlowLayer(state, u, anim, px, py, S, layer){

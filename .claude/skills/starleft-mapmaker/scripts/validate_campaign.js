@@ -75,9 +75,9 @@ const seedSeen = new Map();
 
 console.log(`\nValidating ${MAPS.length} map(s) in ${path.relative(process.cwd(), path.join(ROOT, 'js', 'config.js')) || 'js/config.js'}\n`);
 
+let linearN = 0;   // running count of NON-villain (linear) maps → drives episode numbering (villains are appended out-of-line)
 for (let i = 0; i < MAPS.length; i++) {
   const m = MAPS[i] || {};
-  const roman = toRoman(i + 1);
 
   /* required scalar fields */
   if (typeof m.name !== 'string' || !m.name) err(i, 'missing `name`');
@@ -108,10 +108,12 @@ for (let i = 0; i < MAPS.length; i++) {
      VILLAIN maps (isVillain) are APPENDED past the linear campaign with non-numeric display labels
      ("Boss 7.5"/"EPISODE 7.5"), so they are exempt from the index↔Roman-numeral sequencing check. */
   if (!m.isVillain) {
+    linearN++;                          // Nth linear map → episode N; villains are appended and skipped
+    const roman = toRoman(linearN);
     if (typeof m.name === 'string') {
       const lead = (m.name.trim().match(/^[IVXLCDM]+/) || [null])[0];
       if (lead !== roman)
-        err(i, `name "${m.name}" should start with Roman numeral "${roman}" (array position ${i})`);
+        err(i, `name "${m.name}" should start with Roman numeral "${roman}" (linear episode ${linearN}, array position ${i})`);
     }
     if (m.crawl && typeof m.crawl.episode === 'string' && m.crawl.episode.trim() !== `EPISODE ${roman}`)
       err(i, `crawl.episode "${m.crawl.episode}" should be "EPISODE ${roman}"`);
@@ -138,10 +140,12 @@ for (let i = 0; i < MAPS.length; i++) {
   if (Number.isFinite(W) && Number.isFinite(H)) {
     if (!m.player) err(i, 'missing `player` start'); else checkPt('player', m.player);
     const bases = Array.isArray(m.enemies) ? m.enemies : (m.enemy ? [m.enemy] : []);
-    // VILLAIN arenas have NO enemy bases by design — the boss is the encounter (cfg.villain → villains.js).
-    // Appended SIDE MISSIONS reuse the isVillain gating but win by an alt verb instead of a boss
-    // (cfg.winCondition: survive / escort / reachAndHold — core.js checkAltWin), so either suffices.
-    if (!bases.length && !m.isVillain) err(i, 'no enemy bases (need `enemies:[...]` or `enemy:{...}`)');
+    // BOSS arenas have NO enemy bases by design — the boss is the encounter (cfg.villain → villains.js).
+    // This holds for appended VILLAIN interludes AND for LINEAR boss episodes (e.g. Ep XIII = the REX
+    // duel: a non-villain map carrying `villain:{…}` + `finale`). Appended SIDE MISSIONS instead win by
+    // an alt verb (cfg.winCondition: survive / escort / reachAndHold — core.js checkAltWin). Any of
+    // {enemy bases, a villain block, a winCondition} is a valid win source.
+    if (!bases.length && !m.isVillain && !m.villain && !m.winCondition) err(i, 'no win source — need `enemies:[...]`, a `villain:{ id, x, y }` duel, or a `winCondition:{type,…}`');
     else if (m.isVillain && !m.villain && !m.winCondition) err(i, 'gated map needs a `villain:{ id, x, y }` block or a `winCondition:{type,…}`');
     if (m.winCondition){
       const wc = m.winCondition, types = ['survive', 'escort', 'reachAndHold', 'razeAll'];

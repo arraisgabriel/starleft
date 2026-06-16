@@ -161,6 +161,27 @@ const VILLAINS = {
       death:['Acquisition… reversed.'],
     },
   },
+  // Ep XV "THE FOUNDRY RAID" duel boss: A&O's contracted Founder-Mech test pilot. You out-duel him; on
+  // the win he defects and joins as the hero "Rust" (recruit hook in bossOutcome). Renders as the A&O
+  // founder mech until his bespoke hero sprite lands. Lieutenant-scale (≈ tower_guardian), one stomp.
+  rust: {
+    name:'PEDRO "RUST"',
+    base:'founder', ao:true,
+    neonId:'rust', neonColor:'#ff8c3c', auraColor:[255,140,60], bossScale:2.6,   // foundry orange
+    hp:9000, dmg:60, range:3.6, cd:1.3, speed:1.4, sight:10,
+    dmgReduce:0.24, hpVpiScale:1/78, dmgVpiScale:1/168,
+    abilities:[
+      {k:'stomp', cd:12, range:6.0, dmg:52, waveR:3.2, jumpDur:0.7, capFrac:0.45},
+    ],
+    phases:[ {at:0.45, dmgMul:1.5, cdMul:0.7, speedMul:1.2, tint:[255,140,60]} ],
+    flee:false,
+    taunts:{
+      intro:['Company property doesn\'t quit. Neither do I.', 'They pay me to lose slow. I\'m good at it.'],
+      phase:['Fine. Off the clock now.', 'You want overtime? You\'ve got it.'],
+      stomp:['Foreclosure on three.', 'Mind the footprint.'],
+      death:['Depreciated asset, huh… we\'ll see.'],
+    },
+  },
 };
 
 /* ---- spawn (called from newMap, after the enemy bases/guards/captives exist) ---- */
@@ -821,6 +842,13 @@ function villainCheckWinLose(state){
 // win with a cosmetic _fledBoss flag so the end screen reads "it got away" while still advancing.
 function bossOutcome(state, kind){
   if(kind==='fled'){ state._fledBoss=true; if(typeof toast==='function' && !window._rbReplaying) toast('🌫️ The boss slipped away — but the field is yours.'); }
+  // Arc-3 recruit beat: out-dueling A&O's Founder-Mech test pilot at Ep XV wins over Pedro "Rust".
+  // He DEPLOYS as your hero from XV.5 onward via those maps' cfg.heroes (idiomatic first-appearance,
+  // like Nino on Ep VIII) + the normal hero carryover thereafter — captureHeroes() rebuilds carryover
+  // from on-field heroes at victory, so we can't just push him here; this is the defection toast only.
+  if(kind==='win' && state.cfg && state.cfg.villain && state.cfg.villain.id==='rust'
+     && typeof toast==='function' && !window._rbReplaying)
+    toast('🦾 Pedro "Rust" lays down his arms — the foreman is with you now.');
   // T2-7: the FINALE boss (REX) ends the war on the spot — no extraction loop, straight to the
   // victory flow, where onVictory's finale routing shows the IPO.
   if(state.cfg && state.cfg.finale){

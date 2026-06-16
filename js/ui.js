@@ -462,6 +462,16 @@ function buildCommands(sel){
         const btn=elCmd.lastChild; if(btn){ btn._abilType=t; btn.title=spec.hint||''; }
       }
     }
+    // Arc-3 hero SECOND ability (e.g. Rust RECALL): a bespoke button shown only when a hero carrying a
+    // HERO_ABILITY is selected — sits next to the founder STOMP Rust already inherits by unit type.
+    if(typeof HERO_ABILITY!=='undefined'){
+      const hSprites=[...new Set(combat.filter(u=>u.hero && HERO_ABILITY[u.spriteType]).map(u=>u.spriteType))].slice(0,2);
+      for(const sp of hSprites){
+        const spec=HERO_ABILITY[sp];
+        addCmd(spec.icon, spec.name, null, ()=>{ (typeof netHeroAbility==='function'?netHeroAbility:(g)=>castHeroAbility(g,g.selection))(G); }, 'abil-btn', 'heroability-'+sp);
+        const btn=elCmd.lastChild; if(btn){ btn._heroAbilSprite=sp; btn.title=spec.hint||''; }
+      }
+    }
   }
   // production/build buttons fill the command line; flag it so compact (mobile) layouts
   // can collapse the whole line when a unit has none — Stop now lives in #touch-controls.
@@ -524,6 +534,11 @@ function updateAffordability(){
     // T2-2: ability buttons dim while every selected unit of that type is still on cooldown
     if(b._abilType){
       const ready=G.selection.some(u=>!u.dead && u.type===b._abilType && (u.abilCd||0)<=0);
+      b.classList.toggle('disabled', !ready);
+    }
+    // Arc-3: hero second-ability button dims while every selected hero of that skin is on cooldown
+    if(b._heroAbilSprite){
+      const ready=G.selection.some(u=>!u.dead && u.hero && u.spriteType===b._heroAbilSprite && (u.heroAbilCd||0)<=0);
       b.classList.toggle('disabled', !ready);
     }
   }
@@ -1993,6 +2008,21 @@ function onVictory(){
   // cfg.finale win straight here regardless of isVillain.
   const finaleWon = !!(MAPS[mapIndex] && MAPS[mapIndex].finale);
   if(finaleWon && typeof markVillainCleared==='function') markVillainCleared(mapIndex);
+  // Arc cliffhanger: an episode flagged `cfg.toBeContinued` ends the session on a "TO BE CONTINUED" card
+  // instead of the triumphant IPO — used as the temporary end of content until the next block of
+  // episodes ships (the flag then moves forward; the real finale carries `finale:true`).
+  if(MAPS[mapIndex] && MAPS[mapIndex].toBeContinued){
+    es.className='overlay win'; es.style.display='flex';
+    es.innerHTML=`<div class="big">⏳</div><h1>TO BE CONTINUED</h1>
+      <h2>Arc 3 — the file stays open</h2>
+      ${typeof victorySummaryHTML==='function'?victorySummaryHTML():''}
+      <p>Dell Tusk is still upstream, and the wall still carries names. The next quarter is being written.</p>
+      <div style="display:flex;gap:14px;flex-wrap:wrap;justify-content:center;">
+        <button class="btn" style="background:linear-gradient(180deg,#566,#344);" onclick="location.reload()">↻ Stand down</button>
+        <button class="btn" style="background:linear-gradient(180deg,#3a4656,#222b36);" onclick="showRoster()">🕯 Veterans &amp; Memorial</button>
+      </div>`;
+    return;
+  }
   const fvIdx = (!isVillainMap && mapIndex>=lastEp && typeof finaleVillainIndex==='function') ? finaleVillainIndex() : -1;
   if(!finaleWon && (mapIndex < lastEp || isVillainMap || fvIdx>=0)){
     // infiltration map (Ep X, cfg.noCarryVets): no vets deployed here, so don't run the chooser and

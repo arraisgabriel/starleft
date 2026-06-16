@@ -812,19 +812,22 @@ Weaponize your buzzwords, circle back, and disrupt MegaCorp into bankruptcy. The
   {name:'XII — The Siege Line',enemyName:'A&O',enemyFaction:'ao',aggression:2.00,startGold:3600,startWorkers:12,startSoldiers:12,startBarracks:true,graceTime:118,waveTimer:112,crawl:{episode:'EPISODE XII',title:'THE SIEGE LINE',text:'You hold the GRAAL now, and the Wake in your H.U.B. hums with it — your dead, written back into metal, one at a time. A&O cannot abide a rival who gives the product away.\n\nSo it stops litigating and starts marching. Forward bases bloom across the approaches to the H.U.B. — staging yards, armor depots, artillery sheds — each one a step closer to the altar they mean to level before you can scale it. Let the line reach the gates and the Wake goes dark.\n\nBreak their forward bases. Shatter the assault at its staging grounds and the whole column loses its nerve and falls back. Push them off the approach....',summary:`A&O can't abide that you hold the GRAAL and a working Wake, so it stops sending lawyers and sends an army — forward bases creeping up the approaches to your H.U.B. to level the altar before you can scale it. Shatter all six staging bases and break the assault before it reaches the gates.`},reachCutscene:{name:'EP12_SIEGE_LINES',at:{x:55,y:48},radius:6},objective:'A&O is marching on the H.U.B. to destroy the Wake — liquidate all SIX of its forward staging bases to shatter the assault and force a retreat.',quests:[{id:'raze',text:'Shatter all six forward staging bases',type:'razeAll',required:true},{id:'kills',text:'Repel the assault — decommission 150 A&O troops',type:'killUnits',count:150,reward:125},{id:'churn',text:'Hold the line — keep losses under 20',type:'maxUnitsLost',count:19,reward:100}],w:118,h:96,seed:12012,terrain:{biomes:['tech','ice'],temp:{axis:'diag',base:0.26,gradient:0.18,noise:0.14},freeze:0.24,seaFrac:0.14,mtnFrac:0.08,forest:0,beach:true},player:{x:8,y:88},enemies:[{x:106,y:8,defenders:7,extraBarracks:true},{x:106,y:84,defenders:7,extraBarracks:true},{x:58,y:10,defenders:6,extraBarracks:true},{x:62,y:84,defenders:6},{x:92,y:48,defenders:7,extraBarracks:true},{x:34,y:28,defenders:5}],goldNodes:[{x:6,y:90,amt:3600},{x:13,y:88,amt:3200},{x:9,y:80,amt:2800},{x:22,y:82,amt:2400},{x:55,y:52,amt:4200},{x:42,y:44,amt:3000},{x:76,y:42,amt:3000},{x:96,y:54,amt:2500},{x:110,y:12,amt:1900},{x:110,y:82,amt:1900},{x:58,y:6,amt:1900},{x:64,y:90,amt:1900}],lakes:[{x:56,y:48,r:7},{x:86,y:26,r:5},{x:30,y:66,r:4},{x:74,y:72,r:4}],rockClusters:[{x:48,y:25,n:18},{x:70,y:30,n:16},{x:88,y:62,n:18},{x:24,y:48,n:14},{x:60,y:68,n:16}],forests:[],thickets:[{x:38,y:34,w:22,h:14,density:0.72,mix:0.25,trail:'h'},{x:80,y:34,w:18,h:18,density:0.66,mix:0.15,trail:'v'}]},
   {
     name:'XIII — The Liquidation',
-    // Arc-2 FINALE. After the siege breaks (Ep XII), A&O forecloses the hard way and fields REX — the
-    // walking-foreclosure superboss — marching on the H.U.B. to level the Wake. This is the REX duel:
-    // a LINEAR episode carrying finale:true (the IPO ending fires here via bossOutcome's cfg.finale
-    // branch + onVictory's finaleWon = !!MAPS[i].finale). The standalone REX "FINALE" map is retired
-    // to a spacer; the rex villain def stays in villains.js, reserved for the Arc-3 (Ep XXIII) re-skin.
-    // Carried roster + Nino/Biba arrive by carryover (no cfg.heroes); the prelude plays as the fight opens.
-    isVillain:false, finale:true, displayEp:'XIII',
+    // Arc-2 CLIMAX → Arc-3 PIVOT. After the siege breaks (Ep XII), A&O forecloses the hard way and
+    // fields REX — the walking-foreclosure superboss — marching on the H.U.B. to level the Wake.
+    // NO LONGER finale:true: REX is A&O's WEAPON, not the end of the war. Beating it routes onward to
+    // Ep XIV (the CEO arc, Dell Tusk), via villainNextLinear skipping the appended villain block to the
+    // appended linear XIV. (finaleVillainIndex() is isVillain-gated, so XIII was never the finale-villain;
+    // dropping finale:true simply lets onVictory continue instead of firing the IPO. The real finale —
+    // Tusk-in-REX — carries finale:true when Arc 3 completes.) The rex villain def stays in villains.js,
+    // reserved for that Ep XXIII re-skin. Carried roster + Nino/Biba arrive by carryover (no cfg.heroes);
+    // the prelude plays as the fight opens.
+    isVillain:false, displayEp:'XIII',
     enemyName:'A&O', enemyFaction:'ao',          // → founder _ao green sheet + A&O ground treatment
     aggression:1.0, startGold:1800, startWorkers:6, startSoldiers:8, startBarracks:true,
     graceTime:9999, waveTimer:9999,              // boss duel — no enemy waves; the villain IS the encounter
     crawl:{ episode:'EPISODE XIII', title:'THE LIQUIDATION',
       text:'A&O stops sending bases. It sends a building that walks.\n\nThe siege broke on your forward line and the fund did the math: cheaper to foreclose the whole property than to keep losing crews to it. So it fields REX — five stories of black alloy and toxic light, the foreclosure made flesh — and it is walking straight for the H.U.B. and the Wake humming inside it. It does not negotiate the vesting cliff. It IS the cliff.\n\nCrack its core before it overclocks and goes feral, or be the next name on the wall. Bring everyone. Bring everything....',
-      summary:`The siege failed, so A&O forecloses the hard way: REX — a five-story mech of black alloy and toxic-green light, the foreclosure made flesh — marches on the H.U.B. to level the Wake and everyone guarding it. Survive the assault, then the enrage when its core goes critical. This is the biggest, longest fight of the war.` },
+      summary:`The siege failed, so A&O forecloses the hard way: REX — a five-story mech of black alloy and toxic-green light, the foreclosure made flesh — marches on the H.U.B. to level the Wake and everyone guarding it. Survive the assault, then the enrage when its core goes critical. The hardest fight of the war so far — but REX is just the fund's hammer, and the hand that swings it has deeper pockets than this.` },
     // story-polish §5: the finale prelude (Nino/Biba) plays once as the fight opens (carryover heroes present)
     introCutscene:'REX_PRELUDE_LINES',
     objective:"Destroy A&O's REX before it reaches the Wake. It hits like a foreclosure and turns berserk below 40% — spread out and keep your healers alive.",
@@ -1028,5 +1031,161 @@ Weaponize your buzzwords, circle back, and disrupt MegaCorp into bankruptcy. The
     rockClusters:[ {x:20,y:12,n:14}, {x:36,y:30,n:14} ],
     forests:[],
     goldNodes:[ {x:23,y:28,amt:1600}, {x:31,y:20,amt:1600} ],
+  },
+
+  /* ============================ ARC 3 — THE A&O CEO ARC (Dell Tusk) ============================
+     APPENDED past the linear campaign AND the existing villain block (indices 13–18) so no existing
+     index shifts (save compat; the mapIndex===6 / MAPS[7] / wakeAppearIdx / rebornUnlockIdx hooks all
+     stay valid). villainNextLinear() walks PAST the appended villain entries to reach these appended
+     LINEAR episodes, so XIII→XIV→XV→(gated XV.5)→XVI routes correctly. Episode numbering validates via
+     the NON-VILLAIN ordinal (XV.5 is isVillain → skipped, so XVI is the 16th linear map = "XVI").
+     Block 1 of Arc 3 (design: docs/story-next-steps-ceo-arc.md §4–5). Hero Pedro "Rust" (founder skin,
+     spriteType 'rust') is fielded as the XV duel boss, defects on the win, then deploys via cfg.heroes
+     on XV.5 + XVI (captureHeroes rebuilds carryover from on-field heroes, so a duel-recruit can't be
+     pushed onto carryover directly — cfg.heroes is the idiomatic first-appearance, like Nino on Ep VIII).
+     vetCarryOverride:7 freezes the carry cap (vetCarryCountFor) so a maxed roster never exceeds HQ supply.
+     Temp end of shipped content: XVI carries toBeContinued → the "TO BE CONTINUED" card instead of the IPO
+     (no finale:true anywhere now; the real finale, Tusk-in-REX, lands when the rest of Arc 3 ships). */
+  {
+    name:'XIV — THE RECALL NOTICE',
+    isVillain:false, displayEp:'XIV', vetCarryOverride:7,
+    enemyName:'A&O', enemyFaction:'ao',
+    aggression:2.1, startGold:2400, startWorkers:10, startSoldiers:10, startBarracks:true,
+    graceTime:95, waveTimer:92,
+    crawl:{ episode:'EPISODE XIV', title:'THE RECALL NOTICE',
+      text:'The cure for death is yours, and the invoice just cleared legal.\n\nA&O does not send an army first; it sends a filing. CHAPTER ELEVEN — the fund that owns the beginning and the end declares your company a delinquent asset and your dead its repossessed inventory. And the man who signs it finally gives the fund a face: DELL TUSK, managing partner, who calls the flash a migration event, calls your memorial a liability he is rightsizing, and calls himself the adult in the room.\n\nHis recovery crews are already at the fence, and a countdown to zero the backups began the moment he spoke. Hold the H.U.B. perimeter. Make the repossession expensive....',
+      summary:`The cure for death is yours — so A&O files CHAPTER ELEVEN, declaring your company a delinquent asset and your dead its repossessed inventory, and the fund finally wears a face: managing partner Dell Tusk. His recovery crews test the H.U.B. fence while a clock to erase the backups starts ticking. Hold the perimeter and make the repossession expensive.` },
+    objective:'A&O has served CHAPTER ELEVEN and is moving to repossess the H.U.B. — HOLD the perimeter until the first recovery wave breaks, or raze all FOUR A&O repo camps to throw them off the fence.',
+    winCondition:{ type:'survive', forSec:300, protect:'hq' },
+    quests:[
+      { id:'survive', text:'Hold the H.U.B. perimeter until the recovery wave breaks', type:'survive', required:true },
+      { id:'raze',    text:'Or raze all four A&O repo camps outright',                  type:'razeAll', winsAlone:true, reward:150 },
+      { id:'repel',   text:'Repel the repossession — decommission 90 A&O crew',         type:'killUnits', count:90, reward:100 },
+      { id:'lean',    text:'Keep losses under 16',                                      type:'maxUnitsLost', count:15, reward:100 },
+    ],
+    w:96, h:80, seed:14014,
+    player:{ x:48, y:40 },
+    terrain:{ biomes:['tech'], temp:{ axis:'diag', base:0.30, gradient:0.14, noise:0.14 }, seaFrac:0.06, mtnFrac:0.06, forest:0 },
+    enemies:[ {x:10,y:10, defenders:6, extraBarracks:true}, {x:86,y:10, defenders:6}, {x:10,y:70, defenders:6}, {x:86,y:70, defenders:6, extraBarracks:true} ],
+    events:[
+      { atTime:80,  toast:'Tusk has escalated the recall — heavier recovery crews filed.', aggression:2.4 },
+      { atTime:170, toast:'CHAPTER ELEVEN enforcement: A&O surge on the fence!', spawnSquad:{ comp:[['soldier',4],['ranger',2]] }, at:{x:48,y:8} },
+      { atTime:240, toast:'The clock to zero the backups is still running. Hold.', aggression:2.7 },
+    ],
+    lakes:[ {x:30,y:30,r:4}, {x:66,y:50,r:4} ],
+    rockClusters:[ {x:48,y:20,n:14}, {x:48,y:60,n:14}, {x:24,y:48,n:12}, {x:72,y:32,n:12} ],
+    forests:[],
+    goldNodes:[ {x:46,y:38,amt:3000},{x:52,y:42,amt:2800},{x:44,y:44,amt:2400},{x:54,y:36,amt:2400},
+                {x:14,y:14,amt:1800},{x:82,y:14,amt:1800},{x:14,y:66,amt:1800},{x:82,y:66,amt:1800} ],
+  },
+  {
+    name:'XV — THE FOUNDRY RAID',
+    isVillain:false, displayEp:'XV', vetCarryOverride:7,
+    enemyName:'A&O', enemyFaction:'ao',
+    aggression:2.0, startGold:2600, startWorkers:10, startSoldiers:10, startBarracks:true,
+    graceTime:110, waveTimer:105,
+    crawl:{ episode:'EPISODE XV', title:'THE FOUNDRY RAID',
+      text:'Tusk does not build soldiers; he stamps them.\n\nOne A&O foundry on the coolant coast prints the foreclosure — a line of Founder Mechs, each a repossession on legs, and every one it stamps is one more body marching on the wall. Burn the foundry down before it floors the quarter.\n\nThey will send their contracted test pilot to stop you. He fights like a man with nothing left to lose. He is about to read his own file and find out he is right....',
+      summary:`Tusk doesn't recruit his army — he stamps it, from one A&O foundry on the coolant coast printing foreclosure-mechs on a line. Raze the foundry to break the assembly before it floods the war, then out-duel the test pilot A&O sends to stop you. He fights like he has nothing left to lose.` },
+    objective:'Raze all FIVE A&O foundry campuses to break the foreclosure-mech line and draw out the test pilot — then out-duel him. Win, and the man behind the suit changes sides.',
+    quests:[
+      { id:'raze', text:'Raze all five A&O foundry campuses',                 type:'razeAll', required:true },
+      { id:'duel', text:'Out-duel the A&O test pilot once he is drawn out',   type:'defeatVillain', required:true },
+      { id:'kills',text:'Scrap the assembly — decommission 110 A&O crew',     type:'killUnits', count:110, reward:100 },
+      { id:'lean', text:'Keep losses under 18',                               type:'maxUnitsLost', count:17, reward:100 },
+    ],
+    w:112, h:92, seed:15515,
+    player:{ x:10, y:82 },
+    terrain:{ biomes:['tech','ice'], temp:{ axis:'diag', base:0.30, gradient:0.18, noise:0.14 }, freeze:0.22, seaFrac:0.16, mtnFrac:0.07, forest:0, beach:true },
+    enemies:[ {x:100,y:10, defenders:6, extraBarracks:true}, {x:60,y:12, defenders:6}, {x:104,y:80, defenders:7, extraBarracks:true}, {x:56,y:82, defenders:6}, {x:90,y:46, defenders:7, extraBarracks:true} ],
+    // RUST — A&O's contracted Founder-Mech test pilot. DEFERRED: surfaces the moment the `raze` quest
+    // completes (villainDeferredSpawn), snapped to open ground mid-map. Out-duel him → defection toast
+    // (bossOutcome rust hook); he then deploys as your hero from XV.5 onward via those maps' cfg.heroes.
+    villain:{ id:'rust', x:56, y:46, after:'raze' },
+    lakes:[ {x:48,y:30,r:6}, {x:80,y:64,r:5}, {x:30,y:54,r:4} ],
+    rockClusters:[ {x:44,y:22,n:16}, {x:70,y:28,n:14}, {x:86,y:60,n:16}, {x:28,y:40,n:12} ],
+    forests:[],
+    goldNodes:[ {x:6,y:84,amt:3200},{x:12,y:88,amt:3000},{x:8,y:76,amt:2600},{x:20,y:84,amt:2200},
+                {x:54,y:48,amt:3500},{x:40,y:40,amt:2800},{x:76,y:40,amt:2800},{x:96,y:54,amt:2400},
+                {x:104,y:14,amt:1900},{x:60,y:8,amt:1900},{x:104,y:84,amt:1900},{x:58,y:86,amt:1900} ],
+  },
+  {
+    // ARC-3 INTERLUDE (isVillain → exempt from linear numbering; gateAfter:20 (XV) / returnTo:22 (XVI)
+    // route it after XV and back into XVI — villainGateBefore keys on returnTo===22). Reuses the shipped
+    // tower_guardian boss (re-arms the dormant `evicted` achievement). Rust DEPLOYS here for the first
+    // time via cfg.heroes (fixed dossier); the defeatVillain win + heroesAlive "no hero falls" frames
+    // the "defend the defector" beat.
+    name:'THE NON-COMPETE',
+    isVillain:true, gateAfter:20, returnTo:22, displayEp:'15.5', vetCarryOverride:7,
+    enemyName:'A&O', enemyFaction:'ao',
+    aggression:1.0, startGold:700, startWorkers:4, startSoldiers:5, startBarracks:true,
+    graceTime:9999, waveTimer:9999,              // boss duel — no enemy waves; the warden IS the encounter
+    crawl:{ episode:'EPISODE 15.5', title:'THE NON-COMPETE',
+      text:'Quitting A&O is a breach of contract, and A&O litigates with ordnance.\n\nA Founder-warden walks the slab with a non-compete bolted to its chassis — company property, the filing says, does not get to resign. It has one directive, and the directive is Rust.\n\nStand on the contract-arena with the man who just changed sides and make the clause unenforceable....',
+      summary:`Pedro "Rust" changed sides, and A&O's lawyers answer the only way they know — a Founder-warden with a non-compete bolted to its chassis, dispatched to enforce the clause that says company property cannot resign. Defend the defector on the arena slab and break the warden before it collects.` },
+    objective:'A&O sent a Founder-warden to enforce Rust\'s non-compete — destroy it and keep PEDRO "RUST" standing.',
+    quests:[
+      { id:'duel',   text:'Destroy the A&O Founder-warden',                  type:'defeatVillain', required:true },
+      { id:'defend', text:'No hero falls — keep Rust on his feet',           type:'heroesAlive', reward:125 },
+      { id:'lean',   text:'Lose no more than 5 staff to the warden',         type:'maxUnitsLost', count:5, reward:75 },
+    ],
+    w:34, h:28, seed:15521,
+    player:{ x:6, y:22 },
+    terrain:{ biomes:['tech'], seaFrac:0.04, mtnFrac:0.06, forest:0 },
+    enemies:[],                                  // boss duel — no enemy bases; the warden IS the encounter
+    villain:{ id:'tower_guardian', x:27, y:7 },
+    // Rust's FIRST deployment as a player hero (founder skin). Fixed dossier (gallows-corporate; the
+    // depreciated-asset trauma). He carries forward via captureHeroes after this map; XVI re-lists him
+    // (dedup by heroId) so a death here doesn't strip him from his own episode.
+    heroes:[ { name:'Rust', type:'founder', sprite:'rust', level:6, dossier:{
+      first:'Pedro', last:'"Rust"',
+      home:'the Detroit-Reclamation rustbelt',
+      rel:'crew', relName:'the old line crew',
+      family:"Pedro came up tooling exosuits on a union floor in the Reclamation — the kind of shop where the whole crew signed every chassis — until A&O bought the floor and the signatures with it.",
+      trauma:'the review that booked him a DEPRECIATED ASSET and wrote him off the quarter he turned fifty, scrapped beside the machines he tooled',
+      dream:'to own one thing outright that no quarterly review can ever repossess',
+      crime:'welding the foreclosure-mech chassis that now walks on the people he came up with',
+    } } ],
+    lakes:[], rockClusters:[ {x:14,y:10,n:8}, {x:22,y:18,n:6} ], forests:[],
+    goldNodes:[ {x:6,y:24,amt:1500}, {x:4,y:18,amt:1300}, {x:10,y:25,amt:1300} ],
+  },
+  {
+    name:'XVI — THE SEVERANCE PACKAGE',
+    isVillain:false, displayEp:'XVI', vetCarryOverride:7, toBeContinued:true,
+    enemyName:'A&O', enemyFaction:'ao',
+    aggression:2.1, startGold:2800, startWorkers:10, startSoldiers:12, startBarracks:true,
+    graceTime:100, waveTimer:95,
+    crawl:{ episode:'EPISODE XVI', title:'THE SEVERANCE PACKAGE',
+      text:'They expensed Rust the quarter he turned fifty and kept his face for the brochure. Now A&O wants the chassis back.\n\nA recovery division rolls in with the paperwork pre-signed — and Rust, reading his own file off their network, goes quiet at one line. The founder who signed his layoff has not aged in a render since the year he supposedly died.\n\nDefend your new asset. Raze the division. And start asking what Dell Tusk actually is....',
+      summary:`A&O sends a whole recovery division to repossess its "depreciated asset" — and pulling his own file off their network, Rust finds the thread that unravels everything: the founder who signed his layoff hasn't aged in a marketing render since the year he supposedly died. Defend Rust, raze the division, and start asking what Tusk really is.` },
+    objective:'A&O\'s recovery division has come for Rust — raze all FIVE of its repossession bases and keep PEDRO "RUST" alive.',
+    quests:[
+      { id:'raze',   text:'Raze all five A&O repossession bases',            type:'razeAll', required:true },
+      { id:'defend', text:'No hero falls — Rust walks out of this one',      type:'heroesAlive', reward:150 },
+      { id:'lean',   text:'Keep losses under 18',                            type:'maxUnitsLost', count:17, reward:100 },
+    ],
+    w:108, h:88, seed:16016,
+    player:{ x:10, y:78 },
+    terrain:{ biomes:['tech'], temp:{ axis:'diag', base:0.28, gradient:0.14, noise:0.14 }, seaFrac:0.10, mtnFrac:0.08, forest:0 },
+    enemies:[ {x:98,y:10, defenders:7, extraBarracks:true}, {x:58,y:10, defenders:6}, {x:100,y:78, defenders:7, extraBarracks:true}, {x:54,y:80, defenders:6}, {x:84,y:46, defenders:8, extraBarracks:true} ],
+    heroes:[ { name:'Rust', type:'founder', sprite:'rust', level:6, dossier:{
+      first:'Pedro', last:'"Rust"',
+      home:'the Detroit-Reclamation rustbelt',
+      rel:'crew', relName:'the old line crew',
+      family:"Pedro came up tooling exosuits on a union floor in the Reclamation — the kind of shop where the whole crew signed every chassis — until A&O bought the floor and the signatures with it.",
+      trauma:'the review that booked him a DEPRECIATED ASSET and wrote him off the quarter he turned fifty, scrapped beside the machines he tooled',
+      dream:'to own one thing outright that no quarterly review can ever repossess',
+      crime:'welding the foreclosure-mech chassis that now walks on the people he came up with',
+    } } ],
+    events:[
+      { atTime:90,  toast:'A&O doubles the recovery bounty on Rust — heavier crews inbound.', aggression:2.4 },
+      { atTime:200, toast:'Repossession order escalated — recovery division pressing in.', spawnSquad:{ comp:[['soldier',4],['ranger',2],['lobbyist',1]] }, at:{x:54,y:44} },
+    ],
+    lakes:[ {x:36,y:30,r:5}, {x:74,y:60,r:5}, {x:24,y:56,r:4} ],
+    rockClusters:[ {x:46,y:24,n:16}, {x:70,y:30,n:14}, {x:88,y:62,n:16}, {x:30,y:42,n:12} ],
+    forests:[],
+    goldNodes:[ {x:6,y:80,amt:3200},{x:12,y:84,amt:3000},{x:8,y:72,amt:2600},{x:20,y:80,amt:2200},
+                {x:52,y:46,amt:3400},{x:38,y:38,amt:2800},{x:72,y:40,amt:2800},{x:92,y:54,amt:2400},
+                {x:100,y:14,amt:1900},{x:58,y:6,amt:1900},{x:100,y:82,amt:1900},{x:56,y:84,amt:1900} ],
   },
 ];
