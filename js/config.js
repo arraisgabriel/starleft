@@ -5,6 +5,11 @@
 const TILE = 32;
 const ASSIST_BUILD_RATE = 0.15;  // each Intern beyond the first adds +15% build speed
 const DEMOLISH_REFUND = 0.8;     // demolishing a building salvages 80% of the funding paid for it
+// Google Drive cloud save-sync (js/net/gdrive-*.js). EMPTY by default → the feature is fully inert:
+// no Google Identity Services script is injected, no Sync UI appears, zero network calls (mirrors
+// TELE_ENDPOINT in js/telemetry.js). Paste an OAuth "Web application" Client ID (…apps.googleusercontent.com,
+// PUBLIC + safe — no secret exists for the token flow) to enable. Setup steps: docs/gdrive-setup.md.
+const GDRIVE_CLIENT_ID = '744269173445-h3oj3a1ivs6ovqjffu52u04hnv5793dv.apps.googleusercontent.com';
 const cv = document.getElementById('cv');
 const ctx = cv.getContext('2d');
 const mm = document.getElementById('minimap');

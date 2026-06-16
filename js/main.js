@@ -383,6 +383,15 @@ function _unloadAutosave(){
 }
 document.addEventListener('visibilitychange', ()=>{ if(document.visibilityState==='hidden') _unloadAutosave(); });
 window.addEventListener('pagehide', _unloadAutosave);
+// Cloud save-sync: opportunistically pull when the tab regains focus — but only when NOT in a live match,
+// so play is never interrupted (conflicts surface in the Load menu instead). No-op unless connected.
+function _gdriveFocusPull(){
+  if(typeof gdriveAutoPull!=='function') return;
+  if(typeof running!=='undefined' && running) return;
+  gdriveAutoPull();
+}
+document.addEventListener('visibilitychange', ()=>{ if(document.visibilityState==='visible') _gdriveFocusPull(); });
+window.addEventListener('focus', _gdriveFocusPull);
 if(typeof syncContinueButton==='function') syncContinueButton();   // ▶ Continue from the latest autosave (T0-8)
 if(typeof mpCheckInviteHash==='function') mpCheckInviteHash();   // #mp=CODE invite link → auto-join co-op
 /* =====================================================================

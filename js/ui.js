@@ -1624,6 +1624,14 @@ function docFooter(){ if(_docCampaign) startGame(0); else hideSub('docScreen'); 
 
 function startGame(idx){
   idx = idx|0;
+  // New Campaign (idx 0): a one-time, gated nudge explaining that cross-device save-sync is keyed to the
+  // Google login (js/net/gdrive-sync.js). Returns true only when it shows the panel — then it drives the
+  // rest of startup itself via the onProceed callback. Inert/absent → falls straight through to today's flow.
+  if(idx===0 && typeof cloudCampaignGate==='function' && cloudCampaignGate(()=>startGameProceed(0))) return;
+  startGameProceed(idx);
+}
+function startGameProceed(idx){
+  idx = idx|0;
   if(idx===0 && typeof TELE!=='undefined') TELE.event('new_campaign');
   // Quarter I (idx 0) first asks whether the player wants the guided tutorial; the prompt's
   // Yes/No calls back into beginRun(0). Every other map starts immediately.

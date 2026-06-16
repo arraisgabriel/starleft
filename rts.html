@@ -376,6 +376,11 @@
       <h2>Load Game</h2>
       <div class="panel-label">Resume a saved match</div>
       <div id="loadSlots"></div>
+      <!-- Cloud save-sync controls (Google Drive). Hidden unless GDRIVE_CLIENT_ID is set; populated by gdriveRefreshUI(). -->
+      <div id="cloudPanel" style="display:none;">
+        <div class="panel-label" id="cloudStatus"></div>
+        <div class="submenu-actions" id="cloudActions"></div>
+      </div>
       <input type="file" id="importFile" accept=".json,application/json" style="display:none;"
              onchange="importSaveFile(this.files[0]); this.value='';">
       <div class="submenu-actions">
@@ -502,6 +507,9 @@
   <div class="overlay" id="endScreen" style="display:none;"></div>
   <!-- Extraction "leave them behind?" confirmation -->
   <div class="overlay" id="extractConfirm" style="display:none;"></div>
+  <!-- Cloud save-sync: per-slot "cloud is newer" conflict prompt + New-Campaign Google-login nudge (js/net/gdrive-sync.js) -->
+  <div class="overlay" id="cloudConflict" style="display:none;"></div>
+  <div class="overlay submenu" id="cloudNudge" style="display:none;"></div>
   <!-- Scripted-cutscene caption (lower third), e.g. Nino's Ep VII flash monologue -->
   <div id="cutsceneCaption"><div class="cs-text"></div><div class="cs-hint"></div></div>
 </div>
@@ -584,6 +592,12 @@
 <script src="js/net/mp-ui.js"></script>
 <script src="js/net/voice-chat.js"></script>
 <script src="js/net/features.js"></script>
+<!-- ── Google Drive appDataFolder cloud save-sync (classic; orthogonal to co-op/netRole). Fully inert unless
+     GDRIVE_CLIENT_ID (js/config.js) is set: gdrive-auth then injects Google Identity Services + publishes window.GDRIVE.
+     Loads after save.js (uses its public API) and the readiness bridges. See docs/gdrive-setup.md. ── -->
+<script src="js/net/gdrive-ready.js"></script><!-- whenGsi()/gisAvailable() bridge (mirrors mp-ready.js) -->
+<script src="js/net/gdrive-auth.js"></script><!-- window.GDRIVE token facade; injects accounts.google.com/gsi/client when a Client ID is set -->
+<script src="js/net/gdrive-sync.js"></script><!-- Drive REST CRUD, push/pull/merge, conflict prompt, sync triggers, New-Campaign nudge -->
 <script src="js/perf_scenarios.js"></script><!-- perf harness deterministic worst-case scenes (test-only; needs loadMap/newHubMap/mkUnit) -->
 <script src="js/mutators.js"></script><!-- skirmish-only run modifiers (T3-4): deterministic hooks + the Valuation multiplier -->
 <script src="js/skirmish_gen.js"></script><!-- solo skirmish + daily/random seed-rolled maps (T3-2); transient MAPS slot, never saved -->

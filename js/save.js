@@ -272,6 +272,7 @@ function saveGame(){
     else { enforceCap(); key=SAVE_PREFIX+now; }
     saveWrite(key, payload);
     toast('Game saved');
+    if(typeof gdriveAutoPush==='function') gdriveAutoPush();   // cloud sync (no-op unless connected; never interactive)
   }catch(err){
     // only blame storage when it IS storage — anything else is a serialization bug to surface,
     // not mislabel (a save-crash once shipped as a bogus "storage full" for exactly this reason)
@@ -291,6 +292,7 @@ function autosaveGame(){
     const p=serializeGame(); if(typeof fallenVets!=='undefined' && fallenVets) p.fallen=fallenVets;
     saveWrite(AUTO_KEY, p);
     _autosaveQuotaWarned=false;
+    if(typeof gdriveAutoPush==='function') gdriveAutoPush();   // cloud sync (debounced; no-op unless connected; never pops a popup)
   }catch(err){
     if(!isQuotaError(err)) console.error('Autosave failed', err);
     if(!_autosaveQuotaWarned){ _autosaveQuotaWarned=true;
@@ -364,6 +366,7 @@ function openLoadMenu(){
   const mapBtn=document.getElementById('loadMapSelectBtn');
   if(mapBtn){ const ss=document.getElementById('startScreen'); mapBtn.style.display=(ss && getComputedStyle(ss).display!=='none') ? '' : 'none'; }
   showSub('loadScreen');
+  if(typeof gdriveOnLoadMenuOpen==='function') gdriveOnLoadMenuOpen();   // refresh cloud status + opportunistic pull
 }
 function fmtElapsed(sec){ sec=Math.max(0,sec|0); const m=(sec/60)|0, s=sec%60; return m+':'+(s<10?'0':'')+s; }
 function fmtWhen(ms){ try{ return new Date(ms).toLocaleString(); }catch(_){ return ''; } }
@@ -382,7 +385,8 @@ function buildLoadSlots(){
   meter.textContent='Storage: '+fmtBytes(storageUsedBytes())+' of ~5 MB used';
   wrap.appendChild(meter);
   const saves=listSaves();
-  if(!saves.length){ const none=document.createElement('div'); none.className='panel-label'; none.textContent='No saved games yet'; wrap.appendChild(none); return; }
+  if(!saves.length){ const none=document.createElement('div'); none.className='panel-label'; none.textContent='No saved games yet'; wrap.appendChild(none);
+    if(typeof gdriveAppendCloudRows==='function') gdriveAppendCloudRows(wrap); return; }
   saves.forEach(s=>{
     const row=document.createElement('div'); row.className='save-row';
     let ep=''; try{ ep=saveEpisodeLabel(s.mapIndex, s.hub); }catch(_){ ep=''; }
@@ -399,6 +403,7 @@ function buildLoadSlots(){
     row.querySelector('.save-del').onclick=()=>{ localStorage.removeItem(s.key); buildLoadSlots(); };
     wrap.appendChild(row);
   });
+  if(typeof gdriveAppendCloudRows==='function') gdriveAppendCloudRows(wrap);   // dimmed "in cloud only" rows
 }
 
 /* ---------- export / import save files (share a save between devices) ----------

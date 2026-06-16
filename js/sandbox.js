@@ -104,17 +104,27 @@
     if(panel) return;
     panel=document.createElement('div'); panel.id='sbx-panel';
 
-    // map options: every MAPS entry + the HUB
+    // map options: every MAPS entry + the HUB, ORDERED BY EPISODE NUMBER (not array index). The
+    // appended Arc-3 maps (indices 19-22) and the villain `.5` interludes sit out of play-order in the
+    // array, so sorting by episode makes the list read I…XVI with each interlude slotted into its
+    // story position. Labels use the episode number too (displayEp / leading Roman), never "Q"+(i+1)
+    // — that showed Ep XIV as "Q20" and the new chapters were impossible to find.
+    const romanToNum=(s)=>{ const M={I:1,V:5,X:10,L:50,C:100,D:500,M:1000}; let n=0,prev=0;
+      for(let k=s.length-1;k>=0;k--){ const v=M[s[k]]; if(!v) return NaN; if(v<prev) n-=v; else { n+=v; prev=v; } } return n; };
+    const epNum=(m,i)=>{ const d=(m.displayEp||'').trim();          // sortable episode number
+      if(/^[\d.]+$/.test(d)) return parseFloat(d);                  // '7.5','15.5'
+      if(/^[IVXLCDM]+$/.test(d)) return romanToNum(d);              // 'XIII','XIV'
+      const lead=((m.name||'').trim().match(/^[IVXLCDM]+/)||[''])[0];
+      return lead?romanToNum(lead):(900+i); };                      // unparseable (e.g. REX 'FINALE' spacer) → end
     let opts='<option value="hub">⌂ The H.U.B.</option>';
-    if(typeof MAPS!=='undefined') MAPS.forEach((m,i)=>{
-      const sub=((m.name||('Map '+i)).split('—')[1]||m.name||('Map '+i)).trim();
-      // Label by EPISODE number (displayEp, else the leading Roman in the name), NOT the raw array
-      // index: Arc-3 maps are appended past the villain block (indices 19-22), so "Q"+(i+1) showed
-      // Ep XIV as "Q20" / XVI as "Q23" and the new chapters were impossible to find in this list.
-      const ep=m.displayEp || ((m.name||'').trim().match(/^[IVXLCDM]+(?:\.\d+)?/)||[''])[0];
-      const tag=m.isVillain?('BOSS '+(m.displayEp||'')):('EP '+(ep||(i+1)));
-      opts+=`<option value="${i}">${tag} · ${sub}</option>`;
-    });
+    if(typeof MAPS!=='undefined'){
+      MAPS.map((m,i)=>({m,i})).sort((a,b)=>(epNum(a.m,a.i)-epNum(b.m,b.i))||(a.i-b.i)).forEach(({m,i})=>{
+        const sub=((m.name||('Map '+i)).split('—')[1]||m.name||('Map '+i)).trim();
+        const ep=m.displayEp || ((m.name||'').trim().match(/^[IVXLCDM]+(?:\.\d+)?/)||[''])[0];
+        const tag=m.isVillain?('BOSS '+(m.displayEp||'')):('EP '+(ep||(i+1)));
+        opts+=`<option value="${i}">${tag} · ${sub}</option>`;      // value stays the real array index (loadMap)
+      });
+    }
 
     const unitBtns=placeable('unit').map(k=>paletteBtn(k)).join('');
     const bldBtns =placeable('building').map(k=>paletteBtn(k)).join('');

@@ -440,22 +440,34 @@
     if(!_vmaxC) _vmaxC=(typeof DEF!=='undefined' && DEF.lobbyist && typeof TILE!=='undefined') ? DEF.lobbyist.speed*TILE : 70;
     return _vmaxC;
   }
-  // Bound the VISIBLE walk speed. Itineraries schedule each travel window from the
-  // straight-line distance × ROAD_FACTOR (the route isn't computed yet at bind), but the
-  // real A* road route can be far windier — covering it inside the same window is what
-  // made some NPCs sprint. When the route first resolves, if the implied speed exceeds
-  // _vmax(), extend this travel into the FOLLOWING dwell/hide (arrive later, linger
-  // less, ≥2s of the dwell kept). Deterministic (routes are static-map A*), no position
-  // pops (dwell eval ignores t0; segment advancement reads t1 live), and the mutation is
-  // one-shot per segment (_paced) so day-wrap replays are stable.
+  // Widen the travel WINDOW so the NPC can cover the route at its OWN pace (slot.speed) without
+  // sprinting. Itineraries schedule each window from the straight-line distance × ROAD_FACTOR (the
+  // route isn't computed yet at bind), but the real A* road route can be far windier — covering it
+  // inside that window is what made some NPCs sprint. When the route first resolves, if it can't be
+  // walked at slot.speed inside the window, extend this travel into the FOLLOWING dwell/hide (arrive
+  // later, linger less, ≥2s of the dwell kept). Pairs with the slot.speed cap in _reach/_evalSlot:
+  // the cap kills the sprint; this keeps the NPC from popping to the doorstep when it can't finish.
+  // Deterministic (routes are static-map A*), one-shot per segment (_paced) so day-wrap replays stay
+  // stable.
   function _paceSeg(slot, seg, route){
     seg._paced=1;
-    const W=seg.t1-seg.t0, need=route.len/_vmax();
+    const W=seg.t1-seg.t0, need=route.len/slot.speed;
     if(need<=W) return;
     const next=slot.segs[slot.segIdx+1];
     if(!next || next.kind===K_TRAVEL) return;                  // nothing safe to borrow from (rare)
     const grab=Math.min(need-W, Math.max(0, (next.t1-next.t0)-2));
     if(grab>0){ seg.t1+=grab; next.t0+=grab; }
+  }
+  // Arc-length this NPC has covered into its current travel seg, CAPPED at its own walk pace so a
+  // windy A* route (or a too-short dwell for _paceSeg to borrow from) can never read as a sprint:
+  // walk at slot.speed, and once the route's done hold at the doorstep until the window ends. The
+  // closed-form (no per-frame state) keeps solo/host/client identical. Shared by _evalSlot (body
+  // position) and drawOne (leg-cycle cadence) so the feet never moonwalk against the capped body.
+  function _reach(slot, seg, C){
+    const rt=seg.route;
+    if(rt && !rt.broken) return Math.min(rt.len, slot.speed*Math.max(0, C-seg.t0));
+    const len=Math.hypot(seg.bx-seg.ax, seg.by-seg.ay);       // legs still streaming → straight-line lerp distance
+    return len*Math.max(0, Math.min(1, (C-seg.t0)/(seg.t1-seg.t0||1)));
   }
   function _evalSlot(slot, C){
     const seg=slot.segs[slot.segIdx];
@@ -463,10 +475,10 @@
     if(seg.kind===K_DWELL){ slot.x=seg.ax; slot.y=seg.ay; slot.onMap=true; return seg; }
     const route=seg.route || (seg.route=_routeFor(seg.a, seg.b));
     if(route && !route.broken && !seg._paced) _paceSeg(slot, seg, route);
-    const f=Math.max(0, Math.min(1, (C-seg.t0)/(seg.t1-seg.t0||1)));
     if(route && route.broken){ slot.onMap=false; return seg; }  // walled-in doorstep: skip the walk, arrive on schedule
-    if(route){ _routeAt(route, f*route.len, slot, _pt); slot.x=_pt.x; slot.y=_pt.y; slot.face=_pt.face; }
-    else { slot.x=seg.ax+(seg.bx-seg.ax)*f; slot.y=seg.ay+(seg.by-seg.ay)*f; slot.face=(seg.bx-seg.ax)<0?-1:1; } // legs still computing (first ~14 frames)
+    if(route){ _routeAt(route, _reach(slot, seg, C), slot, _pt); slot.x=_pt.x; slot.y=_pt.y; slot.face=_pt.face; }  // capped at slot.speed → no sprint
+    else { const f=Math.max(0, Math.min(1, (C-seg.t0)/(seg.t1-seg.t0||1)));   // legs still computing (first ~14 frames)
+      slot.x=seg.ax+(seg.bx-seg.ax)*f; slot.y=seg.ay+(seg.by-seg.ay)*f; slot.face=(seg.bx-seg.ax)<0?-1:1; }
     slot.onMap=true;
     return seg;
   }
@@ -566,9 +578,7 @@
     if(!anim || !anim.ready){ _drawSilhouette(slot); return; }  // art still streaming: dark figure, never bright
     let fi=0, S=slot.drawH;
     if(seg && seg.kind===K_TRAVEL){
-      const C=_cityC(), f=Math.max(0,Math.min(1,(C-seg.t0)/(seg.t1-seg.t0||1)));
-      const len=(seg.route&&!seg.route.broken)?seg.route.len:Math.hypot(seg.bx-seg.ax,seg.by-seg.ay);
-      fi=((f*len/9)|0)%anim.frames.length;                      // legs match ground speed (same 9px step as units)
+      fi=((_reach(slot, seg, _cityC())/9)|0)%anim.frames.length;  // legs match the (capped) ground speed (same 9px step as units)
     } else {
       S*=1+0.015*Math.sin(_cityC()*1.7+slot.phase);             // closed-form idle breathe, no per-frame state
     }
