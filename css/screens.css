@@ -179,6 +179,8 @@ body.big-text #toast{ font-size:15px; }
   background:rgba(44,20,24,.95); border:1px solid #753a48; padding:9px 20px; border-radius:20px;
   font-size:13px; color:#ffd86b; z-index:30; pointer-events:none; opacity:0; transition:.3s;
   box-shadow:0 4px 14px rgba(0,0,0,.5);
+  /* wordy notices (e.g. cloud-sync) must wrap, not run off both screen edges and clip their first words */
+  max-width:min(520px,92vw); white-space:normal; line-height:1.4; text-align:center;
 }
 #toast.show { opacity:1; }
 #toast.event { max-width:min(520px,92vw); white-space:normal; line-height:1.45; text-align:center;

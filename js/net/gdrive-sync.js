@@ -19,6 +19,8 @@ const GD_PULL_MIN_INTERVAL = 30000;// never pull more than once / 30s (alt-tab m
 const GD_CLOUD_MANUAL_CAP = 50;    // cloud retention: keep the newest N MANUAL saves in appDataFolder (the autosave is
                                    // never counted/pruned). Generous vs the 12 local slots so a save another device
                                    // still treats as current is very unlikely to be trimmed. Pruned in the push tail.
+const GD_TOAST_MS = 40000;         // long-lived toast (~40s) for the wordy cloud-sync notices — the default 1.8s is far too
+                                   // short to read them. Toasts are still replaced by the next toast / clearToast().
 
 /* ---- save pools ----
    The cloud layer syncs TWO disjoint pools, each tagged in Drive by appProperties.app so they never mix in
@@ -256,7 +258,7 @@ async function reconcileAndRecreate(cloudMissing, pool){
     if(!m.local){ try{ pool.enforceCap(); }catch(_){} await recreateSlot(m.file); }
   }
   if(dropped>0 && typeof toast==='function')
-    toast('Cloud has '+dropped+' more save'+(dropped===1?'':'s')+' than this device holds ('+pool.manualCap+' max). Newest kept; the rest stay backed up in the cloud.');
+    toast('Cloud has '+dropped+' more save'+(dropped===1?'':'s')+' than this device holds ('+pool.manualCap+' max). Newest kept; the rest stay backed up in the cloud.', GD_TOAST_MS);
 }
 
 /* ---- conflict prompt (#cloudConflict overlay; mirrors showExtractConfirm in js/hub.js) ---- */
@@ -434,7 +436,7 @@ function showCloudSignInPanel(){
   const skip=document.getElementById('csiSkip');
   if(connect) connect.onclick=()=>{ close(); gdriveConnect(); };       // real click → interactive sign-in (popup allowed)
   if(skip) skip.onclick=()=>{ setCloudDeclined(); setCloudOn(false); close();
-    if(typeof toast==='function') toast('Saves stay on this device — turn on cloud sync anytime from Load Game');
+    if(typeof toast==='function') toast('Saves stay on this device — turn on cloud sync anytime from Load Game', GD_TOAST_MS);
     gdriveRefreshUI(); };
 }
 // Called from openLoadMenu(): refresh the cloud UI, then opportunistically (silently) fast-forward.
@@ -572,7 +574,7 @@ function cloudCampaignGate(onProceed){
     return false;
   }
   if(cloudOn()){                                                            // opted in but token lapsed → proceed
-    if(typeof toast==='function') toast('Saves sync to'+(email?' '+email:' your Google account')+' — sign in again to resume');
+    if(typeof toast==='function') toast('Saves sync to'+(email?' '+email:' your Google account')+' — sign in again to resume', GD_TOAST_MS);
     return false;
   }
   if(cloudNudgeSeen()) return false;                                        // already shown once → don't nag
