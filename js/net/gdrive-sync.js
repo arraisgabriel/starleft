@@ -36,12 +36,17 @@ let GD_tok = null;                 // bearer for the in-flight push/pull batch (
 let GD_cloudIndex = [];            // last listed cloud index: [{id,name,slKey,savedAt,mapName,mapIndex,hub,auto,modifiedTime}]
 let GD_pushTimer = null, GD_pullTimer = null, GD_lastPullAt = 0, GD_lastSyncAt = 0;
 let GD_statusState = '', GD_statusInfo = null;
+let GD_signinPromptedThisSession = false;   // the menu sign-in/decline panel shows at most once per page load (cloudDeclined() stops it across sessions)
 
 const GD_sleep = ms => new Promise(r => setTimeout(r, ms));
 function cloudOn(){ try{ return localStorage.getItem('starleft_cloud_on')==='1'; }catch(_){ return false; } }
-function setCloudOn(v){ try{ v ? localStorage.setItem('starleft_cloud_on','1') : localStorage.removeItem('starleft_cloud_on'); }catch(_){} }
+function setCloudOn(v){ try{ if(v){ localStorage.setItem('starleft_cloud_on','1'); localStorage.removeItem('starleft_cloud_declined'); } else { localStorage.removeItem('starleft_cloud_on'); } }catch(_){} }
 function cloudNudgeSeen(){ try{ return localStorage.getItem('starleft_cloud_nudge_seen')==='1'; }catch(_){ return false; } }
 function setCloudNudgeSeen(){ try{ localStorage.setItem('starleft_cloud_nudge_seen','1'); }catch(_){} }
+// Persistent "player chose not to sync" decision: silences the menu sign-in panel AND the New-Campaign nudge
+// across sessions. Reversible — connecting from the Load menu calls setCloudOn(true), which clears it.
+function cloudDeclined(){ try{ return localStorage.getItem('starleft_cloud_declined')==='1'; }catch(_){ return false; } }
+function setCloudDeclined(){ try{ localStorage.setItem('starleft_cloud_declined','1'); }catch(_){} }
 
 /* ---- low-level REST ---- */
 // One wrapper for every Drive call: classifies status codes, refreshes a 401 once (silently), retries a 5xx once.
@@ -133,9 +138,14 @@ async function driveDelete(id){
   await driveFetch(GD_API+'/'+id, { method:'DELETE' });
 }
 
-/* ---- token gate for a push/pull batch ---- */
-async function gdAcquire(interactive){
-  let t=null; try{ t = await GDRIVE.getToken({ interactive:!!interactive }); }catch(_){ t=null; }
+/* ---- token gate for a push/pull batch ----
+   mode: true → interactive (may pop a window); 'silent' → near-silent grant (no window unless interaction is
+   truly required, in which case it's popup-blocked and rejects); falsy → cached-token-only (autosave push). */
+async function gdAcquire(mode){
+  const opts = mode===true ? { interactive:true }
+             : mode==='silent' ? { interactive:false, silent:true }
+             : { interactive:false };
+  let t=null; try{ t = await GDRIVE.getToken(opts); }catch(_){ t=null; }
   if(!t){ syncStatus('signin'); return false; }
   GD_tok = t; return true;
 }
@@ -191,25 +201,31 @@ async function gdrivePruneCloud(pool){
 /* ---- PULL (cloud → local) + reconcile/merge ---- */
 async function gdrivePull(opts){
   opts = opts || {}; const pool = opts.pool || GD_solo();
+  const autoApply = !!opts.autoApply;   // seamless menu/boot pull: fast-forward newer cloud slots in place, NEVER prompt
   if(!gisAvailable()) return { ok:false, reason:'unavailable' };
-  if(!(await gdAcquire(opts.interactive))) return { ok:false, reason:'noauth' };
+  const acqMode = opts.interactive ? true : (opts.silent ? 'silent' : false);
+  if(!(await gdAcquire(acqMode))) return { ok:false, reason:'noauth' };
   syncStatus('syncing');
   try{
     const cloud = (await driveList()).filter(f=>f.pool===pool.id);   // only THIS pool's files
     const localByKey = new Map(pool.list().map(s=>[s.key, s]));
-    const recreate = [], conflicts = [];
+    const recreate = [], fastForward = [], conflicts = [];
     for(const f of cloud){
       const local = localByKey.get(f.slKey);
-      if(!local) recreate.push(f);
-      else if(f.savedAt > local.savedAt) conflicts.push({ slKey:f.slKey, id:f.id, local:local.savedAt, cloud:f.savedAt, mapName:f.mapName, auto:f.auto });
+      if(!local) recreate.push(f);                                   // cloud-only slot → download (cap-aware)
+      else if(f.savedAt > local.savedAt){                            // cloud strictly newer than this device's copy
+        if(autoApply) fastForward.push(f);                           // seamless: last-write-wins, overwrite in place
+        else conflicts.push({ slKey:f.slKey, id:f.id, local:local.savedAt, cloud:f.savedAt, mapName:f.mapName, auto:f.auto });
+      }
       // f.savedAt <= local → local newer-or-equal; pull does nothing (push will carry it up)
     }
     await reconcileAndRecreate(recreate, pool);
+    for(const f of fastForward) await recreateSlot(f);               // overwrite the older local slot (incl. the autosave/Continue slot)
     gdriveRefreshMenus();
     GD_lastSyncAt = nowMs();
-    if(conflicts.length){ syncStatus('conflict', { conflicts }); showCloudConflict(conflicts); }
+    if(!autoApply && conflicts.length){ syncStatus('conflict', { conflicts }); showCloudConflict(conflicts); }
     else syncStatus('ok');
-    return { ok:true, recreated:recreate.length, conflicts };
+    return { ok:true, recreated:recreate.length, fastForwarded:fastForward.length, conflicts };
   }catch(e){ syncStatus(statusFor(e)); return { ok:false, reason:'error', err:e }; }
 }
 
@@ -303,10 +319,13 @@ function gdriveConnect(){
 // Run an op across BOTH pools (solo + co-op). Push-before-pull keeps un-uploaded locals safe before any eviction.
 async function gdrivePullAll(opts){ let r=null; for(const p of gdPools()){ r=await gdrivePull(Object.assign({}, opts||{}, {pool:p})); } return r; }
 async function gdrivePushAll(opts){ let r=null; for(const p of gdPools()){ r=await gdrivePush(Object.assign({}, opts||{}, {pool:p})); } return r; }
-// Proceed with the merge: push (back up locals first) then pull (cloud→local, additive/prompt) across both pools.
+// Proceed with the merge: push (back up locals first) then SEAMLESSLY fast-forward newer cloud saves across
+// both pools. Connecting is an opt-in to "keep my saves synced", so the pull is autoApply (last-write-wins,
+// no prompt) to match the no-clicks intent — the explicit "Sync now" / "Restore from cloud" buttons still prompt.
+// setCloudOn(true) also clears any prior "declined" flag.
 function gdriveDoConnect(){
   setCloudOn(true);
-  (async ()=>{ await gdrivePushAll({ interactive:true }); await gdrivePullAll({ interactive:true }); gdriveRefreshUI(); })();
+  (async ()=>{ await gdrivePushAll({ interactive:true }); await gdrivePullAll({ interactive:true, autoApply:true }); gdriveRefreshUI(); })();
 }
 // Abort: sign back out, leave sync off, upload nothing. Local saves are untouched.
 function gdriveCancelConnect(){
@@ -344,14 +363,82 @@ function gdriveAutoPush(){
   GD_pushTimer = setTimeout(()=>{ gdrivePush({ interactive:false }); }, GD_DEBOUNCE_PUSH);
 }
 // Auto-pull on focus / Load-menu open — debounced + throttled, NEVER interactive. SOLO pool only.
+// (Kept for safety/back-compat; the live triggers now route through gdriveSeamlessPull / gdriveMenuSync.)
 function gdriveAutoPull(){
   if(!cloudOn() || !gisAvailable()) return;
   if(nowMs() - GD_lastPullAt < GD_PULL_MIN_INTERVAL) return;
   clearTimeout(GD_pullTimer);
   GD_pullTimer = setTimeout(()=>{ GD_lastPullAt = nowMs(); gdrivePull({ interactive:false }); }, GD_DEBOUNCE_PULL);
 }
-// Called from openLoadMenu(): refresh the cloud UI, then opportunistically pull.
-function gdriveOnLoadMenuOpen(){ gdriveRefreshUI(); gdriveAutoPull(); }
+
+/* ---- seamless cross-device fast-forward (the "always fresh on the menu" path) ----
+   Two entry points, both SOLO pool, both gated off a running match and throttled to GD_PULL_MIN_INTERVAL
+   (cold boot has GD_lastPullAt===0, so the first call always runs). They fire the pull IMMEDIATELY (no 5s
+   debounce) and auto-apply newer cloud saves in place — Continue + Load list refresh with zero clicks. */
+
+// Silent-only fast-forward — used where an inline Connect button already exists (Load menu) or a modal
+// would be jarring (alt-tab focus). No sign-in panel: if there's no token it just no-ops quietly.
+function gdriveSeamlessPull(){
+  whenGsi(()=>{
+    if(!cloudOn() || !gisAvailable()) return;
+    if(typeof running!=='undefined' && running) return;
+    if(nowMs() - GD_lastPullAt < GD_PULL_MIN_INTERVAL) return;
+    GD_lastPullAt = nowMs();
+    gdrivePull({ interactive:false, silent:true, autoApply:true });
+  });
+}
+
+// Panel-capable entry — used at BOOT and on every main-menu (startScreen) show. Syncs invisibly when it
+// can; only when Drive is unreachable without interaction does it surface the explicit choice panel.
+function gdriveMenuSync(){
+  whenGsi(async ()=>{
+    if(!gisAvailable()) return;                          // inert origin (file:// / no Client ID) → no cloud UI ever
+    if(typeof running!=='undefined' && running) return;  // never mid-match
+    if(cloudDeclined()) return;                          // player chose "Don't sync" → respect it, stay silent
+    const hasTok = !!(GDRIVE.hasValidToken && GDRIVE.hasValidToken());
+    if(hasTok){                                          // already authed → silent fast-forward, throttled
+      if(nowMs() - GD_lastPullAt < GD_PULL_MIN_INTERVAL) return;
+      GD_lastPullAt = nowMs();
+      gdrivePull({ interactive:false, silent:true, autoApply:true });
+      return;
+    }
+    // No token. Make ONE silent attempt per page session; if it can't grant without interaction, surface the choice.
+    if(GD_signinPromptedThisSession) return;
+    GD_signinPromptedThisSession = true;
+    if(await gdAcquire('silent')){                       // active Google session + standing consent → no window shown
+      setCloudOn(true);                                  // silent success implies the account already authorized us
+      GD_lastPullAt = nowMs();
+      gdrivePull({ interactive:false, silent:true, autoApply:true });
+    } else {
+      showCloudSignInPanel();                            // expired session / never granted / never opted in
+    }
+  });
+}
+
+// The explicit "Sign in or don't sync" choice panel (reuses the #cloudNudge overlay shell).
+function showCloudSignInPanel(){
+  const el=document.getElementById('cloudNudge'); if(!el) return;     // fail open (no overlay → just stays local)
+  const reAuth = cloudOn();                                            // opted in before, but the token lapsed
+  el.className='overlay submenu';
+  el.innerHTML='<div class="submenu-panel"><div class="big">☁</div>'
+    + '<h2>'+(reAuth ? 'Sign in again to keep your saves in sync' : 'Sync your saves across devices?')+'</h2>'
+    + '<div class="panel-label">'+(reAuth ? 'Your Google sign-in expired — saves aren’t syncing right now.' : 'STARLEFT can sync your saves with your Google account.')+'</div>'
+    + '<p style="max-width:46ch;margin:.6em auto;opacity:.9">Sign in with the <b>same Google account</b> on each device to see the same saves everywhere. Without it, your saves stay on <b>this device only</b>.</p>'
+    + '<div class="submenu-actions">'
+    + '<button class="sc-btn" id="csiConnect">☁ Sign in to Google Drive</button>'
+    + '<button class="sc-btn back" id="csiSkip">Don’t sync save files</button>'
+    + '</div></div>';
+  el.style.display='flex';
+  const close=()=>{ el.style.display='none'; el.innerHTML=''; };
+  const connect=document.getElementById('csiConnect');
+  const skip=document.getElementById('csiSkip');
+  if(connect) connect.onclick=()=>{ close(); gdriveConnect(); };       // real click → interactive sign-in (popup allowed)
+  if(skip) skip.onclick=()=>{ setCloudDeclined(); setCloudOn(false); close();
+    if(typeof toast==='function') toast('Saves stay on this device — turn on cloud sync anytime from Load Game');
+    gdriveRefreshUI(); };
+}
+// Called from openLoadMenu(): refresh the cloud UI, then opportunistically (silently) fast-forward.
+function gdriveOnLoadMenuOpen(){ gdriveRefreshUI(); gdriveSeamlessPull(); }
 
 /* ---- co-op (MP) pool sync triggers — kept OFF the focus/Load-menu auto-pull so a pull can never pop the
    conflict overlay mid-co-op-match. MP push is safe anytime (never pops the overlay); MP pull runs only at
@@ -421,7 +508,6 @@ function nowMs(){ return new Date().getTime(); }
 function statusFor(e){ const k=e&&e.kind; if(k==='auth') return 'signin'; if(k==='network') return 'offline'; return 'fail'; }
 function syncStatus(state, info){ GD_statusState=state; GD_statusInfo=info||null; if(state==='ok') GD_lastSyncAt=nowMs(); gdriveRenderStatus(); }
 function gdriveRenderStatus(){
-  const line=document.getElementById('cloudStatus'); if(!line) return;
   const email = (window.GDRIVE && GDRIVE.currentEmail && GDRIVE.currentEmail()) || '';
   let txt;
   switch(GD_statusState){
@@ -433,7 +519,21 @@ function gdriveRenderStatus(){
     case 'fail':     txt='Sync failed — retry'; break;
     default:         txt = cloudOn() ? ('Cloud save on'+(email?' · '+email:'')) : 'Sign in to sync saves across devices';
   }
-  line.textContent=txt;
+  const line=document.getElementById('cloudStatus'); if(line) line.textContent=txt;   // Load-menu status line (may be absent)
+  // Start-screen mini-indicator: surface only the transient sync states, unobtrusive otherwise.
+  const mini=document.getElementById('menuCloudStatus');
+  if(mini){
+    let m='';
+    if(GD_statusState==='syncing')      m='☁ Syncing…';
+    else if(GD_statusState==='ok')      m='☁ Synced ✓';
+    else if(GD_statusState==='offline') m='☁ Offline — will sync later';
+    else if(GD_statusState==='fail')    m='☁ Sync failed';
+    mini.textContent=m;
+    mini.style.display = m ? '' : 'none';
+  }
+  // Pulse ▶ Continue while a sync is in flight — it may re-point to a newer cloud autosave.
+  const cont=document.getElementById('btn-continue');
+  if(cont) cont.classList.toggle('syncing', GD_statusState==='syncing');
 }
 function gdriveRefreshUI(){
   const panel=document.getElementById('cloudPanel'); if(!panel) return;
@@ -465,6 +565,7 @@ try{
 function cloudCampaignGate(onProceed){
   onProceed = onProceed || function(){};
   if(typeof gisAvailable!=='function' || !gisAvailable()) return false;     // inert → don't intercept
+  if(cloudDeclined()) return false;                                         // player already chose "Don't sync" → don't nag
   const email = (window.GDRIVE && GDRIVE.currentEmail && GDRIVE.currentEmail()) || '';
   if(window.GDRIVE && GDRIVE.hasValidToken && GDRIVE.hasValidToken()){       // already signed in → proceed
     if(typeof toast==='function') toast('Cloud save on'+(email?' · '+email:''));

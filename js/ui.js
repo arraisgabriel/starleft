@@ -612,6 +612,7 @@ function eventToast(html,ms=9000,say){
 function inPregameMenu(){ return !(G && running); }
 function showSub(id){ const el=document.getElementById(id); if(el) el.style.display='flex';
   if(id==='startScreen' && typeof syncContinueButton==='function') syncContinueButton();   // refresh ▶ Continue (T0-8)
+  if(id==='startScreen' && typeof gdriveMenuSync==='function') gdriveMenuSync();            // always fast-forward cloud saves on the main menu (else prompt)
   if(typeof MUSIC!=='undefined' && inPregameMenu()) MUSIC.enterMenu();
 }
 function hideSub(id){ const el=document.getElementById(id); if(el) el.style.display='none'; }

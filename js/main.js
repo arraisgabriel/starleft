@@ -412,16 +412,17 @@ function _unloadAutosave(){
 }
 document.addEventListener('visibilitychange', ()=>{ if(document.visibilityState==='hidden') _unloadAutosave(); });
 window.addEventListener('pagehide', _unloadAutosave);
-// Cloud save-sync: opportunistically pull when the tab regains focus — but only when NOT in a live match,
-// so play is never interrupted (conflicts surface in the Load menu instead). No-op unless connected.
+// Cloud save-sync: opportunistically fast-forward when the tab regains focus — but only when NOT in a live
+// match, so play is never interrupted. Silent only (no sign-in modal on alt-tab). No-op unless connected.
 function _gdriveFocusPull(){
-  if(typeof gdriveAutoPull!=='function') return;
+  if(typeof gdriveSeamlessPull!=='function') return;
   if(typeof running!=='undefined' && running) return;
-  gdriveAutoPull();
+  gdriveSeamlessPull();
 }
 document.addEventListener('visibilitychange', ()=>{ if(document.visibilityState==='visible') _gdriveFocusPull(); });
 window.addEventListener('focus', _gdriveFocusPull);
 if(typeof syncContinueButton==='function') syncContinueButton();   // ▶ Continue from the latest autosave (T0-8)
+if(typeof gdriveMenuSync==='function') gdriveMenuSync();           // at boot: silently fast-forward cloud saves, else prompt sign-in/decline
 if(typeof mpCheckInviteHash==='function') mpCheckInviteHash();   // #mp=CODE invite link → auto-join co-op
 /* =====================================================================
    MAIN LOOP

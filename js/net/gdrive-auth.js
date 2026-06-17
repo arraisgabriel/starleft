@@ -70,12 +70,16 @@
     flushReject(err || new Error('gdrive-auth-failed'));
   }
 
-  // INTERACTIVE auth ONLY here — reachable solely from getToken({interactive:true}), i.e. a click handler.
-  // The AUTO path ({interactive:false}) never calls requestAccessToken, so autosave can never pop a window.
+  // Three tiers: {interactive:true} = real click → may pop a consent/account window (Connect/Sync now);
+  // {silent:true} = the seamless menu/boot pull → asks GIS with prompt:'' which returns a token with NO
+  // window when a Google session + prior grant exist, and is popup-BLOCKED (→ error_callback → reject)
+  // when interaction is truly required, so it never pops uninvited; {interactive:false} (the default, used
+  // by autosave PUSH) is cached-token-only and never touches requestAccessToken, so a save can't pop a window.
   function getToken(opts){
     const interactive = !!(opts && opts.interactive);
+    const silent      = !!(opts && opts.silent);
     if (tokenValid() && !(interactive && expiringSoon())) return Promise.resolve(accessToken);
-    if (!interactive) return Promise.reject(new Error('gdrive-needs-interactive'));
+    if (!interactive && !silent) return Promise.reject(new Error('gdrive-needs-interactive'));
     return new Promise((resolve, reject) => {
       pending.push({ resolve, reject });
       if (pending.length === 1) {                      // de-dupe: one popup even on rapid clicks
