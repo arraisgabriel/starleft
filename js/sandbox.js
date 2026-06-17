@@ -33,6 +33,7 @@
     speed:1,              // 0 paused · 1 · 2 · 4  (sub-steps per rAF frame)
     placeType:null,       // armed DEF key placed on the next canvas click (null = normal play)
     owner:'player',       // side for newly placed entities: 'player' | 'enemy' | 'neutral'
+    reborn:false,         // placement modifier: stage placed UNITS as Wake Reborn cyborgs (grey skin + FX, scarred, +15% HP, dead-nerve no-heal)
     god:false, reveal:true, noEnd:true, funding:false,
     simSteps(){ return this.speed|0; },   // main.js only calls this while .on
     enter, exit,
@@ -169,7 +170,8 @@
             <button data-o="enemy">Enemy</button>
             <button data-o="neutral">Neutral</button>
           </div>
-          <div class="sbx-note">Click a unit/building below, then click (or drag-paint) on the map. Esc / right-click disarms.</div>
+          <button class="sbx-btn" id="sbx-reborn" style="justify-content:center"><span class="ic">🦾</span><span class="tx">Reborn cyborg</span></button>
+          <div class="sbx-note">Click a unit/building below, then click (or drag-paint) on the map. Esc / right-click disarms. <b>Reborn</b> ⇒ placed UNITS spawn as drained-grey Wake cyborgs (scarred, +15% HP, dead-nerve no-heal); buildings unaffected.</div>
         </div>
 
         <div class="sbx-sec">
@@ -224,6 +226,7 @@
     bindToggle('#sbx-reveal','reveal','Reveal map');
     bindToggle('#sbx-noend','noEnd','Freeze win/loss');
     bindToggle('#sbx-funding','funding','Infinite funding');
+    bindToggle('#sbx-reborn','reborn','Reborn cyborg');   // placement modifier (applied per-unit in place(), not enforced globally)
 
     // palette
     panel.querySelectorAll('.sbx-pal').forEach(b=>b.onclick=()=>arm(b.dataset.type));
@@ -270,6 +273,10 @@
     let e;
     if(d.kind==='building') e=mkBuilding(G, type, SB.owner, tx, ty, true);   // instant=true → fully built
     else                    e=mkUnit(G, type, SB.owner, tx, ty);
+    if(d.kind!=='building' && SB.reborn && e){   // stage a Wake Reborn cyborg: drained-grey skin + FX (render reads e.reborn), scarred mind, +15% HP, dead-nerve no-heal
+      e.reborn=true; e.scarred=true;
+      if(typeof applyVetHp==='function') applyVetHp(e, true);   // re-bake maxHp with REBORN.hpMul (regen auto-gated on e.reborn in career.js)
+    }
     if(SB.god && SB.owner==='player') e._godmode=true;
     if(typeof recomputeSupply==='function') recomputeSupply(G);
     if(typeof refreshUI==='function') refreshUI();

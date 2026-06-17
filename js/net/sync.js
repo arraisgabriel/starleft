@@ -135,6 +135,7 @@ window.NET = window.NET || {};
       if(typeof madReliefActive==='function'){ const _mr=madReliefActive(e); if(_mr>0) o.mrl=Math.round(_mr); }   // TEMPORARY field relief (host's current decayed value) → client subtracts for the bar
       if(e.sanityThreshold) o.sth=Math.round(e.sanityThreshold);
       if(e.scarred) o.scr=1;
+      if(e.reborn) o.rb=1;   // Wake-resurrected → client picks the drained-grey 'reborn' sprite skin (render-only; missing key on a legacy snap = not reborn)
       if(e.madDog) o.md=1;
       if(e.subdued) o.sub=1;
       if(e.calmStage) o.cs=e.calmStage;
@@ -210,7 +211,7 @@ window.NET = window.NET || {};
       // it on the client (render decays .t locally at 1/60). Cosmetic only — never simulated.
       if(o.sf) e.shootFx = (e.shootFx && e.shootFx.t>0) ? e.shootFx : { x:(o.sfx!=null?o.sfx:e.x), y:(o.sfy!=null?o.sfy:e.y), t:SHOOTFX_LIFE };
       // MADOSIS (render-only on the client)
-      e.madosis=o.mad||0; e.sanityThreshold=o.sth||0; e.scarred=!!o.scr;
+      e.madosis=o.mad||0; e.sanityThreshold=o.sth||0; e.scarred=!!o.scr; e.reborn=!!o.rb;   // reborn: render-only grey skin (drawUnit fac), no client sim
       e.madRelief=o.mrl||0; e.madReliefT=null;   // host already decayed o.mrl → madReliefActive carries it straight; madReliefT===null tells madGlobalTick to skip (no client sim)
       e.madDog=!!o.md; e.subdued=!!o.sub; e.calmStage=o.cs||0; e._rescue=!!o.rsc;
       e.madEpisode = o.ep ? { phase:(o.ep===3?'feral':o.ep===2?'defiance':'tremor'), t:0 } : null;

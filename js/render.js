@@ -1570,13 +1570,104 @@ function drawVillainGlow(state, u, anim, px, py, S, layer){
   }
   if(list.length) drawMegaNeonLayer(state, { seed:(u.id||0) }, list, dx, dy, dw, dh, layer);
 }
+// ---- REBORN-CYBORG render marker (body UNTOUCHED) -----------------------------------------------
+// A Wake-resurrected unit (u.reborn) is marked entirely at render time: a glowing red silhouette RIM
+// behind it + a red OPTIC (machine eye) at the head + a slow chest-core heartbeat. All pixel-exact to
+// the current sprite frame (built from the very frame being blitted), so it never swims, fits any unit
+// shape, and never touches the body art. Render-only — keyed on the existing u.reborn flag (no save/net).
+// Per-sprite-type, per-ACTION, PER-FRAME head anchor for the green optic (dx[fi] = x-offset from sprite
+// center as a fraction of drawn width; fy = y as a fraction of drawn height from the top). The head moves
+// with the animation (recoil/lean), so dx is a 10-frame array, indexed by the frame being drawn. Keyed by
+// the strip (walk / attack / mine / heal); falls back to .walk, then _default. Mirror-aware at draw time.
+// Built by a consensus of 4 silhouette head-detectors (median per frame rejects whichever one a raised
+// weapon fooled) + a temporal median smooth — see the reborn-optic-head-tracking workflow.
+const REBORN_OPTIC = {
+  soldier:{walk:{fy:0.101,dx:[0.063,0.063,0.053,0.053,0.058,0.059,0.059,0.057,0.054,0.054]}, attack:{fy:0.099,dx:[0.077,0.077,0.073,0.003,-0.002,-0.002,0.059,0.059,0.074,0.076]}},
+  ranger:{walk:{fy:0.101,dx:[-0.031,-0.031,-0.056,-0.056,-0.052,-0.052,-0.052,-0.057,-0.057,-0.056]}, attack:{fy:0.099,dx:[-0.059,-0.062,-0.091,-0.091,-0.056,-0.039,-0.039,-0.058,-0.058,-0.059]}},
+  recruiter:{walk:{fy:0.101,dx:[-0.017,-0.017,-0.014,-0.014,-0.014,-0.014,-0.007,-0.007,-0.007,-0.015]}, heal:{fy:0.099,dx:[-0.032,-0.032,-0.056,-0.059,-0.059,-0.051,-0.034,-0.032,-0.032,-0.032]}},
+  hustler:{walk:{fy:0.099,dx:[0.028,0.028,0.025,0.025,0.025,-0.027,-0.027,-0.017,-0.017,0.009]}, attack:{fy:0.099,dx:[0.002,0.046,0.046,-0.052,-0.052,-0.052,-0.047,0.002,0.002,0.002]}},
+  lobbyist:{walk:{fy:0.1,dx:[-0.155,-0.155,-0.155,-0.153,-0.153,-0.153,-0.153,-0.139,-0.139,-0.139]}, attack:{fy:0.099,dx:[-0.273,-0.267,-0.275,-0.273,-0.314,-0.312,-0.275,-0.186,-0.223,-0.225]}},
+  psychologist:{walk:{fy:0.101,dx:[-0.017,-0.017,-0.014,-0.014,-0.014,-0.014,-0.007,-0.007,-0.007,-0.015]}, heal:{fy:0.099,dx:[-0.032,-0.032,-0.056,-0.059,-0.059,-0.051,-0.034,-0.032,-0.032,-0.032]}},
+  worker:{walk:{fy:0.099,dx:[-0.046,-0.04,-0.033,-0.022,-0.022,-0.034,-0.034,-0.034,-0.045,-0.046]}, mine:{fy:0.102,dx:[0.046,-0.012,-0.012,0.047,0.059,0.059,0.03,0.03,0.044,0.046]}},
+  founder:{walk:{fy:0.102,dx:[0.027,0.027,0.027,0.024,0.024,0.024,0.027,0.027,0.025,0.025]}, attack:{fy:0.108,dx:[-0.022,-0.022,-0.022,-0.019,-0.009,-0.006,-0.006,-0.008,-0.01,-0.01]}},
+  nino:{walk:{fy:0.099,dx:[-0.117,-0.117,-0.117,-0.115,-0.115,-0.113,-0.113,-0.099,-0.098,-0.098]}, attack:{fy:0.099,dx:[-0.303,-0.293,-0.297,-0.293,-0.289,-0.347,-0.305,-0.207,-0.238,-0.238]}},
+  biba:{walk:{fy:0.199,dx:[0.019,0.021,0.021,0.019,0.018,0.017,0.017,0.005,0.005,0.005]}, heal:{fy:0.101,dx:[-0.013,-0.017,-0.035,-0.035,-0.032,-0.032,-0.052,-0.052,-0.014,-0.013]}},
+  rust:{walk:{fy:0.101,dx:[0.008,0.008,0.008,0.007,0.007,0.007,0.007,0.011,0.011,0.011]}, attack:{fy:0.213,dx:[0.055,0.057,0.057,0.057,0.057,0.059,0.066,0.066,0.052,0.052]}},
+  _default:{walk:{fy:0.12,dx:[0,0,0,0,0,0,0,0,0,0]}}
+};
+let _rbScratch=null;
+function _rebornScratch(w,h){
+  if(!_rbScratch) _rbScratch=document.createElement('canvas');
+  const c=_rbScratch; if(c.width<w) c.width=w; if(c.height<h) c.height=h; return c;
+}
+function drawRebornRim(u, anim, px, pyB, S, fi, t){
+  if(!anim || !anim.img || !anim.frames || !anim.fh) return;
+  const n=anim.frames.length, fr=anim.frames[((fi%n)+n)%n];
+  if(!fr) return;
+  const dh=S, dw=S*(anim.fw/anim.fh), pad=6;
+  const cw=Math.max(1,Math.ceil(dw+pad*2)), ch=Math.max(1,Math.ceil(dh+pad*2));
+  const sc=_rebornScratch(cw,ch), sx=sc.getContext('2d');
+  sx.save(); sx.clearRect(0,0,cw,ch);
+  sx.translate(cw/2, pad);                                   // center x, top at pad (matches blitFrame -dw/2,0)
+  const facesLeft=!!(DEF[u.type] && DEF[u.type].facesLeft);
+  if(((u._face||1)<0)!==facesLeft) sx.scale(-1,1);
+  sx.drawImage(anim.img, fr[0],fr[1],anim.fw,anim.fh, -dw/2, 0, dw, dh);
+  sx.restore();
+  const rm=(typeof megaReducedMotion==='function' && megaReducedMotion()), seed=(u.id||0);
+  const bx=px-cw/2, by=pyB - dh*0.7 - pad;                   // align the scratch onto the sprite's blit box
+  const R=Math.max(1.0, S*0.022);                            // thin rim, scales with the unit
+  // recolor the silhouette in the scratch (source-in keeps the silhouette alpha), then blit it as a rim
+  // at 8 ring offsets behind the sprite, additively.
+  const tint=(c)=>{ sx.globalCompositeOperation='source-in'; sx.fillStyle=c; sx.fillRect(0,0,cw,ch); sx.globalCompositeOperation='source-over'; };
+  const blit=()=>{ for(let i=0;i<8;i++){ const a=i/8*6.2832; ctx.drawImage(sc, 0,0,cw,ch, bx+Math.cos(a)*R, by+Math.sin(a)*R, cw, ch); } };
+  ctx.save(); ctx.globalCompositeOperation='lighter';
+  // PASS 1 — the steady silver rim (the main, dominant color), faint breath
+  const sil=rm?0.5:(0.5+0.5*Math.sin(t*2.0+seed*1.3));
+  tint('#c4d2e6'); ctx.globalAlpha=0.20+0.05*sil; blit();
+  // PASS 2 — an A&O toxic-green sheen that breathes CONTINUOUSLY over the silver (ebbs and flows). Slower,
+  // out-of-phase sine so it reads as organic flow, not a strobe; capped so the silver stays dominant.
+  const grn=rm?0.45:(0.5+0.5*Math.sin(t*1.25+seed*0.7));
+  tint('#32e060'); ctx.globalAlpha=0.03+0.15*grn; blit();
+  ctx.restore(); ctx.globalAlpha=1;
+}
+function drawRebornCore(u, anim, px, pyB, S, fi, t, key){
+  const rm=(typeof megaReducedMotion==='function' && megaReducedMotion()), seed=(u.id||0);
+  ctx.save(); ctx.globalCompositeOperation='lighter';
+  // chest core — a slow, tired heartbeat (double-thump)
+  let beat=0.55;
+  if(!rm){ const ph=((t*0.85)+seed*0.37)%1;
+    const thump=Math.exp(-Math.pow(ph/0.10,2))+0.6*Math.exp(-Math.pow((ph-0.17)/0.09,2)); beat=0.40+0.5*Math.min(1,thump); }
+  const cx=px, cy=pyB - S*0.34, cr=S*0.16;
+  const hg=ctx.createRadialGradient(cx,cy,1,cx,cy,cr);
+  hg.addColorStop(0,'rgba(255,80,66,'+(0.52*beat).toFixed(3)+')');
+  hg.addColorStop(0.5,'rgba(220,40,46,'+(0.20*beat).toFixed(3)+')');
+  hg.addColorStop(1,'rgba(150,20,30,0)');
+  ctx.fillStyle=hg; ctx.beginPath(); ctx.arc(cx,cy,cr,0,6.2832); ctx.fill();
+  // optic — a small A&O-GREEN machine-eye on the unit's HEAD, anchored per sprite-type & ACTION strip
+  // (REBORN_OPTIC, measured from the art), mirrored the same way blitFrame mirrors the sprite.
+  const _t=REBORN_OPTIC[u.spriteType||u.type]||REBORN_OPTIC._default;
+  const _m=_t[key]||_t.walk||REBORN_OPTIC._default.walk;
+  const _dxN=_m.dx[(((fi|0)%_m.dx.length)+_m.dx.length)%_m.dx.length];   // per-frame → follows the head's recoil/lean
+  const _dw=(anim&&anim.fh)?S*(anim.fw/anim.fh):S;
+  const _fl=!!(DEF[u.type]&&DEF[u.type].facesLeft), _mir=(((u._face||1)<0)!==_fl)?-1:1;
+  const ox=px + _mir*_dxN*_dw, oy=(pyB-0.7*S)+_m.fy*S, orr=S*0.09;
+  const fl=rm?0.85:(0.7+0.3*Math.sin(t*5.6+seed*1.9));
+  const og=ctx.createRadialGradient(ox,oy,0.5,ox,oy,orr);
+  og.addColorStop(0,'rgba(180,255,170,'+(0.85*fl).toFixed(3)+')');
+  og.addColorStop(0.4,'rgba(60,224,110,'+(0.5*fl).toFixed(3)+')');
+  og.addColorStop(1,'rgba(20,150,55,0)');
+  ctx.fillStyle=og; ctx.beginPath(); ctx.arc(ox,oy,orr,0,6.2832); ctx.fill();
+  ctx.globalAlpha=Math.min(1,fl); ctx.fillStyle='#d8ffdc';
+  ctx.beginPath(); ctx.arc(ox,oy,Math.max(1.2,S*0.02),0,6.2832); ctx.fill();
+  ctx.restore(); ctx.globalAlpha=1;
+}
 function drawUnit(state,u,ox,oy){
   const px=u.x+ox, py=u.y+oy;
   const r=u.r;
   const alt = u.air?16:0;   // flyers are drawn raised
   const vh = unitDrawH(u);   // drawn sprite height (incl. hero 15% bump) — HUD/ring scale to this, not collision r
   const _vdef = (u.villain && typeof VILLAINS!=='undefined') ? VILLAINS[u.villainId] : null;   // villains can force a sprite variant (THE SEVERANCIER → player set)
-  const fac = (_vdef && _vdef.spriteFaction) || (aoSide(state, u.owner) ? 'ao' : null);   // A&O alien sprite set, else owner-keyed (render-only)
+  const fac = (_vdef && _vdef.spriteFaction) || (aoSide(state, u.owner) ? 'ao' : null);   // A&O alien sprite set, else owner-keyed (render-only). Reborn does NOT recolor the body — see drawRebornFx().
   const jz = u._jumpZ||0;   // REX jump-stomp: lifts the sprite off the ground (shadow drawn at the foot below)
 
   if(PERF.opts.spriteLod && (state.zoom||1) < SPRITE_LOD_ZOOM){
@@ -1620,7 +1711,7 @@ function drawUnit(state,u,ox,oy){
 
   // A&O alien ground-aura (render-only): faint toxic-green additive halo under the feet, drawn
   // beneath the sprite. Owner-gated (captured A&O → fac null → no aura), off under reduced-motion.
-  if(fac && !(typeof megaReducedMotion==='function' && megaReducedMotion())){
+  if(fac==='ao' && !(typeof megaReducedMotion==='function' && megaReducedMotion())){
     const fy=py-alt+vh*0.3, t=state.time||0, pulse=0.5+0.5*Math.sin(t*1.6+(u.id||0)*1.7), ar=vh*0.5;
     ctx.save(); ctx.globalCompositeOperation='lighter';
     const ag=ctx.createRadialGradient(px, fy, 1, px, fy, ar);
@@ -1640,9 +1731,9 @@ function drawUnit(state,u,ox,oy){
   if(anim){
     const S = vh;
     const act = u._actState ? actionAnim(sType, u._actState, u.owner, fac) : null;
-    let fi, useAnim, bScale=1, bShift=0;   // bScale/bShift: idle breathing (1/0 = none)
+    let fi, useAnim, useKey='walk', bScale=1, bShift=0;   // useKey: which strip is drawn (for the reborn optic anchor); bScale/bShift: idle breathing
     if(act){
-      useAnim = act; const n=act.frames.length;
+      useAnim = act; useKey = u._actState; const n=act.frames.length;
       if(u._actState==='attack'){ const t = state.time-(u._actStamp||0);          // swing windup→strike→recover across the strip
         fi = t<0.8 ? Math.min(n-1, (t/0.8*n)|0) : 0; }
       else { fi = ((state.time*7)|0) % n; }                                        // mine / heal loop
@@ -1661,7 +1752,7 @@ function drawUnit(state,u,ox,oy){
             const dur = IDLE.gestureMin + h01(u.id*1.7+2.1)*(IDLE.gestureMax-IDLE.gestureMin);
             const local = (state.time + h01(u.id*2.9+0.7)*cyc) % cyc;
             if(local < dur){ const p=local/dur, n=a.frames.length, tri=1-Math.abs(1-2*p);   // 0→1→0 ping-pong
-              useAnim = a; fi = Math.min(n-1, (tri*(n-1))|0); }
+              useAnim = a; useKey = fa; fi = Math.min(n-1, (tri*(n-1))|0); }
           }
         }
         // LAYER 1 — breathing: foot-anchored squash/stretch (idle only). The vertical
@@ -1691,12 +1782,17 @@ function drawUnit(state,u,ox,oy){
         ctx.globalAlpha=0.16*(i/nb); blitFrame(u, g.x+ox, (g.y-alt)+bShift, useAnim, S*bScale, fi); }
       ctx.restore(); ctx.globalAlpha=1;
     }
+    // REBORN-CYBORG marker (render-only, body UNTOUCHED): a glowing red silhouette RIM drawn behind
+    // the sprite — pixel-exact to the art, identical every frame (no swim), on any unit shape.
+    if(u.reborn) drawRebornRim(u, useAnim, px, pyB, S*bScale, fi, state.time||0);
     const dh = blitFrame(u,px,pyB,useAnim,S*bScale,fi);
     // remember what was just blitted (screen px, valid this frame only) so the post-depth
     // pass can re-draw a faint ghost when a building sprite occludes this unit
     u._ghostBlit = { t:state.time, px, py:pyB, anim:useAnim, S:S*bScale, fi };
     if(u.hero) drawHeroGlowLayer(state, u, useAnim, px, pyB, S*bScale, 'core');   // bright core in front
     else if(u.villain) drawVillainGlow(state, u, useAnim, px, pyB, S*bScale, 'core');
+    // REBORN-CYBORG: a red OPTIC (machine eye) at the head + a slow chest-core heartbeat, on top.
+    if(u.reborn) drawRebornCore(u, useAnim, px, pyB, S*bScale, fi, state.time||0, useKey);
     if(u.type==='worker' && u.carrying>0){ ctx.fillStyle='#ffd86b'; ctx.beginPath(); ctx.arc(px,py-alt-dh*0.7-4,3,0,6.28); ctx.fill(); }
   } else if(u.villain){
     // defensive fallback — a villain whose bespoke sheet is missing still reads as a giant glowing mass
