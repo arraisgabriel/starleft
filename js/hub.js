@@ -20,13 +20,15 @@ const HUB = Object.assign({
   trainPairCap:6,         // max simultaneous training sessions (pairs)
   trainMaxGap:6,          // max level difference allowed between mentor and junior
   // ---- The Wake (resurrection tower) tunables ----
-  rebornHourSeconds:3600, // real seconds of ACTIVE play per "in-game hour" of a write (1h = 1 real hour)
+  rebornRealHours:4,      // flat REAL-WORLD (wall-clock) hours per write — counts even while the game is closed; independent of veteran level
   rebornTotalCap:3,       // how many Reborn Cyborgs may EVER exist across the whole campaign (hard cap)
-  rebornSlotCap:1,        // how many may be in the lattice at once (one soul at a time)
+  rebornSlotCap:2,        // how many may be in the lattice at once (up to two souls)
   wakeAppearIdx:11,       // The Wake spire is ABSENT from the H.U.B. until CAMPAIGN.nextMapIndex >= this (it only rises once Episode XI is behind you). Distinct from rebornUnlockIdx, which gates the resurrection *function* — the tower can stand "cold" before then.
   rebornUnlockIdx:11,     // inert until CAMPAIGN.nextMapIndex >= this (after Ep XI: you seize the GRAAL at the Dark Tower)
-  rebornBaseHours:6,      // base in-game hours to reassemble a body
-  rebornHoursPerStar:0.5, // + per veteran level
+  // ---- legacy (pre-wall-clock) write-time fields: only used to read in-flight sessions saved before the change ----
+  rebornHourSeconds:3600, // [legacy] real seconds of ACTIVE play per "in-game hour" of a write
+  rebornBaseHours:6,      // [legacy] base in-game hours to reassemble a body
+  rebornHoursPerStar:0.5, // [legacy] + per veteran level
   rebornBaseCost:300,     // M3$ floor
   rebornCostPerStar:80,   // + per veteran level
 }, HUB_PLACEMENT);
@@ -1977,8 +1979,9 @@ function hubSpawnTrainees(state){
 /* =====================================================================
    THE WAKE — resurrection tower (Ep XIV payoff). Spend M3$ + a lightning-charged
    build to drag a fallen veteran back as a Reborn Cyborg. Hard-capped lifetime
-   total; one soul in the lattice at a time; each fallen resurrectable once.
-   Host/solo simulate the spend + timer; clients are cosmetic (panel-only).
+   total; up to rebornSlotCap souls in the lattice at once; each fallen resurrectable once.
+   Each write takes a flat REAL-WORLD wall-clock duration (rebornRealHours), counted even
+   while the game is closed. Host/solo simulate the spend + timer; clients are cosmetic (panel-only).
    Mirrors the Training Grounds session/clock lifecycle.
    ===================================================================== */
 function rebornUnlocked(){ return (CAMPAIGN.nextMapIndex||0) >= (HUB.rebornUnlockIdx||0); }
@@ -1986,7 +1989,28 @@ function rebornPerformed(){ const r=CAMPAIGN.reborn||{sessions:[],done:[]}; retu
 function rebornChargesLeft(){ return Math.max(0, (HUB.rebornTotalCap||0) - rebornPerformed()); }
 function rebornLvlOf(f){ return (f && (f.stars!=null?f.stars:f.lvl))||0; }
 function rebornCost(f){ return (HUB.rebornBaseCost||0) + (HUB.rebornCostPerStar||0)*rebornLvlOf(f); }
-function rebornHours(f){ return (HUB.rebornBaseHours||0) + Math.round((HUB.rebornHoursPerStar||0)*rebornLvlOf(f)); }
+function rebornHours(f){ return (HUB.rebornBaseHours||0) + Math.round((HUB.rebornHoursPerStar||0)*rebornLvlOf(f)); }   // [legacy] only stamps the legacy hoursTotal field
+// ---- The Wake clock is REAL-WORLD wall time: a flat 4h per write, counted even while the game is closed (not active-play, not in-game hours). ----
+function rebornDurationSec(){ return Math.max(1, Math.round((HUB.rebornRealHours||4)*3600)); }   // flat, level-independent
+function rebornElapsedSec(ses){
+  if(!ses) return 0;
+  if(ses.startedAt!=null) return Math.max(0, (Date.now()-ses.startedAt)/1000);   // wall-clock
+  return ses.secElapsed||0;                                                       // legacy active-play session (saved pre-change)
+}
+function rebornTotalSec(ses){
+  if(ses && ses.durationSec!=null) return ses.durationSec;
+  if(ses && ses.hoursTotal!=null) return ses.hoursTotal*(HUB.rebornHourSeconds||3600);   // legacy
+  return rebornDurationSec();
+}
+// One-time migration (host/solo only): an in-flight session saved before the wall-clock change adopts the flat
+// real-world schedule, crediting whatever fraction it had already accrued on the old active-play clock.
+function rebornMigrateSession(ses){
+  if(!ses || ses.startedAt!=null) return;
+  const oldTotal=(ses.hoursTotal!=null)?ses.hoursTotal*(HUB.rebornHourSeconds||3600):0;
+  const frac=(oldTotal>0)?Math.min(1, (ses.secElapsed||0)/oldTotal):0;
+  ses.durationSec=rebornDurationSec();
+  ses.startedAt=Date.now()-Math.round(frac*ses.durationSec*1000);
+}
 function rebornIsDone(f){
   const r=CAMPAIGN.reborn||{sessions:[],done:[]}, fid=(typeof fallenStableId==='function')?fallenStableId(f):'';
   return !!(f&&f.reborn) || (r.done||[]).includes(fid) || (r.sessions||[]).some(s=>s.fid===fid);
@@ -2007,7 +2031,7 @@ function hubWakeStart(fid){
   if(!f){ toast('No such name on the wall.'); return false; }
   if(!DEF[f.type]){ toast('That body is too corrupted to rebuild.'); return false; }
   if(rebornIsDone(f)){ toast('Already reborn — The Wake takes a soul only once.'); return false; }
-  if((CAMPAIGN.reborn.sessions||[]).length >= (HUB.rebornSlotCap||1)){ toast('The Wake holds one soul at a time.'); return false; }
+  if((CAMPAIGN.reborn.sessions||[]).length >= (HUB.rebornSlotCap||1)){ toast('The Wake can only hold '+(HUB.rebornSlotCap||1)+' in the lattice at once.'); return false; }
   if(rebornChargesLeft() <= 0){ toast('No charges remain — the rest stay on the wall.'); return false; }
   const cost=rebornCost(f);
   if(!hubSpend(cost)) return false;   // host-gated + balance-checked; toasts on failure
@@ -2015,7 +2039,8 @@ function hubWakeStart(fid){
     lore:(typeof fallenDossierSnap==='function')?fallenDossierSnap(f):(f.lore||null),
     heroId:f.heroId||null, spriteType:f.spriteType||null, name:f.name||'A veteran',
     sanityThreshold:f.sanityThreshold||0, xp:f.xp||0, dreamDone:!!f.dreamDone,   // dreamDone → the Reborn reaction line (story-polish §7.2)
-    hoursTotal:rebornHours(f), secElapsed:0, done:false, cost });
+    startedAt:Date.now(), durationSec:rebornDurationSec(),                       // REAL-WORLD wall clock: a flat 4h, ticking even while the game is closed
+    hoursTotal:rebornHours(f), secElapsed:0, done:false, cost });                // hoursTotal/secElapsed kept for legacy/display readers only
   f.reborn=true;   // dim the wall immediately + prevent a double-enqueue across a save
   if(typeof eventToast==='function') eventToast('⚡ <b>'+(f.name||'A veteran')+'</b> is fed into The Wake. The lightning takes them.', 9000);
   refreshUI();
@@ -2030,8 +2055,9 @@ function updateRebornProduction(dt){
   const inHub=(typeof G!=='undefined' && G && G.hub);
   for(const ses of sessions.slice()){
     if(ses.done) continue;
-    ses.secElapsed=(ses.secElapsed||0)+dt;
-    if(ses.secElapsed >= ses.hoursTotal*(HUB.rebornHourSeconds||3600)){
+    rebornMigrateSession(ses);                          // legacy in-flight saves adopt the wall-clock schedule (once)
+    ses.secElapsed=(ses.secElapsed||0)+dt;              // vestigial active-play tally (kept for back-compat readers)
+    if(rebornElapsedSec(ses) >= rebornTotalSec(ses)){   // REAL-WORLD wall clock — counts even while the game was closed
       ses.done=true;
       hubWakeComplete(inHub?G:null, ses);
     }

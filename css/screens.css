@@ -557,6 +557,37 @@ body.hub-menu-open #bottom{ display:none; }              /* syncHud() then drops
 @media (max-width:860px){
   .hub-cols.wake-cols .wake-col-lattice{ order:-1; }   /* stacked: show "in the lattice" above the fallen list */
 }
+/* ── The Wake · "walk to the light": the reassembling cyborg treads a path toward a pulsing, Matrix-green
+   resurrection portal. The panel tick slides .lattice-walker rightward as elapsed/total grows; the portal
+   pulse + falling digital rain are pure CSS. Dark by default — the green glow is the only bright thing. ── */
+.lattice-scene{ position:relative; width:100%; height:clamp(150px,30vw,205px); overflow:hidden; border-radius:8px;
+  background:radial-gradient(120% 90% at 100% 100%, rgba(0,255,90,.13), rgba(0,255,90,0) 55%),
+             linear-gradient(0deg, rgba(0,38,15,.4), rgba(0,0,0,0) 42%); }
+.lattice-scene::after{ content:''; position:absolute; left:0; right:0; bottom:0; height:2px;   /* the lit path/floor toward the portal */
+  background:linear-gradient(90deg, rgba(0,255,90,0), rgba(0,255,90,.45) 78%, rgba(190,255,205,.85)); }
+.lattice-walker{ position:absolute; left:8px; bottom:-4px; z-index:2; width:clamp(108px,33%,158px);
+  transition:transform 1.2s linear; will-change:transform; }
+.lattice-scene .train-spr{ display:block; width:100%; height:auto; aspect-ratio:1/1; background:none;
+  animation:latticeStride 1.05s ease-in-out infinite; transition:filter 1.2s linear;
+  filter:drop-shadow(0 0 5px rgba(90,255,140,.18)); }
+.lattice-portal{ position:absolute; right:12px; bottom:6px; z-index:1; width:clamp(40px,11%,60px); height:84%;
+  /* The gradient IS the light: a green core that stays green all the way out and fades to nothing only at the
+     very edge. NO box-shadow (its outer glow vs. the gradient's faded interior is what made the dark moat ring);
+     the diffuse halo comes from drop-shadow, which follows the gradient's actual shape, so there is no box edge. */
+  filter:saturate(1.4) drop-shadow(0 0 13px rgba(0,255,96,.55)) drop-shadow(0 0 34px rgba(0,255,82,.3));
+  background:radial-gradient(50% 50% at 50% 50%,
+    rgba(160,255,186,.98) 0%, rgba(48,255,116,.95) 16%, rgba(0,236,88,.82) 34%, rgba(0,210,74,.6) 52%,
+    rgba(0,178,62,.4) 68%, rgba(0,150,52,.2) 82%, rgba(0,128,44,.06) 93%, rgba(0,120,40,0) 100%);
+  animation:latticePortalPulse 2.4s ease-in-out infinite; }
+.lattice-portal .lp-bits{ position:absolute; inset:0; width:100%; height:100%; opacity:.95; mix-blend-mode:screen; pointer-events:none;
+  /* soft radial mask → digits fade out toward the edges instead of being hard-clipped to an ellipse */
+  -webkit-mask:radial-gradient(50% 50% at 50% 50%, #000 34%, rgba(0,0,0,.55) 64%, rgba(0,0,0,0) 88%);
+          mask:radial-gradient(50% 50% at 50% 50%, #000 34%, rgba(0,0,0,.55) 64%, rgba(0,0,0,0) 88%); }
+@keyframes latticePortalPulse{ 0%,100%{ transform:scale(1,1); opacity:.9; } 50%{ transform:scale(1.11,1.04); opacity:1; } }
+@keyframes latticeStride{ 0%,100%{ transform:translateY(0); } 50%{ transform:translateY(-3px); } }
+@media (prefers-reduced-motion:reduce){
+  .lattice-portal, .lattice-scene .train-spr{ animation:none; }
+}
 /* M.D.C. "Next deployment" briefing card — the strong right-column teaser for the next episode. */
 .mdc-brief{ display:flex; flex-direction:column; gap:12px; padding:clamp(16px,2vw,26px);
   background:linear-gradient(155deg, rgba(58,16,22,.78), rgba(16,6,9,.72));

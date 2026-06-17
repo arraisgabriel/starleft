@@ -1076,6 +1076,38 @@ function drawTrainCanvas(cv, type, spriteType, tnow){
     c.fillStyle='#bfe6ff'; c.fillText((DEF[type]&&DEF[type].icon)||'•', cv.width/2, cv.height/2);
   }
 }
+// Tiny Matrix-style binary rain inside the resurrection portal (.lp-bits canvas, drawn each frame by the Wake tick).
+// Transparent between glyphs so the portal's green light shows through; falling 0/1 columns with a bright head + green tail.
+function drawLatticeBits(cv){
+  const r=cv.getBoundingClientRect(); if(r.width<4||r.height<8) return;
+  const c=cv.getContext('2d');
+  if(!cv._init){
+    const dpr=Math.min(2,(window.devicePixelRatio||1));
+    cv.width=Math.max(16,Math.round(r.width*dpr)); cv.height=Math.max(40,Math.round(r.height*dpr));
+    cv._fs=Math.max(6,Math.round(cv.width/12));                      // ~12 really-tiny columns across (denser rain)
+    const n=Math.max(2,Math.floor(cv.width/cv._fs)); cv._cols=[];
+    for(let i=0;i<n;i++) cv._cols.push({ y:Math.random()*cv.height, spd:(0.2+Math.random()*0.5)*cv.height, len:4+((Math.random()*8)|0), chars:null });
+    cv._t=performance.now(); cv._init=true;
+  }
+  const rm=(window.matchMedia&&window.matchMedia('(prefers-reduced-motion:reduce)').matches);
+  const now=performance.now(), dt=rm?0:Math.min(0.05,(now-cv._t)/1000); cv._t=now;
+  const W=cv.width, H=cv.height, f=cv._fs;
+  c.clearRect(0,0,W,H);
+  c.font='bold '+f+'px monospace'; c.textAlign='center'; c.textBaseline='middle';
+  for(let i=0;i<cv._cols.length;i++){
+    const col=cv._cols[i];
+    col.y+=col.spd*dt;
+    if(col.y-col.len*f>H){ col.y=-(Math.random()*H*0.35); col.spd=(0.2+Math.random()*0.5)*H; col.len=4+((Math.random()*8)|0); col.chars=null; }
+    if(!col.chars||col.chars.length!==col.len){ col.chars=[]; for(let k=0;k<col.len;k++) col.chars.push(Math.random()<0.5?'0':'1'); }
+    if(!rm && Math.random()<0.09) col.chars[(Math.random()*col.len)|0]=Math.random()<0.5?'0':'1';   // subtle flicker
+    const x=i*f+f/2;
+    for(let k=0;k<col.len;k++){
+      const yy=col.y-k*f; if(yy<-f||yy>H+f) continue;
+      c.fillStyle = k===0 ? 'rgba(235,255,240,.95)' : 'rgba(80,255,140,'+Math.max(0.06,0.82-k*0.13).toFixed(2)+')';
+      c.fillText(col.chars[k], x, yy);
+    }
+  }
+}
 // Display name for a roster snapshot OR live unit: hero → heroId; career unit → dossier full name; else type.
 function trainUnitName(s){
   if(!s) return '';
@@ -1242,7 +1274,7 @@ function buildWakeBody(body){
 
   const sum=document.createElement('div'); sum.className='hub-stat';
   sum.innerHTML = unlocked
-    ? ('The storm holds <b>'+charges+'</b> of its <b>'+cap+'</b> writes — ever. In the lattice now: <b>'+sessions.length+' / '+(HUB.rebornSlotCap||1)+'</b>. One soul at a time; the rest stay names.')
+    ? ('The storm holds <b>'+charges+'</b> of its <b>'+cap+'</b> writes — ever. In the lattice now: <b>'+sessions.length+' / '+(HUB.rebornSlotCap||1)+'</b>. Up to '+(HUB.rebornSlotCap||1)+' at a time; the rest stay names.')
     : '⚠ LATTICE OFFLINE — resurrection unlocks at the GRAAL.';
   body.appendChild(sum);
 
@@ -1301,8 +1333,16 @@ function buildWakeBody(body){
   if(!sessions.length){ const m=document.createElement('div'); m.className='muted'; m.textContent='The coils are cold.'; colR.appendChild(m); }
   for(const ses of sessions){
     const card=document.createElement('div'); card.className='train-session'; card.dataset.wakeid=ses.id;
+    // "Walk to the light": the cyborg treads a path toward a pulsing Matrix-green resurrection portal.
+    // The walker is slid rightward by the panel tick as elapsed/total grows (it nears the light as the timer runs);
+    // portal pulse + digital rain are pure CSS.
+    const scene=document.createElement('div'); scene.className='lattice-scene';
+    const portal=document.createElement('div'); portal.className='lattice-portal';
+    const bits=document.createElement('canvas'); bits.className='lp-bits'; portal.appendChild(bits);   // tiny Matrix binary rain
+    const walk=document.createElement('div'); walk.className='lattice-walker';
     const cv=document.createElement('canvas'); cv.width=200; cv.height=200; cv.className='train-spr';
-    cv.dataset.type=ses.type; cv.dataset.sprite=ses.spriteType||''; card.appendChild(cv);
+    cv.dataset.type=ses.type; cv.dataset.sprite=ses.spriteType||''; walk.appendChild(cv);
+    scene.appendChild(portal); scene.appendChild(walk); card.appendChild(scene);
     const lab=document.createElement('div'); lab.className='train-cap';
     lab.innerHTML='<b>'+(ses.name||trainUnitName(ses))+'</b><br>Lv '+(ses.stars||0)+' · reassembling';
     card.appendChild(lab);
@@ -1318,15 +1358,30 @@ function openWakeMenu(){
   if(CAMPAIGN.reborn==null) CAMPAIGN.reborn={sessions:[],done:[]};
   openHubMenu({
     id:'wake', icon:'⚡', title:'The Wake',
-    subtitle:'A bootleg of A&O’s tower — the stolen lattice, fed your rescued dead, powered by the storm. Three, ever; one at a time. The rest keep their place on the wall. Nothing it gives back is whole.',
+    subtitle:'A bootleg of A&O’s tower — the stolen lattice, fed your rescued dead, powered by the storm. Three, ever; two at a time, four hours each. The rest keep their place on the wall. Nothing it gives back is whole.',
     signature: wakeSignature,
     build: buildWakeBody,
     tick: function(body){
       body.querySelectorAll('[data-wakeid]').forEach(el=>{
         const ses=((CAMPAIGN.reborn&&CAMPAIGN.reborn.sessions)||[]).find(s=>s.id===el.dataset.wakeid); if(!ses) return;
-        const total=ses.hoursTotal*(HUB.rebornHourSeconds||3600), remain=Math.max(0, total-(ses.secElapsed||0));
-        const bar=el.querySelector('.train-bar>i'); if(bar) bar.style.width=Math.min(100, (total?(ses.secElapsed||0)/total*100:100))+'%';
+        const total=(typeof rebornTotalSec==='function')?rebornTotalSec(ses):(ses.hoursTotal*(HUB.rebornHourSeconds||3600));
+        const elapsed=(typeof rebornElapsedSec==='function')?rebornElapsedSec(ses):(ses.secElapsed||0);
+        const remain=Math.max(0, total-elapsed);
+        const frac=ses.done?1:Math.min(1, total?elapsed/total:1);
+        const bar=el.querySelector('.train-bar>i'); if(bar) bar.style.width=(frac*100)+'%';
         const cd=el.querySelector('.train-countdown'); if(cd) cd.textContent=ses.done?'✓ RISEN':fmtTrainRemain(remain);
+        // walk-to-the-light: slide the cyborg along its path toward the green portal as elapsed/total grows,
+        // and let the resurrection light bleed onto it (green rim) more strongly the closer it gets.
+        const walk=el.querySelector('.lattice-walker');
+        if(walk && Math.abs((walk._frac==null?-1:walk._frac)-frac)>0.0008){
+          walk._frac=frac;
+          const scene=walk.parentElement, portalEl=el.querySelector('.lattice-portal');
+          const span=Math.max(0, scene.clientWidth - walk.offsetWidth - (portalEl?portalEl.offsetWidth:44) - 2);
+          walk.style.transform='translateX('+(frac*span).toFixed(1)+'px)';
+          const spr=walk.querySelector('.train-spr');
+          if(spr) spr.style.filter='drop-shadow(0 0 '+((5+frac*16)|0)+'px rgba(90,255,140,'+(0.18+frac*0.55).toFixed(2)+'))';
+        }
+        const bits=el.querySelector('.lp-bits'); if(bits) drawLatticeBits(bits);   // animate the portal's binary rain every frame
       });
     }
   });

@@ -87,7 +87,8 @@
     const isResume = (mode==='resume');
     const mapRow=$('mp-map-row'), saveRow=$('mp-save-row');
     if(mapRow)  mapRow.style.display  = isResume ? 'none' : '';
-    if(saveRow){ saveRow.style.display = isResume ? '' : 'none'; if(isResume) populateSavePick(); }
+    if(saveRow){ saveRow.style.display = isResume ? '' : 'none';
+      if(isResume){ if(typeof gdriveOnMpResumeOpen==='function') gdriveOnMpResumeOpen(); else populateSavePick(); } }   // pull MP cloud saves (if connected) then populate
     const mp=$('mp-map-pick'); if(mp) mp.disabled = (mode==='campaign' || mode==='duel' || isResume);   // campaign starts at Quarter 1; duel rolls its own arena (T4-5)
     renderPeers();   // re-evaluate Start gating (resume needs a selected save)
   };

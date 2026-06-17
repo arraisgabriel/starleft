@@ -20,6 +20,17 @@ const GD_CLOUD_MANUAL_CAP = 50;    // cloud retention: keep the newest N MANUAL 
                                    // never counted/pruned). Generous vs the 12 local slots so a save another device
                                    // still treats as current is very unlikely to be trimmed. Pruned in the push tail.
 
+/* ---- save pools ----
+   The cloud layer syncs TWO disjoint pools, each tagged in Drive by appProperties.app so they never mix in
+   appDataFolder: SOLO ('starleft', the campaign/H.U.B. slots) and MP ('starleft-mp', the co-op campaign slots).
+   Every CRUD/push/pull/prune fn takes a pool descriptor and defaults to SOLO, so the solo path is unchanged. */
+function GD_solo(){ return { id:'solo', appTag:'starleft', autoKey:AUTO_KEY, manualCap:MANUAL_CAP,
+  list:(typeof listSaves==='function'?listSaves:function(){return[];}), enforceCap:(typeof enforceCap==='function'?enforceCap:function(){}) }; }
+function GD_mp(){ return { id:'mp', appTag:'starleft-mp', autoKey:null, manualCap:(typeof MP_MANUAL_CAP!=='undefined'?MP_MANUAL_CAP:12),
+  list:(typeof listMpSaves==='function'?listMpSaves:function(){return[];}), enforceCap:(typeof enforceMpCap==='function'?enforceMpCap:function(){}) }; }
+function gdPools(){ const out=[GD_solo()]; if(typeof MP_SAVE_PREFIX!=='undefined') out.push(GD_mp()); return out; }
+function gdPoolIdOf(appTag){ return appTag==='starleft-mp' ? 'mp' : 'solo'; }
+
 /* ---- module state (bare globals, per the project's classic-scope convention) ---- */
 let GD_tok = null;                 // bearer for the in-flight push/pull batch (refreshed by driveFetch on 401)
 let GD_cloudIndex = [];            // last listed cloud index: [{id,name,slKey,savedAt,mapName,mapIndex,hub,auto,modifiedTime}]
@@ -84,9 +95,10 @@ async function driveList(){
     const j = await res.json();
     (j.files||[]).forEach(f=>{
       const ap = f.appProperties || {};
-      if(ap.app && ap.app!=='starleft') return;          // ignore anything not ours (appDataFolder is per-app anyway)
+      const app = ap.app || 'starleft';                  // legacy files (no app tag) are solo
+      if(app!=='starleft' && app!=='starleft-mp') return;// ignore anything not ours (appDataFolder is per-app anyway)
       if(!ap.slKey) return;
-      out.push({ id:f.id, name:f.name, slKey:ap.slKey, savedAt:+ap.savedAt||0,
+      out.push({ id:f.id, name:f.name, pool:gdPoolIdOf(app), slKey:ap.slKey, savedAt:+ap.savedAt||0,
                  mapName:ap.mapName||'', mapIndex:+ap.mapIndex||0, hub:ap.hub==='1', auto:ap.auto==='1',
                  modifiedTime:f.modifiedTime });
     });
@@ -95,22 +107,23 @@ async function driveList(){
   GD_cloudIndex = out;
   return out;
 }
-function slotMeta(s){
-  return { app:'starleft', slKey:s.key, savedAt:String(s.savedAt||0),
+function slotMeta(s, pool){
+  return { app:(pool&&pool.appTag)||'starleft', slKey:s.key, savedAt:String(s.savedAt||0),
            mapName:(s.mapName||'').slice(0,100), mapIndex:String(s.mapIndex||0),
            hub:s.hub?'1':'0', auto:s.auto?'1':'0' };
 }
-function slotFileName(s){
+function slotFileName(s, pool){
   const slug = (typeof saveSlug==='function') ? saveSlug(s.mapName||'save') : 'save';
-  return s.auto ? 'starleft-autosave.json' : ('starleft-'+slug+'-'+String(s.savedAt||0).slice(-6)+'.json');
+  const pre = (pool&&pool.id==='mp') ? 'starleft-coop-' : 'starleft-';
+  return s.auto ? 'starleft-autosave.json' : (pre+slug+'-'+String(s.savedAt||0).slice(-6)+'.json');
 }
-async function driveCreate(s, json){
+async function driveCreate(s, json, pool){
   return driveMultipart('POST', GD_UP+'?uploadType=multipart&fields='+GD_FIELDS,
-    Object.assign({ name:slotFileName(s), parents:['appDataFolder'] }, { appProperties:slotMeta(s) }), json);
+    Object.assign({ name:slotFileName(s,pool), parents:['appDataFolder'] }, { appProperties:slotMeta(s,pool) }), json);
 }
-async function driveUpdate(id, s, json){
+async function driveUpdate(id, s, json, pool){
   return driveMultipart('PATCH', GD_UP+'/'+id+'?uploadType=multipart&fields='+GD_FIELDS,
-    { name:slotFileName(s), appProperties:slotMeta(s) }, json);   // PATCH must NOT include parents
+    { name:slotFileName(s,pool), appProperties:slotMeta(s,pool) }, json);   // PATCH must NOT include parents
 }
 async function driveDownload(id){
   const res = await driveFetch(GD_API+'/'+id+'?alt=media', { method:'GET' });
@@ -129,27 +142,27 @@ async function gdAcquire(interactive){
 
 /* ---- PUSH (local → cloud) ---- */
 async function gdrivePush(opts){
-  opts = opts || {};
+  opts = opts || {}; const pool = opts.pool || GD_solo();
   if(!gisAvailable()) return { ok:false, reason:'unavailable' };
   if(!(await gdAcquire(opts.interactive))) return { ok:false, reason:'noauth' };
   syncStatus('syncing');
   try{
     const cloud = await driveList();
-    const byKey = new Map(cloud.map(f=>[f.slKey, f]));
+    const byKey = new Map(cloud.filter(f=>f.pool===pool.id).map(f=>[f.slKey, f]));   // only THIS pool's files
     const conflicts = []; let pushed=0, skipped=0;
-    for(const s of listSaves()){
+    for(const s of pool.list()){
       let json; try{ json = saveRawJson(s.key); }catch(_){ json=null; }
       if(!json) continue;
       const remote = byKey.get(s.key);
       try{
-        if(!remote){ await driveCreate(s, json); pushed++; }
-        else if(s.savedAt > remote.savedAt){ await driveUpdate(remote.id, s, json); pushed++; }
+        if(!remote){ await driveCreate(s, json, pool); pushed++; }
+        else if(s.savedAt > remote.savedAt){ await driveUpdate(remote.id, s, json, pool); pushed++; }
         else if(s.savedAt < remote.savedAt){ conflicts.push({ slKey:s.key, id:remote.id, local:s.savedAt, cloud:remote.savedAt, mapName:remote.mapName, auto:remote.auto }); skipped++; }
         else skipped++;                                   // equal savedAt → identical, no-op
       }catch(e){ /* per-slot failure must not abort the batch */ skipped++; }
     }
     await driveList();                                    // refresh the cached index after writes
-    try{ await gdrivePruneCloud(); }catch(_){}             // best-effort retention trim (never affects push success)
+    try{ await gdrivePruneCloud(pool); }catch(_){}         // best-effort retention trim (never affects push success)
     GD_lastSyncAt = nowMs();
     syncStatus(conflicts.length ? 'conflict' : 'ok', { pushed, skipped, conflicts });
     return { ok:true, pushed, skipped, conflicts };
@@ -161,8 +174,9 @@ async function gdrivePush(opts){
    the game, never pops auth, and never runs on its own timer. The autosave (AUTO_KEY) is the shared resume
    slot and is NEVER counted or pruned. Deletes the OLDEST-beyond-cap by exact file id, per-file guarded so
    one failure can't abort the batch (the next push retries). Idempotent: a no-op once the cloud is ≤ cap. */
-async function gdrivePruneCloud(){
-  const manual = GD_cloudIndex.filter(f=>f && f.slKey && f.slKey!==AUTO_KEY && !f.auto)
+async function gdrivePruneCloud(pool){
+  pool = pool || GD_solo();
+  const manual = GD_cloudIndex.filter(f=>f && f.pool===pool.id && f.slKey && f.slKey!==pool.autoKey && !f.auto)
                               .sort((a,b)=> b.savedAt - a.savedAt);     // newest first
   if(manual.length <= GD_CLOUD_MANUAL_CAP) return 0;                     // common case: nothing to trim
   const stale = manual.slice(GD_CLOUD_MANUAL_CAP);                       // everything past the cap = the oldest
@@ -176,13 +190,13 @@ async function gdrivePruneCloud(){
 
 /* ---- PULL (cloud → local) + reconcile/merge ---- */
 async function gdrivePull(opts){
-  opts = opts || {};
+  opts = opts || {}; const pool = opts.pool || GD_solo();
   if(!gisAvailable()) return { ok:false, reason:'unavailable' };
   if(!(await gdAcquire(opts.interactive))) return { ok:false, reason:'noauth' };
   syncStatus('syncing');
   try{
-    const cloud = await driveList();
-    const localByKey = new Map(listSaves().map(s=>[s.key, s]));
+    const cloud = (await driveList()).filter(f=>f.pool===pool.id);   // only THIS pool's files
+    const localByKey = new Map(pool.list().map(s=>[s.key, s]));
     const recreate = [], conflicts = [];
     for(const f of cloud){
       const local = localByKey.get(f.slKey);
@@ -190,7 +204,7 @@ async function gdrivePull(opts){
       else if(f.savedAt > local.savedAt) conflicts.push({ slKey:f.slKey, id:f.id, local:local.savedAt, cloud:f.savedAt, mapName:f.mapName, auto:f.auto });
       // f.savedAt <= local → local newer-or-equal; pull does nothing (push will carry it up)
     }
-    await reconcileAndRecreate(recreate);
+    await reconcileAndRecreate(recreate, pool);
     gdriveRefreshMenus();
     GD_lastSyncAt = nowMs();
     if(conflicts.length){ syncStatus('conflict', { conflicts }); showCloudConflict(conflicts); }
@@ -209,23 +223,24 @@ async function recreateSlot(f){
   return true;
 }
 
-// Recreate cloud-missing slots while respecting MANUAL_CAP: the newest-by-savedAt 12 manual slots win.
-async function reconcileAndRecreate(cloudMissing){
-  const cloudAuto   = cloudMissing.filter(f=>f.slKey===AUTO_KEY);
-  const cloudManual = cloudMissing.filter(f=>f.slKey!==AUTO_KEY);
-  for(const f of cloudAuto) await recreateSlot(f);       // the shared, capped-at-1 autosave slot
+// Recreate cloud-missing slots while respecting the pool's local cap: the newest-by-savedAt slots win.
+async function reconcileAndRecreate(cloudMissing, pool){
+  pool = pool || GD_solo();
+  const cloudAuto   = pool.autoKey ? cloudMissing.filter(f=>f.slKey===pool.autoKey) : [];
+  const cloudManual = pool.autoKey ? cloudMissing.filter(f=>f.slKey!==pool.autoKey) : cloudMissing.slice();
+  for(const f of cloudAuto) await recreateSlot(f);       // the shared, capped-at-1 autosave slot (solo only)
 
-  const localManual = listSaves().filter(s=>!s.auto);
+  const localManual = pool.list().filter(s=>!s.auto);
   const merged = localManual.map(s=>({ slKey:s.key, savedAt:s.savedAt, local:true }))
     .concat(cloudManual.map(f=>({ slKey:f.slKey, savedAt:f.savedAt, file:f, local:false })))
     .sort((a,b)=> b.savedAt - a.savedAt);                // newest first
-  const keep = merged.slice(0, MANUAL_CAP);
+  const keep = merged.slice(0, pool.manualCap);
   const dropped = merged.length - keep.length;
   for(const m of keep){
-    if(!m.local){ if(typeof enforceCap==='function') enforceCap(); await recreateSlot(m.file); }
+    if(!m.local){ try{ pool.enforceCap(); }catch(_){} await recreateSlot(m.file); }
   }
   if(dropped>0 && typeof toast==='function')
-    toast('Cloud has '+dropped+' more save'+(dropped===1?'':'s')+' than this device holds ('+MANUAL_CAP+' max). Newest kept; the rest stay backed up in the cloud.');
+    toast('Cloud has '+dropped+' more save'+(dropped===1?'':'s')+' than this device holds ('+pool.manualCap+' max). Newest kept; the rest stay backed up in the cloud.');
 }
 
 /* ---- conflict prompt (#cloudConflict overlay; mirrors showExtractConfirm in js/hub.js) ---- */
@@ -285,10 +300,13 @@ function gdriveConnect(){
     gdriveDoConnect();
   });
 }
-// Proceed with the merge: pull (cloud→local, additive/prompt) then push (local→cloud).
+// Run an op across BOTH pools (solo + co-op). Push-before-pull keeps un-uploaded locals safe before any eviction.
+async function gdrivePullAll(opts){ let r=null; for(const p of gdPools()){ r=await gdrivePull(Object.assign({}, opts||{}, {pool:p})); } return r; }
+async function gdrivePushAll(opts){ let r=null; for(const p of gdPools()){ r=await gdrivePush(Object.assign({}, opts||{}, {pool:p})); } return r; }
+// Proceed with the merge: push (back up locals first) then pull (cloud→local, additive/prompt) across both pools.
 function gdriveDoConnect(){
   setCloudOn(true);
-  (async ()=>{ await gdrivePull({ interactive:true }); await gdrivePush({ interactive:true }); gdriveRefreshUI(); })();
+  (async ()=>{ await gdrivePushAll({ interactive:true }); await gdrivePullAll({ interactive:true }); gdriveRefreshUI(); })();
 }
 // Abort: sign back out, leave sync off, upload nothing. Local saves are untouched.
 function gdriveCancelConnect(){
@@ -315,8 +333,8 @@ function showCloudAccountSwitch(newEmail, count, onContinue, onCancel){
   if(go) go.onclick=()=>{ close(); onContinue(); };
   if(cancel) cancel.onclick=()=>{ close(); onCancel(); };
 }
-function gdriveSyncNow(){ whenGsi(async ()=>{ if(!gisAvailable()) return; await gdrivePull({ interactive:true }); await gdrivePush({ interactive:true }); gdriveRefreshUI(); }); }
-function gdriveRestore(){ whenGsi(async ()=>{ if(!gisAvailable()) return; await gdrivePull({ interactive:true }); gdriveRefreshUI(); }); }
+function gdriveSyncNow(){ whenGsi(async ()=>{ if(!gisAvailable()) return; await gdrivePushAll({ interactive:true }); await gdrivePullAll({ interactive:true }); gdriveRefreshUI(); }); }
+function gdriveRestore(){ whenGsi(async ()=>{ if(!gisAvailable()) return; await gdrivePullAll({ interactive:true }); gdriveRefreshUI(); }); }
 function gdriveDisconnect(){ if(window.GDRIVE && GDRIVE.signOut) GDRIVE.signOut(); setCloudOn(false); GD_cloudIndex=[]; gdriveRefreshMenus(); gdriveRefreshUI(); }
 
 // Auto-push after a successful save/autosave — debounced, NEVER interactive (can't pop a window).
@@ -325,7 +343,7 @@ function gdriveAutoPush(){
   clearTimeout(GD_pushTimer);
   GD_pushTimer = setTimeout(()=>{ gdrivePush({ interactive:false }); }, GD_DEBOUNCE_PUSH);
 }
-// Auto-pull on focus / Load-menu open — debounced + throttled, NEVER interactive.
+// Auto-pull on focus / Load-menu open — debounced + throttled, NEVER interactive. SOLO pool only.
 function gdriveAutoPull(){
   if(!cloudOn() || !gisAvailable()) return;
   if(nowMs() - GD_lastPullAt < GD_PULL_MIN_INTERVAL) return;
@@ -334,6 +352,25 @@ function gdriveAutoPull(){
 }
 // Called from openLoadMenu(): refresh the cloud UI, then opportunistically pull.
 function gdriveOnLoadMenuOpen(){ gdriveRefreshUI(); gdriveAutoPull(); }
+
+/* ---- co-op (MP) pool sync triggers — kept OFF the focus/Load-menu auto-pull so a pull can never pop the
+   conflict overlay mid-co-op-match. MP push is safe anytime (never pops the overlay); MP pull runs only at
+   lobby-safe points (resume picker open) where the game isn't running. ---- */
+let GD_mpPushTimer = null;
+function gdriveAutoPushMp(){
+  if(!cloudOn() || !gisAvailable() || typeof MP_SAVE_PREFIX==='undefined') return;
+  clearTimeout(GD_mpPushTimer);
+  GD_mpPushTimer = setTimeout(()=>{ gdrivePush({ interactive:false, pool:GD_mp() }); }, GD_DEBOUNCE_PUSH);   // background; push never shows the conflict overlay
+}
+// Lobby resume picker opened: pull the MP pool (safe — not in a running match) so cloud co-op campaigns
+// materialize locally and appear in the picker, then (re)populate it. Non-interactive + throttled.
+function gdriveOnMpResumeOpen(){
+  const repop = ()=>{ if(typeof mpPopulateSavePick==='function') mpPopulateSavePick(); };
+  if(!cloudOn() || !gisAvailable() || typeof MP_SAVE_PREFIX==='undefined'){ repop(); return; }
+  if(nowMs() - GD_lastPullAt < GD_PULL_MIN_INTERVAL){ repop(); return; }
+  GD_lastPullAt = nowMs();
+  gdrivePull({ interactive:false, pool:GD_mp() }).then(repop, repop);
+}
 
 /* ---- per-row cloud-only actions (interactive button clicks) ---- */
 async function gdriveRestoreOne(f){
@@ -353,7 +390,7 @@ async function gdriveRemoveOne(f){
 function gdriveAppendCloudRows(wrap){
   if(!wrap || !cloudOn() || !gisAvailable() || !GD_cloudIndex.length) return;
   const localKeys = new Set(listSaves().map(s=>s.key));
-  const cloudOnly = GD_cloudIndex.filter(f=>f.slKey && f.slKey!==AUTO_KEY && !localKeys.has(f.slKey)).sort((a,b)=>b.savedAt-a.savedAt);
+  const cloudOnly = GD_cloudIndex.filter(f=>f.pool==='solo' && f.slKey && f.slKey!==AUTO_KEY && !localKeys.has(f.slKey)).sort((a,b)=>b.savedAt-a.savedAt);  // MP cloud-only saves surface in the lobby resume picker, not here
   if(!cloudOnly.length) return;
   const hdr=document.createElement('div'); hdr.className='panel-label'; hdr.textContent='In cloud only — restore to play on this device';
   wrap.appendChild(hdr);

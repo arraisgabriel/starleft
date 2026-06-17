@@ -322,10 +322,12 @@ function mpSaveGame(opts){
     if(!localStorage.getItem(key)) enforceMpCap();     // only enforce the cap when adding a NEW campaign slot
     saveWrite(key, payload);
     if(!opts.silent) toast('Co-op campaign saved');
-    // distribute the exact bytes to clients (no-op until the net layer is wired); MP pool is NOT on the solo cloud hook
+    // distribute the exact bytes to clients so every participant holds a re-hostable copy
     if(typeof NET!=='undefined' && NET.mpBroadcastSave){
       try{ NET.mpBroadcastSave(JSON.stringify(payload), payload.mpCampaignId, !!opts.auto); }catch(_){}
     }
+    // back up to the MP cloud pool (separate from the solo cloud; debounced, background, safe during a match)
+    if(typeof gdriveAutoPushMp==='function') gdriveAutoPushMp();
     return true;
   }catch(err){
     if(isQuotaError(err)){ if(!opts.silent) toast('Co-op save failed: storage full — delete co-op saves'); }
