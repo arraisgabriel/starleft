@@ -20,6 +20,7 @@
     netRole='solo'; LOCAL_CTRL='p1'; pendingPlayers=1;
     NET.peerCtrl={}; NET.ctrlPeer={};
     S.role='solo'; S.code=null; S.started=false; S.peerId=null; S.joiner=null; S.host=null; S._gone=false;
+    S.mpCampaignId=null; S._resumed=false; S._peerVer=null; S._awaitResume=false; S._pendingSaveMeta=null;
   }
   window.mpResetToSolo = resetToSolo;
 
@@ -42,6 +43,7 @@
     NET.bindHostReceivers();                       // 'mpcmd'
     MP.on('mphello', (msg, peerId)=>{               // joiner announced its profile
       S.joiner = msg.profile; S.peerId = peerId;
+      S._peerVer = (msg.ver!=null) ? (msg.ver|0) : S._peerVer;   // joiner's SAVE_VERSION (build-skew check on resume)
       NET.mpLog && NET.mpLog('info','ally identified: '+((msg.profile&&msg.profile.handle)||'?'));
       if(typeof rememberFriend==='function' && msg.profile) rememberFriend(msg.profile.id, msg.profile.handle);
       ui('Peers');
@@ -54,7 +56,7 @@
         else if(S.peerId && S.peerId!==peerId && NET.ctrlPeer['p2']){ NET.mpLog && NET.mpLog('warn','rejected extra peer '+String(peerId).slice(0,6)+'… (match full)'); MP.send('mpbye',{reason:'full'},peerId); return; }
         S.peerId=peerId; NET.peerCtrl[peerId]='p2'; NET.ctrlPeer['p2']=peerId;
         NET.mpLog && NET.mpLog('ok','ally reconnected '+String(peerId).slice(0,6)+'… → p2 (resyncing)');
-        MP.send('mphello', { profile:S.me, youCtrl:'p2', mode:S.mode, mapIndex:S.mapIndex }, peerId);
+        MP.send('mphello', { profile:S.me, youCtrl:'p2', mode:S.mode, mapIndex:S.mapIndex, mpCampaignId:S.mpCampaignId, ver:(typeof SAVE_VERSION!=='undefined'?SAVE_VERSION:0) }, peerId);
         if(NET.sendFull) NET.sendFull(peerId);                  // resync the rejoined client to current state
         ui('Peers'); toast('Ally reconnected');
         return;
@@ -79,7 +81,8 @@
     if(S.role!=='host') return;
     if(typeof TELE!=='undefined') TELE.event('coop_session', { role:'host', mode: mode||S.mode });
     S.mode = mode || S.mode; S.mapIndex = mapIndex|0; S.started=true; S.duelSeed=(extra&&extra.duelSeed)!=null?extra.duelSeed:null;
-    pendingPlayers = 2; LOCAL_CTRL='p1'; netRole='host';
+    pendingPlayers = 2; LOCAL_CTRL='p1'; netRole='host'; S._resumed=false;
+    if(S.mode==='campaign' && !S.mpCampaignId){ S.mpCampaignId = (typeof _mpUuid==='function') ? _mpUuid() : ('mp'+Date.now().toString(36)); }  // stable co-op campaign id (saved/resumed slot key)
     // fresh roster for skirmish; campaign keeps the carried veterans (p1's campaign progression)
     if(S.mode!=='campaign'){ if(typeof setCarryover==='function') setCarryover([]);
       if(typeof resetHeroes==='function') resetHeroes(); if(typeof resetFallen==='function') resetFallen(); }
@@ -114,7 +117,7 @@
     if(typeof startHostClock==='function') startHostClock();   // keep the host simulating + broadcasting off-focus
     // tell the joiner to build the same map, then ship the authoritative dynamic state
     NET.mpLog && NET.mpLog('info','starting host-authoritative co-op — map '+S.mapIndex+', sending mpstart + full snapshot');
-    MP.send('mpstart', { mapIndex:S.mapIndex, mode:S.mode, duelSeed:S.duelSeed });
+    MP.send('mpstart', { mapIndex:S.mapIndex, mode:S.mode, duelSeed:S.duelSeed, mpCampaignId:S.mpCampaignId });
     NET.tick = 0; NET._sAcc = 0; NET._kAcc = 0;
     NET._baseline = new Map(); NET._lastEcoStr = null; NET._lastQuestStr = null; NET._sinceSend = 0;   // reset Phase 4 delta baseline / eco + quest signatures for the new map
     NET.sendFull(S.peerId);
@@ -138,17 +141,25 @@
     MP.on('mphello', (msg, peerId)=>{                 // host welcomed us
       S.host = msg.profile; S.peerId = peerId; LOCAL_CTRL = msg.youCtrl || 'p2';
       S.mode = msg.mode || S.mode; S.mapIndex = msg.mapIndex|0;
+      if(msg.mpCampaignId) S.mpCampaignId = msg.mpCampaignId;   // co-op save identity (for the client's mirror copy)
+      S._peerVer = (msg.ver!=null) ? (msg.ver|0) : S._peerVer;  // host's SAVE_VERSION (build-skew check)
       NET.mpLog && NET.mpLog('ok','host welcomed us → you are '+LOCAL_CTRL+' (host '+String(peerId).slice(0,6)+'…)');
       clearTimer('_joinTimer');
       if(S._reconnecting){ S._reconnecting=false; clearTimer('_reconnTimer'); }   // host re-acknowledged us mid-reconnect
       if(typeof rememberFriend==='function' && msg.profile) rememberFriend(msg.profile.id, msg.profile.handle);
-      MP.send('mphello', { profile:S.me, role:'join' }, peerId);   // send our handle back
+      MP.send('mphello', { profile:S.me, role:'join', ver:(typeof SAVE_VERSION!=='undefined'?SAVE_VERSION:0) }, peerId);   // send our handle + build version back
       ui('Peers');
     });
     MP.on('mpstart', (msg)=> beginClientMatch(msg.mapIndex|0, msg.mode, msg));
     MP.on('rbstart', (msg)=> beginClientRollback(msg));   // rollback co-op join
     MP.on('mphub', (msg)=> beginClientHub(msg));
     MP.on('mppause', (msg)=> applyHostPause(!!(msg && msg.paused)));
+    // ── co-op save distribution (host→client). SINGLE-SERIALIZER: clients PERSIST the host's exact bytes;
+    //    they never serialize their own G. mpsave = mid-match mirror copy; mpresume = full resume blob (also
+    //    deserialized into G when resuming — see beginClientMatch's resume branch). ──
+    MP.on('mpsavemeta', (m)=>{ S._pendingSaveMeta = m||{}; });
+    MP.on('mpsave', (p)=> NET._recvChunked(p, (blob)=> mpClientPersistSave(blob, S._pendingSaveMeta)));
+    MP.on('mpresume', (p)=> NET._recvChunked(p, (blob)=> mpClientApplyResume(blob)));
     MP.on('mpbye', (msg)=>{ if(msg && msg.reason==='full'){ NET.mpLog && NET.mpLog('err','room is full — host rejected us'); toast('Room is full'); mpLeave(); } else { NET.mpLog && NET.mpLog('err','host left (clean BYE) — match ended'); mpHostGone('left'); } });   // clean BYE → terminal
   }
 
@@ -244,6 +255,8 @@
   }
 
   function beginClientMatch(idx, mode, msg){
+    if(msg && msg.mpCampaignId) S.mpCampaignId = msg.mpCampaignId;
+    if(msg && msg.resume) return beginClientResume(idx, mode, msg);   // resume: wait for the full blob, deserialize it (no newMap)
     NET.mpLog && NET.mpLog('info','mpstart received (map '+idx+') — building map, awaiting host snapshot');
     if(typeof TELE!=='undefined') TELE.event('coop_session', { role:'join', mode: mode||S.mode });
     S.started=true; S.mode=mode||S.mode; S.mapIndex=idx;
@@ -272,6 +285,7 @@
   function beginClientHub(msg){
     S.started=true; S.mode=(msg&&msg.mode)||S.mode; S.mapIndex=(msg&&msg.mapIndex)|0;
     netRole='client'; LOCAL_CTRL='p2'; pendingPlayers=2; mapIndex=S.mapIndex;
+    if(msg && msg.mpCampaignId) S.mpCampaignId=msg.mpCampaignId;
     if(msg && msg.campaign && typeof deserializeHubCampaign==='function') deserializeHubCampaign(msg.campaign);
     G = newHubMap();
     running = false;
@@ -287,6 +301,59 @@
       LOADER.beginMission(missionTagsHub());
       gateMission(S.mapIndex, null, { passive:true, until:()=>running, label:'H.U.B. UPLINK' });
     }
+  }
+
+  // RESUME (client): the host ships a full save blob (terrain included) via 'mpresume'; we deserializeGame it
+  // directly (host-authoritative → byte-identical to the host), instead of newMap()+snapshot. running flips
+  // when the blob applies (mpClientApplyResume). Used for both battlefield and H.U.B. resumes.
+  function beginClientResume(idx, mode, msg){
+    const isHub=!!(msg && msg.hub);
+    NET.mpLog && NET.mpLog('info','mpstart{resume'+(isHub?',hub':'')+'} received (map '+idx+') — awaiting full resume blob');
+    if(typeof TELE!=='undefined') TELE.event('coop_session', { role:'join', mode:mode||S.mode, resume:1 });
+    S.started=true; S.mode=mode||S.mode; S.mapIndex=idx;
+    netRole='client'; LOCAL_CTRL='p2'; pendingPlayers=2; mapIndex=idx;
+    running=false; S._awaitResume=true; NET._lastAppliedTick=-1;
+    if(NET.resetWatchdog) NET.resetWatchdog();
+    if(NET.flushPendingFull) NET.flushPendingFull();
+    armSyncWatchdog();
+    ui('Syncing');
+    if(typeof gateMission==='function' && typeof LOADER!=='undefined'){
+      LOADER.beginMission(isHub ? missionTagsHub() : missionTags(idx));
+      gateMission(idx, null, { passive:true, until:()=>running, label: isHub ? 'H.U.B. UPLINK' : undefined });
+    }
+  }
+  // Apply a received resume blob: deserialize it into G (safe — host-authored), persist our own copy, run.
+  function mpClientApplyResume(blob){
+    if(!blob || blob.coop!==true){ NET.mpLog && NET.mpLog('err','resume blob rejected (not a co-op save)'); return; }
+    if(typeof saveVersionOk==='function' && !saveVersionOk(blob)){
+      NET.mpLog && NET.mpLog('err','resume blob version incompatible — build skew'); toast('Co-op resume failed — your build differs from the host'); onHostDrop('lost'); return; }
+    try{
+      G = deserializeGame(blob);                        // SAFE: deserializing a host-authored blob (half-state rule intact)
+      mapIndex = (typeof saveMapIndex==='function') ? saveMapIndex(blob) : (blob.mapIndex|0);
+      S.mapIndex = mapIndex; S.mpCampaignId = blob.mpCampaignId || S.mpCampaignId;
+    }catch(err){ NET.mpLog && NET.mpLog('err','resume deserialize failed: '+((err&&err.message)||err)); console.error('[mp] resume failed', err); onHostDrop('lost'); return; }
+    mpClientPersistSave(blob, { campId: blob.mpCampaignId });   // keep our own re-hostable copy
+    NET.lastFull = 0; NET._lastAppliedTick = 0;          // baseline so the live mpsnap stream takes over cleanly
+    S._awaitResume=false; running=true; clearTimer('_syncTimer');
+    if(typeof syncHud==='function') syncHud();
+    if(typeof refreshUI==='function') refreshUI();
+    if(G && G.hub){ if(typeof clampCam==='function') clampCam(G); ui('EnterGame'); toast('Resumed co-op H.U.B. — P1 controls upgrades and launch.'); return; }
+    const o=G._coopOrigins && G._coopOrigins.p2;
+    if(o && typeof clampCam==='function'){ const z=G.zoom||1; G.camX=o.x*TILE-(innerWidth/z)/2; G.camY=o.y*TILE-(innerHeight/z)/2; clampCam(G); }
+    else if(typeof clampCam==='function') clampCam(G);
+    ui('EnterGame'); toast('Resumed co-op campaign — your base is marked in amber');
+  }
+  // Persist a host-shipped co-op blob to THIS device's MP pool (persist-only; never touches G).
+  function mpClientPersistSave(blob, meta){
+    meta = meta || {};
+    const campId = meta.campId || (blob && blob.mpCampaignId);
+    if(!campId || !blob || blob.coop!==true) return;     // guard: only persist a real co-op blob
+    try{
+      if(typeof mpSaveKey!=='function' || typeof saveWrite!=='function') return;
+      if(!localStorage.getItem(mpSaveKey(campId)) && typeof enforceMpCap==='function') enforceMpCap();
+      saveWrite(mpSaveKey(campId), blob);
+      NET.mpLog && NET.mpLog('ok','co-op save mirrored locally');
+    }catch(_){}
   }
 
   function applyHostPause(paused){
@@ -372,7 +439,71 @@
     S.mapIndex = mapIndex|0;
     NET.tick = 0; NET._sAcc = 0; NET._kAcc = 0;
     NET._baseline = new Map(); NET._lastEcoStr = null; NET._lastQuestStr = null; NET._sinceSend = 0;   // reset Phase 4 delta baseline / eco + quest signatures for the new map
-    MP.send('mphub', { mapIndex:S.mapIndex, mode:S.mode, campaign: typeof serializeHubCampaign==='function' ? serializeHubCampaign() : null });
+    MP.send('mphub', { mapIndex:S.mapIndex, mode:S.mode, mpCampaignId:S.mpCampaignId, campaign: typeof serializeHubCampaign==='function' ? serializeHubCampaign() : null });
     if(S.peerId && NET.sendFull) NET.sendFull(S.peerId);
+  };
+
+  /* ---------------- co-op save distribution + resume (host side) ---------------- */
+  // Mid-match save copy → ally (chunked, backpressured, best-effort). Called from mpSaveGame (js/save.js).
+  NET.mpBroadcastSave = function(str, campId, auto){
+    if(!S.peerId) return;
+    const HIWATER = NET.SEND_HIWATER || 64*1024;
+    const go=()=>{ if(S._gone) return;
+      const buf=(typeof MP!=='undefined' && MP.bufferedAmount)?MP.bufferedAmount():0;
+      if(buf>HIWATER){ setTimeout(go, 300); return; }     // don't head-of-line-block the 15Hz mpsnap stream
+      try{ MP.send('mpsavemeta', { campId, auto:!!auto }, S.peerId); NET._sendChunked('mpsave', str, S.peerId);
+           NET.mpLog && NET.mpLog('info','co-op save → ally ('+Math.round(str.length/1024)+'KB)'); }catch(_){}
+    };
+    go();
+  };
+  // Full resume blob (terrain included) → ally; the client deserializes it (mpClientApplyResume).
+  NET.mpBroadcastResume = function(str){
+    if(!S.peerId) return;
+    const HIWATER = NET.SEND_HIWATER || 64*1024;
+    const go=()=>{ if(S._gone) return;
+      const buf=(typeof MP!=='undefined' && MP.bufferedAmount)?MP.bufferedAmount():0;
+      if(buf>HIWATER){ setTimeout(go, 200); return; }
+      try{ NET._sendChunked('mpresume', str, S.peerId); NET.mpLog && NET.mpLog('info','co-op resume blob → ally ('+Math.round(str.length/1024)+'KB)'); }catch(_){}
+    };
+    go();
+  };
+
+  // HOST: resume a saved co-op campaign (battlefield OR H.U.B.). Loads the blob into the authoritative G, then
+  // ships the SAME blob to the client which deserializes it (byte-identical state). Any participant can do this
+  // from their own copy — whoever resumes becomes p1.
+  window.mpHostStartFromSave = function(key){
+    if(S.role!=='host'){ toast('Only the host can resume a co-op campaign'); return false; }
+    const d = (typeof saveRead==='function') ? saveRead(key) : null;
+    if(!d || !isSaveBlob(d) || !saveVersionOk(d)){ toast('Saved co-op campaign is unreadable'); return false; }
+    if(S.peerId && S._peerVer!=null && S._peerVer < (d.v||0)){ toast('Your ally is on an older build — they can’t load this co-op save'); return false; }
+    if(typeof TELE!=='undefined') TELE.event('coop_session', { role:'host', mode:'campaign', resume:1 });
+    const isHub = (typeof saveIsHubMap==='function') ? saveIsHubMap(d) : !!d.hub;
+    S.mode='campaign'; S.started=true; S.duelSeed=null; S._resumed=true;
+    S.mpCampaignId = d.mpCampaignId || S.mpCampaignId || ((typeof _mpUuid==='function')?_mpUuid():('mp'+Date.now().toString(36)));
+    d.mpCampaignId = S.mpCampaignId; d.coop = true;       // ensure the wire/local copy carry the adopted identity
+    S.mapIndex = (typeof saveMapIndex==='function') ? saveMapIndex(d) : (d.mapIndex|0);
+    mapIndex = S.mapIndex; pendingPlayers = d.players||2; LOCAL_CTRL='p1'; netRole='host';
+    if(typeof MUSIC!=='undefined') MUSIC.leaveMenu();
+    try{ G = deserializeGame(d); }
+    catch(err){ console.error('[mp] resume deserialize failed', err); toast('Co-op resume failed — save data incomplete'); resetToSolo(); return false; }
+    if(typeof resetDialogs==='function') resetDialogs();
+    if(typeof syncHud==='function') syncHud();
+    if(typeof clampCam==='function') clampCam(G);
+    if(typeof refreshUI==='function') refreshUI();
+    running = true;
+    if(typeof startHostClock==='function') startHostClock();
+    NET.tick=0; NET._sAcc=0; NET._kAcc=0; NET._baseline=new Map(); NET._lastEcoStr=null; NET._lastQuestStr=null; NET._sinceSend=0; NET._lastAppliedTick=-1;
+    // write the host's own slot under this campaign id (latest battlefield/HUB)
+    try{ if(typeof mpSaveKey==='function' && typeof saveWrite==='function') saveWrite(mpSaveKey(S.mpCampaignId), d); }catch(_){}
+    // tell the client to RESUME (not newMap) and ship the full blob it will deserialize
+    MP.send('mpstart', { mapIndex:S.mapIndex, mode:'campaign', mpCampaignId:S.mpCampaignId, resume:true, hub:isHub });
+    if(S.peerId){ try{ NET.mpBroadcastResume(JSON.stringify(d)); }catch(_){} }
+    if(typeof gateMission==='function' && typeof LOADER!=='undefined'){
+      LOADER.beginMission(isHub ? missionTagsHub() : missionTags(S.mapIndex));
+      gateMission(S.mapIndex, null, { passive:true });
+    }
+    ui('EnterGame');
+    toast(isHub ? 'Resumed co-op H.U.B.' : ('Resumed co-op campaign — Quarter '+(S.mapIndex+1)));
+    return true;
   };
 })();

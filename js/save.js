@@ -7,6 +7,11 @@ const SAVE_VERSION = 2;   // v2: madosis fields persist; older (v<2 / null) save
 const SAVE_PREFIX  = 'starleft_save_';
 const AUTO_KEY     = SAVE_PREFIX + 'auto';
 const MANUAL_CAP   = 12;            // newest 12 manual saves kept; oldest evicted (compressed slots are small)
+// Multiplayer (co-op) save pool — a SEPARATE, disjoint namespace from the solo pool. 'starleft_save_' is NOT a
+// prefix of 'starleft_mpsave_' (and vice-versa), so the two scanners never collide. One slot per logical co-op
+// campaign, keyed by a stable mpCampaignId, so re-saving the same campaign overwrites its slot. See js/net/mp.js.
+const MP_SAVE_PREFIX = 'starleft_mpsave_';
+const MP_MANUAL_CAP  = 12;          // newest 12 co-op campaigns kept on this device; oldest evicted
 const SAVE_LZ_MARK = '\u0001';      // sentinel marking an LZ-compressed at-rest value (never a valid JSON start)
 
 /* ---------- compressed at-rest storage ----------
@@ -257,6 +262,78 @@ function enforceCap(){
   const manual=listSaves().filter(s=>!s.auto).sort((a,b)=>a.savedAt-b.savedAt); // oldest first
   while(manual.length>=MANUAL_CAP){ localStorage.removeItem(manual.shift().key); }
 }
+
+/* ---------- multiplayer (co-op) save pool ----------
+   Mirrors the solo pool in a disjoint namespace, reusing every key-agnostic helper (saveWrite/saveRead/
+   isSaveBlob/saveVersionOk/saveMapIndex/saveIsHubMap) UNCHANGED. SINGLE-SERIALIZER rule: only the HOST calls
+   serializeGame() (mpSaveGame); clients persist the host's exact wire bytes (js/net/mp.js) under the same key —
+   so every participant holds a byte-identical, re-hostable copy. One slot per campaign, keyed by mpCampaignId. */
+function mpSaveKey(campId){ return MP_SAVE_PREFIX + (campId||''); }
+function listMpSaves(){
+  const out=[];
+  for(let i=0;i<localStorage.length;i++){
+    const key=localStorage.key(i);
+    if(!key || key.indexOf(MP_SAVE_PREFIX)!==0) continue;
+    const d=saveRead(key);
+    if(!d || !isSaveBlob(d) || !saveVersionOk(d)) continue;
+    out.push({key, mapName:d.mapName || (d.cfg&&d.cfg.name) || 'Quarter', gameTime:d.gameTime||d.time||0,
+      savedAt:d.savedAt||0, mapIndex:saveMapIndex(d), hub:saveIsHubMap(d),
+      coop:true, players:d.players||2, mode:d.mode||'campaign',
+      mpCampaignId:d.mpCampaignId||null, participants:Array.isArray(d.participants)?d.participants:[]});
+  }
+  out.sort((a,b)=> b.savedAt-a.savedAt);     // most recently saved first
+  return out;
+}
+function enforceMpCap(){
+  const list=listMpSaves().sort((a,b)=>a.savedAt-b.savedAt); // oldest first
+  while(list.length>=MP_MANUAL_CAP){ localStorage.removeItem(list.shift().key); }
+}
+// Stable campaign id + host-first participants from the live session (lazily mints an id if none yet).
+function mpCoopMeta(){
+  const S = (typeof MP_SESSION!=='undefined') ? MP_SESSION : null;
+  const me = (typeof getOrCreateProfile==='function') ? getOrCreateProfile() : {id:'host',handle:'Host'};
+  let parts = (S && S.role==='client') ? [S.host, S.me] : [ (S&&S.me)||me, S&&S.joiner ];   // index 0 = p1
+  parts = parts.filter(Boolean).map(p=>({id:p.id, handle:p.handle}));
+  let campId = S && S.mpCampaignId;
+  if(!campId){ campId = (typeof _mpUuid==='function') ? _mpUuid() : ('mp'+Date.now().toString(36)); if(S) S.mpCampaignId=campId; }
+  return { campId, parts };
+}
+// Decorate a serializeGame() blob with co-op metadata (keeps serializeGame itself pure for solo).
+function mpStampPayload(payload){
+  const m=mpCoopMeta();
+  payload.coop=true;
+  payload.mode=(typeof MP_SESSION!=='undefined' && MP_SESSION.mode) || 'campaign';
+  payload.players=(G&&G.players)||2;
+  payload.mpCampaignId=m.campId;
+  payload.participants=m.parts;
+  return payload;
+}
+// HOST-AUTHORITATIVE co-op save: write the host's MP slot, then broadcast the blob so clients mirror it.
+function mpSaveGame(opts){
+  opts=opts||{};
+  if(typeof netRole==='undefined' || netRole!=='host'){ if(!opts.silent) toast('The host saves the co-op campaign'); return false; }
+  if(!(G && running && !G.over)){ if(!opts.silent) toast('Can only save during a match'); return false; }
+  if(G && G._skirmish){ if(!opts.silent) toast('Skirmish runs aren\'t saved'); return false; }
+  try{
+    const payload=serializeGame();
+    if(typeof fallenVets!=='undefined' && fallenVets) payload.fallen=fallenVets;
+    mpStampPayload(payload);
+    const key=mpSaveKey(payload.mpCampaignId);
+    if(!localStorage.getItem(key)) enforceMpCap();     // only enforce the cap when adding a NEW campaign slot
+    saveWrite(key, payload);
+    if(!opts.silent) toast('Co-op campaign saved');
+    // distribute the exact bytes to clients (no-op until the net layer is wired); MP pool is NOT on the solo cloud hook
+    if(typeof NET!=='undefined' && NET.mpBroadcastSave){
+      try{ NET.mpBroadcastSave(JSON.stringify(payload), payload.mpCampaignId, !!opts.auto); }catch(_){}
+    }
+    return true;
+  }catch(err){
+    if(isQuotaError(err)){ if(!opts.silent) toast('Co-op save failed: storage full — delete co-op saves'); }
+    else { console.error('Co-op save failed', err); if(!opts.silent) toast('Co-op save failed — details in the console'); }
+    return false;
+  }
+}
+function mpAutosaveGame(){ return mpSaveGame({ auto:true, silent:true }); }
 
 /* ---------- public: save / autosave / load ---------- */
 function saveGame(){

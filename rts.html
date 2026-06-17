@@ -325,9 +325,11 @@
                 <span>Mode</span>
                 <button class="mp-mode on" id="mp-mode-skirmish" onclick="mpUiSetMode('skirmish')">Skirmish</button>
                 <button class="mp-mode" id="mp-mode-campaign" onclick="mpUiSetMode('campaign')">Campaign</button>
+                <button class="mp-mode" id="mp-mode-resume" onclick="mpUiSetMode('resume')">⟲ Resume Campaign</button>
                 <button class="mp-mode" id="mp-mode-duel" onclick="mpUiSetMode('duel')">⚔ Duel (PvP)</button>
               </div>
-              <div class="mp-map-row"><label>Quarter</label><select id="mp-map-pick"></select></div>
+              <div class="mp-map-row" id="mp-map-row"><label>Quarter</label><select id="mp-map-pick"></select></div>
+              <div class="mp-map-row" id="mp-save-row" style="display:none;"><label>Saved campaign</label><select id="mp-save-pick"></select></div>
               <button class="sc-btn" id="mp-start" onclick="mpHostStartClick()" disabled>▶ Start Match</button>
             </div>
             <div class="mp-ready-row" id="mp-ready-row">

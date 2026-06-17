@@ -65,9 +65,31 @@
     sel.innerHTML=''; MAPS.forEach((m,i)=>{ const o=document.createElement('option'); o.value=i;
       o.textContent='Quarter '+(i+1)+' — '+((m.name.split('—')[1]||m.name).trim()); sel.appendChild(o); });
   }
+  // Co-op campaign saves on THIS device (host or a former client's mirror copy). Labeled episode · who · when.
+  function populateSavePick(){
+    const sel=$('mp-save-pick'); if(!sel) return;
+    sel.innerHTML='';
+    const saves=(typeof listMpSaves==='function') ? listMpSaves().filter(s=>s.mode==='campaign') : [];
+    if(!saves.length){ const o=document.createElement('option'); o.value=''; o.disabled=true; o.textContent='No saved co-op campaigns on this device'; sel.appendChild(o); return; }
+    saves.forEach(s=>{
+      const o=document.createElement('option'); o.value=s.key;
+      const ep=(typeof saveEpisodeLabel==='function') ? saveEpisodeLabel(s.mapIndex, s.hub) : (s.mapName||'Quarter');
+      const who=(s.participants||[]).map(p=>p.handle).filter(Boolean).join(' + ');
+      const el=(typeof fmtElapsed==='function') ? fmtElapsed(s.gameTime) : '';
+      const when=(typeof fmtWhen==='function') ? fmtWhen(s.savedAt) : '';
+      o.textContent=ep+(who?(' · '+who):'')+(el?(' · '+el):'')+(when?(' · '+when):'');
+      sel.appendChild(o);
+    });
+  }
+  window.mpPopulateSavePick = populateSavePick;
   window.mpUiSetMode = function(mode){ UI.mode=mode;
-    ['skirmish','campaign','duel'].forEach(m=>{ const b=$('mp-mode-'+m); if(b) b.classList.toggle('on', m===mode); });
-    const mp=$('mp-map-pick'); if(mp) mp.disabled = (mode==='campaign' || mode==='duel');   // campaign starts at Quarter 1; duel rolls its own arena (T4-5)
+    ['skirmish','campaign','resume','duel'].forEach(m=>{ const b=$('mp-mode-'+m); if(b) b.classList.toggle('on', m===mode); });
+    const isResume = (mode==='resume');
+    const mapRow=$('mp-map-row'), saveRow=$('mp-save-row');
+    if(mapRow)  mapRow.style.display  = isResume ? 'none' : '';
+    if(saveRow){ saveRow.style.display = isResume ? '' : 'none'; if(isResume) populateSavePick(); }
+    const mp=$('mp-map-pick'); if(mp) mp.disabled = (mode==='campaign' || mode==='duel' || isResume);   // campaign starts at Quarter 1; duel rolls its own arena (T4-5)
+    renderPeers();   // re-evaluate Start gating (resume needs a selected save)
   };
 
   window.mpUiOpenRoom = function(opts){
@@ -144,7 +166,10 @@
         `<span class="mp-badge ${isHost?'host':'guest'}">${isHost?'P1':'P2'}</span></div>`;
     wrap.innerHTML = slot(host,'ctrl-p1',true, s.role==='host') + slot(join,'ctrl-p2',false, s.role!=='host');
     const oc=$('mp-opcount'); if(oc) oc.textContent = ((host?1:0)+(join?1:0)) + ' / 2';
-    const startBtn=$('mp-start'); if(startBtn) startBtn.disabled = !(s.role==='host' && s.peerId);
+    const startBtn=$('mp-start'); if(startBtn){
+      const haveSave = (UI.mode==='resume') ? !!(($('mp-save-pick')||{}).value) : true;   // resume needs a picked campaign
+      startBtn.disabled = !(s.role==='host' && s.peerId && haveSave);
+    }
     setConn(s.peerId ? 'Connected' : 'Waiting for co-founder…', s.peerId?'ok':'wait');
   }
   window.mpUiPeers = renderPeers;
@@ -155,6 +180,12 @@
 
   /* ---------- room buttons ---------- */
   window.mpHostStartClick = function(){
+    if(UI.mode==='resume'){   // resume a saved co-op campaign (battlefield or H.U.B.) instead of a fresh map
+      const key=($('mp-save-pick')||{}).value;
+      if(!key){ toast('Pick a saved co-op campaign'); return; }
+      if(typeof mpHostStartFromSave==='function') mpHostStartFromSave(key);
+      return;
+    }
     if(UI.mode==='duel'){   // T4-5: roll a fresh arena, install it locally, ship the seed to the guest
       const seed=(Math.random()*1e9)>>>0;
       const idx=(typeof installDuelConfig==='function')?installDuelConfig(seed):0;

@@ -544,6 +544,19 @@ body.hub-menu-open #bottom{ display:none; }              /* syncHud() then drops
   .hub-col.scroll{ overflow:visible; }
 }
 .hub-cards{ display:flex; flex-wrap:wrap; gap:14px; }
+/* The Wake gets its own column ratio + card grid (scoped — Training/M.D.C./healing keep .hub-cards/.c2).
+   Narrow/mobile (default): exactly 2 wider cards per row, sprite scales up to its native 200px.
+   Wide (≥861px): a narrower "in the lattice" column frees the fallen panel to hold ≥3 cards per row. */
+.wake-cards{ display:grid; gap:14px; grid-template-columns:repeat(2, minmax(0,1fr)); align-content:start; }
+.wake-cards .train-card{ width:100%; max-width:none; }
+.wake-cards .train-spr{ width:min(200px, 86%); height:auto; aspect-ratio:1/1; }
+@media (min-width:861px){
+  .hub-cols.wake-cols{ grid-template-columns:minmax(0,1.5fr) minmax(0,1fr); }   /* reduce the lattice panel, widen the fallen */
+  .wake-cards{ grid-template-columns:repeat(auto-fill, minmax(190px, 1fr)); }    /* as many ≥190px cards as fit (≥3 in the widened column) */
+}
+@media (max-width:860px){
+  .hub-cols.wake-cols .wake-col-lattice{ order:-1; }   /* stacked: show "in the lattice" above the fallen list */
+}
 /* M.D.C. "Next deployment" briefing card — the strong right-column teaser for the next episode. */
 .mdc-brief{ display:flex; flex-direction:column; gap:12px; padding:clamp(16px,2vw,26px);
   background:linear-gradient(155deg, rgba(58,16,22,.78), rgba(16,6,9,.72));

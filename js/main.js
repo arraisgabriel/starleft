@@ -149,7 +149,7 @@ addEventListener('keydown', e=>{
   }
   // save game (⌘/Ctrl+S) — block the browser's native Save dialog
   if((e.key==='s'||e.key==='S') && (e.metaKey||e.ctrlKey)){
-    e.preventDefault(); saveGame(); return;
+    e.preventDefault(); saveCurrentGame(); return;
   }
   // T4-4: F2 = select the whole army (the desktop "Select Army" helper; ⛶ covers touch)
   if(e.key==='F2' && G && !G.over){ e.preventDefault(); if(typeof selectAllArmy==='function'){ selectAllArmy(); } return; }
@@ -257,6 +257,23 @@ function togglePause(){
 }
 document.addEventListener('fullscreenchange', syncFsButtons);
 document.addEventListener('webkitfullscreenchange', syncFsButtons);
+// Save routing: solo → saveGame() (its own pool); co-op host → mpSaveGame() (the separate MP pool).
+// A co-op client never saves (the host is the single serializer); its Save button is hidden by syncSaveBtn().
+function saveCurrentGame(){
+  if(typeof netRole!=='undefined' && netRole!=='solo'){ if(typeof mpSaveGame==='function') mpSaveGame(); return; }
+  if(typeof saveGame==='function') saveGame();
+}
+function syncSaveBtn(){
+  const b=document.getElementById('btn-save'); if(!b) return;
+  const coop = (typeof netRole!=='undefined' && netRole!=='solo');
+  const isHost = coop && (typeof MP_SESSION!=='undefined') && MP_SESSION.role==='host';
+  b.style.display = (!coop || isHost) ? '' : 'none';   // co-op client: hidden (host controls saving)
+}
+// Periodic autosave: solo → its pool; co-op host → the MP pool (+ mirror to the ally). Each self-gates by netRole.
+function autosaveCurrentGame(){
+  if(typeof autosaveGame==='function') autosaveGame();        // no-ops unless netRole==='solo'
+  if(typeof mpAutosaveGame==='function') mpAutosaveGame();    // no-ops unless netRole==='host'
+}
 function wireTouchControls(){
   const on=(id,fn)=>{ const el=document.getElementById(id); if(el) el.addEventListener('click', fn); };
   on('btn-pause', togglePause);
@@ -267,7 +284,7 @@ function wireTouchControls(){
   on('btn-army', ()=>{ if(typeof isGamePaused==='function' && isGamePaused()) return; selectAllArmy(); });
   on('btn-clear', ()=>{ if(typeof isGamePaused==='function' && isGamePaused()) return; if(G && G.selection.length){ clearSelection(); refreshUI(); } });   // Esc equivalent: drop the current selection
   on('btn-cancel', ()=>{ if(typeof isGamePaused==='function' && isGamePaused()) return; if(G&&G.placing){ G.placing=null; refreshUI(); } });
-  on('btn-save', ()=>{ if(typeof TELE!=='undefined') TELE.event('save_click'); saveGame(); });
+  on('btn-save', ()=>{ if(typeof TELE!=='undefined') TELE.event('save_click'); saveCurrentGame(); });
   on('btn-load', ()=>{
     const panel=document.getElementById('topmenu-panel'), btn=document.getElementById('btn-topmenu');
     if(panel) panel.style.display='none';
@@ -292,7 +309,7 @@ function wireTouchControls(){
     const panel=document.getElementById('topmenu-panel');
     if(!wrap||!btn||!panel) return;
     const close=()=>{ panel.style.display='none'; btn.classList.remove('open'); btn.setAttribute('aria-expanded','false'); };
-    const open =()=>{ panel.style.display='flex'; btn.classList.add('open');    btn.setAttribute('aria-expanded','true');  };
+    const open =()=>{ panel.style.display='flex'; btn.classList.add('open');    btn.setAttribute('aria-expanded','true'); syncSaveBtn(); };
     btn.addEventListener('click', e=>{ e.stopPropagation(); (panel.style.display==='flex')?close():open(); });
     // picking any item runs its own action then collapses the menu
     panel.querySelectorAll('.tc-btn').forEach(b=> b.addEventListener('click', close));
@@ -388,8 +405,10 @@ try{
 }catch(_){ }
 // T4-3: a tab-close/switch autosaves a live solo game (sandbox & skirmish excluded)
 function _unloadAutosave(){
-  if(typeof netRole!=='undefined' && netRole==='solo' && G && running && !G.over
-     && !(window.SANDBOX && SANDBOX.on) && !G._skirmish && typeof autosaveGame==='function') autosaveGame();
+  if(!(G && running && !G.over) || (window.SANDBOX && SANDBOX.on) || G._skirmish) return;
+  if(typeof netRole==='undefined') return;
+  if(netRole==='solo'){ if(typeof autosaveGame==='function') autosaveGame(); }
+  else if(netRole==='host'){ if(typeof mpAutosaveGame==='function') mpAutosaveGame(); }   // co-op host saves on tab-close (its local copy is synchronous)
 }
 document.addEventListener('visibilitychange', ()=>{ if(document.visibilityState==='hidden') _unloadAutosave(); });
 window.addEventListener('pagehide', _unloadAutosave);
@@ -427,7 +446,7 @@ function loop(now){
         const _sbSteps=(window.SANDBOX&&SANDBOX.on)?SANDBOX.simSteps():1;   // sandbox test tool: 0 (paused) or N sub-steps for 2×/4×; normal play = 1
         if(PERF.on){ PERF.mark('simUpdate'); for(let _s=0;_s<_sbSteps;_s++) update(G,dt); PERF.lap('simUpdate'); }  // single-player: rAF drives the sim
         else { for(let _s=0;_s<_sbSteps;_s++) update(G,dt); }
-        if(!(window.SANDBOX&&SANDBOX.on)){ autoTick+=dt; if(autoTick>60){ autoTick=0; autosaveGame(); } }  // never autosave a god-mode sandbox over a real slot
+        if(!(window.SANDBOX&&SANDBOX.on)){ autoTick+=dt; if(autoTick>60){ autoTick=0; autosaveCurrentGame(); } }  // never autosave a god-mode sandbox over a real slot
       } else if(netRole==='host'){
         // host sim + snapshot broadcast run via the host-clock (real-time dt); the worker keeps them
         // going when this window is backgrounded and rAF stalls. rAF here just renders (below).

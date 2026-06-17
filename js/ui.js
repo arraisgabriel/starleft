@@ -1267,6 +1267,8 @@ function buildWakeBody(body){
   }
 
   const cols=hubMenuColumns(2), colL=hubMenuColumn(true), colR=hubMenuColumn(true);
+  cols.classList.add('wake-cols');   // wider fallen / narrower lattice on desktop (see .wake-cols in screens.css)
+  colR.classList.add('wake-col-lattice');   // stacked-mobile: this rises above the fallen list (CSS order)
   cols.appendChild(colL); cols.appendChild(colR); body.appendChild(cols);
 
   // ---- LEFT: the fallen ----
@@ -1291,7 +1293,7 @@ function buildWakeBody(body){
         action: { label: already ? 'Reborn' : ('Resurrect · M3$ '+cost),
           onClick: ()=>{ if(typeof hubWakeStart==='function' && hubWakeStart(fallenStableId(f))) buildHubMenuBody(); } }
       };
-    }));
+    }, 'wake-cards'));
   }
 
   // ---- RIGHT: in the lattice ----

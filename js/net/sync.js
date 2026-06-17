@@ -360,23 +360,37 @@ window.NET = window.NET || {};
     if(hadCampaign && typeof refreshUI==='function') refreshUI();
   };
 
-  /* ---------------- chunked send/receive for the (larger) full snapshot ---------------- */
+  /* ---------------- generic chunked send/receive (reused by mpfull + co-op save/resume blobs) ----------------
+     12KB framed chunks {id,i,n,d}; the receiver reassembles per-id with a stalled-buffer TTL, then JSON.parses
+     and hands the object to onComplete. id is monotonic per sender so transfers on different tags never collide. */
   let chunkSeq = 0;
-  NET.sendFull = function(toPeer){
-    const str = JSON.stringify(NET.serializeForNet());
+  NET._sendChunked = function(tag, str, toPeer){
     const CH = 12*1024, id = ++chunkSeq, n = Math.ceil(str.length/CH);
-    NET.mpLog && NET.mpLog('info','sending full snapshot → '+(toPeer?String(toPeer).slice(0,6)+'…':'all')+' ('+Math.round(str.length/1024)+'KB, '+n+' chunks)');
-    for(let i=0;i<n;i++) MP.send('mpfull', { id, i, n, d: str.slice(i*CH,(i+1)*CH) }, toPeer);
+    for(let i=0;i<n;i++) MP.send(tag, { id, i, n, d: str.slice(i*CH,(i+1)*CH) }, toPeer);
+    return { id, n, kb: Math.round(str.length/1024) };
   };
-  NET._recvFull = function(p){
+  NET._recvChunked = function(p, onComplete){
     const now=_now();
     for(const k in NET._chunk){ if(now - (NET._chunk[k].t0||now) > NET.CHUNK_TTL) delete NET._chunk[k]; }   // expire stalled buffers (lost chunk)
     const b = NET._chunk[p.id] || (NET._chunk[p.id] = { n:p.n, got:0, parts:[], t0:now });
     if(b.parts[p.i]===undefined){ b.parts[p.i]=p.d; b.got++; }
     if(b.got>=b.n){ delete NET._chunk[p.id];
-      try { NET.applyFullSnapshot(JSON.parse(b.parts.join(''))); NET.mpLog && NET.mpLog('ok','full snapshot applied — synced to host'); if(typeof NET.onFullApplied==='function') NET.onFullApplied(); }
-      catch(err){ NET.mpLog && NET.mpLog('err','full snapshot parse failed: '+((err&&err.message)||err)); console.warn('[mp] full snapshot parse failed', err); }
+      let obj=null;
+      try{ obj=JSON.parse(b.parts.join('')); }
+      catch(err){ NET.mpLog && NET.mpLog('err','chunked payload parse failed: '+((err&&err.message)||err)); console.warn('[mp] chunked payload parse failed', err); return; }
+      try{ onComplete(obj); }catch(err){ console.warn('[mp] chunked onComplete failed', err); }
     }
+  };
+  NET.sendFull = function(toPeer){
+    const str = JSON.stringify(NET.serializeForNet());
+    const info = NET._sendChunked('mpfull', str, toPeer);
+    NET.mpLog && NET.mpLog('info','sending full snapshot → '+(toPeer?String(toPeer).slice(0,6)+'…':'all')+' ('+info.kb+'KB, '+info.n+' chunks)');
+  };
+  NET._recvFull = function(p){
+    NET._recvChunked(p, (s)=>{
+      NET.applyFullSnapshot(s); NET.mpLog && NET.mpLog('ok','full snapshot applied — synced to host');
+      if(typeof NET.onFullApplied==='function') NET.onFullApplied();
+    });
   };
 
   /* ---------------- per-frame driver (called from main.js loop) ---------------- */
