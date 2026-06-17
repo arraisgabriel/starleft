@@ -64,7 +64,7 @@ Every system below is designed to obey these. They are repeated here because the
 - **Determinism.** All procedural derivations use the game's seeded `makeRng`; **no `Math.random()` in simulated paths**, frozen draw order, so solo/host/client stay byte-identical.
 - **HUB routines must stay closed-form.** NPC movement to/from venue tables uses the existing closed-form itinerary system — **never** `hubpoi` commands (`js/hub_npcs.js` constraint).
 - **`refreshUI()` signature-rebuild.** Menus rebuild only when their `signature()` changes; never rebuild choice buttons every frame (eats clicks).
-- **Art is procedural-fallback-safe.** Don't assume any sprite/audio asset exists; ship procedural fallbacks (the game already does this).
+- **Art is procedural-fallback-safe.** Don't assume any sprite/audio asset exists; ship procedural fallbacks (the game already does this). **No new art is required to ship, and all Gemini sprite generation is hard-gated behind explicit owner approval — see §12.4.**
 
 ---
 
@@ -433,6 +433,15 @@ All example lines are **slot templates** (`{me}` = the directed veteran's first 
 - ✅ **Routines:** venue + NPC routing closed-form, no `hubpoi` cmds.
 - ✅ **UI:** `signature()`-gated rebuilds; mobile single-column; HUD-height math untouched (overlay, not new HUD band).
 - ✅ **Art:** procedural neon-facade fallback if a venue sprite is absent.
+
+### 12.4 Art & assets — no new art to ship; Gemini generation is HARD-GATED
+
+The Off-Hours requires **zero new art to ship**, and every art *upgrade* is isolated behind an explicit owner-approval gate — the same discipline the voice pipeline already uses (§13; the lore-forge "hard approval gate before any recording").
+
+- **Venue exteriors** render from the existing procedural `megaSprites` path (the renderer that already draws the condos / ULTRA with no asset file), tinted per venue — a dark neon facade with **no sprite required** (tasks C1/C4/C5 + the procedural fallback C7).
+- **No interiors exist to build.** Scenes are DOM menu overlays on the `openHubMenu` shell (like the Wake/Training menus), not walk-in rooms. The "inside" is carried by menu styling + a procedural per-venue backdrop (F6) + the existing `hubMenuUnitCard` portrait canvases.
+- **Characters in scenes** reuse existing unit sprites and the shipped NPCMIX wardrobe. The bartender-confidant ships on a **pinned fixed wardrobe** (deterministic, consistent — task D5); no generation needed.
+- **Generated art is opt-in polish only, and HARD-GATED as the last batch.** Any task that invokes the Gemini image pipeline (`_dev/gen`, the path that made the heroes / Dark Tower) — a bespoke bartender sheet, distinct venue facades, painted menu backdrops — lives in its own isolated epic (**EPIC N** in the task list) and **must not run until the owner explicitly approves**, exactly like voice recording. The procedural/reuse fallback always remains underneath, so the build never blocks on, or depends on, generation.
 
 ---
 

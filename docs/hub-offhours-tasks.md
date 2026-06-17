@@ -3,7 +3,7 @@
 > **Living build checklist** for the design in [hub-offhours-design.md](hub-offhours-design.md). Tick `[x]` as you complete each task/subtask.
 > **Rule:** every later phase must still load a P0-era save with zero migration. No Founder/CEO character exists — the player directs veterans; scenes are veteran↔NPC or veteran↔veteran.
 > **Phases:** P0 = Ledger + the Late Shift vertical slice · P1 = Marisol's (kin) · P2 = Static (vet↔vet) + ambient sim · P3 = gifts/keepsakes/polish.
-> **Total tasks:** 61 across 13 sections (epics A–L + gap-fill addenda M).
+> **Total tasks:** 66 across 14 sections (epics A–L · critic addenda M · hard-gated art N). **Ships with zero generated art** — every task uses reuse / procedural facades / a pinned NPCMIX wardrobe. **All Gemini sprite generation is isolated in EPIC N (the last batch) behind an explicit owner-approval gate**, the same discipline as the lore-forge voice gate.
 
 ## How to use
 - Each task has a `[ ]` checkbox and checkboxed subtasks; flip to `[x]` as you land them.
@@ -15,9 +15,9 @@
 - **EPIC A — Foundation — modules, state, ledger core** _(P0)_ — A1, A2, A3, A4
 - **EPIC B — Relationship Ledger systems** _(P0/P2)_ — B1, B2, B3, B4, B5
 - **EPIC C — Venues — POIs + world placement** _(P0→P3)_ — C1, C2, C3, C4, C5, C6, C7
-- **EPIC D — Bartender-confidant NPC** _(P0)_ — D1, D2, D3, D4
+- **EPIC D — Bartender-confidant NPC** _(P0)_ — D1, D2, D3, D4, D5
 - **EPIC E — Conversation Engine** _(P0)_ — E1, E2, E3, E4, E5, E6, E7, E8
-- **EPIC F — Venue menu UI** _(P0→P2)_ — F1, F2, F3, F4, F5
+- **EPIC F — Venue menu UI** _(P0→P2)_ — F1, F2, F3, F4, F5, F6
 - **EPIC G — Systemic backdrop — the blend** _(P2)_ — G1, G2, G3, G4
 - **EPIC H — Payoffs — light & opt-in** _(P1→P3)_ — H1, H2, H3, H4, H5, H6
 - **EPIC I — Economy & scarcity** _(P0/P3)_ — I1, I2, I3
@@ -25,6 +25,7 @@
 - **EPIC K — Content pipeline & authoring** _(P0→P3 ongoing)_ — K1, K2, K3, K4
 - **EPIC L — QA, verification & phase DoD** _(cross-cutting)_ — L1, L2, L3, L4, L5
 - **EPIC M — Addenda (gap-fill from completeness critic)** _(P0)_ — M1, M2
+- **EPIC N — 🔒 Bespoke art · HARD-GATED Gemini generation (owner approval, last batch)** _(P3)_ — N1, N2, N3
 
 ---
 
@@ -369,6 +370,21 @@ The Late Shift's deep one-on-one room needs a *constant listener*: one hand-auth
 
 ---
 
+### [ ] D5 — Bartender appearance: pin a fixed NPCMIX wardrobe (no generation — ship default)
+**Phase:** P0 · **Depends on:** D2, D3 · **System:** §12.4, §4.2①
+**Game reference:** infra — reuse the shipped NPCMIX wardrobe; zero art generation.
+**Reuses:** the NPCMIX 20-sheet part library + the NPC sprite mixer in the living-hub render path (`js/hub_npcs.js`); the frozen wardrobe draw-order appended last in the npc_lore draw stream (`js/npc_lore.js:367`); the fixed-dossier branch from D2 (`buildNpcDossier`).
+**Description:** Give the bartender-confidant a consistent, recognizable look using ONLY the shipped NPCMIX parts — no new art. Because it is a hand-authored recurring NPC (fixed dossier, D2/D3), pin a deterministic wardrobe combo so it never re-rolls into a generic resident. This is the **ship default** and is fully procedural-safe; the bespoke generated sheet is the optional, hard-gated upgrade N1, which the build never depends on.
+**Subtasks:**
+- [ ] In the D2 fixed-dossier path, attach a pinned `wardrobe` spec (fixed part indices over the NPCMIX sheets — a worn, retired-pilot read) so the bartender always renders the same parts; bypass the normal appended wardrobe roll for this one id.
+- [ ] Confirm the bartender draws via the existing provider-NPC sprite path (`np:` staff already rendered by the living-hub renderer) with the pinned parts — no new sheet, no asset file.
+- [ ] Keep it deterministic & append-only: the pin is a fixed literal (no `Math.random`), and other staff/residents' wardrobe draws are unchanged (don't shift the frozen draw order).
+- [ ] Dark-cyberpunk palette: choose muted/untinted parts per the art-direction constraint (never bright).
+- [ ] Cross-ref: this is the SHIP DEFAULT; the bespoke generated sheet is the hard-gated N1.
+**Acceptance / DoD:** the bartender shows a stable, distinctive look across visits/reloads using only NPCMIX; identical on solo/host/client (deterministic); zero new assets; legacy saves unaffected (pure render).
+
+---
+
 ## EPIC E — Conversation Engine
 
 > The data-and-resolution core of The Off-Hours: a scene authored as slot-templated data (shaped like `LORE_DATA.events`), selected and gated deterministically, slot-filled from both parties' dossiers, rendered as the **veteran's** choice buttons, resolved by a light Disco-Elysium check (failure is content), and committed so outcomes **write real canon** — a bond grow, a life-event into `u.lore.events`, and an NPC `rec.ev` entry. Sits between the Ledger (Epic A) and the venue UI shell (Epic D); host-authoritative commit lives in the net layer. Every task obeys: append-only + version-gating, `makeRng` determinism, save-compat (no scene data on a legacy save), and the three netRole paths (client never simulates — it renders the host's committed result).
@@ -588,6 +604,20 @@ The Late Shift's deep one-on-one room needs a *constant listener*: one hand-auth
 - [ ] Explicitly verify NO change to `VIEW_TOP`, `syncHud`, or canvas viewport height: the panel is the `#hubMenuView` overlay (positioned by `hubMenuSyncTop`, js/ui.js:776); it must remain an overlay and never push the HUD/canvas. Grep for and avoid any HUD-height write.
 - [ ] Manual check both viewports per CLAUDE.md: desktop two-column and a <760px phone width — load a venue, read a scene, tap a choice, scroll history.
 **Acceptance / DoD:** On desktop the venue shows two columns (scene | bond-state); below ~760–860px it collapses to one column with the scene/choices above the history log, buttons full-width and tappable. The world canvas/fog/camera math is byte-identical with the menu open or closed (overlay only — no HUD band added). Save-compat and netRole are unaffected (pure CSS/layout). Manual desktop + narrow-viewport pass confirmed.
+
+---
+
+### [ ] F6 — Per-venue menu backdrop (procedural CSS/canvas — no generation, ship default)
+**Phase:** P1 · **Depends on:** F1 · **System:** §12.4, §6.4
+**Game reference:** Hades — the downtime room *feels* like a place; we sell "inside" with atmosphere, not tile art.
+**Reuses:** the `openHubMenu` shell + its hub-menu DOM container (`js/ui.js:748`); the grain/scanline/neon motif already used in the hub UI; the per-venue accent from C7.
+**Description:** Give each venue menu an atmospheric backdrop — a dark, per-venue neon-through-grime gradient/painted-CSS strip behind the scene panel — so a scene reads as "at the bar / in the diner / in the club" without any rendered interior (there are no walk-in rooms; scenes are menu overlays, §6.4). Procedural-only ship default; a painted backdrop image is the hard-gated upgrade N3, layered on top with this CSS backdrop always underneath.
+**Subtasks:**
+- [ ] Add a `.venue-backdrop` layer in the `openVenueMenu` body keyed by `kind`/`visual.accent` (amber bar · cold magenta-cyan club · steam-orange diner), built from CSS gradients + the existing grain/scanline overlay, clamped dark.
+- [ ] Place it behind the scene cards and exclude it from the `signature()`-rebuild (it's static per venue; never rebuilt on choice clicks).
+- [ ] Mobile: scales with the single-column collapse (F5); a dim overlay preserves text contrast.
+- [ ] No asset dependency: if the painted backdrop (N3) is absent, this CSS backdrop is what ships.
+**Acceptance / DoD:** each venue menu has a distinct dark atmosphere with zero image assets; readable on desktop + narrow viewport; no rebuild churn on choice clicks; client-safe (pure UI).
 
 ---
 
@@ -1105,4 +1135,52 @@ These two tasks close reactivity and cross-venue-threading gaps the completeness
 
 ---
 
-*Generated task list — 61 tasks. Completeness critic: gaps found and appended as EPIC M.*
+## EPIC N — 🔒 Bespoke art (HARD-GATED Gemini generation)
+
+> The only tasks that touch the Gemini image pipeline — and the **last batch**. Hard-gated and owner-approval-required, the same discipline as the lore-forge voice gate (K3/D4): nothing here is generated until the owner explicitly signs off, and the build never depends on it. Every venue, the bartender, and every scene already ship on reuse + procedural facades (C7) + a pinned NPCMIX wardrobe (D5) + a procedural menu backdrop (F6). These are pure visual *upgrades* layered on top, with the procedural/reuse fallback always underneath. Design §12.4.
+
+---
+
+### [ ] N1 — 🔒 Bartender bespoke sprite sheet (Gemini · HARD-GATED)
+**Phase:** P3 · **Depends on:** D5 (ships without this) · **System:** §12.4
+**Game reference:** infra — STARLEFT art pipeline (`_dev/gen` Gemini image API), same gate model as voice (K3).
+**Reuses:** the `_dev/gen` + `_dev/prompts` Gemini sprite pipeline (`starleft-unit-forge`); the hero / Dark-Tower generation precedent; the LOADER asset registration (never `img.src`); the dark-palette recolor tooling; D2's fixed-dossier identity; the `np:` provider render path.
+**Description:** Optional bespoke animated sprite sheet for the bartender-confidant — a hand-directed look beyond the pinned NPCMIX wardrobe (D5). Generated via the existing Gemini pipeline, recolored to the dark register. **HARD-GATED:** do not generate without explicit owner approval.
+**Subtasks:**
+- [ ] 🔒 GATE — do NOT invoke the Gemini pipeline until the owner explicitly approves (mirror the K3/D4 voice gate). D5 (pinned wardrobe) is the shipping default; this is opt-in.
+- [ ] On approval: author a `_dev/prompts` entry (retired-pilot / founder-mech-survivor bartender, dark cyberpunk) and generate the sheet via `_dev/gen`; recolor to the dark palette; never bright.
+- [ ] Register the sheet on the LOADER (per the asset-loader contract — never `img.src`) with a procedural/NPCMIX fallback if absent; wire the bartender id to it in the render path.
+- [ ] Verify the fallback: with the sheet removed, the bartender still renders via D5's wardrobe (no crash, no missing-asset box).
+**Acceptance / DoD:** with owner approval + the sheet present, the bartender renders its bespoke look; with it absent, D5's wardrobe renders exactly as before; gate respected (no generation pre-approval); save/netRole unaffected (render-only).
+
+---
+
+### [ ] N2 — 🔒 Bespoke venue facade megas (Gemini · HARD-GATED)
+**Phase:** P3 · **Depends on:** C7 (ships without this) · **System:** §12.4
+**Game reference:** Hades — distinct neon-through-grime architecture per venue.
+**Reuses:** the `megaSprites` render path (the same that draws condos/ULTRA/Dark Tower); the `_dev/gen` Gemini pipeline; the Dark-Tower "generate direct on key" precedent; LOADER registration; dark-palette recolor.
+**Description:** Optional bespoke generated facade art for each venue mega (THE LATE SHIFT / MARISOL'S / STATIC), replacing the procedural-tinted fallback (C7) with hand-directed dark high-rises. **HARD-GATED.**
+**Subtasks:**
+- [ ] 🔒 GATE — no generation until owner approval (mirror the voice gate). C7's procedural facades are the shipping default.
+- [ ] Per venue: author `_dev/prompts` (confessional sodium bar · cold bass club · steam-warm diner), generate the mega sheet via `_dev/gen`, recolor dark; register on the LOADER with the C7 procedural fallback underneath.
+- [ ] Point each venue's `megaSprites` entry at the generated art only when present; confirm the procedural path still renders if the asset is missing (no grey box).
+- [ ] Keep deterministic (fixed seeds/frames); mobile + perf unaffected (static megas).
+**Acceptance / DoD:** approved + present → distinct painted facades; absent → C7 procedural facades unchanged; gate respected; pure config/asset — zero save/snapshot change.
+
+---
+
+### [ ] N3 — 🔒 Painted per-venue menu backdrops (Gemini · HARD-GATED)
+**Phase:** P3 · **Depends on:** F6 (ships without this) · **System:** §12.4, §6.4
+**Game reference:** Hades — the Taverna/lounge interior mood, delivered as one flat image (not a tilemap).
+**Reuses:** the `_dev/gen` Gemini pipeline; the F6 `openVenueMenu` backdrop layer; LOADER registration; dark-palette recolor.
+**Description:** Optional painted interior-mood backdrop image behind each venue's scene panel — the closest thing to an "interior," shipped as a single flat image, not a rendered room. Upgrade over F6's CSS backdrop. **HARD-GATED.**
+**Subtasks:**
+- [ ] 🔒 GATE — no generation until owner approval. F6's procedural CSS backdrop is the shipping default.
+- [ ] Per venue: author `_dev/prompts` (a dark, lived-in bar/diner/club interior, neon-through-grime), generate one flat backdrop image, recolor dark; register on the LOADER.
+- [ ] Swap the F6 CSS backdrop for the painted image only when present; keep the CSS backdrop as the fallback (absent image → F6 renders); dim overlay preserves text contrast.
+- [ ] Mobile + `signature()`-rebuild safe (static per venue).
+**Acceptance / DoD:** approved + present → painted venue backdrops; absent → F6's CSS backdrop; gate respected; pure UI/asset — no save/netRole impact.
+
+---
+
+*Generated task list — 66 tasks across 14 sections (A–L build · M critic addenda · N hard-gated Gemini art, the last batch). Ships with zero generated art; all Gemini generation is isolated in EPIC N behind the owner-approval gate.*
