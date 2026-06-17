@@ -105,6 +105,10 @@ function hubDefaultCampaign(){
     // altarSeen: the Ep XI Biba↔Nino reveal has played (gates Biba's post-altar bark tier).
     // perfectExtraction: last extraction lost zero veterans (arms the hub memorial-clearing beat).
     storyFlags:{ altarSeen:false, perfectExtraction:false },
+    // Off-Hours Relationship Ledger (js/offhours.js). v 0 = unstamped (the first bond stamps the content-version);
+    // nights = downtime budget for THIS hub visit (reset per visit); bonds keyed by sorted stable-id pair.
+    // OFFHOURS loads AFTER hub.js, so guard the default value here (deserialize re-runs once it exists).
+    offhours:{ v:0, nights:(typeof OFFHOURS!=='undefined' ? OFFHOURS.tune.nightsPerVisit : 3), bonds:{}, visited:{} },
   };
 }
 function resetHubCampaign(){ CAMPAIGN = hubDefaultCampaign(); }
@@ -134,6 +138,10 @@ function deserializeHubCampaign(data){
     // legacy-safe: saves predating the narrative gates load with both flags false
     CAMPAIGN.storyFlags = Object.assign({altarSeen:false, perfectExtraction:false}, data.storyFlags||{});
     if(!CAMPAIGN.npc.byId || typeof CAMPAIGN.npc.byId!=='object') CAMPAIGN.npc.byId={};
+    // legacy-safe: saves predating The Off-Hours load with an empty Relationship Ledger
+    CAMPAIGN.offhours = Object.assign({ v:0, nights:(typeof OFFHOURS!=='undefined' ? OFFHOURS.tune.nightsPerVisit : 3), bonds:{}, visited:{} }, data.offhours||{});
+    if(!CAMPAIGN.offhours.bonds || typeof CAMPAIGN.offhours.bonds!=='object') CAMPAIGN.offhours.bonds={};
+    if(!CAMPAIGN.offhours.visited || typeof CAMPAIGN.offhours.visited!=='object') CAMPAIGN.offhours.visited={};
   }
 }
 function hubOwnerCtrl(){ return 'p1'; }
