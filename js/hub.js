@@ -2400,16 +2400,17 @@ function drawHubOverlays(state){
 // dead (and reads what the resurrection economy is FOR). Newest first, capped; pure cosmetic.
 function drawWakeMemorial(state){
   const wake=state.hubPois && state.hubPois.wake;
-  if(!wake || typeof fallenVets==='undefined' || !fallenVets.length) return;
+  const shown=(typeof displayFallen==='function')?displayFallen():((typeof fallenVets!=='undefined')?fallenVets:[]);   // veterans-only wall (legacy sub-vets hidden, not dropped)
+  if(!wake || !shown.length) return;
   const cx=((wake.tx||0)+(wake.w||2)/2)*TILE, topY=(wake.ty||0)*TILE;
-  const t=state.time||0, N=Math.min(8, fallenVets.length);
+  const t=state.time||0, N=Math.min(8, shown.length);
   ctx.save(); ctx.textAlign='center'; ctx.textBaseline='alphabetic';
   ctx.fillStyle='#9fb6c8';
   ctx.font='600 10px '+GAME_FONT;
   ctx.globalAlpha=0.85;
-  ctx.fillText('THE WAKE — '+fallenVets.length+' name'+(fallenVets.length===1?'':'s'), cx, topY-12-N*13);
+  ctx.fillText('THE WAKE — '+shown.length+' name'+(shown.length===1?'':'s'), cx, topY-12-N*13);
   for(let i=0;i<N;i++){
-    const f=fallenVets[fallenVets.length-1-i];   // newest first, rising up the tower
+    const f=shown[shown.length-1-i];   // newest first, rising up the tower
     const fl=0.55+0.18*Math.sin(t*1.2+i*1.9);    // candle-flicker, slow
     ctx.globalAlpha=fl*(1-i*0.07);
     ctx.fillStyle = f.dreamDone ? '#ffd86b' : '#c9d8e6';

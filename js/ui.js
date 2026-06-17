@@ -1108,6 +1108,154 @@ function drawLatticeBits(cv){
     }
   }
 }
+/* ===== Training Grounds "firing range" card animation =====================================
+   The In-training card is a cyberpunk range: mentor + junior snipers face downrange and take
+   turns firing laser shots at a holographic target. The mentor hits clean; the junior's aim
+   scatters early and tightens onto the bull as the training timer runs down (accuracy ∝ progress).
+   Self-contained canvas drawing (drawLaserBolt/drawMegaNeonLayer are bound to the game ctx) —
+   reuses the real attack frames (actionAnim) + barrel anchors (MUZZLE). Driven by the Training tick. */
+const _cardGlowCache={};
+function _cardGlow(red){
+  const key=red?'r':'b'; let cc=_cardGlowCache[key]; if(cc) return cc;
+  const s=64; cc=document.createElement('canvas'); cc.width=cc.height=s;
+  const x=cc.getContext('2d'), g=x.createRadialGradient(s/2,s/2,0,s/2,s/2,s/2);
+  g.addColorStop(0,'rgba(255,255,255,1)');
+  if(red){ g.addColorStop(.22,'rgba(255,228,212,.95)'); g.addColorStop(.5,'rgba(255,80,60,.55)'); g.addColorStop(1,'rgba(255,60,45,0)'); }
+  else   { g.addColorStop(.22,'rgba(220,240,255,.95)'); g.addColorStop(.5,'rgba(90,175,255,.55)'); g.addColorStop(1,'rgba(70,160,255,0)'); }
+  x.fillStyle=g; x.fillRect(0,0,s,s); _cardGlowCache[key]=cc; return cc;
+}
+// drawLaserBolt (render.js) ported to an explicit context: layered additive beam + muzzle flash + impact spark.
+function drawCardShot(c, x0,y0,x1,y1, p, w, red){
+  const glow=_cardGlow(red);
+  const outer=red?'255,70,55':'80,170,255', core=red?'255,232,218':'220,242,255';
+  const ep=p*p*(3-2*p), hx=x0+(x1-x0)*ep, hy=y0+(y1-y0)*ep;
+  const tp=Math.max(0,ep-0.34), lx=x0+(x1-x0)*tp, ly=y0+(y1-y0)*tp;
+  const env=Math.max(0, Math.min(1,p/0.10)*Math.min(1,(1-p)/0.28)), W=w;
+  c.save(); c.globalCompositeOperation='lighter'; c.lineCap='round'; c.lineJoin='round';
+  if(env>0.02){
+    const layers=[[W*3.4,'rgba('+outer+','+(0.14*env).toFixed(3)+')'],[W*1.9,'rgba('+outer+','+(0.30*env).toFixed(3)+')'],
+      [W*1.0,'rgba('+core+','+(0.55*env).toFixed(3)+')'],[Math.max(1,W*0.45),'rgba(255,255,255,'+(0.92*env).toFixed(3)+')']];
+    for(let i=0;i<layers.length;i++){ c.strokeStyle=layers[i][1]; c.lineWidth=layers[i][0]; c.beginPath(); c.moveTo(lx,ly); c.lineTo(hx,hy); c.stroke(); }
+  }
+  const blob=(cx,cy,r,a)=>{ if(a<=0.01||r<=0.3) return; c.globalAlpha=Math.min(1,a); c.drawImage(glow,cx-r,cy-r,r*2,r*2); c.globalAlpha=1; };
+  blob(hx,hy, W*2.0*Math.max(0.45,env), env*1.1);
+  blob(x0,y0, W*3.0*(0.6+0.4*Math.max(0,(0.42-p)/0.42)), Math.max(0,(0.42-p)/0.42));   // muzzle flash
+  blob(x1,y1, W*2.6*(0.5+0.5*Math.max(0,(p-0.74)/0.26)), Math.max(0,(p-0.74)/0.26));    // impact spark
+  c.restore();
+}
+// holographic cyan training target: flickering wireframe bullseye + scanlines; brightens + rings on a hit (flash 0..1).
+function drawHoloTarget(c, x,y,R, tnow, flash){
+  c.save();
+  const fl=0.82+0.18*Math.abs(Math.sin(tnow*9.0)+0.4*Math.sin(tnow*37.0));   // hologram flicker
+  const a=(0.5+0.45*flash)*Math.min(1,fl);
+  c.globalCompositeOperation='lighter';
+  let pg=c.createLinearGradient(x,y-R*1.6,x,y+R*1.7);
+  pg.addColorStop(0,'rgba(0,230,255,0)'); pg.addColorStop(.5,'rgba(0,230,255,'+(0.05+0.07*flash).toFixed(3)+')'); pg.addColorStop(1,'rgba(0,230,255,0)');
+  c.fillStyle=pg; c.fillRect(x-R*0.55,y-R*1.6,R*1.1,R*3.3);                  // projector beam
+  c.lineWidth=Math.max(1.2,R*0.05);
+  for(let i=3;i>=1;i--){ c.strokeStyle='rgba(90,238,255,'+(a*(i===1?1:0.62)).toFixed(3)+')';
+    c.beginPath(); c.arc(x,y,R*i/3,0,Math.PI*2); c.stroke(); }
+  c.fillStyle='rgba(225,255,255,'+(0.8*a+0.2*flash).toFixed(3)+')'; c.beginPath(); c.arc(x,y,Math.max(1.5,R*0.08),0,Math.PI*2); c.fill();
+  c.strokeStyle='rgba(90,238,255,'+(a*0.85).toFixed(3)+')'; c.lineWidth=Math.max(1,R*0.035);
+  for(const t of [0,Math.PI/2,Math.PI,Math.PI*1.5]){ c.beginPath(); c.moveTo(x+Math.cos(t)*R*0.86,y+Math.sin(t)*R*0.86); c.lineTo(x+Math.cos(t)*R*1.14,y+Math.sin(t)*R*1.14); c.stroke(); }
+  c.save(); c.beginPath(); c.arc(x,y,R,0,Math.PI*2); c.clip();             // scanlines, clipped to the disc
+  const step=Math.max(3,R*0.16), off=(tnow*R*1.3)%step;
+  c.strokeStyle='rgba(120,242,255,'+(0.12*fl).toFixed(3)+')'; c.lineWidth=1;
+  for(let yy=y-R+off; yy<y+R; yy+=step){ c.beginPath(); c.moveTo(x-R,yy); c.lineTo(x+R,yy); c.stroke(); }
+  c.restore();
+  if(flash>0.01){ c.strokeStyle='rgba(255,232,212,'+(0.6*flash).toFixed(3)+')'; c.lineWidth=Math.max(1.5,R*0.06);
+    c.beginPath(); c.arc(x,y,R*(1+(1-flash)*0.85),0,Math.PI*2); c.stroke(); }
+  c.restore();
+}
+// the firing-range scene for one training session card. Per-card state lives on the canvas element.
+function drawTrainingRange(cv, ses, tnow){
+  const r=cv.getBoundingClientRect(); if(r.width<8||r.height<8) return;
+  const c=cv.getContext('2d');
+  if(!cv._rng || cv._rngW!==Math.round(r.width)){
+    const dpr=Math.min(2,(window.devicePixelRatio||1));
+    cv.width=Math.max(120,Math.round(r.width*dpr)); cv.height=Math.max(80,Math.round(r.height*dpr));
+    cv._rngW=Math.round(r.width);
+    cv._rng={ last:tnow, shots:[], pending:[], nextVolley:tnow+0.7, hitT:-9, aFire:-9, bFire:-9 };
+  }
+  const st=cv._rng, W=cv.width, H=cv.height;
+  const rm=(window.matchMedia&&window.matchMedia('(prefers-reduced-motion:reduce)').matches);
+  st.last=tnow;
+  const totalSec=(ses.hoursTotal||1)*((typeof HUB!=='undefined'&&HUB.trainHourSeconds)||90);
+  const frac=ses.done?1:Math.max(0,Math.min(1, totalSec?(ses.secElapsed||0)/totalSec:1));
+  c.clearRect(0,0,W,H);
+
+  const floorY=H*0.84, S=H*0.66;
+  const ax=W*0.24, bx=W*0.44, tx=W*0.82, ty=floorY-S*0.42, R=H*0.155;
+
+  // ---- background: dark range, floor line, cyan light pool at the target ----
+  c.save(); c.globalCompositeOperation='lighter';
+  let pool=c.createRadialGradient(tx,floorY,2, tx,floorY,R*2.8);
+  pool.addColorStop(0,'rgba(0,200,255,0.10)'); pool.addColorStop(1,'rgba(0,200,255,0)');
+  c.fillStyle=pool; c.fillRect(0,0,W,H); c.restore();
+  let fl=c.createLinearGradient(0,0,W,0);
+  fl.addColorStop(0,'rgba(140,100,120,0)'); fl.addColorStop(.5,'rgba(150,110,130,0.16)'); fl.addColorStop(1,'rgba(110,235,255,0.34)');
+  c.strokeStyle=fl; c.lineWidth=Math.max(1,H*0.006); c.beginPath(); c.moveTo(0,floorY); c.lineTo(W,floorY); c.stroke();
+
+  // ---- target (under the tracers); flash decays over 0.3s after a hit ----
+  const flash=st.hitT>=0?Math.max(0,1-(tnow-st.hitT)/0.3):0;
+  drawHoloTarget(c, tx,ty,R, tnow, flash);
+
+  // ---- units (compute muzzle while drawing) ----
+  function shooter(who){
+    const snap=who==='a'?ses.a:ses.b, sType=(snap.spriteType||snap.type), cx=who==='a'?ax:bx;
+    const fireT=who==='a'?st.aFire:st.bFire, firing=(tnow-fireT)<1.0;   // firing window (2× — slower, more readable)
+    const atk=(typeof actionAnim==='function')?actionAnim(sType,'attack','player'):null;
+    const wlk=(typeof unitWalk==='function')?unitWalk(sType,'player'):null;
+    const anim=(firing&&atk&&atk.ready)?atk:((wlk&&wlk.ready)?wlk:(atk&&atk.ready?atk:null));
+    const ar=(anim&&anim.fh)?anim.fw/anim.fh:0.8, dh=S, dw=S*ar, py=floorY-0.3*dh;
+    const flip=!!(typeof DEF!=='undefined'&&DEF[snap.type]&&DEF[snap.type].facesLeft);
+    if(anim){
+      const n=anim.frames.length; let fi;
+      if(firing&&atk&&anim===atk){ const t=tnow-fireT; fi=t<0.9?Math.min(n-1,(t/0.9*n)|0):n-1; }   // 2× slower attack sweep
+      else fi=rm?0:((tnow*2)|0)%n;
+      const fr=anim.frames[((fi%n)+n)%n];
+      c.save(); c.translate(cx,py); if(flip) c.scale(-1,1);
+      c.drawImage(anim.img, fr[0],fr[1],anim.fw,anim.fh, -dw/2,-0.7*dh, dw,dh); c.restore();
+    } else {
+      c.save(); c.font=Math.round(S*0.4)+'px '+GAME_FONT; c.textAlign='center'; c.textBaseline='middle';
+      c.fillStyle='#bfe6ff'; c.fillText((typeof DEF!=='undefined'&&DEF[snap.type]&&DEF[snap.type].icon)||'•', cx, py-0.25*dh); c.restore();
+    }
+    if(!atk||!atk.ready) return null;                                            // only units with a firing pose shoot lasers
+    const M=(typeof MUZZLE!=='undefined'&&MUZZLE[sType])||(typeof MUZZLE_FALLBACK!=='undefined'?MUZZLE_FALLBACK:{mx:0.7,my:0.42,w:1});
+    const adw=S*(atk.fw/atk.fh), sgn=flip?-1:1;                                   // X from the ATTACK frame box (the aimed pose)
+    const mx=(M.mx!=null?M.mx:0.7);
+    const my=Math.max(0.05,(M.my!=null?M.my:0.42)-0.18);                          // raise to the shoulder-aimed barrel — the gun is UP while firing
+    return { x:cx+sgn*(mx-0.5)*adw, y:py+(my-0.7)*dh, w:Math.max(1.5,S*0.02)*(M.w||1) };
+  }
+  const muz={ a:shooter('a'), b:shooter('b') };
+
+  // ---- volley scheduling: mentor fires, junior echoes ~0.45s later (skipped under reduced-motion) ----
+  if(!rm){
+    if(tnow>=st.nextVolley){ st.pending.push({who:'a',at:tnow}); st.pending.push({who:'b',at:tnow+0.45}); st.nextVolley=tnow+2.4+Math.random()*1.1; }
+    for(let i=st.pending.length-1;i>=0;i--){ if(tnow>=st.pending[i].at){
+      const who=st.pending[i].who; st.pending.splice(i,1);
+      if(who==='a') st.aFire=tnow; else st.bFire=tnow;   // gun starts raising now; the tracer fires a beat later (gun up)
+      const m=muz[who]; if(!m) continue;                 // no firing pose → no laser (units just stand)
+      let x1=tx, y1=ty, miss=false;
+      if(who==='b'){                                   // junior: accuracy improves with training progress
+        const sc=1-frac; if(Math.random()<0.4*sc) miss=true;
+        const sp=R*1.5*sc*(miss?2.2:1);
+        x1=tx+(Math.random()*2-1)*sp; y1=ty+(Math.random()*2-1)*sp+(miss?R*1.1:0);
+      }
+      st.shots.push({ start:tnow+0.36, x0:m.x,y0:m.y, x1,y1, w:m.w, miss, hit:false });   // +0.36s ≈ the gun-up muzzle-flash frame
+    } }
+  }
+
+  // ---- tracers + impacts (on top); register the target hit when the bolt lands ----
+  const LIFE=0.32;   // tracer/muzzle-flash/impact lifetime (2× — slower laser travel)
+  for(let i=st.shots.length-1;i>=0;i--){
+    const sh=st.shots[i], p=(tnow-sh.start)/LIFE;
+    if(p>1.12){ st.shots.splice(i,1); continue; }
+    if(p<0) continue;                                  // scheduled, but the gun isn't up yet
+    if(!sh.hit && p>=0.8){ sh.hit=true; if(!sh.miss) st.hitT=tnow; }
+    drawCardShot(c, sh.x0,sh.y0, sh.x1,sh.y1, Math.min(1,p), sh.w, true);
+  }
+}
 // Display name for a roster snapshot OR live unit: hero → heroId; career unit → dossier full name; else type.
 function trainUnitName(s){
   if(!s) return '';
@@ -1176,16 +1324,16 @@ function buildTrainingBody(body){
   if(!sessions.length){ const m=document.createElement('div'); m.className='muted'; m.textContent='No active mentorships.'; right.appendChild(m); }
   for(const ses of sessions){
     const card=document.createElement('div'); card.className='train-session'; card.dataset.sesid=ses.id;
-    const pair=document.createElement('div'); pair.className='train-pair';
+    // Firing-range scene: both snipers face downrange and take turns shooting a holographic target; the
+    // junior's aim tightens onto the bull as training progresses (drawn each frame by drawTrainingRange).
+    const scene=document.createElement('canvas'); scene.className='train-range'; card.appendChild(scene);
+    const caps=document.createElement('div'); caps.className='train-range-caps';
     [ses.a, ses.b].forEach(who=>{
-      const slot=document.createElement('div'); slot.className='train-pair-slot';
-      const cv=document.createElement('canvas'); cv.width=200; cv.height=200; cv.className='train-spr';
-      cv.dataset.type=who.type; cv.dataset.sprite=who.spriteType||''; slot.appendChild(cv);
       const lab=document.createElement('div'); lab.className='train-cap';
       lab.innerHTML='<b>'+(who===ses.a?'Mentor':'Junior')+'</b><br>'+trainTypeName(who)+'<br>Lv '+(who.stars||0)+' → <b>Lv '+ses.target+'</b>';
-      slot.appendChild(lab); pair.appendChild(slot);
+      caps.appendChild(lab);
     });
-    card.appendChild(pair);
+    card.appendChild(caps);
     const meta=document.createElement('div'); meta.className='train-meta';
     meta.innerHTML='<div class="train-countdown">…</div><div class="train-bar"><i></i></div>'
       +'<div class="muted">'+((DEF[ses.type]&&DEF[ses.type].name)||ses.type)+' · both → Level '+ses.target+'</div>';
@@ -1211,6 +1359,7 @@ function openTrainingMenu(){
         const total=ses.hoursTotal*HUB.trainHourSeconds, remain=Math.max(0, total-(ses.secElapsed||0));
         const bar=el.querySelector('.train-bar>i'); if(bar) bar.style.width=Math.min(100, (total?(ses.secElapsed||0)/total*100:100))+'%';
         const cd=el.querySelector('.train-countdown'); if(cd) cd.textContent=ses.done?'✓ COMPLETE':fmtTrainRemain(remain);
+        const rng=el.querySelector('.train-range'); if(rng) drawTrainingRange(rng, ses, performance.now()/1000);   // firing-range scene
       });
     }
   });
@@ -1267,7 +1416,9 @@ function wakeFallenHeader(showSort, title){
 }
 function buildWakeBody(body){
   const r=(typeof CAMPAIGN!=='undefined'&&CAMPAIGN.reborn)||{sessions:[],done:[]};
-  const sessions=r.sessions||[], fallen=(typeof fallenVets!=='undefined')?fallenVets:[];
+  // The fallen list shown here is veterans-only (heroes/Lv2+); legacy sub-veteran records stay in
+  // fallenVets for save/identity but are filtered out of the wall AND the resurrection picker.
+  const sessions=r.sessions||[], fallen=(typeof displayFallen==='function')?displayFallen():((typeof fallenVets!=='undefined')?fallenVets:[]);
   const unlocked=(typeof rebornUnlocked==='function')?rebornUnlocked():true;
   const charges=(typeof rebornChargesLeft==='function')?rebornChargesLeft():0;
   const cap=HUB.rebornTotalCap||0;

@@ -588,6 +588,12 @@ body.hub-menu-open #bottom{ display:none; }              /* syncHud() then drops
 @media (prefers-reduced-motion:reduce){
   .lattice-portal, .lattice-scene .train-spr{ animation:none; }
 }
+/* ── Training Grounds "firing range" scene (drawn by drawTrainingRange in js/ui.js) ── */
+.train-range{ display:block; width:100%; height:clamp(160px,26vw,215px); border-radius:9px; margin-bottom:6px;
+  background:radial-gradient(120% 95% at 82% 80%, rgba(0,165,210,.10), rgba(0,165,210,0) 55%),
+             linear-gradient(180deg, rgba(26,10,15,.5), rgba(8,3,6,.66)); }
+.train-range-caps{ display:flex; gap:18px; justify-content:center; flex-wrap:wrap; }
+.train-range-caps .train-cap{ min-width:120px; }
 /* M.D.C. "Next deployment" briefing card — the strong right-column teaser for the next episode. */
 .mdc-brief{ display:flex; flex-direction:column; gap:12px; padding:clamp(16px,2vw,26px);
   background:linear-gradient(155deg, rgba(58,16,22,.78), rgba(16,6,9,.72));

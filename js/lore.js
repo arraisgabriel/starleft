@@ -219,8 +219,15 @@ function resetFallen(){ fallenVets.length = 0; _fallenIds.clear(); }
 // the dedup id-set — the restored fallen are already gone from G.entities, so they can't be re-killed
 // and re-memorialized; deaths AFTER load repopulate it normally.
 function restoreFallen(arr){ fallenVets.length=0; _fallenIds.clear(); if(Array.isArray(arr)) for(const f of arr){ if(f) fallenVets.push(f); } }
+// ---- The Wake is a VETERAN memorial: heroes or Lv2+ only (mirrors the e.hero||stars>=2 test in core.js).
+// recordFallen enforces this for NEW deaths; the same predicate filters legacy saves at DISPLAY time —
+// we never drop records from fallenVets, so old save data and resurrection ids stay intact.
+function fallenLvl(f){ return (f && (f.stars!=null ? f.stars : f.lvl)) || 0; }
+function fallenIsVet(f){ return !!f && (!!f.hero || fallenLvl(f) >= 2); }
+function displayFallen(){ return (typeof fallenVets!=='undefined'?fallenVets:[]).filter(fallenIsVet); }
 function recordFallen(u){
   if(!u.lore) return;
+  if(!u.hero && (u.stars||0) < 2) return;   // veterans-only: u.lore now mints from Lv1/first-kill/first-select, so the .lore check alone no longer means "veteran"
   if(u.id!=null){ if(_fallenIds.has(u.id)) return; _fallenIds.add(u.id); }   // dedup across rollback re-simulations (the dead unit leaves G.entities, so the guard can't live on it)
   const d = buildDossier(u);
   fallenVets.push({ name:d.full, type:u.type, lvl:u.stars||0, dream:d.dream, home:d.home,
@@ -370,9 +377,10 @@ function rosterHTML(){
     h += `<div class="roster-rowwrap"><button class="roster-row" data-uid="${u.id}">${def.icon||''} <b>${d.full}</b><span class="rr-sub">${careerTitle(u.stars||0)} ${def.name} · Lv ${u.stars||0}${st}</span></button>`
        + `<button class="roster-share" data-share-uid="${u.id}" title="Share this file as an image">⇪</button></div>`; }
   h += `</div>`;
-  h += `<div class="roster-col"><h3>The Fallen (${fallenVets.length})</h3>`;
-  if(!fallenVets.length) h += `<div class="muted">None yet — keep them alive.</div>`;
-  fallenVets.forEach((f, fi)=>{ const def=DEF[f.type];
+  const fallenShown = (typeof displayFallen==='function')?displayFallen():fallenVets;
+  h += `<div class="roster-col"><h3>The Fallen (${fallenShown.length})</h3>`;
+  if(!fallenShown.length) h += `<div class="muted">None yet — keep them alive.</div>`;
+  fallenVets.forEach((f, fi)=>{ if(typeof fallenIsVet==='function' && !fallenIsVet(f)) return; const def=DEF[f.type];   // skip legacy sub-veteran records; fi stays the true fallenVets index so data-share-fidx resolves
     h += `<div class="roster-rowwrap"><div class="roster-row fallen">${def?def.icon:''} <b>${f.name}</b><span class="rr-sub">${careerTitle(f.lvl)} ${def?def.name:f.type} · Lv ${f.lvl} · fell at ${f.map||'the front'} · ${f.dreamDone?'dream fulfilled ✓':'dream unfulfilled'}</span></div>`
        + `<button class="roster-share" data-share-fidx="${fi}" title="Pour one out — share their memorial card">⇪</button></div>`; });
   h += `</div></div>`;
