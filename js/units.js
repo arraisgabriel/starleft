@@ -468,7 +468,7 @@ function releaseAllStoredUnits(state,hq){
 function tryTrain(state, building, type){
   const d=DEF[type];
   const eco=playerEco(state, building.ctrl);          // train from the producing player's pool
-  if(eco.gold < d.cost){ toast('Not enough gold'); return; }
+  if(eco.gold < d.cost){ toast('Not enough funding'); return; }
   if(d.supply && eco.supply + (state.queuedSupply||0) + d.supply > eco.supplyCap){
     toast('Headcount full — build another Open-Plan HQ or a Satellite Office');
     if(typeof TUTORIAL!=='undefined' && TUTORIAL.fireContextual) TUTORIAL.fireContextual('supply-cap', state);   // teach supply the moment it bites (T2-5)
@@ -484,7 +484,7 @@ function tryUpgradeTurret(state, b, key){
   if(!spec || !b || b.dead || b.type!=='turret' || b.constructing) return;
   if(b[spec.field]) return;                                   // already installed
   const eco=playerEco(state, b.ctrl);
-  if(eco.gold < spec.cost){ toast('Not enough gold'); return; }
+  if(eco.gold < spec.cost){ toast('Not enough funding'); return; }
   eco.gold -= spec.cost;
   b[spec.field]=true;
   toast(spec.name+' installed — '+spec.hint);
@@ -573,7 +573,7 @@ function tryPlace(state, type){
   const sel = state.selection.find(e=>e.kind==='unit'&&e.type==='worker'&&!e.dead);
   if(!sel){ toast('Select a Worker first'); return; }
   const d=DEF[type];
-  if(playerEco(state, sel.ctrl).gold < d.cost){ toast('Not enough gold'); return; }
+  if(playerEco(state, sel.ctrl).gold < d.cost){ toast('Not enough funding'); return; }
   state.placing = { type, def:d, builder:sel };
   toast('Tap a spot to build the '+d.name+' (Cancel / Esc to abort)');
 }

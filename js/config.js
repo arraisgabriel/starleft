@@ -140,7 +140,7 @@ const DEF = {
               flavor:'Bills $400/hr to lob synergy buzzwords at the enemy from a safe distance.' },
 
   /* ---- People Ops (Barracks) tier ---- */
-  recruiter:{ name:'Recruiter', icon:'🧑‍🏫', kind:'unit', hp:80, cost:99, build:14, sight:6, supply:1, speed:2.5, dmg:0, range:4.0, cd:1.0, r:9, action:'heal',
+  recruiter:{ name:'Recruiter', icon:'🧑‍🏫', kind:'unit', hp:80, cost:149, build:14, sight:6, supply:1, speed:2.5, dmg:0, range:4.0, cd:1.0, r:9, action:'heal',
               heal:9, flavor:'Heals burnout. "We\'re like a family." Mends teammates instead of fighting.' },
   psychologist:{ name:'Mindfulness Facilitator', icon:'🛋️', kind:'unit', hp:90, cost:1000, build:40, sight:6, supply:2, speed:2.2, dmg:0, range:4.0, cd:1.0, r:9, action:'heal',
               madHeal:true, flavor:'Company psychologist. Channels TEMPORARY calm into one frayed mind at a time — a field stopgap that wears off (and is lost the moment they\'re extracted). Never a real cure, and can\'t fight.' },
@@ -159,7 +159,7 @@ const DEF = {
   founder:  { name:'Founder Mech', icon:'🦄', kind:'unit', hp:600, cost:599, build:45, sight:8, supply:6, speed:1.6, dmg:45, range:3.5, cd:1.5, r:16, vehicle:true,
               armor:0.30,   // T2-4: exosuit plating shrugs off small-arms — bring piercing
               splash:20, splashR:1.3, antiAir:true, flavor:'A visionary in a 12-ft exosuit. Armored; hits anything, ground or air.' },
-  courier:  { name:'Drugztore Delivery Drone', icon:'🛸', kind:'unit', hp:120, cost:90, build:16, sight:7, supply:2, speed:3.0, dmg:0, range:4.0, cd:1.0, r:10, air:true, action:'heal',
+  courier:  { name:'Drugztore Delivery Drone', icon:'🛸', kind:'unit', hp:120, cost:199, build:16, sight:7, supply:2, speed:3.0, dmg:0, range:4.0, cd:1.0, r:10, air:true, action:'heal',
               heal:7, flavor:'Same-day delivery of medkits and morale. Flies over everything.' },
   bomber:   { name:'Buzzword Bomber', icon:'🛩️', kind:'unit', hp:480, cost:630, build:50, sight:9, supply:6, speed:1.7, dmg:26, range:6.0, cd:0.9, r:16, air:true, antiAir:true, facesLeft:true,
               armor:0.20,   // T2-4: armored hull

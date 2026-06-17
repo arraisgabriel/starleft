@@ -497,8 +497,8 @@ function gdriveAppendCloudRows(wrap){
 }
 
 // Refresh every menu that reads localStorage saves, after a cloud op writes/removes a slot:
-// the Load Game list (#loadSlots) AND the main-menu ▶ Continue button (reads the autosave slot).
-// Continue is keyed to AUTO_KEY, which is the shared cross-device slot — so pulling a newer autosave
+// the Load Game list (#loadSlots) AND the main-menu ▶ Continue button.
+// Continue resumes the most-recent LOCAL save (autosave or manual) — so pulling a newer slot
 // from another device must re-point Continue at it, not leave the stale local label.
 function gdriveRefreshMenus(){
   if(typeof buildLoadSlots==='function') buildLoadSlots();

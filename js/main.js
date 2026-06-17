@@ -421,7 +421,7 @@ function _gdriveFocusPull(){
 }
 document.addEventListener('visibilitychange', ()=>{ if(document.visibilityState==='visible') _gdriveFocusPull(); });
 window.addEventListener('focus', _gdriveFocusPull);
-if(typeof syncContinueButton==='function') syncContinueButton();   // ▶ Continue from the latest autosave (T0-8)
+if(typeof syncContinueButton==='function') syncContinueButton();   // ▶ Continue from the most-recent save — autosave or manual (T0-8)
 if(typeof gdriveMenuSync==='function') gdriveMenuSync();           // at boot: silently fast-forward cloud saves, else prompt sign-in/decline
 if(typeof mpCheckInviteHash==='function') mpCheckInviteHash();   // #mp=CODE invite link → auto-join co-op
 /* =====================================================================

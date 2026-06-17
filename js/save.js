@@ -412,25 +412,34 @@ function loadGame(key){
   }, _isHub ? { label:'H.U.B. UPLINK' } : undefined);
 }
 
-/* ---------- "▶ Continue" (T0-8): one-click resume of the most recent autosave ---------- */
+/* ---------- "▶ Continue" (T0-8): one-click resume of the most recent save ---------- */
 // Episode-aware label for a save: map index → the crawl's episode/title; hub saves read as the H.U.B.
 function saveEpisodeLabel(idx, isHub){
   if(isHub) return 'H.U.B. — between quarters';
   const m = MAPS[idx], cr = m && m.crawl;
   return cr ? (cr.episode + ' — ' + cr.title) : ((m && m.name) || 'Quarter');
 }
-function continueGame(){ loadGame(AUTO_KEY); }
-// Show/hide + label the main-menu Continue button from the autosave (legacy autosaves without a
-// clean map index fall back to the raw map name; storage empty/disabled hides the button).
+// The single most-recent solo save — autosave OR manual, whichever was written last.
+// listSaves() already validates each slot and sorts newest-first by savedAt, so [0]
+// is the true "last save file" regardless of which kind it is. null when storage is empty.
+function latestSave(){ const all=listSaves(); return all.length ? all[0] : null; }
+function continueGame(){
+  const s=latestSave();
+  if(!s){ toast('No saved games yet'); return; }
+  loadGame(s.key);
+}
+// Show/hide + label the main-menu Continue button from the most-recent save (autosave or
+// manual). Legacy saves without a clean map index fall back to the raw map name; an empty
+// or disabled storage (no valid save) hides the button.
 function syncContinueButton(){
   const btn=document.getElementById('btn-continue'); if(!btn) return;
-  const d=saveRead(AUTO_KEY);
-  if(!d || !isSaveBlob(d) || !saveVersionOk(d)){ btn.style.display='none'; return; }
+  const s=latestSave();
+  if(!s){ btn.style.display='none'; return; }
   const sub=document.getElementById('btn-continue-sub');
   if(sub){
     let lbl;
-    try{ lbl=saveEpisodeLabel(saveMapIndex(d), saveIsHubMap(d)); }catch(_){ lbl=d.mapName||'Quarter'; }
-    sub.textContent = lbl + ' · ' + fmtElapsed(d.gameTime||0) + ' in';
+    try{ lbl=saveEpisodeLabel(s.mapIndex, s.hub); }catch(_){ lbl=s.mapName||'Quarter'; }
+    sub.textContent = lbl + ' · ' + fmtElapsed(s.gameTime||0) + ' in';
   }
   btn.style.display='';
 }
