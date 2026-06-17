@@ -267,7 +267,7 @@ function wireTouchControls(){
   on('btn-army', ()=>{ if(typeof isGamePaused==='function' && isGamePaused()) return; selectAllArmy(); });
   on('btn-clear', ()=>{ if(typeof isGamePaused==='function' && isGamePaused()) return; if(G && G.selection.length){ clearSelection(); refreshUI(); } });   // Esc equivalent: drop the current selection
   on('btn-cancel', ()=>{ if(typeof isGamePaused==='function' && isGamePaused()) return; if(G&&G.placing){ G.placing=null; refreshUI(); } });
-  on('btn-save', ()=>{ saveGame(); });
+  on('btn-save', ()=>{ if(typeof TELE!=='undefined') TELE.event('save_click'); saveGame(); });
   on('btn-load', ()=>{
     const panel=document.getElementById('topmenu-panel'), btn=document.getElementById('btn-topmenu');
     if(panel) panel.style.display='none';
@@ -325,6 +325,16 @@ function wireTouchControls(){
     el.addEventListener('pointerleave', cancel);
     el.addEventListener('pointercancel', cancel);
   });
+  // main-menu (title screen) click tracking: one 'menu_click' event per option, broken down by `item`
+  // (delegated so it survives the inline onclick handlers and any future menu buttons). Analytics-only.
+  (function wireMenuNavTracking(){
+    const nav=document.querySelector('#startScreen .menu-nav');
+    if(!nav || typeof TELE==='undefined') return;
+    nav.addEventListener('click', e=>{
+      const b=e.target.closest('[data-menu]'); if(!b || !nav.contains(b)) return;
+      TELE.event('menu_click', { item: b.dataset.menu });
+    });
+  })();
 }
 function wireBootGate(){
   const gate=document.getElementById('bootGate');

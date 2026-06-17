@@ -16,6 +16,9 @@ const GD_FIELDS= 'id,name,appProperties,modifiedTime';
 const GD_DEBOUNCE_PUSH = 8000;     // coalesce a burst of saves into ~1 push (manual saves collapse at 3s; autosave is 60s)
 const GD_DEBOUNCE_PULL = 5000;     // settle focus/menu events before pulling
 const GD_PULL_MIN_INTERVAL = 30000;// never pull more than once / 30s (alt-tab must not hammer Drive)
+const GD_CLOUD_MANUAL_CAP = 50;    // cloud retention: keep the newest N MANUAL saves in appDataFolder (the autosave is
+                                   // never counted/pruned). Generous vs the 12 local slots so a save another device
+                                   // still treats as current is very unlikely to be trimmed. Pruned in the push tail.
 
 /* ---- module state (bare globals, per the project's classic-scope convention) ---- */
 let GD_tok = null;                 // bearer for the in-flight push/pull batch (refreshed by driveFetch on 401)
@@ -146,10 +149,29 @@ async function gdrivePush(opts){
       }catch(e){ /* per-slot failure must not abort the batch */ skipped++; }
     }
     await driveList();                                    // refresh the cached index after writes
+    try{ await gdrivePruneCloud(); }catch(_){}             // best-effort retention trim (never affects push success)
     GD_lastSyncAt = nowMs();
     syncStatus(conflicts.length ? 'conflict' : 'ok', { pushed, skipped, conflicts });
     return { ok:true, pushed, skipped, conflicts };
   }catch(e){ syncStatus(statusFor(e)); return { ok:false, reason:'error', err:e }; }
+}
+
+/* ---- background cloud retention: keep only the newest GD_CLOUD_MANUAL_CAP manual files ----
+   Runs only as the tail of a push (which is debounced + non-interactive + background), so it never blocks
+   the game, never pops auth, and never runs on its own timer. The autosave (AUTO_KEY) is the shared resume
+   slot and is NEVER counted or pruned. Deletes the OLDEST-beyond-cap by exact file id, per-file guarded so
+   one failure can't abort the batch (the next push retries). Idempotent: a no-op once the cloud is ≤ cap. */
+async function gdrivePruneCloud(){
+  const manual = GD_cloudIndex.filter(f=>f && f.slKey && f.slKey!==AUTO_KEY && !f.auto)
+                              .sort((a,b)=> b.savedAt - a.savedAt);     // newest first
+  if(manual.length <= GD_CLOUD_MANUAL_CAP) return 0;                     // common case: nothing to trim
+  const stale = manual.slice(GD_CLOUD_MANUAL_CAP);                       // everything past the cap = the oldest
+  let pruned = 0;
+  for(const f of stale){
+    try{ await driveDelete(f.id); GD_cloudIndex = GD_cloudIndex.filter(x=>x.id!==f.id); pruned++; }
+    catch(_){ /* leave it for the next push; never abort */ }
+  }
+  return pruned;
 }
 
 /* ---- PULL (cloud → local) + reconcile/merge ---- */
@@ -169,7 +191,7 @@ async function gdrivePull(opts){
       // f.savedAt <= local → local newer-or-equal; pull does nothing (push will carry it up)
     }
     await reconcileAndRecreate(recreate);
-    if(typeof buildLoadSlots==='function') buildLoadSlots();
+    gdriveRefreshMenus();
     GD_lastSyncAt = nowMs();
     if(conflicts.length){ syncStatus('conflict', { conflicts }); showCloudConflict(conflicts); }
     else syncStatus('ok');
@@ -233,7 +255,7 @@ function showCloudConflict(conflicts){
     if(!(await gdAcquire(true))) return;
     const ok = await recreateSlot({ id:c.id, slKey:c.slKey });
     if(ok && typeof toast==='function') toast('Loaded cloud copy of '+(c.mapName||'save'));
-    if(typeof buildLoadSlots==='function') buildLoadSlots();
+    gdriveRefreshMenus();
   };
   conflicts.forEach((c,i)=>{
     const keepBtn=document.getElementById('ccKeep'+i), cloudBtn=document.getElementById('ccCloud'+i);
@@ -241,7 +263,7 @@ function showCloudConflict(conflicts){
     if(cloudBtn) cloudBtn.onclick=async ()=>{ await useCloud(c); cloudBtn.disabled=true; if(keepBtn) keepBtn.disabled=true; };
   });
   const all=document.getElementById('ccCloudAll'); if(all) all.onclick=async ()=>{ for(const c of conflicts) await useCloud(c); close(); };
-  const done=document.getElementById('ccDone'); if(done) done.onclick=()=>{ if(typeof buildLoadSlots==='function') buildLoadSlots(); close(); };
+  const done=document.getElementById('ccDone'); if(done) done.onclick=()=>{ gdriveRefreshMenus(); close(); };
 }
 
 /* ---- sync triggers ---- */
@@ -295,7 +317,7 @@ function showCloudAccountSwitch(newEmail, count, onContinue, onCancel){
 }
 function gdriveSyncNow(){ whenGsi(async ()=>{ if(!gisAvailable()) return; await gdrivePull({ interactive:true }); await gdrivePush({ interactive:true }); gdriveRefreshUI(); }); }
 function gdriveRestore(){ whenGsi(async ()=>{ if(!gisAvailable()) return; await gdrivePull({ interactive:true }); gdriveRefreshUI(); }); }
-function gdriveDisconnect(){ if(window.GDRIVE && GDRIVE.signOut) GDRIVE.signOut(); setCloudOn(false); GD_cloudIndex=[]; if(typeof buildLoadSlots==='function') buildLoadSlots(); gdriveRefreshUI(); }
+function gdriveDisconnect(){ if(window.GDRIVE && GDRIVE.signOut) GDRIVE.signOut(); setCloudOn(false); GD_cloudIndex=[]; gdriveRefreshMenus(); gdriveRefreshUI(); }
 
 // Auto-push after a successful save/autosave — debounced, NEVER interactive (can't pop a window).
 function gdriveAutoPush(){
@@ -319,13 +341,13 @@ async function gdriveRestoreOne(f){
   if(typeof enforceCap==='function') enforceCap();
   const ok = await recreateSlot(f);
   if(typeof toast==='function') toast(ok ? 'Restored from cloud' : 'Could not restore that save');
-  await driveList(); if(typeof buildLoadSlots==='function') buildLoadSlots();
+  await driveList(); gdriveRefreshMenus();
 }
 async function gdriveRemoveOne(f){
   if(!(await gdAcquire(true))) return;
   try{ await driveDelete(f.id); GD_cloudIndex = GD_cloudIndex.filter(x=>x.id!==f.id); if(typeof toast==='function') toast('Removed from cloud'); }
   catch(_){ if(typeof toast==='function') toast('Could not remove from cloud'); }
-  if(typeof buildLoadSlots==='function') buildLoadSlots();
+  gdriveRefreshMenus();
 }
 // Append dimmed "in cloud only" rows to the Load list (called by buildLoadSlots in save.js).
 function gdriveAppendCloudRows(wrap){
@@ -346,6 +368,15 @@ function gdriveAppendCloudRows(wrap){
     row.querySelector('.cloud-del').onclick=()=>gdriveRemoveOne(f);
     wrap.appendChild(row);
   });
+}
+
+// Refresh every menu that reads localStorage saves, after a cloud op writes/removes a slot:
+// the Load Game list (#loadSlots) AND the main-menu ▶ Continue button (reads the autosave slot).
+// Continue is keyed to AUTO_KEY, which is the shared cross-device slot — so pulling a newer autosave
+// from another device must re-point Continue at it, not leave the stale local label.
+function gdriveRefreshMenus(){
+  if(typeof buildLoadSlots==='function') buildLoadSlots();
+  if(typeof syncContinueButton==='function') syncContinueButton();
 }
 
 /* ---- status line + button UI in the Load menu (#cloudPanel) ---- */

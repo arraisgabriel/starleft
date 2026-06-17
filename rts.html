@@ -183,12 +183,12 @@
       <div class="logo-text">STARLEFT<small>DISRUPT · SCALE · CONQUER</small></div>
     </div>
     <nav class="menu-nav">
-      <button class="sc-btn" id="btn-continue" onclick="continueGame()" style="display:none;">▶ Continue<small id="btn-continue-sub"></small></button>
-      <button class="sc-btn" onclick="startGame(0)">New Campaign</button>
-      <button class="sc-btn" id="btn-mp" onclick="showMpLobby()">Multiplayer</button>
-      <button class="sc-btn" onclick="showSkirmish()">Skirmish</button>
-      <button class="sc-btn" onclick="openLoadMenu()">Load Game</button>
-      <button class="sc-btn" onclick="showSettings()">Settings</button>
+      <button class="sc-btn" id="btn-continue" data-menu="continue" onclick="continueGame()" style="display:none;">▶ Continue<small id="btn-continue-sub"></small></button>
+      <button class="sc-btn" data-menu="new_campaign" onclick="startGame(0)">New Campaign</button>
+      <button class="sc-btn" id="btn-mp" data-menu="multiplayer" onclick="showMpLobby()">Multiplayer</button>
+      <button class="sc-btn" data-menu="skirmish" onclick="showSkirmish()">Skirmish</button>
+      <button class="sc-btn" data-menu="load_game" onclick="openLoadMenu()">Load Game</button>
+      <button class="sc-btn" data-menu="settings" onclick="showSettings()">Settings</button>
     </nav>
     <aside class="menu-news">
       <h4>Field Tip</h4>
@@ -344,8 +344,9 @@
               <button class="tc-btn" id="mp-mute" onclick="mpToggleMute()" disabled>🔇 Mute</button>
               <span class="mp-ptt-hint">Hold <b>V</b> to talk</span>
             </div>
-            <details class="mp-relay"><summary>Hard network? Add a TURN relay</summary>
-              <div class="mp-relay-in"><input id="mp-relay-url" placeholder="turn:host:3478 (optional)"><button class="tc-btn" onclick="mpAddRelay()">Add</button></div>
+            <details class="mp-relay"><summary>Can't connect? Add a relay</summary>
+              <div class="mp-relay-in"><input id="mp-relay-url" placeholder="turn:host:3478  or  wss://relay.example.com"><button class="tc-btn" onclick="mpAddRelay()">Add</button></div>
+              <div class="mp-relay-hint muted"><code>turn:</code> = NAT traversal · <code>wss://</code> = signaling relay (peer discovery). Leave &amp; rejoin to apply.</div>
             </details>
           </section>
         </div>
@@ -467,8 +468,8 @@
       </div>
       <div class="panel-label">Difficulty</div>
       <div id="difficultyRow" class="diff-row"></div>
-      <button class="sc-btn" onclick="TUTORIAL.choosePrompt(true)"><span class="ic">▶</span> Show me the ropes</button>
-      <button class="sc-btn back" onclick="TUTORIAL.choosePrompt(false)">⊘ I know what I'm doing</button>
+      <button class="sc-btn" onclick="TUTORIAL.choosePrompt(true)"><span class="ic">▶</span>Show tutorials</button>
+      <button class="sc-btn back" onclick="TUTORIAL.choosePrompt(false)"><span class="ic">⊘</span>I know what I'm doing</button>
     </div>
   </div>
 

@@ -1,53 +1,70 @@
-/* telemetry.js — lightweight, privacy-respecting analytics (T0-10).
-   TELE.event(name, props) POSTs a tiny JSON blob via navigator.sendBeacon to a COOKIELESS
-   endpoint (self-hosted Plausible/Umami "custom event" API or any collector). No PII, no
-   user id, no fingerprinting — just funnel counts. Hard-gated by:
-     • Do-Not-Track (navigator.doNotTrack / globalPrivacyControl) — never sends;
-     • a consent toggle persisted in localStorage (TELE.setEnabled, surfaced in Settings);
-     • TELE_ENDPOINT — EMPTY by default, so out of the box nothing is ever sent. Point it
-       at your collector (e.g. 'https://stats.example.com/api/event') to go live.
+/* telemetry.js — lightweight, cookieless analytics (T0-10).
+   TELE.event(name, props) records a cookieless, no-PII, no-fingerprint funnel event. Analytics is
+   ALWAYS ON — there is NO consent toggle and NO Do-Not-Track gate; the only gate is that a sink is
+   configured. Two optional sinks (leave the id/url empty to disable that sink):
+     • Umami Cloud (hosted / serverless): UMAMI_WEBSITE_ID. The loader auto-counts a pageview = "who
+       accessed the page" and receives every TELE.event as a custom event (umami.track) = the funnel.
+     • TELE_ENDPOINT: a raw cookieless collector (Plausible/Umami custom-event API or your own) that
+       gets a tiny sendBeacon JSON blob.
    Fails silently offline / blocked. Local & cosmetic — never touches G, saves, or netcode. */
 
 const TELE = (function(){
-  const LS_KEY = 'starleft_tele';
-  const TELE_ENDPOINT = '';          // ← set to your cookieless collector URL to enable
-  let enabled = true;                // consent; AND'ed with DNT + endpoint below
-  try {
-    const s = JSON.parse(localStorage.getItem(LS_KEY) || '{}');
-    if(typeof s.enabled === 'boolean') enabled = s.enabled;
-  } catch(e){}
-  const save = ()=>{ try { localStorage.setItem(LS_KEY, JSON.stringify({ enabled })); } catch(e){} };
+  // ─── sinks (both optional; leave the id/url empty to disable that sink) ───────────────────────
+  const UMAMI_WEBSITE_ID = 'b84254d2-de90-41c3-a9ef-fc190a7f7827';   // Umami Cloud website id (empty → off)
+  const UMAMI_SRC = 'https://cloud.umami.is/script.js';   // Cloud loader (EU acct: https://eu.umami.is/script.js; self-host: your /script.js)
+  const TELE_ENDPOINT = '';                               // optional raw cookieless collector URL (sendBeacon JSON)
 
-  function dnt(){
-    try {
-      return navigator.doNotTrack === '1' || window.doNotTrack === '1' || navigator.globalPrivacyControl === true;
-    } catch(e){ return false; }
-  }
-  function on(){ return enabled && !dnt() && !!TELE_ENDPOINT; }
+  const umamiConfigured = ()=> !!UMAMI_WEBSITE_ID;
+  function on(){ return umamiConfigured() || !!TELE_ENDPOINT; }   // always on — only requires a configured sink
 
   // tiny anonymous session tag (per-load, in-memory only) so funnels can be stitched per session
   const sid = Math.random().toString(36).slice(2, 10);
 
+  // ─── Umami: loader injection + a small pre-load event buffer ──────────────────────────────────
+  let umamiInjected = false;
+  const umamiQueue = [];             // events fired before the async loader defines window.umami
+  function umamiFlush(){
+    if(!(window.umami && typeof window.umami.track === 'function')) return;
+    while(umamiQueue.length){ const e = umamiQueue.shift(); try { window.umami.track(e[0], e[1]); } catch(_){} }
+  }
+  function umamiEnsure(){
+    if(umamiInjected || !umamiConfigured() || typeof document === 'undefined') return;
+    umamiInjected = true;
+    // clear any opt-out left by an earlier (consent-gated) build so returning users are tracked again
+    try { localStorage.removeItem('umami.disabled'); localStorage.removeItem('starleft_tele'); } catch(e){}
+    try {
+      const s = document.createElement('script');
+      s.async = true; s.src = UMAMI_SRC;
+      s.setAttribute('data-website-id', UMAMI_WEBSITE_ID);
+      s.onload = umamiFlush;
+      (document.head || document.documentElement).appendChild(s);
+    } catch(e){ umamiInjected = false; }
+  }
+  function umamiTrack(name, props){
+    if(window.umami && typeof window.umami.track === 'function'){ try { window.umami.track(name, props); } catch(e){} }
+    else if(umamiQueue.length < 50) umamiQueue.push([name, props]);   // buffer until the loader is ready
+  }
+
   function event(name, props){
     if(!on() || !name) return;
-    try {
-      const payload = JSON.stringify({
-        n: String(name).slice(0, 48),
-        p: props || {},
-        sid,
-        u: 'rts.html',                       // page, not the full URL (an #mp=CODE hash is semi-private)
-        t: Date.now(),
-      });
-      if(navigator.sendBeacon) navigator.sendBeacon(TELE_ENDPOINT, new Blob([payload], {type:'application/json'}));
-      else fetch(TELE_ENDPOINT, { method:'POST', body:payload, keepalive:true, headers:{'Content-Type':'application/json'} }).catch(()=>{});
-    } catch(e){}
+    const n = String(name).slice(0, 48), p = props || {};
+    // sink 1 — Umami custom event
+    if(umamiConfigured()) umamiTrack(n, p);
+    // sink 2 — raw cookieless collector (sendBeacon JSON)
+    if(TELE_ENDPOINT){
+      try {
+        const payload = JSON.stringify({ n, p, sid, u:'rts.html', t:Date.now() });  // page, not full URL (#mp=CODE is semi-private)
+        if(navigator.sendBeacon) navigator.sendBeacon(TELE_ENDPOINT, new Blob([payload], {type:'application/json'}));
+        else fetch(TELE_ENDPOINT, { method:'POST', body:payload, keepalive:true, headers:{'Content-Type':'application/json'} }).catch(()=>{});
+      } catch(e){}
+    }
   }
+
+  // start the pageview loader immediately (always on)
+  umamiEnsure();
 
   return {
     event,
-    isEnabled(){ return enabled; },
-    setEnabled(v){ enabled = !!v; save(); },
-    toggle(){ this.setEnabled(!enabled); return enabled; },
-    active(){ return on(); },               // endpoint configured + consent + no DNT
+    active(){ return on(); },               // a sink is configured
   };
 })();

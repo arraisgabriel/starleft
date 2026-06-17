@@ -16,7 +16,7 @@
     const avail = mpAvailable();
     const note=$('mp-net-note');
     if(note){
-      if(avail) note.innerHTML = 'Serverless P2P over WebRTC — no server. STUN connects most players; paste a relay in-room for strict networks.';
+      if(avail) note.innerHTML = 'Serverless P2P over WebRTC — no server. STUN + a free TURN relay connect most players; if a join stalls, open 🐞 DEBUG to see the relay/ICE state, or paste a relay in-room.';
       else if(location.protocol==='file:') note.innerHTML = '⚠ <b>Multiplayer needs the game served over http(s).</b> ES modules are blocked on <code>file://</code>. Run a local server, e.g. <code>python3 -m http.server</code> in the game folder, then open <code>http://localhost:8000/rts.html</code>. (Single-player works fine from a file.)';
       else if(!window.__MP_READY) note.innerHTML = '⏳ Connecting to the peer network… give it a moment, then reopen this screen.';
       else note.innerHTML = '⚠ Multiplayer transport failed to load (network blocked or relays down). Check your connection and reload.';
@@ -167,7 +167,15 @@
   window.mpToggleReady = function(){ UI.ready=!UI.ready; const b=$('mp-ready'); if(b) b.classList.toggle('on',UI.ready);
     try{ MP.send('mpready',{ready:UI.ready}); }catch(_){} };
   window.mpLeaveRoomClick = function(){ if(typeof mpLeave==='function') mpLeave(); };
-  window.mpAddRelay = function(){ const u=(($('mp-relay-url')||{}).value||'').trim(); if(u && window.MP && MP.setRelay){ MP.setRelay(u); window.NET && window.NET.mpLog && window.NET.mpLog('info','TURN relay added — reconnect to use it'); toast('Relay added — reconnect to use it'); } };
+  window.mpAddRelay = function(){
+    const u=(($('mp-relay-url')||{}).value||'').trim(); if(!u || !window.MP) return;
+    const log=(m)=>{ window.NET && window.NET.mpLog && window.NET.mpLog('info', m); };
+    if(/^wss?:\/\//i.test(u)){                                   // wss:// → Nostr SIGNALING relay (peer discovery)
+      if(MP.setSignalingRelays){ MP.setSignalingRelays(u); log('signaling relay set — leave & rejoin to use it'); toast('Signaling relay set — leave & rejoin'); }
+    } else {                                                     // turn:/stun: → ICE relay (NAT traversal)
+      if(MP.setRelay){ MP.setRelay(u); log('TURN relay added — leave & rejoin to use it'); toast('TURN relay added — leave & rejoin'); }
+    }
+  };
 
   /* ---------- invite sharing ---------- */
   window.mpCopyInvite = function(){ const link=mpInviteLink(UI.code);

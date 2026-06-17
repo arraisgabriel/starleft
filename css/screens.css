@@ -444,8 +444,24 @@ body.scene-dispatch #crawlScreen {
 .train-summary b{ color:#ffd86b; }
 .train-h{ font-size:11px; letter-spacing:2px; text-transform:uppercase; color:#ff9aa2;
   border-bottom:1px solid #5a2f3a; padding-bottom:4px; margin-top:4px; }
+/* section header carrying an inline control (e.g. the Wake fallen-list sort) — the divider rides on the
+   row so the title + control share one baseline above it; collapses gracefully on narrow columns. */
+.hub-section-head{ display:flex; align-items:center; justify-content:space-between; gap:10px 14px; flex-wrap:wrap;
+  border-bottom:1px solid #5a2f3a; padding-bottom:4px; margin-top:4px; }
+.hub-section-head .train-h{ border-bottom:none; padding-bottom:0; margin-top:0; flex:1 1 auto; }
+/* sort control: a compact segmented pill-group; the active mode lights up gold like the storm's writes. */
+.wake-sort{ display:inline-flex; align-items:center; gap:1px; flex:0 0 auto; padding:2px;
+  background:rgba(20,10,14,.7); border:1px solid #5a2f3a; border-radius:999px; }
+.wake-sort-ic{ font-size:11px; line-height:1; color:#ff9aa2; padding:0 4px 0 7px; user-select:none; }
+.wake-sort-opt{ font:inherit; font-size:10px; letter-spacing:1.2px; text-transform:uppercase; cursor:pointer;
+  color:#caa6ae; background:transparent; border:0; border-radius:999px; padding:4px 11px; transition:.12s; }
+.wake-sort-opt:hover{ color:#fff; background:rgba(60,28,40,.85); }
+.wake-sort-opt.on{ color:#1a0c10; font-weight:700; background:linear-gradient(180deg,#ffe08a,#f0a93a);
+  box-shadow:0 0 10px rgba(255,200,80,.35), 0 1px 0 rgba(0,0,0,.3) inset; }
+.wake-sort-opt.on:hover{ color:#1a0c10; background:linear-gradient(180deg,#ffe79c,#f6b34a); }
 .train-staged{ display:flex; flex-wrap:wrap; gap:10px; }
 .train-card{ display:flex; flex-direction:column; align-items:center; gap:4px; cursor:pointer;
+  box-sizing:border-box; width:calc(clamp(128px,17vw,190px) + 16px);   /* uniform: sprite width + 8px padding each side; captions wrap, never stretch the card */
   background:rgba(40,20,28,.6); border:1px solid #5a2f3a; border-radius:9px; padding:8px;
   color:#f0d6da; transition:.12s; font:inherit; }
 .train-card:hover{ background:rgba(60,28,40,.85); }
@@ -453,7 +469,7 @@ body.scene-dispatch #crawlScreen {
 .train-card.sel .train-cap b::after{ content:' ✓'; color:#8effb0; }
 .train-spr{ width:clamp(128px,17vw,190px); height:clamp(128px,17vw,190px);
   background:radial-gradient(ellipse at 50% 80%, rgba(120,200,255,.10), rgba(0,0,0,0) 62%); }
-.train-cap{ text-align:center; font-size:12px; line-height:1.35; color:#e7c8a0; }
+.train-cap{ text-align:center; font-size:12px; line-height:1.35; color:#e7c8a0; max-width:100%; overflow-wrap:break-word; }
 .train-cap b{ color:#fff; }
 .train-rank{ text-align:center; line-height:1; margin-top:1px; }
 .train-rank .rank-lvl{ font-size:11px; }

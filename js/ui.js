@@ -1191,6 +1191,7 @@ function wakeSignature(){
        +'|f:'+((typeof fallenVets!=='undefined')?fallenVets.length:0)
        +'|done:'+((r.done||[]).join(','))
        +'|se:'+((r.sessions||[]).map(s=>s.id+':'+(s.done?1:0)).join(','))
+       +'|sort:'+WAKE_SORT
        +'|m3:'+((typeof CAMPAIGN!=='undefined')?(CAMPAIGN.m3|0):0);
 }
 // map a fallen record → a card snapshot hubMenuUnitCard understands (type/stars/spriteType/lore)
@@ -1199,6 +1200,38 @@ function fallenCardSnap(f){
     lore:(typeof fallenDossierSnap==='function')?fallenDossierSnap(f):(f.lore||null),
     heroId:f.heroId||null, key:'wakecard:'+((typeof fallenStableId==='function')?fallenStableId(f):(f.name||'')),
     madosis:0, sanityThreshold:0 };
+}
+// ---- Wake fallen-list sorting (UI pref; persisted, never enters a save slot) ----
+var WAKE_SORT=(function(){ try{ var v=localStorage.getItem('sl_wakeSort'); if(v==='level'||v==='type'||v==='name') return v; }catch(e){} return 'level'; })();
+function wakeFallenLvl(f){ return (f.stars!=null?f.stars:f.lvl)||0; }
+function wakeFallenName(f){ return (f.name||'').toString(); }
+function wakeFallenTypeName(f){ return (((typeof DEF!=='undefined'&&DEF[f.type]&&DEF[f.type].name))||f.type||'').toString(); }
+// return a SORTED COPY (never mutates fallenVets); ties break by name so the order is stable.
+function wakeSortFallen(list){
+  const a=(list||[]).slice();
+  const byName=(x,y)=>wakeFallenName(x).localeCompare(wakeFallenName(y));
+  if(WAKE_SORT==='name')      a.sort(byName);
+  else if(WAKE_SORT==='type') a.sort((x,y)=>wakeFallenTypeName(x).localeCompare(wakeFallenTypeName(y))||byName(x,y));
+  else                        a.sort((x,y)=>(wakeFallenLvl(y)-wakeFallenLvl(x))||byName(x,y));   // 'level': high→low
+  return a;
+}
+// section header for the fallen list, with the sort control anchored to its right (shown only when worth sorting).
+function wakeFallenHeader(showSort, title){
+  const head=document.createElement('div'); head.className='hub-section-head';
+  const h=document.createElement('div'); h.className='train-h'; h.textContent=title||'The fallen'; head.appendChild(h);
+  if(showSort){
+    const seg=document.createElement('div'); seg.className='wake-sort'; seg.title='Sort the fallen';
+    const ic=document.createElement('span'); ic.className='wake-sort-ic'; ic.textContent='⇅'; seg.appendChild(ic);
+    [['level','Level'],['type','Type'],['name','Name']].forEach(([mode,label])=>{
+      const b=document.createElement('button'); b.type='button';
+      b.className='wake-sort-opt'+(WAKE_SORT===mode?' on':''); b.textContent=label;
+      b.setAttribute('aria-pressed', WAKE_SORT===mode?'true':'false');
+      b.onclick=()=>{ if(WAKE_SORT!==mode){ WAKE_SORT=mode; try{localStorage.setItem('sl_wakeSort',mode);}catch(e){} buildHubMenuBody(); } };
+      seg.appendChild(b);
+    });
+    head.appendChild(seg);
+  }
+  return head;
 }
 function buildWakeBody(body){
   const r=(typeof CAMPAIGN!=='undefined'&&CAMPAIGN.reborn)||{sessions:[],done:[]};
@@ -1218,12 +1251,12 @@ function buildWakeBody(body){
     const m=document.createElement('div'); m.className='muted';
     m.innerHTML='Seize the GRAAL at the Dark Tower (Episode XI). Then the stolen lattice has something to write — and your dead a way back into fresh metal.';
     body.appendChild(m);
-    body.appendChild(hubMenuSection('The fallen ('+fallen.length+')'));
+    body.appendChild(wakeFallenHeader(fallen.length>1, 'The fallen ('+fallen.length+')'));
     if(!fallen.length){
       const e=document.createElement('div'); e.className='muted'; e.textContent='No one yet. Keep it that way.';
       body.appendChild(e);
     } else {
-      for(const f of fallen){
+      for(const f of wakeSortFallen(fallen)){
         const row=document.createElement('div'); row.className='hub-stat';
         row.innerHTML='🕯 <b>'+f.name+'</b> — '+(typeof careerTitle==='function'?careerTitle(f.lvl):'')+' · Lv '+(f.lvl||0)
           +' · fell at '+(f.map||'the front')+' · '+(f.dreamDone?'dream fulfilled ✓':'dream unfulfilled: '+(f.dream||'unknown'));
@@ -1237,21 +1270,22 @@ function buildWakeBody(body){
   cols.appendChild(colL); cols.appendChild(colR); body.appendChild(cols);
 
   // ---- LEFT: the fallen ----
-  colL.appendChild(hubMenuSection('The fallen'));
+  colL.appendChild(wakeFallenHeader(fallen.length>1));
   if(!fallen.length){
     const m=document.createElement('div'); m.className='muted';
     m.textContent='No one has fallen yet. The lattice waits, humming, for its first body.';
     colL.appendChild(m);
   } else {
-    colL.appendChild(hubMenuUnitGrid(fallen.map(fallenCardSnap), (snap,i)=>{
-      const f=fallen[i];
+    const sortedFallen=wakeSortFallen(fallen);
+    colL.appendChild(hubMenuUnitGrid(sortedFallen.map(fallenCardSnap), (snap,i)=>{
+      const f=sortedFallen[i];
       const already=(typeof rebornIsDone==='function')?rebornIsDone(f):false;
       const cost=(typeof rebornCost==='function')?rebornCost(f):0;
       // T4-1: the choice is dream-aware — who they were and what they never finished sits ON the card
       let dreamLine='';
       try{ if(typeof buildDossier==='function' && typeof fallenDossierSnap==='function'){
         const d=buildDossier({type:f.type, lore:fallenDossierSnap(f)});
-        if(d&&d.dream) dreamLine='<br><i style="color:#9fb6c8">'+(f.dreamDone?'✓ ':'✗ ')+'“'+d.dream+'”</i>'; } }catch(e){}
+        if(d&&d.dream) dreamLine='<br><i style="color:#9fb6c8;font-size:10.5px;line-height:1.25;display:inline-block;margin-top:1px">'+(f.dreamDone?'✓ ':'✗ ')+'“'+d.dream+'”</i>'; } }catch(e){}
       return {
         caption: trainTypeName(snap)+'<br>fell at '+(f.map||'the front')+(already?' · <i>reborn</i>':'')+dreamLine,   // level → built-in .train-rank row
         action: { label: already ? 'Reborn' : ('Resurrect · M3$ '+cost),
@@ -1683,7 +1717,6 @@ function buildSettingsBody(){
   h+=`<label class="set-row"><input type="checkbox" data-aud="voice" ${ (typeof VOICE!=='undefined'&&VOICE.isEnabled())?'checked':''}> <b>Voices</b> <span>unit barks, narrator, tutorial coach</span></label>`;
   h+=`<label class="set-row"><input type="checkbox" data-aud="music" ${ (typeof MUSIC!=='undefined'&&MUSIC.isEnabled())?'checked':''}> <b>Music &amp; ambient</b> <span>menu theme + in-mission biome beds</span></label>`;
   h+=`<label class="set-row"><input type="checkbox" data-aud="sfx" ${ (typeof SFX!=='undefined'&&SFX.isEnabled())?'checked':''}> <b>Combat SFX</b> <span>lasers, impacts, deaths, UI clicks</span></label>`;
-  h+=`<label class="set-row"><input type="checkbox" data-aud="tele" ${ (typeof TELE!=='undefined'&&TELE.isEnabled())?'checked':''}> <b>Anonymous analytics</b> <span>cookieless funnel counts \u2014 nothing is sent unless an endpoint is configured; Do-Not-Track always wins</span></label>`;
   // Field Manual + (localhost-only) Sandbox moved here from the title menu; each opens its own panel.
   h+='<div class="panel-label">Manuals &amp; tools</div>';
   h+='<div style="display:flex;gap:8px;flex-wrap:wrap;">';
@@ -1706,7 +1739,6 @@ function buildSettingsBody(){
       if(inp.dataset.aud==='voice' && typeof VOICE!=='undefined'){ VOICE.setEnabled(inp.checked); if(typeof syncVoiceBtn==='function') syncVoiceBtn(); }
       if(inp.dataset.aud==='music' && typeof MUSIC!=='undefined') MUSIC.setEnabled(inp.checked);
       if(inp.dataset.aud==='sfx'   && typeof SFX!=='undefined') SFX.setEnabled(inp.checked);
-      if(inp.dataset.aud==='tele'  && typeof TELE!=='undefined') TELE.setEnabled(inp.checked);
     };
   });
 }

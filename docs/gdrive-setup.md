@@ -8,12 +8,12 @@ This is a **one-time, owner-only** step (you need a Google account; players do n
 
 1. **Create a project** at <https://console.cloud.google.com> — e.g. *"STARLEFT Cloud Save"*.
 2. **Enable the Drive API** — APIs & Services → **Library** → *Google Drive API* → **Enable**. (Required even though we only touch `appDataFolder`.)
-3. **OAuth consent screen** — APIs & Services → *OAuth consent screen*:
-   - **User type: External.**
-   - App name, **user-support email**, developer contact email.
-   - **Scopes:** add `.../auth/drive.appdata`, `openid`, `email`. All three are **non-sensitive**, so there is **no Google verification / security review** and no unverified-app warning.
-   - **⚠ PUBLISH the app to Production.** This is the easy-to-miss step. Left in **Testing**, you are capped at ≤100 added test users and their consent expires every 7 days. Because every scope is non-sensitive, the Testing → Production flip is instant and needs no review. Confirm the screen reads **"Publishing status: In production"**.
-4. **Create the OAuth client** — APIs & Services → **Credentials** → *Create credentials* → **OAuth client ID**:
+3. **OAuth consent screen** — Google renamed this. In the current console it lives under **APIs & Services → OAuth consent screen**, which opens the **Google Auth Platform** (tabs: *Overview · Branding · Audience · Clients · Data Access · Verification Center*). If it's your first time you'll click **Get started** and fill app name + support email. Then:
+   - **Branding:** app name, **user-support email**, developer contact email.
+   - **Audience → User type: External.**
+   - **Data Access → Add or remove scopes:** add `.../auth/drive.appdata`, `openid`, `email`. All three are **non-sensitive**, so there is **no Google verification / security review** and no unverified-app warning.
+   - **⚠ Audience → PUBLISH the app (Publishing status: In production).** This is the easy-to-miss step. Left in **Testing**, you are capped at ≤100 added test users and their consent expires every 7 days. Because every scope is non-sensitive, the *Publish app* button flips you to Production instantly with no review. Confirm it reads **"Publishing status: In production"**.
+4. **Create the OAuth client** — **APIs & Services → Credentials → Create credentials → OAuth client ID** (or the **Clients** tab of Google Auth Platform → *Create client*):
    - **Application type: Web application.**
    - **Authorized JavaScript origins** (origins only — no path, no trailing slash). Add **every** origin that serves `rts.html`, plus localhost for dev:
      - your production origin — confirm which one you actually deploy to (the repo references both `https://starleft.vercel.app` in the OG tags and a GitHub Pages origin like `https://arraisgabriel.github.io`); list each one that serves the game
