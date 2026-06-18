@@ -95,8 +95,8 @@ function closeInterior(){
   if(typeof syncHud==='function') try{ syncHud(); }catch(_){ }
 }
 function _syncHead(){
-  const L=ohLedger();
-  $('oh-int-sub').textContent='downtime: '+(L?(L.nights|0):0)+'  ·  M3$ '+((typeof CAMPAIGN!=='undefined')?(CAMPAIGN.m3|0):0);
+  const m3=(typeof CAMPAIGN!=='undefined')?(CAMPAIGN.m3|0):0, cost=(typeof OFFHOURS!=='undefined')?(OFFHOURS.tune.sceneCost|0):0;
+  $('oh-int-sub').textContent='M3$ '+m3+'  ·  a round costs M3$ '+cost;
 }
 
 /* ---- populate occupants (a random subset of roster vets already inside + the venue NPC) ---- */
@@ -366,7 +366,6 @@ function _showLinePicker(vet, target, pick, cx){
 function _commitChoice(ci){
   const sc=_int.scene; if(!sc) return; const cx=sc.cx;
   if((typeof CAMPAIGN!=='undefined') && (CAMPAIGN.m3|0) < (OFFHOURS.tune.sceneCost|0)){ _flash('Not enough M3rit$ for a round.'); return; }
-  const L=ohLedger(); if(L && (L.nights|0)<=0){ _flash('Out of downtime this visit.'); return; }
   const payload={ vetKey:sc.vet.key, npcId:cx.npcId, sceneIdx:sc.pick.idx, choiceIdx:ci };
   let res=null;
   if(typeof netOffhoursCommit==='function') res=netOffhoursCommit(G, payload);

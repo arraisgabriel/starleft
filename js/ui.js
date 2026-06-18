@@ -1578,29 +1578,26 @@ function _venueBuild(body){
   h+='<div class="dk">'+_vEsc(_venue.poi.hubPoi.name||'THE OFF-HOURS')+'</div><div class="dossier-prose"><p style="color:#9fb0c2">';
   if(npcName) h+='At the bar: <b>'+_vEsc(npcName)+'</b>'+(tierName?(' · <i>'+_vEsc(tierName)+'</i>'):'')+'<br>';
   if(bond && (typeof CAMPAIGN!=='undefined') && ((CAMPAIGN.visit|0)-(bond.lv|0))>=2) h+='<span style="opacity:.6">It\'s been a while since you came by.</span><br>';   // B5 decay cue
-  h+='With you: <b>'+_vEsc(vetName)+'</b><br>Downtime tonight: <b>'+nights+'</b> · M3$ '+m3+'</p></div>';
+  h+='With you: <b>'+_vEsc(vetName)+'</b><br>M3$ '+m3+' · a round costs M3$ '+(OFFHOURS.tune.sceneCost|0)+'</p></div>';
   if(_venue.result){
     const r=_venue.result;
     h+='<div class="dk">The night</div><div class="dossier-prose"><p>'+_vEsc(r.reply||'…')+'</p>';
     if(r.wrote!=null) h+='<p class="assess">A line goes into '+_vEsc(vetName)+'’s file.</p>';
     if(r.leveled && bond) h+='<p class="assess">Something shifted — now <i>'+_vEsc(ohTierName(bond))+'</i>.</p>';
     h+='</div><div '+acts+'>';
-    if(nights>0 && _venueHasNext()) h+='<button '+btn+' data-act="next">Another round</button>';
+    if(_venueHasNext()) h+='<button '+btn+' data-act="next">Another round</button>';
     h+='<button '+btn+' data-act="leave">Call it a night</button></div>';
   } else if(_venue.pick){
     const scene=_venue.pick.scene;
     h+='<div class="dk">'+_vEsc((tierName||'tonight').toUpperCase())+'</div><div class="dossier-prose"><p>'+_vEsc(ohFill(scene.open,vet,npcId))+'</p></div>';
-    if(nights<=0){ h+='<p class="assess">You’re out of downtime this visit — come back after the next deployment.</p>'; }
-    else{
-      h+='<div '+acts+'>';
-      scene.choices.forEach(function(c,ci){
-        if(c.gate && typeof ohVetHas==='function' && !ohVetHas(vet,c.gate)) return;
-        const tag=c.approach?'<span style="opacity:.55;font-family:monospace;font-size:11px">['+c.approach+'] </span>':'';
-        h+='<button '+btn+' data-ci="'+ci+'">'+tag+_vEsc(ohFill(c.line,vet,npcId))+'</button>';
-      });
-      if(_venue.npcId) h+='<button '+btn+' data-act="gift">Bring '+_vEsc(npcName||'them')+' something · M3$ '+(OFFHOURS.tune.giftCost|0)+'</button>';
-      h+='</div><p class="assess" style="opacity:.6">Each round: M3$ '+(OFFHOURS.tune.sceneCost|0)+' · one night. A gift opens the door faster.</p>';
-    }
+    h+='<div '+acts+'>';
+    scene.choices.forEach(function(c,ci){
+      if(c.gate && typeof ohVetHas==='function' && !ohVetHas(vet,c.gate)) return;
+      const tag=c.approach?'<span style="opacity:.55;font-family:monospace;font-size:11px">['+c.approach+'] </span>':'';
+      h+='<button '+btn+' data-ci="'+ci+'">'+tag+_vEsc(ohFill(c.line,vet,npcId))+'</button>';
+    });
+    if(_venue.npcId) h+='<button '+btn+' data-act="gift">Bring '+_vEsc(npcName||'them')+' something · M3$ '+(OFFHOURS.tune.giftCost|0)+'</button>';
+    h+='</div><p class="assess" style="opacity:.6">Each round costs M3$ '+(OFFHOURS.tune.sceneCost|0)+'. A gift opens the door faster.</p>';
   } else {
     h+='<div class="dk">Tonight</div><div class="dossier-prose"><p>'+_vEsc(npcName||'The bartender')+' nods at '+_vEsc(vetName)+'. Nothing new to get into tonight — come back after the next deployment.</p></div>';
     h+='<div '+acts+'><button '+btn+' data-act="leave">Call it a night</button></div>';
@@ -1625,7 +1622,6 @@ function _venueGift(){
 function _venueChoose(ci){
   if(!_venue || !_venue.pick) return;
   const L=ohLedger();
-  if(L && (L.nights|0)<=0){ if(typeof toast==='function') toast('Out of downtime this visit.'); return; }
   if((CAMPAIGN.m3|0) < (OFFHOURS.tune.sceneCost|0)){ if(typeof toast==='function') toast('Not enough M3rit$ for a round.'); return; }
   const payload={ vetKey:_venue.vetKey, npcId:_venue.npcId, sceneIdx:_venue.pick.idx, choiceIdx:ci };
   let res=null;

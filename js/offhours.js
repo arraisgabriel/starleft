@@ -274,8 +274,7 @@ function applyOffhoursCommit(state, payload){
   const bond = ohEnsureBond(payload.vetKey, npcId, scene.kind); if(!bond) return null;
   if(ohHasSeen(bond, payload.sceneIdx|0)) return { already:true };          // idempotent
   // economy: a deep scene costs M3$ + a downtime night (host-gated). Ambient/caught are free & never committed here.
-  if(typeof hubSpend==='function' && !hubSpend(OFFHOURS.tune.sceneCost|0)) return { broke:true };
-  if(L.nights!=null) L.nights = Math.max(0, (L.nights|0) - 1);
+  if(typeof hubSpend==='function' && !hubSpend(OFFHOURS.tune.sceneCost|0)) return { broke:true };  // M3$ is the only gate (the per-visit 'nights' cap was removed)
   const visit = (typeof CAMPAIGN!=='undefined' && CAMPAIGN) ? (CAMPAIGN.visit|0) : 0;
   const landed = choice.check ? ohCheckLands(bond, payload.sceneIdx|0, payload.choiceIdx|0, visit, choice.approach) : true;
   const br = landed ? choice.land : (choice.miss || choice.land);
