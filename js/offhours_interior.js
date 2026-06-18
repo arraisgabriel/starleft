@@ -120,16 +120,37 @@ function _populate(){
   const seedBase=(typeof _loHash==='function')?_loHash(((_strHash(_int.kind))^(((typeof CAMPAIGN!=='undefined'&&CAMPAIGN)?CAMPAIGN.visit|0:0)+1))>>>0):1;
   const rng=(typeof makeRng==='function')?makeRng(seedBase%233280):Math.random;
   const shuffled=vets.slice().sort((a,b)=> (rng()-0.5));
-  const n=Math.min(shuffled.length, 4 + ((rng()*2)|0));
-  const seats=(L.seats||[]).slice();
-  for(let i=0;i<n;i++){ const u=shuffled[i]; _addVet(u, seats[i]||L.wander[i%L.wander.length]); }
+  const n=Math.min(shuffled.length, 4 + ((rng()*3)|0));        // 4–6 already inside
+  const slots=_spreadSlots(L, rng);
+  for(let i=0;i<n;i++){ _addVet(shuffled[i], slots[i] || { x:L.door.x+40+i*34, y:L.door.y-10 }); }
 }
-function _addVet(u, seat){
+function _jit(rng, v, a){ return v + (rng()-0.5)*a; }
+// natural placement — little groups/couples: gathered round the tables, a pair at the bar,
+// a loose standing knot, and a couple of scattered singles, all with jitter so nobody lines up.
+function _spreadSlots(L, rng){
+  const slots=[];
+  for(const t of (L.tables||[])){                                // 2–3 around each table
+    const k=2+((rng()*2)|0);
+    for(let i=0;i<k;i++){ const ang=rng()*6.283, r=t.r*0.92+rng()*12;
+      slots.push({ x:_jit(rng, t.x+Math.cos(ang)*r, 8), y:_jit(rng, t.y+Math.sin(ang)*r*0.58, 6), seat:null }); }
+  }
+  const stools=(L.stools||L.seats||[]);                          // a pair/trio clustered at the bar
+  if(stools.length){ const s0=(rng()*Math.max(1,stools.length-2))|0, k=2+((rng()*2)|0);
+    for(let i=0;i<k && s0+i<stools.length;i++){ const s=stools[s0+i]; slots.push({ x:_jit(rng,s.x,7), y:_jit(rng,s.y+10,5), seat:s }); }
+  }
+  const w=(L.wander||[]);                                         // a loose standing knot + a couple of scattered singles
+  if(w.length){ const c=w[(rng()*w.length)|0], k=2+((rng()*2)|0);
+    for(let i=0;i<k;i++){ const ang=rng()*6.283, r=22+rng()*28; slots.push({ x:_jit(rng,c.x+Math.cos(ang)*r,6), y:_jit(rng,c.y+Math.sin(ang)*r*0.58,6), seat:null }); }
+    for(const c2 of w.slice(0,2)) slots.push({ x:_jit(rng,c2.x,34), y:_jit(rng,c2.y,26), seat:null });
+  }
+  return slots.sort(()=> rng()-0.5);
+}
+function _addVet(u, pos){
   const L=_int.layout; const d=(u.lore&&typeof buildDossier==='function')?buildDossier(u):null;
-  const p=seat||L.door;
+  const p=pos||L.door;
   _int.occ.push({ key:ohUnitKey(u), kind:'vet', unit:u, name:(d&&d.first)||(typeof trainTypeName==='function'?trainTypeName(u):'vet'),
     sprite:{type:u.spriteType||u.type, owner:'player', heroId:u.heroId||null},
-    x:p.x, y:p.y, tx:p.x, ty:p.y, face:1, seat:seat, wanderT:1+Math.random()*5, wob:Math.random()*6, wphase:0 });
+    x:p.x, y:p.y, tx:p.x, ty:p.y, face:(Math.random()<0.5?-1:1), seat:(pos&&pos.seat)||null, wanderT:2+Math.random()*6, wob:Math.random()*6, wphase:0 });
 }
 function _strHash(s){ let h=0x811c9dc5; s=String(s||''); for(let i=0;i<s.length;i++){ h^=s.charCodeAt(i); h=Math.imul(h,0x01000193); } return h>>>0; }
 
