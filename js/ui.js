@@ -1518,7 +1518,8 @@ function _venuePick(){
   if(!_venue) return;
   const bond=_venue.npcId?ohGetBond(_venue.vetKey,_venue.npcId):null;
   _venue.bond=bond;
-  _venue.pick=(typeof ohSceneFor==='function')?ohSceneFor(_venue.kind, _venueBondKind(_venue.kind), _venue.vet, bond):null;
+  const sceneKind=(_venue.kind==='club' && bond)?ohKindName(bond.k):_venueBondKind(_venue.kind);
+  _venue.pick=(typeof ohSceneFor==='function')?ohSceneFor(_venue.kind, sceneKind, _venue.vet, bond):null;
 }
 function _venueHasNext(){
   if(!_venue) return false;
@@ -1534,10 +1535,19 @@ function openVenueMenu(poi, who){
   if(!vet){ if(typeof toast==='function') toast('Bring a veteran along to the Off-Hours.'); return; }
   if(typeof ensureDossier==='function') ensureDossier(vet);
   const vetKey=ohUnitKey(vet);
-  const npcId=(kind==='bar')?OFFHOURS.barNpc:(kind==='diner'?('nr:'+vetKey):null);
+  let npcId=null, other=null;
+  if(kind==='bar') npcId=OFFHOURS.barNpc;
+  else if(kind==='diner') npcId='nr:'+vetKey;
+  else if(kind==='club'){
+    other=vets.find(u=>u!==vet && u.lore) || vets.find(u=>u!==vet);
+    if(!other){ if(typeof toast==='function') toast('Bring two veterans to Static.'); return; }
+    if(typeof ensureDossier==='function') ensureDossier(other);
+    npcId=ohUnitKey(other);
+  }
   if(kind==='bar' && typeof ohSeedConfidant==='function') ohSeedConfidant(vetKey);
   if(typeof ohSeedVetBonds==='function') ohSeedVetBonds(vetKey, vet);
-  if(npcId && typeof ohEnsureBond==='function') ohEnsureBond(vetKey, npcId, _venueBondKind(kind));
+  if(kind==='club' && other){ if(typeof ohSeedClub==='function') ohSeedClub(vetKey, vet, npcId, other); }
+  else if(npcId && typeof ohEnsureBond==='function') ohEnsureBond(vetKey, npcId, _venueBondKind(kind));
   const L0=ohLedger(); if(L0 && L0.visited) L0.visited[(poi.hubPoi&&poi.hubPoi.id)||kind]=(CAMPAIGN.visit|0);   // M1: the place remembers your visit
   _venue={ poi, kind, vet, vetKey, npcId, result:null, rev:0 };
   _venuePick();

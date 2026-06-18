@@ -76,6 +76,9 @@ const OFFHOURS = {
     { text:"Finally told {npc} the thing about {trauma} — said it at a noodle counter, of all places." },    // 6
     { text:"Made peace with {npc} over bad noodles. Family again." },                                        // 7
     { text:"Took the key {npc} slid across the counter. There's a door back in {home} that's {me}'s again." },// 8
+    { text:"Found something like a brother in {them} — over bad music and worse drinks at Static." },         // 9
+    { text:"Made an enemy of {them} the honest way: face to face, over the thing neither would drop." },      // 10
+    { text:"Found, in {them}, the one warm thing this city hadn't taken yet." },                              // 11
   ],
   // say[i] : first-person reaction, index-aligned to events (text-only until the lore-forge voice gate).
   say: [
@@ -88,6 +91,9 @@ const OFFHOURS = {
     "Said it. At a noodle counter.",                   // 6
     "We're alright. We're family.",                    // 7
     "There's a way home now.",                         // 8
+    "Bad music, good company.",                        // 9
+    "Some people you respect by fighting them.",       // 10
+    "Didn't expect to find that here.",                // 11
   ],
   // scenes[] : Scene objects. The counterpart OPENS; the bulleted choices are the VETERAN's lines.
   //   req: {venue, kind, minTier, maxTier, gate}  · choice: {approach, gate, line, check, land, miss}
@@ -148,6 +154,27 @@ const OFFHOURS = {
       choices:[
         { approach:'warm', line:"Take the key. Mean it.",
           land:{ reply:"Family again. Whatever the war does next, it can't unmake this one.", ev:8, fx:{t:'capstone'} } },
+      ] },
+    // --- STATIC (club) — veteran ↔ veteran ({them} = the other vet; you direct {me}, they react by compatibility) ---
+    { id:'club.first_table', venue:'club', kind:'friend', req:{minTier:0, maxTier:2},
+      open:"{me} and {them} end up at the same sticky table, sizing each other up over the bass.",
+      choices:[
+        { approach:'warm', line:"Buy the round. Bring up the op {them} dragged {me} out of.",
+          land:{ reply:"You trade the war story only the two of you have. Something clicks — easy as that.", ev:9 } },
+        { approach:'probing', line:"Ask {them} what they did before all this.",
+          land:{ reply:"Turns out you came up the same kind of hard. The drinks go down easier after.", ev:9 } },
+      ] },
+    { id:'club.tight', venue:'club', kind:'friend', req:{minTier:2, maxTier:4},
+      open:"{them} saves {me} a seat without being asked. The bass is the only thing louder than the quiet between you.",
+      choices:[
+        { approach:'warm', line:"Tell {them} you'd take the next bad call with them and no one else.",
+          land:{ reply:"{them} doesn't say it back. Doesn't have to. Inseparable, now.", ev:9, fl:'CLOSEST' } },
+      ] },
+    { id:'club.friction', venue:'club', kind:'rival', req:{minTier:0, maxTier:4},
+      open:"{me} and {them} keep ending up at the same end of the bar, and neither will give the other the satisfaction of leaving first.",
+      choices:[
+        { approach:'blunt', line:"Needle {them} about the call that got someone killed.",
+          land:{ reply:"It gets sharp, fast. Neither backs down. It's not friendship — but it's a kind of bond.", ev:10 } },
       ] },
   ],
   // gossip[] = ambient world-bubble lines — Phase 3 (G3).

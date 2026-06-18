@@ -113,14 +113,82 @@ function ohNpcName(npcId){
   const p=(typeof npcParseId==='function')?npcParseId(npcId):null;
   return (p && p.poiId) ? 'the bartender' : 'them';
 }
-// slot-fill a line for a (vet, npc) pair: vet-dossier slots ({me}/{home}/{dream}/{trauma}/{crime}/…) + {npc}
+// the display name of ANY counterpart id — an NPC (np:/nr:/nf:/nu:) or another veteran (lore:/hero:/unit:)
+function ohPartyName(id){
+  if(typeof id!=='string' || !id) return '';
+  if(/^(np:|nr:|nf:|nu:)/.test(id)) return ohNpcName(id);
+  const ents=(typeof G!=='undefined' && G && G.entities)?G.entities:[];
+  for(const e of ents){ if(e && !e.dead && e.kind==='unit' && ohUnitKey(e)===id){ try{ return buildDossier(e).first; }catch(_){ return 'them'; } } }
+  if(typeof CAMPAIGN!=='undefined' && CAMPAIGN.roster){ for(const rs of CAMPAIGN.roster){ if(rs && rs.key===id && rs.lore){ try{ return buildDossier({type:rs.type, lore:rs.lore}).first; }catch(_){ } } } }
+  return 'them';
+}
+// slot-fill a line for a (vet, counterpart) pair: vet-dossier slots + {npc}/{them} (the counterpart's name)
 function ohFill(text, vet, npcId){
   if(text==null) return '';
   let s=String(text);
   if(vet && vet.lore && typeof buildDossier==='function'){ try{ s = buildDossier(vet).fill(s); }catch(_){ } }
-  s = s.replace(/\{npc\}/g, npcId ? ohNpcName(npcId) : '');
+  s = s.replace(/\{npc\}|\{them\}/g, npcId ? ohPartyName(npcId) : '');
   return s;
 }
+
+/* ---- compatibility (B3) — deterministic vet↔vet bias (RimWorld/Wildermyth) ---- */
+function ohCompat(a, b){
+  if(!a || !b || !a.lore || !b.lore || typeof buildDossier!=='function') return 0;
+  let da, db; try{ da=buildDossier(a); db=buildDossier(b); }catch(_){ return 0; }
+  const T=OFFHOURS.tune.compat; let c=0;
+  if(da.home && da.home===db.home) c += T.home;                          // shared hometown clicks
+  if(a.type===b.type) c += T.type;                                       // same archetype
+  if(da.trauma && db.trauma) c += T.trauma*0.5;                          // two haunted people grind
+  if((!!da.crime) !== (!!db.crime)) c += T.crime*0.5;                    // one carries a crime the other might judge
+  const seed=(_loHash(((a.lore.seed^b.lore.seed)>>>0))) % 233280;        // deterministic jitter so it's not all ties
+  c += (makeRng(seed)()-0.5) * 0.4;
+  return Math.max(-1, Math.min(1, c));
+}
+function ohCompatKind(score){ const T=OFFHOURS.tune.compat; return (score<=T.rivalT) ? 'rival' : 'friend'; }
+function ohSeedClub(vetKeyA, vetA, vetKeyB, vetB){
+  if(!vetKeyA || !vetKeyB) return null;
+  const kind = ohCompatKind(ohCompat(vetA, vetB));
+  return ohEnsureBond(vetKeyA, vetKeyB, kind);
+}
+
+/* ---- the thin mood layer (G1) — transient/derived, NEVER identity ---- */
+function ohVetMood(u){
+  if(!u) return { morale:0.5, loneliness:0, want:null };
+  const B=ohBonds(), k=ohUnitKey(u); let lastLv=-1;
+  if(B) for(const id in B){ if(id.indexOf(k)>=0 && (B[id].lv|0)>lastLv) lastLv=B[id].lv|0; }
+  const visit=(typeof CAMPAIGN!=='undefined' && CAMPAIGN)?(CAMPAIGN.visit|0):0;
+  const loneliness=Math.max(0, Math.min(1, lastLv<0 ? 0.6 : (visit-lastLv)/4));
+  const morale=Math.max(0, Math.min(1, 0.7 - (u.madosis||0)*0.01 - (u._vetGrief?0.2:0) + (u.dreamDone?0.1:0)));
+  const want = loneliness>0.5 ? 'wants a night out' : null;
+  return { morale, loneliness, want };
+}
+// G2 — roster vets who want a night out, loneliest first (Persona-style nudge list)
+function ohNeedsNight(){
+  const out=[]; const ents=(typeof G!=='undefined' && G && G.entities)?G.entities:[];
+  for(const e of ents){ if(e && !e.dead && e.kind==='unit' && e.owner==='player' && e.lore){ const m=ohVetMood(e); if(m.want) out.push({ key:ohUnitKey(e), unit:e, loneliness:m.loneliness }); } }
+  out.sort((a,b)=> b.loneliness - a.loneliness);
+  return out;
+}
+
+/* ---- payoffs: deploy synergy (H3) + grief partners (H6) — query functions; combat/death wiring is light ---- */
+// the opt-in bonus a bonded pair gets when deployed together. Returns 0 if not bonded / not a friend|romance.
+function ohDeploySynergy(a, b){
+  const ka=ohUnitKey(a), kb=ohUnitKey(b); const bond=ohGetBond(ka,kb); if(!bond) return 0;
+  const kind=ohKindName(bond.k);
+  if(kind==='friend' || kind==='romance' || kind==='confidant') return 0.02 + 0.02*(bond.t|0);   // tiny per-tier
+  if(kind==='rival') return 0.015*(bond.t|0);                                                     // competitive edge
+  return 0;
+}
+// the bonded partners of a (fallen) veteran key — read by grief beats (H6) to deepen the loss.
+function ohGriefPartners(vetKey){
+  const B=ohBonds(); if(!B || !vetKey) return [];
+  const out=[];
+  for(const id in B){ const i=id.indexOf(vetKey); if(i<0) continue; const rec=B[id];
+    if((rec.t|0)>=3 || (rec.fl & OH_FL.CLOSEST)){ const other=id.split('|').find(p=>p!==vetKey); if(other) out.push({ id:other, bond:rec }); } }
+  return out;
+}
+
+
 
 /* ---- seeding (B2) ---- */
 function ohSeedConfidant(vetKey){ return vetKey ? ohEnsureBond(vetKey, OFFHOURS.barNpc, 'confidant', 0) : null; }
@@ -210,6 +278,12 @@ function applyOffhoursCommit(state, payload){
        && OFFHOURS.npcEvents && OFFHOURS.npcEvents[br.ev|0])
       _npcEvPush(CAMPAIGN.npc.byId[npcId], visit, 4000 + (br.ev|0));
   }
+  // vet↔vet: the OTHER veteran shares the night — mirror the dossier line into their file too
+  if(br.ev!=null && npcId && /^(lore:|hero:|unit:)/.test(npcId)){
+    const other=_ohFindVet(state, npcId);
+    if(other && other.lore){ if(!Array.isArray(other.lore.events)) other.lore.events=[];
+      other.lore.events.push({ lvl:(visit||(other.stars|0)), i:(br.ev|0), oh:1, npc:payload.vetKey }); }
+  }
   // light fx — capstone delegates to the existing dream-fulfillment path; relief reuses the field-relief shape
   if(br.fx && vet){
     if(br.fx.t==='capstone' && typeof applyEventFx==='function') applyEventFx(vet, br.fx, state);
@@ -238,6 +312,10 @@ function ohVetHasArc(u){
 /* ---- publish on window (classic global-scope) ---- */
 if(typeof window !== 'undefined'){
   window.ohVetHasArc = ohVetHasArc;
+  window.ohPartyName = ohPartyName;
+  window.ohCompat = ohCompat; window.ohCompatKind = ohCompatKind; window.ohSeedClub = ohSeedClub;
+  window.ohVetMood = ohVetMood; window.ohNeedsNight = ohNeedsNight;
+  window.ohDeploySynergy = ohDeploySynergy; window.ohGriefPartners = ohGriefPartners;
   window.ohLatestVersion = ohLatestVersion; window.ohPoolLens = ohPoolLens; window.ohPickN = ohPickN;
   window.ohUnitKey = ohUnitKey; window.ohBondId = ohBondId;
   window.ohLedger = ohLedger; window.ohBonds = ohBonds; window.ohKindCode = ohKindCode; window.ohKindName = ohKindName;

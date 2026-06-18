@@ -214,6 +214,17 @@ window.HUB_MAP_DATA = {
       "w": 3,
       "h": 3,
       "visual": { "megaId": "marisols_mega" }
+    },
+    {
+      "id": "static",
+      "kind": "club",
+      "name": "STATIC",
+      "type": "outpost",
+      "x": 38,
+      "y": 33,
+      "w": 3,
+      "h": 3,
+      "visual": { "megaId": "static_mega" }
     }
   ],
   "rivers": [
@@ -424,6 +435,24 @@ window.HUB_MAP_DATA = {
       "biome": "tech",
       "fixedFrame": 0,
       "seed": 0.529,
+      "tags": [
+        "neon"
+      ]
+    },
+    {
+      "id": "static_mega",
+      "poiId": "static",
+      "cat": "megabuilding",
+      "variant": 3,
+      "tx": 38,
+      "ty": 31,
+      "w": 6,
+      "h": 9,
+      "overhang": 1.15,
+      "heightScale": 0.95,
+      "biome": "tech",
+      "fixedFrame": 0,
+      "seed": 0.711,
       "tags": [
         "neon"
       ]

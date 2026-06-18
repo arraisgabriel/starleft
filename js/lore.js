@@ -246,6 +246,15 @@ function recordFallen(u){
   if(typeof sayHeroEvent==='function' && !window._rbReplaying) sayHeroEvent('grief');
   // story-polish §7.2: a vet joined the wall this mission → clears the clean-extraction beat at the hub
   if(typeof G!=='undefined' && G) G._vetLost=true;
+  // H6 (Off-Hours): a bonded partner's fall hits the survivors hardest — flag them (deepens grief + mood).
+  if(typeof ohGriefPartners==='function' && typeof ohUnitKey==='function'){
+    try{ const parts=ohGriefPartners(ohUnitKey(u));
+      if(parts.length && typeof G!=='undefined' && G && G.entities){
+        for(const pp of parts){ for(const e of G.entities){ if(e && !e.dead && e.kind==='unit' && ohUnitKey(e)===pp.id) e._vetGrief=true; } }
+        if(!window._rbReplaying && typeof eventToast==='function') eventToast('🖤 The ones closest to <b>'+d.full+'</b> feel it the hardest.', 9000);
+      }
+    }catch(_){ }
+  }
 }
 // ---- The Wake: stable identity + dossier reconstruction for fallen records ----
 // A stable id used to dedup resurrection across save/load + rollback. Prefer the frozen lore seed
@@ -305,7 +314,7 @@ function dossierFileHTML(u){
   for(const ev of u.lore.events){
     // Off-Hours scene lines (oh:1) render from the OFFHOURS pool (append-only); {npc} fills from the recorded counterpart.
     if(ev.oh){ const oe=(typeof OFFHOURS!=='undefined' && OFFHOURS.events[ev.i]); if(!oe) continue;
-      let line=d.fill(oe.text); if(ev.npc && typeof ohNpcName==='function') line=line.replace(/\{npc\}/g, ohNpcName(ev.npc));
+      let line=d.fill(oe.text); if(ev.npc && typeof ohPartyName==='function') line=line.replace(/\{npc\}|\{them\}/g, ohPartyName(ev.npc));
       h += `<li><b>Lv ${ev.lvl}</b> — ${_loCap(line)}</li>`; continue; }
     const t = LORE_DATA.events[ev.i]; if(!t) continue;
     h += `<li><b>Lv ${ev.lvl}</b> — ${_loCap(d.fill(t.text))}</li>`; }
