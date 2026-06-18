@@ -50,6 +50,12 @@ function hubPoiAvailable(p){
     const idx=(typeof CAMPAIGN!=='undefined' && CAMPAIGN && CAMPAIGN.nextMapIndex!=null) ? CAMPAIGN.nextMapIndex : 0;
     return idx >= (HUB.wakeAppearIdx!=null ? HUB.wakeAppearIdx : 11);
   }
+  // Off-Hours nightlife district: unlocks once veterans start earning dossiers (post-Ep IV–V), so
+  // attachments can be built before The Wake exists to cash them in. Tunable via HUB.offhoursAppearIdx.
+  if(p.kind==='bar' || p.kind==='club' || p.kind==='diner' || p.kind==='landing'){
+    const idx=(typeof CAMPAIGN!=='undefined' && CAMPAIGN && CAMPAIGN.nextMapIndex!=null) ? CAMPAIGN.nextMapIndex : 0;
+    return idx >= (HUB.offhoursAppearIdx!=null ? HUB.offhoursAppearIdx : 4);
+  }
   return true;
 }
 function hubCondoIds(){ return (HUB.pois||[]).filter(p=>p.kind==='condo').map(p=>p.id); }
@@ -1255,6 +1261,7 @@ function hubUnitArrivedPoi(state,u,poi){
   else if(p.kind==='training') hubTrainStage(state,u,poi);
   else if(p.kind==='mentalhealth') hubHealStage(state,u,poi);
   else if(p.kind==='wake') openWakeMenu();
+  else if(p.kind==='bar'||p.kind==='club'||p.kind==='diner'||p.kind==='landing'){ if(typeof openVenueMenu==='function') openVenueMenu(poi, u); }
 }
 function hubEnlistedKeys(){
   CAMPAIGN.dispatch = Object.assign({mdcId:null, staged:[]}, CAMPAIGN.dispatch||{});

@@ -192,6 +192,17 @@ window.HUB_MAP_DATA = {
         "heightScale": 1,
         "stack": 1
       }
+    },
+    {
+      "id": "late_shift",
+      "kind": "bar",
+      "name": "THE LATE SHIFT",
+      "type": "outpost",
+      "x": 44,
+      "y": 33,
+      "w": 3,
+      "h": 3,
+      "visual": { "megaId": "late_shift_mega" }
     }
   ],
   "rivers": [
@@ -370,6 +381,24 @@ window.HUB_MAP_DATA = {
     }
   ],
   "megaSprites": [
+    {
+      "id": "late_shift_mega",
+      "poiId": "late_shift",
+      "cat": "megabuilding",
+      "variant": 1,
+      "tx": 44,
+      "ty": 31,
+      "w": 6,
+      "h": 8,
+      "overhang": 1.12,
+      "heightScale": 0.9,
+      "biome": "tech",
+      "fixedFrame": 0,
+      "seed": 0.317,
+      "tags": [
+        "neon"
+      ]
+    },
     {
       "id": "condo_nw_mega",
       "poiId": "condo_nw",

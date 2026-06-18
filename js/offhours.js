@@ -98,6 +98,132 @@ const OH_FL = { CLOSEST:1, STRAINED:2, ARC_UNLOCKED:4, ARC_DONE:8, KEEPSAKE:16 }
 function ohSetFlag(rec, bit, on){ if(!rec) return; if(on===false) rec.fl = (rec.fl|0) & ~bit; else rec.fl = (rec.fl|0) | bit; }
 function ohHasFlag(rec, bit){ return !!(rec && ((rec.fl|0) & bit)); }
 
+/* ---- fixed-identity NPCs (D2/D3): the bartender confidant ---- */
+function ohFixedNpc(key, id){
+  const F = OFFHOURS.fixedNpcs && OFFHOURS.fixedNpcs[key]; if(!F) return null;
+  const first=F.first||'', full=F.full||first, home=F.home||'parts unknown';
+  const fill=(t)=> (t||'').replace(/\{me\}/g,first).replace(/\{full\}/g,full).replace(/\{home\}/g,home).replace(/\{prof\}/g,F.profession||'');
+  return { id:id||'', role:'provider', fixed:key, first, last:F.last||'', full, gender:F.gender||'f', home,
+           rel:'', vetKey:null, vetFirst:'', vetFull:'', profession:F.profession||'', workPoiName:'THE LATE SHIFT',
+           condoName:'', backstoryText:F.backstoryText||'', chores:F.chores||['',''], fill };
+}
+// the counterpart's first name for {npc} slot-fill
+function ohNpcName(npcId){
+  if(typeof buildNpcDossier==='function'){ try{ const d=buildNpcDossier(npcId); if(d && d.first) return d.first; }catch(_){ } }
+  const p=(typeof npcParseId==='function')?npcParseId(npcId):null;
+  return (p && p.poiId) ? 'the bartender' : 'them';
+}
+// slot-fill a line for a (vet, npc) pair: vet-dossier slots ({me}/{home}/{dream}/{trauma}/{crime}/…) + {npc}
+function ohFill(text, vet, npcId){
+  if(text==null) return '';
+  let s=String(text);
+  if(vet && vet.lore && typeof buildDossier==='function'){ try{ s = buildDossier(vet).fill(s); }catch(_){ } }
+  s = s.replace(/\{npc\}/g, npcId ? ohNpcName(npcId) : '');
+  return s;
+}
+
+/* ---- seeding (B2) ---- */
+function ohSeedConfidant(vetKey){ return vetKey ? ohEnsureBond(vetKey, OFFHOURS.barNpc, 'confidant', 0) : null; }
+function ohSeedVetBonds(vetKey, vet){
+  if(!vetKey || !ohLedger()) return;
+  if(vetKey.indexOf('lore:')===0 && vet && vet.lore && typeof buildDossier==='function'){   // kin from the named relative
+    let d; try{ d=buildDossier(vet); }catch(_){ d=null; }
+    if(d && d.rel){
+      const estr=/estrang|haven'?t|cut off|disown|left|silence|gone/i.test(((d.familyText||'')+' '+(d.trauma||'')));
+      ohEnsureBond(vetKey, 'nr:'+vetKey, 'kin', estr?0:1);
+    }
+  }
+}
+
+/* ---- scene eligibility + pick (E2) ---- */
+function _ohVetHas(vet, aspect){
+  if(!aspect) return true;
+  if(!vet || !vet.lore || typeof buildDossier!=='function') return false;
+  let d; try{ d=buildDossier(vet); }catch(_){ return false; }
+  if(aspect==='crime') return !!d.crime;
+  if(aspect==='trauma') return !!d.trauma;
+  if(aspect==='dream') return !!d.dream;
+  return true;
+}
+function ohSceneEligible(scene, idx, vet, bond){
+  if(!scene || !scene.req) return false;
+  const tier = bond ? (bond.t|0) : 0;
+  if(bond && ohHasSeen(bond, idx)) return false;
+  const r=scene.req;
+  if(r.minTier!=null && tier < r.minTier) return false;
+  if(r.maxTier!=null && tier > r.maxTier) return false;
+  if(r.gate && !_ohVetHas(vet, r.gate)) return false;
+  if(!scene.choices.some(c => _ohVetHas(vet, c.gate))) return false;   // every choice gated out → skip
+  return true;
+}
+// the venue's current scene for (vet, npc): the lowest-index eligible, unseen scene matching venue (+kind)
+function ohSceneFor(venue, kind, vet, bond){
+  for(let i=0;i<OFFHOURS.scenes.length;i++){ const s=OFFHOURS.scenes[i];
+    if(s.venue!==venue) continue; if(kind && s.kind && s.kind!==kind) continue;
+    if(ohSceneEligible(s, i, vet, bond)) return { scene:s, idx:i };
+  }
+  return null;
+}
+// the choices a vet can actually pick in a scene (aspect-gated by their dossier)
+function ohSceneChoices(scene, vet){ return scene ? scene.choices.filter(c => _ohVetHas(vet, c.gate)) : []; }
+
+/* ---- the light check (E5) — deterministic ---- */
+function ohApproachWeight(ap){ const a=OFFHOURS.tune.approach[ap]; return a?a[0]:1; }
+function ohApproachBias(ap){ const a=OFFHOURS.tune.approach[ap]; return a?a[1]:0; }
+function ohCheckLands(bond, sceneIdx, choiceIdx, visit, approach){
+  const T=OFFHOURS.tune, tier=bond?(bond.t|0):0;
+  const p=Math.max(T.checkMin, Math.min(T.checkMax, T.checkBase + T.checkPerTier*tier + ohApproachBias(approach)));
+  const seed=(_loHash((sceneIdx+1)*131 ^ (choiceIdx+1)*977 ^ ((visit|0)+1)*2654435761 ^ (bond?(bond.p|0):0)>>>0)) % 233280;
+  return makeRng(seed)() < p;
+}
+
+/* ---- commit a scene outcome (E6) — HOST-AUTHORITATIVE (entered via netOffhoursCommit) ---- */
+// payload: { vetKey, npcId, sceneIdx, choiceIdx }
+function applyOffhoursCommit(state, payload){
+  if(!payload) return null;
+  const L=ohLedger(); if(!L) return null;
+  const scene = OFFHOURS.scenes[payload.sceneIdx|0]; if(!scene) return null;
+  const choice = scene.choices[payload.choiceIdx|0]; if(!choice) return null;
+  const npcId = payload.npcId || (scene.with==='bartender' ? OFFHOURS.barNpc : null);
+  const vet = _ohFindVet(state, payload.vetKey);
+  const bond = ohEnsureBond(payload.vetKey, npcId, scene.kind); if(!bond) return null;
+  if(ohHasSeen(bond, payload.sceneIdx|0)) return { already:true };          // idempotent
+  // economy: a deep scene costs M3$ + a downtime night (host-gated). Ambient/caught are free & never committed here.
+  if(typeof hubSpend==='function' && !hubSpend(OFFHOURS.tune.sceneCost|0)) return { broke:true };
+  if(L.nights!=null) L.nights = Math.max(0, (L.nights|0) - 1);
+  const visit = (typeof CAMPAIGN!=='undefined' && CAMPAIGN) ? (CAMPAIGN.visit|0) : 0;
+  const landed = choice.check ? ohCheckLands(bond, payload.sceneIdx|0, payload.choiceIdx|0, visit, choice.approach) : true;
+  const br = landed ? choice.land : (choice.miss || choice.land);
+  const pts = (br.pts!=null) ? (br.pts|0) : Math.round(OFFHOURS.tune.scenePts * ohApproachWeight(choice.approach));
+  const lvl = ohGrantPoints(bond, pts, visit);
+  ohMarkSeen(bond, payload.sceneIdx|0);
+  if(br.fl && OH_FL[br.fl]!=null) ohSetFlag(bond, OH_FL[br.fl], true);       // e.g. ARC_UNLOCKED (the Hades favor)
+  // CANON write: a new life-event line in the vet's dossier (ohCode sentinel `oh:1`; rendered by dossierFileHTML)
+  let wrote=null;
+  if(br.ev!=null && vet && vet.lore){
+    if(!Array.isArray(vet.lore.events)) vet.lore.events=[];
+    vet.lore.events.push({ lvl:(visit||(vet.stars|0)), i:(br.ev|0), oh:1, npc:npcId||null });
+    wrote = br.ev|0;
+    // (the NPC counterpart's own life-event log lands in Phase 2 — kin reunions, where an NPC-perspective pool fits.)
+  }
+  // light fx — capstone delegates to the existing dream-fulfillment path; relief reuses the field-relief shape
+  if(br.fx && vet){
+    if(br.fx.t==='capstone' && typeof applyEventFx==='function') applyEventFx(vet, br.fx, state);
+    else if(br.fx.t==='relief') ohApplyRelief(vet, br.fx, state);
+  }
+  return { ok:true, landed, reply: ohFill(br.reply, vet, npcId), leveled: lvl.leveled, tier: bond.t, points: bond.p, wrote };
+}
+function _ohFindVet(state, vetKey){
+  const ents = (state && state.entities) ? state.entities : ((typeof G!=='undefined'&&G)?G.entities:[]);
+  for(const e of ents){ if(e && !e.dead && e.kind==='unit' && e.owner==='player' && ohUnitKey(e)===vetKey) return e; }
+  return null;
+}
+function ohApplyRelief(u, fx, state){      // H1 — reuse the Mindfulness-Facilitator field-relief shape (js/madosis.js)
+  const frac=(fx&&fx.frac)||0.3, room=(u.madosis||0)-(u.madRelief||0);
+  const add=Math.max(0, Math.min((u.madosis||0)*frac - (u.madRelief||0), room));
+  if(add>0){ u.madRelief=(u.madRelief||0)+add; u.madReliefT=(typeof MADOSIS!=='undefined'&&MADOSIS.fieldRelief?MADOSIS.fieldRelief.durationSec:30); u._madTendedAt=(state?state.time:0); }
+}
+
 /* ---- publish on window (classic global-scope) ---- */
 if(typeof window !== 'undefined'){
   window.ohLatestVersion = ohLatestVersion; window.ohPoolLens = ohPoolLens; window.ohPickN = ohPickN;
@@ -107,4 +233,9 @@ if(typeof window !== 'undefined'){
   window.ohTierFor = ohTierFor; window.ohTierName = ohTierName; window.ohGrantPoints = ohGrantPoints;
   window.ohMarkSeen = ohMarkSeen; window.ohHasSeen = ohHasSeen;
   window.OH_FL = OH_FL; window.ohSetFlag = ohSetFlag; window.ohHasFlag = ohHasFlag;
+  window.ohFixedNpc = ohFixedNpc; window.ohNpcName = ohNpcName; window.ohFill = ohFill;
+  window.ohSeedConfidant = ohSeedConfidant; window.ohSeedVetBonds = ohSeedVetBonds;
+  window.ohSceneFor = ohSceneFor; window.ohSceneChoices = ohSceneChoices; window.ohSceneEligible = ohSceneEligible;
+  window.ohApproachWeight = ohApproachWeight; window.applyOffhoursCommit = applyOffhoursCommit;
+  window.ohVetHas = _ohVetHas;
 }

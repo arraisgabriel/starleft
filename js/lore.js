@@ -302,7 +302,12 @@ function dossierFileHTML(u){
     h += `<p class="assess">${fillP(d.paras.assessment)}</p></div>`;
   }
   h += `<div class="dk">Service record</div><ol class="dossier-log">`;
-  for(const ev of u.lore.events){ const t = LORE_DATA.events[ev.i]; if(!t) continue;
+  for(const ev of u.lore.events){
+    // Off-Hours scene lines (oh:1) render from the OFFHOURS pool (append-only); {npc} fills from the recorded counterpart.
+    if(ev.oh){ const oe=(typeof OFFHOURS!=='undefined' && OFFHOURS.events[ev.i]); if(!oe) continue;
+      let line=d.fill(oe.text); if(ev.npc && typeof ohNpcName==='function') line=line.replace(/\{npc\}/g, ohNpcName(ev.npc));
+      h += `<li><b>Lv ${ev.lvl}</b> — ${_loCap(line)}</li>`; continue; }
+    const t = LORE_DATA.events[ev.i]; if(!t) continue;
     h += `<li><b>Lv ${ev.lvl}</b> — ${_loCap(d.fill(t.text))}</li>`; }
   h += `</ol>`;
   return h;

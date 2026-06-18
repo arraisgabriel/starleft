@@ -49,13 +49,76 @@ const OFFHOURS = {
     confidant: ['a stranger at the bar', 'a face they nod to', 'a regular', 'talks freely', 'tells them everything'],
   },
 
-  // ---- content pools (APPEND-ONLY; filled in Phase 1+) ----
-  // events[i] = { text } : an off-hours dossier life-event line (slot-filled via d.fill); i is the ohCode.
-  events: [],
-  // say[i]   = first-person reaction line, index-aligned to events (text-only until the lore-forge gate).
-  say: [],
-  // scenes[] = Scene objects (venue, kind, with, req, open, choices[], outcome) — Phase 1 (E1).
-  scenes: [],
+  // the bar's confidant NPC (fixed-identity staff, slot 0 of THE LATE SHIFT).
+  barNpc: 'np:late_shift:0',
+  // venue kind → fixed-identity key for staff slot 0 (read by hubSyncNpcs staff-mint).
+  venueStaffFixed: { bar:'bartender' },
+
+  // ---- hand-authored fixed NPC identities (D3). buildNpcDossier short-circuits to these (D2). ----
+  fixedNpcs: {
+    bartender: {
+      first:'Sable', last:'Voss', full:'Sable Voss', gender:'f',
+      home:'the first campus', profession:'bartender',
+      backstoryText:"Flew a founder-mech two arcs back and outlived the whole unit. Now she pours for whoever's left and keeps their names. She is not your boss; she's the one who's still here.",
+      chores:['drying the same glass twice','listening more than she pours'],
+    },
+  },
+
+  // ---- content pools (APPEND-ONLY — never reorder/delete; see header) ----
+  // events[i] = { text } : an off-hours dossier life-event line (slot-filled via d.fill + {npc}); i is the ohCode.
+  events: [
+    { text:"Sat at the Late Shift and let someone who'd buried three rosters name the dead with {me}." },   // 0
+    { text:"Said out loud, to a stranger pouring drinks, what {me} actually wants: {dream}." },             // 1
+    { text:"Told {npc} what {me} did before the company — {crime} — for the first time, out loud." },       // 2
+    { text:"Became a regular at the Late Shift. The city finally has one place that knows {me} by name." }, // 3
+    { text:"Went back to {home} to settle the old thing. {npc} kept the stool." },                          // 4
+  ],
+  // say[i] : first-person reaction, index-aligned to events (text-only until the lore-forge voice gate).
+  say: [
+    "Didn't plan to talk. Didn't hate it.",            // 0
+    "Yeah. That's the thing I want. Said it now.",     // 1
+    "First time out loud.",                            // 2
+    "Place knows my name now.",                        // 3
+    "Going home to settle it.",                        // 4
+  ],
+  // scenes[] : Scene objects. The counterpart OPENS; the bulleted choices are the VETERAN's lines.
+  //   req: {venue, kind, minTier, maxTier, gate}  · choice: {approach, gate, line, check, land, miss}
+  //   land/miss: {reply, pts?, ev?, npcEv?, fx?, fl?}  (pts default = scenePts × approach weight; ev = ohCode)
+  scenes: [
+    { id:'bar.first_round', venue:'bar', kind:'confidant', with:'bartender', req:{minTier:0, maxTier:1},
+      open:"{npc} slides {me} a knockoff whiskey {me} didn't order. \"On the house. Three rosters I've poured for — you've all got the same look on the way in.\"",
+      choices:[
+        { approach:'warm', line:"Take the glass. Let her talk.",
+          land:{ reply:"{npc} starts naming the dead you have in common. The ice outlasts the small talk, and {me} stays.", ev:0 } },
+        { approach:'blunt', line:"Slide it back — \"I'm not here to get read.\"", check:true,
+          land:{ reply:"{npc} shrugs and pours anyway, slower. \"Suit yourself. I'll be here.\"" },
+          miss:{ reply:"{me} goes quiet and nurses it alone. Nothing said tonight.", pts:0 } },
+        { approach:'probing', gate:'dream', line:"Ask if she ever wanted out of this city.",
+          land:{ reply:"It turns into {me} saying it instead — {dream} — out loud, for once.", ev:1 } },
+      ] },
+    { id:'bar.regulars', venue:'bar', kind:'confidant', req:{minTier:0, maxTier:3},
+      open:"{npc} nods at {me} like a regular now. \"Usual?\"",
+      choices:[
+        { approach:'warm', line:"Sit. Trade the week's bad news.",
+          land:{ reply:"You trade the kind of small talk that only means anything after a war. {me} leaves lighter.", ev:3 } },
+        { approach:'probing', line:"Ask her what keeps her pouring.",
+          land:{ reply:"\"Somebody's got to remember the names,\" she says, and tops you off." } },
+      ] },
+    { id:'bar.the_thing', venue:'bar', kind:'confidant', req:{minTier:2, maxTier:3, gate:'crime'},
+      open:"{npc} doesn't look up from the glass she's drying. \"You came in heavier than usual. Say it.\"",
+      choices:[
+        { approach:'probing', gate:'crime', line:"Finally say what {me} did before the company.",
+          land:{ reply:"{npc} doesn't flinch. \"Yeah. I figured it was something like that.\" It's lighter, said.", ev:2, fl:'ARC_UNLOCKED' } },
+        { approach:'blunt', line:"Deflect. Talk about the war instead.",
+          land:{ reply:"She lets it slide. \"Another night, maybe.\" The glass keeps turning in her hands." } },
+      ] },
+    { id:'bar.last_call', venue:'bar', kind:'confidant', req:{minTier:4, maxTier:4},
+      open:"Last call. {npc} sets two glasses down and charges for neither.",
+      choices:[
+        { approach:'warm', line:"Tell her about the thing back in {home}.",
+          land:{ reply:"{npc} nods, slow. \"Then go settle it. I'll keep your stool.\"", ev:4, fx:{t:'capstone'} } },
+      ] },
+  ],
   // gossip[] = ambient world-bubble lines — Phase 3 (G3).
   gossip: [],
   // gifts[]  = luxury gift items + dossier-derived affinities — Phase 4 (I3).

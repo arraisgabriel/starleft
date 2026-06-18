@@ -58,7 +58,7 @@ function npcPoolLens(v){
 }
 
 /* ---- population shape ---- */
-const NPC_STAFF_COUNT = { mentalhealth:3, mdc:2, training:2, ultra:3 };   // providers per POI kind
+const NPC_STAFF_COUNT = { mentalhealth:3, mdc:2, training:2, ultra:3, bar:1, club:1, diner:1 };   // providers per POI kind
 // friend count per veteran: 25% none / 45% one / 30% two — derived, never stored
 function _npcFriendCount(vetKey){
   const r=makeRng(_loHash((_npcVetHash(vetKey) ^ 0x4643)>>>0) % 233280);
@@ -116,6 +116,8 @@ function buildNpcDossier(id){
   const rec=CAMPAIGN.npc.byId && CAMPAIGN.npc.byId[id];
   const p=npcParseId(id);
   if(!rec || !p) return null;
+  // hand-authored fixed-identity NPCs (the Off-Hours bartender confidant — D2/D3): short-circuit the seeded draw.
+  if(rec.fixed && typeof ohFixedNpc==='function'){ const fd=ohFixedNpc(rec.fixed, id); if(fd) return fd; }
   const ck=id+'|'+(rec.v||1)+'|'+(rec.lvD||1)+'|'+(rec.t||'')+'|'+(rec.lvv||0)+'|'+(rec.hc||'');
   if(_npcDossierCache.has(ck)) return _npcDossierCache.get(ck);
   const seed=npcSeedFor(id);
@@ -283,7 +285,12 @@ function hubSyncNpcs(){
     const cnt=NPC_STAFF_COUNT[poi.kind]||0;
     for(let s=0;s<cnt;s++){
       const id='np:'+poi.id+':'+s;
-      if(!byId[id]) _npcMint(byId, id, { hc:_npcQuietestCondo(byId) });
+      if(!byId[id]){
+        const fields={ hc:_npcQuietestCondo(byId) };
+        // Off-Hours venue staff slot 0 is a hand-authored fixed identity (e.g. the bartender confidant).
+        if(s===0 && typeof OFFHOURS!=='undefined' && OFFHOURS.venueStaffFixed && OFFHOURS.venueStaffFixed[poi.kind]) fields.fixed=OFFHOURS.venueStaffFixed[poi.kind];
+        _npcMint(byId, id, fields);
+      }
     }
   }
   { const r=makeRng(_loHash((N.seed ^ 0x554C)>>>0) % 233280);

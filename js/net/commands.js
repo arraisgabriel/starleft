@@ -57,6 +57,13 @@
     if(netRole!=='client') return tryTrain(state, building, type);
     if(building && isMine(building)) MP.send('mpcmd', { k:'train', from:LOCAL_CTRL, bid:building.id, type, seq:(NET._cmdSeq=(NET._cmdSeq||0)+1) });
   }
+  // Off-Hours scene commit — host-authoritative (mirrors netTrain). Returns the outcome on solo/host (for the local menu).
+  function netOffhoursCommit(state, payload){
+    if(hubClientBlocked(state)) return;
+    if(window.USE_ROLLBACK){ NET.rbEnqueue({ k:'offhours', payload }); return; }
+    if(netRole!=='client') return (typeof applyOffhoursCommit==='function') ? applyOffhoursCommit(state, payload) : null;
+    MP.send('mpcmd', { k:'offhours', from:LOCAL_CTRL, payload, seq:(NET._cmdSeq=(NET._cmdSeq||0)+1) });
+  }
   function netUpgrade(state, building, key){
     if(hubClientBlocked(state)) return;
     if(window.USE_ROLLBACK){ if(building && isMine(building)) NET.rbEnqueue({ k:'upg', bid:building.id, key }); return; }
@@ -128,6 +135,7 @@
   window.netTrain=netTrain; window.netCancelTrain=netCancelTrain; window.netReleaseStored=netReleaseStored;
   window.netUpgrade=netUpgrade; window.netDemolish=netDemolish; window.netScan=netScan;
   window.netAmove=netAmove; window.netStance=netStance; window.netAbility=netAbility; window.netHeroAbility=netHeroAbility;
+  window.netOffhoursCommit=netOffhoursCommit;
 
   /* ---------------- host: validate + replay a remote command ---------------- */
   function idIndex(state){ const m=new Map(); for(const e of state.entities) if(!e.dead) m.set(e.id,e); return m; }
@@ -172,6 +180,8 @@
       const mine=(cmd.ids||[]).map(id=>byId.get(id)).filter(e=>e&&!e.dead&&(e.ctrl||'p1')===ctrl);
       if(!mine.length) return;
       runScoped(ctrl, mine, ()=> stopSelection());
+    } else if(cmd.k==='offhours'){
+      if(typeof applyOffhoursCommit==='function') quiet(()=> applyOffhoursCommit(G, cmd.payload));
     } else if(cmd.k==='train'){
       const b=byId.get(cmd.bid); if(!b||b.owner!=='player'||(b.ctrl||'p1')!==ctrl) return;
       quiet(()=> tryTrain(G, b, cmd.type));

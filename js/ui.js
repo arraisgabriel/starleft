@@ -498,6 +498,8 @@ function buildHubCommands(sel){
   if(poi && poi.hubPoi.kind==='training') addCmd('🎯','TRAINING GROUNDS',null,()=>openTrainingMenu());
   if(poi && poi.hubPoi.kind==='mentalhealth') addCmd('🧠','MENTAL HEALTH',null,()=>openHealingMenu());
   if(poi && poi.hubPoi.kind==='wake')     addCmd('⚡','THE WAKE',null,()=>openWakeMenu());
+  if(poi && (poi.hubPoi.kind==='bar'||poi.hubPoi.kind==='club'||poi.hubPoi.kind==='diner'||poi.hubPoi.kind==='landing'))
+    addCmd('🍸', poi.hubPoi.name||'THE OFF-HOURS', null, ()=>openVenueMenu(poi, owned.filter(e=>e.kind==='unit')));
   if(!poi && !unit) addCmd('🕯','VETERANS & MEMORIAL',null,()=>showRoster());   // top-level in the HUB (T1-7)
   if(unit){
     const key=hubUnitKey(unit), up=(CAMPAIGN.upgrades[key]||{}), il=up.implantLevel||0;
@@ -1505,6 +1507,106 @@ function buildWakeBody(body){
     colR.appendChild(card);
   }
 }
+/* ====================== THE OFF-HOURS — venue menu (F1/F2/F3) ======================
+   The player DIRECTS a veteran through a scene with an NPC (or, later, another vet). The
+   counterpart opens; the buttons are the veteran's lines. A committed scene grows the bond and
+   writes a real line into the dossier (host-authoritative via netOffhoursCommit). */
+let _venue = null;
+function _vEsc(s){ return String(s==null?'':s).replace(/[&<>]/g,function(c){return c==='&'?'&amp;':c==='<'?'&lt;':'&gt;';}); }
+function _venueBondKind(kind){ return kind==='bar'?'confidant':(kind==='diner'?'kin':(kind==='club'?'friend':'confidant')); }
+function _venuePick(){
+  if(!_venue) return;
+  const bond=_venue.npcId?ohGetBond(_venue.vetKey,_venue.npcId):null;
+  _venue.bond=bond;
+  _venue.pick=(typeof ohSceneFor==='function')?ohSceneFor(_venue.kind, _venueBondKind(_venue.kind), _venue.vet, bond):null;
+}
+function _venueHasNext(){
+  if(!_venue) return false;
+  const bond=_venue.npcId?ohGetBond(_venue.vetKey,_venue.npcId):null;
+  return !!(typeof ohSceneFor==='function' && ohSceneFor(_venue.kind,_venueBondKind(_venue.kind),_venue.vet,bond));
+}
+function openVenueMenu(poi, who){
+  if(typeof CAMPAIGN==='undefined' || !poi || typeof OFFHOURS==='undefined') return;
+  const kind=poi.hubPoi?poi.hubPoi.kind:(poi.kind||'bar');
+  let vets=Array.isArray(who)?who.slice():(who?[who]:[]);
+  vets=vets.filter(u=>u && !u.dead && u.kind==='unit' && u.owner==='player');
+  let vet=vets.find(u=>u && u.lore) || vets[0] || null;
+  if(!vet){ if(typeof toast==='function') toast('Bring a veteran along to the Off-Hours.'); return; }
+  if(typeof ensureDossier==='function') ensureDossier(vet);
+  const vetKey=ohUnitKey(vet);
+  const npcId=(kind==='bar')?OFFHOURS.barNpc:null;
+  if(kind==='bar' && typeof ohSeedConfidant==='function') ohSeedConfidant(vetKey);
+  if(typeof ohSeedVetBonds==='function') ohSeedVetBonds(vetKey, vet);
+  _venue={ poi, kind, vet, vetKey, npcId, result:null, rev:0 };
+  _venuePick();
+  openHubMenu({ id:'venue', icon:'🍸', title:(poi.hubPoi&&poi.hubPoi.name)||'THE OFF-HOURS',
+    subtitle:'The off-hours. Debrief’s filed. Pull up a stool.', signature:_venueSig, build:_venueBuild });
+}
+function _venueSig(){
+  if(!_venue) return 'x';
+  const b=_venue.npcId?ohGetBond(_venue.vetKey,_venue.npcId):null, L=ohLedger();
+  return 'oh|'+_venue.rev+'|'+(b?b.t:0)+'|'+(b?b.p:0)+'|'+(L?(L.nights|0):0)+'|'+(_venue.pick?_venue.pick.idx:-1)+'|'+(_venue.result?1:0)+'|'+(CAMPAIGN.m3|0);
+}
+function _venueBuild(body){
+  if(!_venue || !body) return;
+  const vet=_venue.vet, npcId=_venue.npcId, L=ohLedger();
+  const bond=npcId?ohGetBond(_venue.vetKey,npcId):null;
+  const npcName=(npcId&&typeof ohNpcName==='function')?ohNpcName(npcId):'';
+  const vetName=(vet&&vet.lore&&typeof buildDossier==='function')?buildDossier(vet).full:(vet&&typeof trainTypeName==='function'?trainTypeName(vet):'a veteran');
+  const tierName=bond?ohTierName(bond):'';
+  const nights=L?(L.nights|0):0, m3=(CAMPAIGN.m3|0);
+  const acts='style="display:flex;flex-direction:column;gap:8px;margin:12px 0"';
+  const btn='class="hub-card-act" style="text-align:left;white-space:normal;line-height:1.4"';
+  let h='<div class="hub-cols c2"><div class="hub-col scroll">';
+  h+='<div class="dk">'+_vEsc(_venue.poi.hubPoi.name||'THE OFF-HOURS')+'</div><div class="dossier-prose"><p style="color:#9fb0c2">';
+  if(npcName) h+='At the bar: <b>'+_vEsc(npcName)+'</b>'+(tierName?(' · <i>'+_vEsc(tierName)+'</i>'):'')+'<br>';
+  h+='With you: <b>'+_vEsc(vetName)+'</b><br>Downtime tonight: <b>'+nights+'</b> · M3$ '+m3+'</p></div>';
+  if(_venue.result){
+    const r=_venue.result;
+    h+='<div class="dk">The night</div><div class="dossier-prose"><p>'+_vEsc(r.reply||'…')+'</p>';
+    if(r.wrote!=null) h+='<p class="assess">A line goes into '+_vEsc(vetName)+'’s file.</p>';
+    if(r.leveled && bond) h+='<p class="assess">Something shifted — now <i>'+_vEsc(ohTierName(bond))+'</i>.</p>';
+    h+='</div><div '+acts+'>';
+    if(nights>0 && _venueHasNext()) h+='<button '+btn+' data-act="next">Another round</button>';
+    h+='<button '+btn+' data-act="leave">Call it a night</button></div>';
+  } else if(_venue.pick){
+    const scene=_venue.pick.scene;
+    h+='<div class="dk">'+_vEsc((tierName||'tonight').toUpperCase())+'</div><div class="dossier-prose"><p>'+_vEsc(ohFill(scene.open,vet,npcId))+'</p></div>';
+    if(nights<=0){ h+='<p class="assess">You’re out of downtime this visit — come back after the next deployment.</p>'; }
+    else{
+      h+='<div '+acts+'>';
+      scene.choices.forEach(function(c,ci){
+        if(c.gate && typeof ohVetHas==='function' && !ohVetHas(vet,c.gate)) return;
+        const tag=c.approach?'<span style="opacity:.55;font-family:monospace;font-size:11px">['+c.approach+'] </span>':'';
+        h+='<button '+btn+' data-ci="'+ci+'">'+tag+_vEsc(ohFill(c.line,vet,npcId))+'</button>';
+      });
+      h+='</div><p class="assess" style="opacity:.6">Each round: M3$ '+(OFFHOURS.tune.sceneCost|0)+' · one night.</p>';
+    }
+  } else {
+    h+='<div class="dk">Tonight</div><div class="dossier-prose"><p>'+_vEsc(npcName||'The bartender')+' nods at '+_vEsc(vetName)+'. Nothing new to get into tonight — come back after the next deployment.</p></div>';
+    h+='<div '+acts+'><button '+btn+' data-act="leave">Call it a night</button></div>';
+  }
+  h+='</div><div class="hub-col"><div class="dk">The wall</div><div class="dossier-prose"><p style="opacity:.7">Whatever happens here ends up in the file you read at The Wake.</p></div></div></div>';
+  body.innerHTML=h;
+  body.querySelectorAll('[data-ci]').forEach(function(b){ b.addEventListener('click',function(){ _venueChoose(+b.dataset.ci); }); });
+  body.querySelectorAll('[data-act]').forEach(function(b){ b.addEventListener('click',function(){ if(b.dataset.act==='next') _venueNext(); else if(typeof closeHubMenu==='function') closeHubMenu(); }); });
+}
+function _venueChoose(ci){
+  if(!_venue || !_venue.pick) return;
+  const L=ohLedger();
+  if(L && (L.nights|0)<=0){ if(typeof toast==='function') toast('Out of downtime this visit.'); return; }
+  if((CAMPAIGN.m3|0) < (OFFHOURS.tune.sceneCost|0)){ if(typeof toast==='function') toast('Not enough M3rit$ for a round.'); return; }
+  const payload={ vetKey:_venue.vetKey, npcId:_venue.npcId, sceneIdx:_venue.pick.idx, choiceIdx:ci };
+  let res=null;
+  if(typeof netOffhoursCommit==='function') res=netOffhoursCommit(G, payload);
+  else if(typeof applyOffhoursCommit==='function') res=applyOffhoursCommit(G, payload);
+  if(res && res.broke){ if(typeof toast==='function') toast('Not enough M3rit$.'); return; }
+  _venue.result=(res && res.already)?{ reply:'Already lived that one.' }:(res||{ reply:'…' });
+  _venue.rev++;
+  if(typeof refreshUI==='function') refreshUI();
+}
+function _venueNext(){ if(!_venue) return; _venue.result=null; _venuePick(); _venue.rev++; }
+
 function openWakeMenu(){
   if(typeof CAMPAIGN==='undefined') return;
   if(CAMPAIGN.reborn==null) CAMPAIGN.reborn={sessions:[],done:[]};
