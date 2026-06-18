@@ -424,6 +424,18 @@
     </div>
   </div>
 
+  <!-- Off-Hours Sims-like interior view (a room per venue; canvas + floating DOM UI) -->
+  <div id="oh-interior-overlay" style="display:none;">
+    <canvas id="oh-interior"></canvas>
+    <header id="oh-int-head">
+      <span id="oh-int-title"></span>
+      <span id="oh-int-sub"></span>
+      <button id="oh-int-close" type="button">✕ Leave</button>
+    </header>
+    <div id="oh-int-ui"></div>
+    <div id="oh-int-roster"></div>
+  </div>
+
   <!-- Roster & Memorial sub-screen -->
   <div class="overlay submenu" id="rosterScreen" style="display:none;">
     <div class="submenu-panel">
@@ -554,6 +566,7 @@
 <script src="js/npc_lore.js"></script><!-- living-city NPC identity/persistence/dossiers: CAMPAIGN.npc registry, derive-don't-store -->
 <script src="js/offhours_data.js"></script><!-- Off-Hours static content + tuning (OFFHOURS): append-only + version-gated like lore_data.js -->
 <script src="js/offhours.js"></script><!-- Off-Hours Relationship Ledger runtime: bond math over CAMPAIGN.offhours; reads buildDossier/buildNpcDossier -->
+<script src="js/offhours_interior.js"></script><!-- Off-Hours Sims-like INTERIOR view: spatial room, pie-menu, line-picker; reuses the engine + unitWalk/blitFrame -->
 
 <script src="js/sharecard.js"></script><!-- veteran/memorial share-card PNG (T0-6): offscreen card render + share/clipboard/download ladder -->
 <script src="js/fallen_scene.js"></script><!-- "Fallen" memorial interstitial (T1-1): solo-gated 2.6s beat on a Lv2+ veteran death -->

@@ -54,6 +54,24 @@ const OFFHOURS = {
   // venue kind → fixed-identity key for staff slot 0 (read by hubSyncNpcs staff-mint).
   venueStaffFixed: { bar:'bartender' },
 
+  // ---- INTERIOR room layouts (Sims-like view, js/offhours_interior.js). Virtual room space 960×560.
+  // Canvas-drawn for now (the single swap point for a future Gemini background). Coords are virtual units. ----
+  interiors: {
+    bar: {
+      name:'THE LATE SHIFT', accent:'#ffce6a', floorA:'#14181f', floorB:'#1b2129', wall:'#0c0f15',
+      counter:{ x:140, y:108, w:680, h:58 },      // the long bar (bartender works behind it)
+      shelf:{ x:160, y:52, w:640, h:42 },          // bottle shelf on the back wall
+      bartender:{ x:480, y:138 },                  // fixed bartender position behind the counter
+      sign:'THE LATE SHIFT',
+      stools:[ {x:240,y:236},{x:360,y:236},{x:480,y:236},{x:600,y:236},{x:720,y:236} ],
+      tables:[ {x:300,y:440,r:52},{x:690,y:440,r:52} ],
+      seats:[ {x:240,y:236},{x:360,y:236},{x:480,y:236},{x:600,y:236},{x:720,y:236},
+              {x:244,y:452},{x:356,y:452},{x:634,y:452},{x:746,y:452} ],
+      door:{ x:70, y:498 },                          // called-in vets enter here
+      wander:[ {x:320,y:350},{x:560,y:360},{x:470,y:320},{x:660,y:345},{x:200,y:380} ],
+    },
+  },
+
   // ---- hand-authored fixed NPC identities (D3). buildNpcDossier short-circuits to these (D2). ----
   fixedNpcs: {
     bartender: {

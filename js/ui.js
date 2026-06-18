@@ -499,7 +499,7 @@ function buildHubCommands(sel){
   if(poi && poi.hubPoi.kind==='mentalhealth') addCmd('🧠','MENTAL HEALTH',null,()=>openHealingMenu());
   if(poi && poi.hubPoi.kind==='wake')     addCmd('⚡','THE WAKE',null,()=>openWakeMenu());
   if(poi && (poi.hubPoi.kind==='bar'||poi.hubPoi.kind==='club'||poi.hubPoi.kind==='diner'||poi.hubPoi.kind==='landing'))
-    addCmd('🍸', poi.hubPoi.name||'THE OFF-HOURS', null, ()=>openVenueMenu(poi, owned.filter(e=>e.kind==='unit')));
+    addCmd('🍸', 'ENTER · '+(poi.hubPoi.name||'THE OFF-HOURS'), null, ()=>{ const vets=owned.filter(e=>e.kind==='unit'); if(typeof openInterior==='function') openInterior(poi, vets); else openVenueMenu(poi, vets); });
   if(!poi && !unit) addCmd('🕯','VETERANS & MEMORIAL',null,()=>showRoster());   // top-level in the HUB (T1-7)
   if(unit){
     const key=hubUnitKey(unit), up=(CAMPAIGN.upgrades[key]||{}), il=up.implantLevel||0;

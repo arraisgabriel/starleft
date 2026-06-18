@@ -1261,7 +1261,7 @@ function hubUnitArrivedPoi(state,u,poi){
   else if(p.kind==='training') hubTrainStage(state,u,poi);
   else if(p.kind==='mentalhealth') hubHealStage(state,u,poi);
   else if(p.kind==='wake') openWakeMenu();
-  else if(p.kind==='bar'||p.kind==='club'||p.kind==='diner'||p.kind==='landing'){ if(typeof openVenueMenu==='function') openVenueMenu(poi, u); }
+  else if(p.kind==='bar'||p.kind==='club'||p.kind==='diner'||p.kind==='landing'){ if(typeof openInterior==='function') openInterior(poi, u); else if(typeof openVenueMenu==='function') openVenueMenu(poi, u); }
 }
 function hubEnlistedKeys(){
   CAMPAIGN.dispatch = Object.assign({mdcId:null, staged:[]}, CAMPAIGN.dispatch||{});
