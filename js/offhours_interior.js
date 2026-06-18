@@ -20,7 +20,7 @@ function $(id){ return document.getElementById(id); }
 function _ensureStyle(){
   if(_styled) return; _styled=true;
   const css=`
-  #oh-interior-overlay{position:fixed;inset:0;z-index:60;background:#06080c;display:none;overflow:hidden;font-family:'Chakra Petch','Spline Sans',system-ui,sans-serif}
+  #oh-interior-overlay{position:fixed;inset:0;z-index:90;background:#06080c;display:none;overflow:hidden;font-family:'Chakra Petch','Spline Sans',system-ui,sans-serif}
   #oh-interior{position:absolute;inset:0;width:100%;height:100%;display:block;cursor:pointer}
   #oh-int-head{position:absolute;top:0;left:0;right:0;height:46px;display:flex;align-items:center;gap:12px;padding:0 16px;z-index:3;
     background:linear-gradient(180deg,rgba(6,8,12,.92),rgba(6,8,12,.3));border-bottom:1px solid #1c2533;pointer-events:none}
@@ -205,13 +205,13 @@ function _drawOcc(ctx,m,o,t){
   else if(_int.mode==='target' && o!==_int.selected){ ctx.strokeStyle='rgba(95,224,255,.5)'; ctx.lineWidth=1.6*m.scale; ctx.setLineDash([4*m.scale,4*m.scale]); ctx.beginPath(); ctx.ellipse(p.x,p.y,S*0.24,S*0.09,0,0,6.28); ctx.stroke(); ctx.setLineDash([]); }
   // sprite
   const anim=(typeof unitWalk==='function')?unitWalk(o.sprite.type,o.sprite.owner):null;
-  if(anim && anim.ready && typeof blitFrame==='function'){
+  if(anim && anim.ready && anim.frames && anim.frames.length){
     const fi=o.moving?(((o.wphase||0)|0)%anim.frames.length):0;
-    const dummy={type:o.sprite.type, owner:o.sprite.owner, _face:o.face, heroId:o.sprite.heroId};
-    blitFrame(dummy, p.x, p.y, anim, S, fi);
-  } else { // silhouette fallback
-    ctx.fillStyle='#11161d'; ctx.beginPath(); ctx.ellipse(p.x,p.y-S*0.28,S*0.16,S*0.32,0,0,6.28); ctx.fill();
-    ctx.fillStyle='#1c2430'; ctx.beginPath(); ctx.ellipse(p.x,p.y-S*0.62,S*0.11,S*0.13,0,0,6.28); ctx.fill();
+    _blitSprite(ctx, {type:o.sprite.type, _face:o.face}, p.x, p.y, anim, S, fi);  // draws to the INTERIOR ctx (blitFrame is hardwired to the main canvas)
+  } else { // brighter silhouette fallback — visible against the dark floor when a sprite asset is absent
+    ctx.fillStyle='#3a465b'; ctx.beginPath(); ctx.ellipse(p.x,p.y-S*0.30,S*0.17,S*0.33,0,0,6.28); ctx.fill();
+    ctx.fillStyle='#4c5a73'; ctx.beginPath(); ctx.ellipse(p.x,p.y-S*0.64,S*0.12,S*0.14,0,0,6.28); ctx.fill();
+    ctx.fillStyle=(o.kind==='npc'?_accent():'#7fd6ff'); ctx.fillRect(p.x-S*0.025,p.y-S*0.50,S*0.05,S*0.05);
   }
   // mood / want icon over a vet's head
   if(o.kind==='vet' && typeof ohVetMood==='function'){ const mo=ohVetMood(o.unit);
@@ -226,6 +226,16 @@ function _drawTags(m){
   ctx.fillStyle='rgba(6,8,12,.85)'; ctx.fillRect(p.x-w/2, p.y+6, w, 16); ctx.fillStyle='#cdd6e1'; ctx.fillText(txt, p.x, p.y+18); ctx.restore();
 }
 function _hexA(hex,a){ hex=hex.replace('#',''); if(hex.length===3) hex=hex.split('').map(c=>c+c).join(''); const n=parseInt(hex,16); return 'rgba('+((n>>16)&255)+','+((n>>8)&255)+','+(n&255)+','+a+')'; }
+// our own sprite blit (the global blitFrame is hardwired to the main canvas `ctx`; we need the interior ctx)
+function _blitSprite(ictx, u, px, py, anim, S, fi){
+  const n=anim.frames.length, fr=anim.frames[((fi%n)+n)%n]; if(!fr) return;
+  const dh=S, dw=S*(anim.fw/anim.fh);
+  ictx.save(); ictx.translate(px,py);
+  const facesLeft=!!(typeof DEF!=='undefined' && DEF[u.type] && DEF[u.type].facesLeft);
+  if(((u._face||1)<0)!==facesLeft) ictx.scale(-1,1);
+  ictx.drawImage(anim.img, fr[0],fr[1],anim.fw,anim.fh, -dw/2, -dh*0.7, dw, dh);
+  ictx.restore();
+}
 function _esc(s){ return String(s==null?'':s).replace(/[&<>]/g,function(c){return c==='&'?'&amp;':c==='<'?'&lt;':'&gt;';}); }
 function _accent(){ return (_int && _int.layout && _int.layout.accent)||'#5fe0ff'; }
 
