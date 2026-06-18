@@ -179,6 +179,12 @@ function ohDeploySynergy(a, b){
   if(kind==='rival') return 0.015*(bond.t|0);                                                     // competitive edge
   return 0;
 }
+// H5 — a tiny carried bonus per keepsake the veteran holds (a bond that received a gift). Opt-in flavor.
+function ohKeepsakeBonus(u){
+  const B=ohBonds(); if(!B || !u) return 0; const k=ohUnitKey(u); if(!k) return 0; let n=0;
+  for(const id in B){ if(id.indexOf(k)>=0 && (B[id].fl & OH_FL.KEEPSAKE)) n++; }
+  return Math.min(0.05, n*0.02);
+}
 // the bonded partners of a (fallen) veteran key — read by grief beats (H6) to deepen the loss.
 function ohGriefPartners(vetKey){
   const B=ohBonds(); if(!B || !vetKey) return [];
@@ -250,6 +256,17 @@ function ohCheckLands(bond, sceneIdx, choiceIdx, visit, approach){
 function applyOffhoursCommit(state, payload){
   if(!payload) return null;
   const L=ohLedger(); if(!L) return null;
+  // I3 — a gift opens/accelerates a bond and returns a keepsake (Hades first-nectar). Host-authoritative.
+  if(payload.gift){
+    const g=ohEnsureBond(payload.vetKey, payload.npcId, payload.kind||'friend'); if(!g) return null;
+    if(typeof hubSpend==='function' && !hubSpend(OFFHOURS.tune.giftCost|0)) return { broke:true };
+    const first=!(g.fl & OH_FL.KEEPSAKE);
+    ohGrantPoints(g, OFFHOURS.tune.giftPts, (typeof CAMPAIGN!=='undefined'?(CAMPAIGN.visit|0):0));
+    ohSetFlag(g, OH_FL.KEEPSAKE, true);                         // first gift returns a keepsake (H5)
+    return { ok:true, gift:true, keepsake:first, tier:g.t,
+      reply: first ? 'You bring something worth more than M3rit$. They keep it — and press something back into your hand.'
+                   : 'They take it with a nod. The gauge ticks up.' };
+  }
   const scene = OFFHOURS.scenes[payload.sceneIdx|0]; if(!scene) return null;
   const choice = scene.choices[payload.choiceIdx|0]; if(!choice) return null;
   const npcId = payload.npcId || (scene.with==='bartender' ? OFFHOURS.barNpc : null);
@@ -315,7 +332,7 @@ if(typeof window !== 'undefined'){
   window.ohPartyName = ohPartyName;
   window.ohCompat = ohCompat; window.ohCompatKind = ohCompatKind; window.ohSeedClub = ohSeedClub;
   window.ohVetMood = ohVetMood; window.ohNeedsNight = ohNeedsNight;
-  window.ohDeploySynergy = ohDeploySynergy; window.ohGriefPartners = ohGriefPartners;
+  window.ohDeploySynergy = ohDeploySynergy; window.ohGriefPartners = ohGriefPartners; window.ohKeepsakeBonus = ohKeepsakeBonus;
   window.ohLatestVersion = ohLatestVersion; window.ohPoolLens = ohPoolLens; window.ohPickN = ohPickN;
   window.ohUnitKey = ohUnitKey; window.ohBondId = ohBondId;
   window.ohLedger = ohLedger; window.ohBonds = ohBonds; window.ohKindCode = ohKindCode; window.ohKindName = ohKindName;

@@ -1562,6 +1562,10 @@ function _venueSig(){
 }
 function _venueBuild(body){
   if(!_venue || !body) return;
+  body.style.background = _venue.kind==='bar' ? 'radial-gradient(100% 60% at 50% 0%, rgba(255,206,106,.07), transparent 62%)'
+    : _venue.kind==='club' ? 'radial-gradient(100% 60% at 50% 0%, rgba(207,139,255,.10), transparent 62%)'
+    : _venue.kind==='diner' ? 'radial-gradient(100% 60% at 50% 0%, rgba(255,150,90,.08), transparent 62%)'
+    : 'radial-gradient(100% 60% at 50% 0%, rgba(95,224,255,.06), transparent 62%)';   // F6: per-venue neon-through-grime backdrop
   const vet=_venue.vet, npcId=_venue.npcId, L=ohLedger();
   const bond=npcId?ohGetBond(_venue.vetKey,npcId):null;
   const npcName=(npcId&&typeof ohNpcName==='function')?ohNpcName(npcId):'';
@@ -1573,6 +1577,7 @@ function _venueBuild(body){
   let h='<div class="hub-cols c2"><div class="hub-col scroll">';
   h+='<div class="dk">'+_vEsc(_venue.poi.hubPoi.name||'THE OFF-HOURS')+'</div><div class="dossier-prose"><p style="color:#9fb0c2">';
   if(npcName) h+='At the bar: <b>'+_vEsc(npcName)+'</b>'+(tierName?(' · <i>'+_vEsc(tierName)+'</i>'):'')+'<br>';
+  if(bond && (typeof CAMPAIGN!=='undefined') && ((CAMPAIGN.visit|0)-(bond.lv|0))>=2) h+='<span style="opacity:.6">It\'s been a while since you came by.</span><br>';   // B5 decay cue
   h+='With you: <b>'+_vEsc(vetName)+'</b><br>Downtime tonight: <b>'+nights+'</b> · M3$ '+m3+'</p></div>';
   if(_venue.result){
     const r=_venue.result;
@@ -1593,7 +1598,8 @@ function _venueBuild(body){
         const tag=c.approach?'<span style="opacity:.55;font-family:monospace;font-size:11px">['+c.approach+'] </span>':'';
         h+='<button '+btn+' data-ci="'+ci+'">'+tag+_vEsc(ohFill(c.line,vet,npcId))+'</button>';
       });
-      h+='</div><p class="assess" style="opacity:.6">Each round: M3$ '+(OFFHOURS.tune.sceneCost|0)+' · one night.</p>';
+      if(_venue.npcId) h+='<button '+btn+' data-act="gift">Bring '+_vEsc(npcName||'them')+' something · M3$ '+(OFFHOURS.tune.giftCost|0)+'</button>';
+      h+='</div><p class="assess" style="opacity:.6">Each round: M3$ '+(OFFHOURS.tune.sceneCost|0)+' · one night. A gift opens the door faster.</p>';
     }
   } else {
     h+='<div class="dk">Tonight</div><div class="dossier-prose"><p>'+_vEsc(npcName||'The bartender')+' nods at '+_vEsc(vetName)+'. Nothing new to get into tonight — come back after the next deployment.</p></div>';
@@ -1602,7 +1608,19 @@ function _venueBuild(body){
   h+='</div><div class="hub-col"><div class="dk">The wall</div><div class="dossier-prose"><p style="opacity:.7">Whatever happens here ends up in the file you read at The Wake.</p></div></div></div>';
   body.innerHTML=h;
   body.querySelectorAll('[data-ci]').forEach(function(b){ b.addEventListener('click',function(){ _venueChoose(+b.dataset.ci); }); });
-  body.querySelectorAll('[data-act]').forEach(function(b){ b.addEventListener('click',function(){ if(b.dataset.act==='next') _venueNext(); else if(typeof closeHubMenu==='function') closeHubMenu(); }); });
+  body.querySelectorAll('[data-act]').forEach(function(b){ b.addEventListener('click',function(){ if(b.dataset.act==='next') _venueNext(); else if(b.dataset.act==='gift') _venueGift(); else if(typeof closeHubMenu==='function') closeHubMenu(); }); });
+}
+function _venueGift(){
+  if(!_venue || !_venue.npcId) return;
+  if((CAMPAIGN.m3|0) < (OFFHOURS.tune.giftCost|0)){ if(typeof toast==='function') toast('Not enough M3rit$ for a gift.'); return; }
+  const payload={ vetKey:_venue.vetKey, npcId:_venue.npcId, kind:_venueBondKind(_venue.kind), gift:true };
+  let res=null;
+  if(typeof netOffhoursCommit==='function') res=netOffhoursCommit(G, payload);
+  else if(typeof applyOffhoursCommit==='function') res=applyOffhoursCommit(G, payload);
+  if(res && res.broke){ if(typeof toast==='function') toast('Not enough M3rit$.'); return; }
+  _venue.result = res || { reply:'…' };
+  _venue.rev++;
+  if(typeof refreshUI==='function') refreshUI();
 }
 function _venueChoose(ci){
   if(!_venue || !_venue.pick) return;
