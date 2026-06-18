@@ -46,6 +46,10 @@ function _ensureStyle(){
     box-shadow:0 5px 18px rgba(0,0,0,.5);pointer-events:none;animation:ohiPop .18s ease both}
   .ohi-hint{position:absolute;left:50%;bottom:84px;transform:translateX(-50%);font-family:'JetBrains Mono',monospace;font-size:12px;letter-spacing:.08em;
     color:#5fe0ff;background:rgba(6,8,12,.8);border:1px solid rgba(95,224,255,.35);padding:7px 16px;border-radius:20px}
+  .ohi-flash{position:absolute;left:50%;top:52%;transform:translate(-50%,-50%);z-index:6;font-family:'Chakra Petch',sans-serif;font-weight:600;font-size:14px;
+    letter-spacing:.03em;color:#ffd0d6;background:rgba(40,10,14,.96);border:1px solid rgba(255,93,110,.5);padding:11px 20px;border-radius:8px;
+    box-shadow:0 8px 26px rgba(0,0,0,.6);animation:ohiPop .18s ease both}
+  .ohi-pie.off{opacity:.4;cursor:not-allowed;border-style:dashed}
   #oh-int-roster{position:absolute;left:0;right:0;bottom:0;z-index:3;display:flex;gap:8px;align-items:center;padding:10px 16px;min-height:64px;
     background:linear-gradient(0deg,rgba(6,8,12,.94),rgba(6,8,12,.2));border-top:1px solid #1c2533;overflow-x:auto}
   #oh-int-roster .lab{font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:#56606f;flex:none;margin-right:4px}
@@ -81,7 +85,7 @@ function openInterior(poi, who){
   _resizeCanvas();
   _bindInput();
   _renderRoster();
-  _clearUI();
+  _clearUI(); _setCloseLabel(false);
   _last=performance.now(); if(!_raf) _raf=requestAnimationFrame(_loop);
 }
 function closeInterior(){
@@ -242,8 +246,19 @@ function _accent(){ return (_int && _int.layout && _int.layout.accent)||'#5fe0ff
 /* ---- input: click the canvas → hit-test an occupant → pie-menu / target ---- */
 function _bindInput(){
   const cv=$('oh-interior'); if(cv && !cv._ohBound){ cv._ohBound=true; cv.addEventListener('click', _onCanvasClick); }
-  const cl=$('oh-int-close'); if(cl && !cl._ohBound){ cl._ohBound=true; cl.addEventListener('click', closeInterior); }
+  const cl=$('oh-int-close'); if(cl && !cl._ohBound){ cl._ohBound=true; cl.addEventListener('click', _onClose); }
+  if(!window._ohEsc){ window._ohEsc=true; document.addEventListener('keydown', function(e){ if(_int && (e.key==='Escape'||e.key==='Esc')){ e.preventDefault(); _onClose(); } }); }
 }
+// ✕ / Escape: first dismiss any open dialog (pie / scene / line-picker), then leave the venue.
+function _dismiss(){
+  if(!_int) return false;
+  const open=(_int.mode && _int.mode!=='idle') || !!_int.scene || !!document.querySelector('#oh-int-ui .ohi-pie, #oh-int-ui .ohi-choice');
+  if(!open) return false;
+  _int.pending=null; _int.scene=null; _int.mode='idle'; _int.selected=null; _clearUI(); _setCloseLabel(false);
+  return true;
+}
+function _onClose(){ if(_dismiss()) return; closeInterior(); }
+function _setCloseLabel(inDialog){ const b=$('oh-int-close'); if(b) b.textContent=inDialog?'✕ Close':'✕ Leave'; }
 function _pick(cx,cy){
   const m=_metrics(); let best=null, bd=1e9;
   for(const o of _int.occ){ const p=v2c(o.x,o.y,m); const S=SPR_H*m.scale;
@@ -259,7 +274,7 @@ function _onCanvasClick(e){
   }
   if(_int.mode==='scene'){ return; }   // line-picker handles its own clicks
   _clearUI();
-  if(!hit){ _int.selected=null; _int.mode='idle'; return; }
+  if(!hit){ _int.selected=null; _int.mode='idle'; _setCloseLabel(false); return; }
   _int.selected=hit;
   if(hit.kind==='vet'){ _int.mode='pie'; _showPie(hit); }
   else { _showBubble(hit, hit.name+' — '+( (typeof buildNpcDossier==='function' && buildNpcDossier(hit.npcId)||{}).profession || 'regular' ), 'npc', 2600); _int.mode='idle'; }
@@ -281,6 +296,7 @@ function _showPie(o){
     b.addEventListener('click', function(ev){ ev.stopPropagation(); _pieAct(a.k, o); });
     ui.appendChild(b);
   });
+  _setCloseLabel(true);
 }
 function _pieAct(k, o){
   _clearUI();
@@ -340,6 +356,12 @@ function _showLinePicker(vet, target, pick, cx){
     b.addEventListener('click', function(ev){ ev.stopPropagation(); _commitChoice(ci); });
     ui.appendChild(b);
   });
+  // explicit exit — touch players need a visible way out of the conversation (not just clicking empty space)
+  const sx=document.createElement('div'); sx.className='ohi-choice'; sx.style.setProperty('--ac','#ff5d70');
+  sx.style.left='50%'; sx.style.top=(m.cssH-152)+'px'; sx.style.textAlign='center'; sx.style.fontWeight='600';
+  sx.textContent='✕ Step away'; sx.addEventListener('click', function(ev){ ev.stopPropagation(); _dismiss(); });
+  ui.appendChild(sx);
+  _setCloseLabel(true);
 }
 function _commitChoice(ci){
   const sc=_int.scene; if(!sc) return; const cx=sc.cx;
@@ -355,7 +377,7 @@ function _commitChoice(ci){
   _showBubble(sc.vet, reply, 'reply', 4200);
   if(res && res.wrote!=null) _showBubble(sc.target, 'A line goes into '+sc.vet.name+'’s file.', 'npc', 3200, 30);
   if(typeof refreshUI==='function') refreshUI();
-  _int.scene=null; _int.mode='idle'; _int.selected=null; _syncHead(); _renderRoster();
+  _int.scene=null; _int.mode='idle'; _int.selected=null; _syncHead(); _renderRoster(); _setCloseLabel(false);
 }
 function _doGift(vet, target){
   _hideHint(); const cx=_interactionContext(vet, target);
@@ -365,7 +387,7 @@ function _doGift(vet, target){
   if(res && res.broke){ _flash('Not enough M3rit$.'); _int.mode='idle'; return; }
   _showBubble(vet, (res&&res.reply)||'They take it with a nod.', 'reply', 3600);
   if(typeof refreshUI==='function') refreshUI();
-  _int.mode='idle'; _int.selected=null; _syncHead();
+  _int.mode='idle'; _int.selected=null; _syncHead(); _setCloseLabel(false);
 }
 
 /* ---- floating UI helpers ---- */
@@ -380,7 +402,11 @@ function _showBubble(o, text, tone, ttl, dy){
 }
 function _hint(t){ _hideHint(); const ui=$('oh-int-ui'); const el=document.createElement('div'); el.className='ohi-hint'; el.id='ohi-hint'; el.textContent=t; ui.appendChild(el); }
 function _hideHint(){ const e=$('ohi-hint'); if(e&&e.parentNode) e.parentNode.removeChild(e); }
-function _flash(t){ if(typeof toast==='function') toast(t); else _hint(t); }
+function _flash(t){   // visible INSIDE the overlay — the game toast is z-30, behind this z-90 view
+  const ui=$('oh-int-ui'); if(!ui) return; const old=document.getElementById('ohi-flash'); if(old&&old.parentNode) old.parentNode.removeChild(old);
+  const el=document.createElement('div'); el.id='ohi-flash'; el.className='ohi-flash'; el.textContent=t; ui.appendChild(el);
+  setTimeout(()=>{ if(el.parentNode) el.parentNode.removeChild(el); }, 2600);
+}
 function _setMode(mode){ _int.mode=mode; if(mode==='idle'){ _int.selected=null; _clearUI(); } }
 function _clearUI(){ const ui=$('oh-int-ui'); if(ui) ui.innerHTML=''; }
 
