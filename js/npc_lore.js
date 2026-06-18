@@ -236,7 +236,8 @@ function npcStatusEvents(id){
   for(let i=0;i+1<rec.ev.length;i+=2){
     const V=rec.ev[i], code=rec.ev[i+1];
     let t=null;
-    if(code>=3000) t=NPC_LORE.linkReborn[code-3000];
+    if(code>=4000) t=(typeof OFFHOURS!=='undefined' && OFFHOURS.npcEvents && OFFHOURS.npcEvents[code-4000]) ? OFFHOURS.npcEvents[code-4000] : null;   // Off-Hours NPC-perspective lines
+    else if(code>=3000) t=NPC_LORE.linkReborn[code-3000];
     else if(code>=2000) t=NPC_LORE.linkProud[code-2000];
     else if(code>=1000) t=NPC_LORE.linkGrief[code-1000];
     else t=NPC_LORE.events[code] && NPC_LORE.events[code].text;

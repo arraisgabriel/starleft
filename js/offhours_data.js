@@ -72,6 +72,10 @@ const OFFHOURS = {
     { text:"Told {npc} what {me} did before the company — {crime} — for the first time, out loud." },       // 2
     { text:"Became a regular at the Late Shift. The city finally has one place that knows {me} by name." }, // 3
     { text:"Went back to {home} to settle the old thing. {npc} kept the stool." },                          // 4
+    { text:"Sat across from {npc} at Marisol's and let the broth go cold instead of leaving." },             // 5
+    { text:"Finally told {npc} the thing about {trauma} — said it at a noodle counter, of all places." },    // 6
+    { text:"Made peace with {npc} over bad noodles. Family again." },                                        // 7
+    { text:"Took the key {npc} slid across the counter. There's a door back in {home} that's {me}'s again." },// 8
   ],
   // say[i] : first-person reaction, index-aligned to events (text-only until the lore-forge voice gate).
   say: [
@@ -80,6 +84,10 @@ const OFFHOURS = {
     "First time out loud.",                            // 2
     "Place knows my name now.",                        // 3
     "Going home to settle it.",                        // 4
+    "Didn't leave. That's something.",                 // 5
+    "Said it. At a noodle counter.",                   // 6
+    "We're alright. We're family.",                    // 7
+    "There's a way home now.",                         // 8
   ],
   // scenes[] : Scene objects. The counterpart OPENS; the bulleted choices are the VETERAN's lines.
   //   req: {venue, kind, minTier, maxTier, gate}  · choice: {approach, gate, line, check, land, miss}
@@ -118,11 +126,47 @@ const OFFHOURS = {
         { approach:'warm', line:"Tell her about the thing back in {home}.",
           land:{ reply:"{npc} nods, slow. \"Then go settle it. I'll keep your stool.\"", ev:4, fx:{t:'capstone'} } },
       ] },
+    // --- MARISOL'S (diner) — veteran ↔ kin NPC (the relative the dossier named; {npc} = their name) ---
+    { id:'diner.doorway', venue:'diner', kind:'kin', req:{minTier:0, maxTier:1},
+      open:"{npc} is already in the back booth, both hands around a bowl of broth going cold. \"So you finally showed.\"",
+      choices:[
+        { approach:'warm', line:"Sit. Say {npc}'s name before anything else.",
+          land:{ reply:"The broth goes colder while you talk. Nobody walks out. It's a start.", ev:5 } },
+        { approach:'probing', gate:'trauma', line:"Finally say the thing about {trauma}.",
+          land:{ reply:"It lands hard and quiet. {npc} reaches across the table instead of leaving.", ev:6, fl:'ARC_UNLOCKED' } },
+        { approach:'blunt', line:"Stay in the doorway, arms crossed.",
+          land:{ reply:"{npc} waits, then gathers a coat. \"Another time, then.\" Recoverable — just not tonight.", pts:0 } },
+      ] },
+    { id:'diner.mending', venue:'diner', kind:'kin', req:{minTier:2, maxTier:3},
+      open:"{npc} saved you the stool by the window. The broth's already ordered.",
+      choices:[
+        { approach:'warm', line:"Talk like family, not like a debrief.",
+          land:{ reply:"For a few minutes it's just two people and a bad noodle place. {me} leaves lighter than {me} came.", ev:7, fx:{t:'relief'} } },
+      ] },
+    { id:'diner.peace', venue:'diner', kind:'kin', req:{minTier:4, maxTier:4},
+      open:"Last bowl. {npc} slides a key across the counter. \"Place back home's still yours, if you ever want it.\"",
+      choices:[
+        { approach:'warm', line:"Take the key. Mean it.",
+          land:{ reply:"Family again. Whatever the war does next, it can't unmake this one.", ev:8, fx:{t:'capstone'} } },
+      ] },
   ],
   // gossip[] = ambient world-bubble lines — Phase 3 (G3).
   gossip: [],
   // gifts[]  = luxury gift items + dossier-derived affinities — Phase 4 (I3).
   gifts: [],
+  // npcEvents[i] : NPC-perspective off-hours line, SAME ohCode index as events[] (sparse). Stored as 4000+i in rec.ev.
+  npcEvents: [ null, null, null, null, null,
+    "{vet} came by Marisol's and didn't bolt for once.",                  // 5
+    "{vet} finally said the thing. Hard to hear — glad they said it.",    // 6
+    "Made peace with {vet} over bad noodles. We're alright now.",         // 7
+    "Slid {vet} the key. There's a door back home that's theirs again.",  // 8
+  ],
+  // bark[] : "unburdened" selection barks for a veteran whose confidant/kin arc is done (fl&8). Text-only.
+  bark: [
+    "Settled some things. Lighter now.",
+    "Somebody back home knows my name again.",
+    "Said the thing out loud. Sky didn't fall.",
+  ],
 };
 
 if (typeof window !== 'undefined') window.OFFHOURS = OFFHOURS;

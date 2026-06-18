@@ -198,13 +198,17 @@ function applyOffhoursCommit(state, payload){
   const lvl = ohGrantPoints(bond, pts, visit);
   ohMarkSeen(bond, payload.sceneIdx|0);
   if(br.fl && OH_FL[br.fl]!=null) ohSetFlag(bond, OH_FL[br.fl], true);       // e.g. ARC_UNLOCKED (the Hades favor)
+  if(bond.t>=OFFHOURS.tune.maxTier) ohSetFlag(bond, OH_FL.ARC_DONE, true);   // arc complete → "unburdened" barks (M2)
   // CANON write: a new life-event line in the vet's dossier (ohCode sentinel `oh:1`; rendered by dossierFileHTML)
   let wrote=null;
   if(br.ev!=null && vet && vet.lore){
     if(!Array.isArray(vet.lore.events)) vet.lore.events=[];
     vet.lore.events.push({ lvl:(visit||(vet.stars|0)), i:(br.ev|0), oh:1, npc:npcId||null });
     wrote = br.ev|0;
-    // (the NPC counterpart's own life-event log lands in Phase 2 — kin reunions, where an NPC-perspective pool fits.)
+    // the NPC counterpart's own life-event log (NPC-perspective pool; off-hours codes 4000+; rendered by npcStatusEvents)
+    if(typeof _npcEvPush==='function' && CAMPAIGN.npc && CAMPAIGN.npc.byId && npcId && CAMPAIGN.npc.byId[npcId]
+       && OFFHOURS.npcEvents && OFFHOURS.npcEvents[br.ev|0])
+      _npcEvPush(CAMPAIGN.npc.byId[npcId], visit, 4000 + (br.ev|0));
   }
   // light fx — capstone delegates to the existing dream-fulfillment path; relief reuses the field-relief shape
   if(br.fx && vet){
@@ -224,8 +228,16 @@ function ohApplyRelief(u, fx, state){      // H1 — reuse the Mindfulness-Facil
   if(add>0){ u.madRelief=(u.madRelief||0)+add; u.madReliefT=(typeof MADOSIS!=='undefined'&&MADOSIS.fieldRelief?MADOSIS.fieldRelief.durationSec:30); u._madTendedAt=(state?state.time:0); }
 }
 
+// M2: does this veteran have any completed Off-Hours arc (fl & ARC_DONE)? → "unburdened" barks.
+function ohVetHasArc(u){
+  const B=ohBonds(); if(!B || !u) return false; const k=ohUnitKey(u); if(!k) return false;
+  for(const id in B){ if(id.indexOf(k)>=0 && ((B[id].fl|0) & OH_FL.ARC_DONE)) return true; }
+  return false;
+}
+
 /* ---- publish on window (classic global-scope) ---- */
 if(typeof window !== 'undefined'){
+  window.ohVetHasArc = ohVetHasArc;
   window.ohLatestVersion = ohLatestVersion; window.ohPoolLens = ohPoolLens; window.ohPickN = ohPickN;
   window.ohUnitKey = ohUnitKey; window.ohBondId = ohBondId;
   window.ohLedger = ohLedger; window.ohBonds = ohBonds; window.ohKindCode = ohKindCode; window.ohKindName = ohKindName;

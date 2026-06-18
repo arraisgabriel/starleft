@@ -53,6 +53,12 @@ function sayUnitSelected(u){
     }
   }
 
+  // M2: a veteran whose Off-Hours arc is done (fl & ARC_DONE) sometimes speaks an "unburdened" bark (append-only, text-only).
+  if(u.lore && typeof OFFHOURS!=='undefined' && OFFHOURS.bark && OFFHOURS.bark.length
+     && typeof ohVetHasArc==='function' && ohVetHasArc(u) && Math.random()<0.5){
+    pushDialog(u, _pickLine(u, OFFHOURS.bark), { type:'select', tone:'pos' });
+    return;
+  }
   // T0-5/T1-6: a dossier'd non-hero sometimes speaks its OWN backstory (~30%, text-only fallback).
   if(u.lore && typeof DOSSIER_SELECT_LINES!=='undefined' && DOSSIER_SELECT_LINES.length
      && typeof buildDossier==='function' && Math.random()<0.30){

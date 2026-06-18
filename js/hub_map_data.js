@@ -203,6 +203,17 @@ window.HUB_MAP_DATA = {
       "w": 3,
       "h": 3,
       "visual": { "megaId": "late_shift_mega" }
+    },
+    {
+      "id": "marisols",
+      "kind": "diner",
+      "name": "MARISOL'S",
+      "type": "outpost",
+      "x": 50,
+      "y": 36,
+      "w": 3,
+      "h": 3,
+      "visual": { "megaId": "marisols_mega" }
     }
   ],
   "rivers": [
@@ -395,6 +406,24 @@ window.HUB_MAP_DATA = {
       "biome": "tech",
       "fixedFrame": 0,
       "seed": 0.317,
+      "tags": [
+        "neon"
+      ]
+    },
+    {
+      "id": "marisols_mega",
+      "poiId": "marisols",
+      "cat": "megabuilding",
+      "variant": 2,
+      "tx": 50,
+      "ty": 34,
+      "w": 6,
+      "h": 7,
+      "overhang": 1.1,
+      "heightScale": 0.82,
+      "biome": "tech",
+      "fixedFrame": 0,
+      "seed": 0.529,
       "tags": [
         "neon"
       ]

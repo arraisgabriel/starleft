@@ -1534,13 +1534,16 @@ function openVenueMenu(poi, who){
   if(!vet){ if(typeof toast==='function') toast('Bring a veteran along to the Off-Hours.'); return; }
   if(typeof ensureDossier==='function') ensureDossier(vet);
   const vetKey=ohUnitKey(vet);
-  const npcId=(kind==='bar')?OFFHOURS.barNpc:null;
+  const npcId=(kind==='bar')?OFFHOURS.barNpc:(kind==='diner'?('nr:'+vetKey):null);
   if(kind==='bar' && typeof ohSeedConfidant==='function') ohSeedConfidant(vetKey);
   if(typeof ohSeedVetBonds==='function') ohSeedVetBonds(vetKey, vet);
+  if(npcId && typeof ohEnsureBond==='function') ohEnsureBond(vetKey, npcId, _venueBondKind(kind));
+  const L0=ohLedger(); if(L0 && L0.visited) L0.visited[(poi.hubPoi&&poi.hubPoi.id)||kind]=(CAMPAIGN.visit|0);   // M1: the place remembers your visit
   _venue={ poi, kind, vet, vetKey, npcId, result:null, rev:0 };
   _venuePick();
+  const lost=(typeof G!=='undefined'&&G&&G._vetLost);   // M1: react to the last mission (Hades-Taverna style)
   openHubMenu({ id:'venue', icon:'🍸', title:(poi.hubPoi&&poi.hubPoi.name)||'THE OFF-HOURS',
-    subtitle:'The off-hours. Debrief’s filed. Pull up a stool.', signature:_venueSig, build:_venueBuild });
+    subtitle: lost?'You came in heavier than usual tonight.':'The off-hours. Debrief’s filed. Pull up a stool.', signature:_venueSig, build:_venueBuild });
 }
 function _venueSig(){
   if(!_venue) return 'x';
