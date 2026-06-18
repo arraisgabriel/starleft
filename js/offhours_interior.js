@@ -267,12 +267,17 @@ function _onCanvasClick(e){
 
 /* ---- the Sims pie-menu ---- */
 function _showPie(o){
-  const ui=$('oh-int-ui'); const m=_metrics(); const c=v2c(o.x, o.y-SPR_H*m.scale*0.5/m.scale, m);
+  const ui=$('oh-int-ui'); const m=_metrics();
+  const cx=m.offX+o.x*m.scale, cy=m.offY+(o.y-SPR_H*0.62)*m.scale;     // centre on the upper body
   const acts=[ {k:'talk',t:'Talk'},{k:'gift',t:'Gift'},{k:'sit',t:'Sit'},{k:'watch',t:'Watch'},{k:'leave',t:'Leave'} ];
-  const R=68, a0=-Math.PI/2 - (acts.length-1)*0.32/2;
-  acts.forEach((a,i)=>{ const ang=a0 + i*0.32*Math.PI/Math.max(1,1); const A=-Math.PI/2 + (i-(acts.length-1)/2)*0.5;
-    const b=document.createElement('button'); b.className='ohi-pie'; b.textContent=a.t; b.style.setProperty('--ac', _int.layout.accent||'#5fe0ff');
-    b.style.left=(c.x + Math.cos(A)*R)+'px'; b.style.top=(c.y + Math.sin(A)*R)+'px';
+  const n=acts.length, R=132, step=54*Math.PI/180;                     // wide radius + 54° between items → no overlap
+  const base=-Math.PI/2 - (n-1)*step/2;                                // fan symmetric about straight-up, top hemisphere
+  acts.forEach((a,i)=>{
+    const A=base + i*step;
+    const x=Math.max(56, Math.min(m.cssW-56, cx + Math.cos(A)*R));
+    const y=Math.max(58, Math.min(m.cssH-128, cy + Math.sin(A)*R));
+    const b=document.createElement('button'); b.className='ohi-pie'; b.textContent=a.t; b.style.setProperty('--ac', _accent());
+    b.style.left=x+'px'; b.style.top=y+'px';
     b.addEventListener('click', function(ev){ ev.stopPropagation(); _pieAct(a.k, o); });
     ui.appendChild(b);
   });
