@@ -275,7 +275,7 @@ function _dismiss(){
   if(!_int) return false;
   const open=(_int.mode && _int.mode!=='idle') || !!_int.scene || !!document.querySelector('#oh-int-ui .ohi-pie, #oh-int-ui .ohi-choice');
   if(!open) return false;
-  _int.pending=null; _int.scene=null; _int.mode='idle'; _int.selected=null; _clearUI(); _setCloseLabel(false);
+  _int.pending=null; _int.scene=null; _int.mode='idle'; _int.selected=null; _clearUI(); _setCloseLabel(false); _syncHead();
   return true;
 }
 function _onClose(){ if(_dismiss()) return; closeInterior(); }
@@ -293,7 +293,7 @@ function _onCanvasClick(e){
     if(hit && hit!==_int.selected){ _startInteraction(_int.selected, hit); } else { _setMode('idle'); }
     return;
   }
-  if(_int.mode==='scene'){ return; }   // line-picker handles its own clicks
+  if(_int.mode==='scene' || _int.mode==='ended'){ return; }   // scene / finished-result are dismissed only via ✕ / Esc / Step away
   _clearUI();
   if(!hit){ _int.selected=null; _int.mode='idle'; _setCloseLabel(false); return; }
   _int.selected=hit;
@@ -377,11 +377,7 @@ function _showLinePicker(vet, target, pick, cx){
     b.addEventListener('click', function(ev){ ev.stopPropagation(); _commitChoice(ci); });
     ui.appendChild(b);
   });
-  // explicit exit — touch players need a visible way out of the conversation (not just clicking empty space)
-  const sx=document.createElement('div'); sx.className='ohi-choice'; sx.style.setProperty('--ac','#ff5d70');
-  sx.style.left='50%'; sx.style.top=(m.cssH-152)+'px'; sx.style.textAlign='center'; sx.style.fontWeight='600';
-  sx.textContent='✕ Step away'; sx.addEventListener('click', function(ev){ ev.stopPropagation(); _dismiss(); });
-  ui.appendChild(sx);
+  _showStepAway();   // explicit exit — touch players need a visible way out (not just clicking empty space)
   _setCloseLabel(true);
 }
 function _commitChoice(ci){
@@ -391,13 +387,14 @@ function _commitChoice(ci){
   let res=null;
   if(typeof netOffhoursCommit==='function') res=netOffhoursCommit(G, payload);
   else if(typeof applyOffhoursCommit==='function') res=applyOffhoursCommit(G, payload);
+  if(res && res.broke){ _flash('Not enough M3rit$.'); return; }   // keep the line-picker so they can step away / retry
+  // success — bond + dossier are written; show the result and WAIT for the player to step away (no auto-fade)
   _clearUI();
-  if(res && res.broke){ _flash('Not enough M3rit$.'); _int.mode='idle'; _int.scene=null; return; }
-  const reply=(res&&res.reply)||'…';
-  _showBubble(sc.vet, reply, 'reply', 4200);
-  if(res && res.wrote!=null) _showBubble(sc.target, 'A line goes into '+sc.vet.name+'’s file.', 'npc', 3200, 30);
-  if(typeof refreshUI==='function') refreshUI();
-  _int.scene=null; _int.mode='idle'; _int.selected=null; _syncHead(); _renderRoster(); _setCloseLabel(false);
+  _showBubble(sc.vet, (res&&res.reply)||'…', 'reply', 0);          // ttl 0 = persists until ✕ / Esc / Step away
+  if(res && res.wrote!=null) _showBubble(sc.target, 'A line goes into '+sc.vet.name+'’s file.', 'npc', 0, 30);
+  _showStepAway();
+  try{ if(typeof refreshUI==='function') refreshUI(); }catch(_){ }
+  _int.scene=null; _int.mode='ended'; _int.selected=null; _syncHead(); _renderRoster(); _setCloseLabel(true);
 }
 function _doGift(vet, target){
   _hideHint(); const cx=_interactionContext(vet, target);
@@ -405,9 +402,11 @@ function _doGift(vet, target){
   const payload={ vetKey:vet.key, npcId:cx.npcId, kind:cx.kind, gift:true };
   let res=(typeof netOffhoursCommit==='function')?netOffhoursCommit(G,payload):(typeof applyOffhoursCommit==='function'?applyOffhoursCommit(G,payload):null);
   if(res && res.broke){ _flash('Not enough M3rit$.'); _int.mode='idle'; return; }
-  _showBubble(vet, (res&&res.reply)||'They take it with a nod.', 'reply', 3600);
-  if(typeof refreshUI==='function') refreshUI();
-  _int.mode='idle'; _int.selected=null; _syncHead(); _setCloseLabel(false);
+  _clearUI();
+  _showBubble(vet, (res&&res.reply)||'They take it with a nod.', 'reply', 0);   // persists until dismissed
+  _showStepAway();
+  try{ if(typeof refreshUI==='function') refreshUI(); }catch(_){ }
+  _int.mode='ended'; _int.selected=null; _syncHead(); _setCloseLabel(true);
 }
 
 /* ---- floating UI helpers ---- */
@@ -426,6 +425,14 @@ function _flash(t){   // visible INSIDE the overlay — the game toast is z-30, 
   const ui=$('oh-int-ui'); if(!ui) return; const old=document.getElementById('ohi-flash'); if(old&&old.parentNode) old.parentNode.removeChild(old);
   const el=document.createElement('div'); el.id='ohi-flash'; el.className='ohi-flash'; el.textContent=t; ui.appendChild(el);
   setTimeout(()=>{ if(el.parentNode) el.parentNode.removeChild(el); }, 2600);
+}
+// the only exit from an open/finished conversation — bottom-centre, persists until clicked (✕/Esc do the same)
+function _showStepAway(){
+  const ui=$('oh-int-ui'); if(!ui) return; const m=_metrics();
+  const sx=document.createElement('div'); sx.className='ohi-choice'; sx.style.setProperty('--ac','#ff5d70');
+  sx.style.left='50%'; sx.style.top=(m.cssH-152)+'px'; sx.style.textAlign='center'; sx.style.fontWeight='600';
+  sx.textContent='✕ Step away'; sx.addEventListener('click', function(ev){ ev.stopPropagation(); _dismiss(); });
+  ui.appendChild(sx);
 }
 function _setMode(mode){ _int.mode=mode; if(mode==='idle'){ _int.selected=null; _clearUI(); } }
 function _clearUI(){ const ui=$('oh-int-ui'); if(ui) ui.innerHTML=''; }
