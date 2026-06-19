@@ -32,7 +32,7 @@ const OFFHOURS = {
     // approach: [pointWeight ×{1,2,3}, checkBias]
     approach: { warm:[1, 0.10], probing:[2, 0.0], blunt:[1, -0.12] },
     // compatibility weights (vet↔vet) — RimWorld/Wildermyth
-    compat: { home:0.30, dream:0.25, trauma:-0.30, crime:-0.35, type:0.12, friendT:0.33, rivalT:-0.20, romanceT:0.55, mentorGap:3 },
+    compat: { home:0.30, dream:0.25, trauma:-0.30, crime:-0.35, type:0.12, friendT:0.33, rivalT:-0.20, romanceT:0.45, mentorGap:3 },
     cohesion: { l1:10, l2:15, l3:20 },   // per-level increments to bond up (XCOM cohesion ladder)
   },
 
@@ -97,6 +97,69 @@ const OFFHOURS = {
     { text:"Found something like a brother in {them} — over bad music and worse drinks at Static." },         // 9
     { text:"Made an enemy of {them} the honest way: face to face, over the thing neither would drop." },      // 10
     { text:"Found, in {them}, the one warm thing this city hadn't taken yet." },                              // 11
+    { text:"Took the drink {me} hadn't ordered at the Late Shift and traded the week's dead with {npc} — names, never numbers — till the ice in the glass was gone." },   // 12
+    { text:"Asked {npc} if she ever wanted out, and somehow it was {me} who answered — said what {me} wants: {dream}, across the rail to a stranger." },   // 13
+    { text:"Came off {lastmap} too heavy and set part of it down at the Late Shift — {npc} remembered {fallen} too, so {me} carried out a little less." },   // 14
+    { text:"Told {npc} what {me} did before the company — {crime} — and she didn't flinch, just said she'd figured it was always something that shape." },   // 15
+    { text:"Sat where {npc} could read {me} and gave her the names instead — the dead {me} carries traded for hers — until the corners stopped mattering." },   // 16
+    { text:"Learned the Late Shift's one rule — nobody finishes a war in here — and took the gap at the dark end of the rail until it was {me}'s by habit." },   // 17
+    { text:"Asked {npc} about flying again; she'd buried a founder-mech and traded the sky for a rag and a glass, on purpose. Found out {me} was just whoever the same war left." },   // 18
+    { text:"Told {npc} {me} was done drinking with strangers and got told {me} stopped being one four visits back — then just kept showing up." },   // 19
+    { text:"Said it straight to {npc} — the thing {me} actually wants: {dream} — and out loud, for the first time, it didn't sound stupid." },   // 20
+    { text:"Told {npc} who {fallen} actually was — the person, not the soldier — and she didn't fill the gaps with comfort, just kept them, the way she keeps all of them." },   // 21
+    { text:"Finally said the thing about {trauma} to {npc}, who wouldn't lie that it gets better — she stayed all the way through and poured one for each, so it stopped being only {me}'s." },   // 22
+    { text:"Took the name {npc} wrote on a coaster — someone back in {home} who still owes the dead a favor — and left to settle the one thing there that's still alive." },   // 23
+    { text:"Ate the cold broth {npc} had ordered without asking — the apology neither of them could say out loud." },   // 24
+    { text:"Handed {npc} one small survivable truth about the war, and watched them keep it like it was worth more." },   // 25
+    { text:"Said the dead were gone — flat, no comfort in it — but said it at {npc}'s counter, where it landed on someone." },   // 26
+    { text:"Gave {npc} the part of {fallen} that wasn't a soldier — the laugh, the bad habit — so two people carry the name now." },   // 27
+    { text:"Named one old wound at {npc}'s counter and owned their half of it — no ceremony, one thing off the list." },   // 28
+    { text:"Let {npc} talk around the creased photo — who was alive, what {home} smelled like — and sat in a life that was good once." },   // 29
+    { text:"Left the creased photo with {npc} to keep somewhere they'd see it — so one of them still remembers who {me} was." },   // 30
+    { text:"Gave {npc} the edges of the unsaid thing, not the center — and got told to bring the rest when {me} could carry it." },   // 31
+    { text:"Said the thing about {trauma} all the way through, and {npc} reached across the cold bowls and took {me}'s hand." },   // 32
+    { text:"Left {npc}'s battered handset on the formica, but quit pretending the line to {home} wasn't there." },   // 33
+    { text:"Picked up {npc}'s handset and let someone back in {home} hear {me} was still breathing." },   // 34
+    { text:"Caught the key {npc} slid down the counter — a door back in {home} that isn't a barracks, that the war can't reach." },   // 35
+    { text:"Drank with someone who crawled off the same ridge as {me}, different years — no shared roster, just the same dirt under both their nails." },   // 36
+    { text:"Asked {them} at Static what they'd do if the noise ever quit, and got back {me}'s own answer: go find a louder room." },   // 37
+    { text:"Traded the cheapest good night from before the war with {them} — two leftovers, comparing the scraps it didn't get to." },   // 38
+    { text:"Pointed out the bar-fight lie of a scar, then the real one, and watched {them} do the same — done explaining to anyone but each other." },   // 39
+    { text:"Finished, at Static, the war story {me} never finishes — {them} didn't fix it or flinch, just logged the debt." },   // 40
+    { text:"Guarded the question of whose call killed {fallen} alongside {them}, so neither carried it alone, and raised a glass at the full one without a word." },   // 41
+    { text:"Told {them} the thing about {fallen} that sounds like a lie to anyone who wasn't there — {them} was there. {fallen} was real in that booth." },   // 42
+    { text:"Told {them} {me}'d have made the same bad call and carried it the same — and the call picked up a second name in the dark of the booth." },   // 43
+    { text:"Made {them} run the no-trade math out loud till it landed nowhere clean, then refused to leave {them} alone with the result." },   // 44
+    { text:"Sat through the long quiet while {them} found the first inch back up from the one they couldn't reach. Not forgiveness — standing." },   // 45
+    { text:"Handed {them} the name {me} couldn't reach in time — ghost for ghost — so neither was the only one at the table holding a short list." },   // 46
+    { text:"Said it plain to {them}: the last good thing this burned-down city hadn't taken yet — and learned it ran both ways." },   // 47
+    { text:"Told {them} that whatever the city does next, {me} wants {them} on the wrong end of it alongside — and got the real grin the war took." },   // 48
+    { text:"Swore it over last call and got it answered the only way {them} answers — {me}'s glass held against {me}'s hand a beat too long." },   // 49
+    { text:"Heard {them} admit they'd figured on burning out alone, till {me} turned up facing the same door — the one survivor that made the wreckage livable." },   // 50
+    { text:"Held the stool against {them} till they called it stubborn — and neither one slid off. Respect, the only way {them} gives it." },   // 51
+    { text:"Told {them} straight {me} doesn't like them and won't fake it — and got poured a drink next to that anyway." },   // 52
+    { text:"Sat across from {them} and named the trade out loud: A&O sells the dead, and the two of you laid every brick." },   // 53
+    { text:"Swore to {them} {me} would hold their flank — the last good thing {me} had left to give, and they took it." },   // 54
+    { text:"Handed {them} the worst of it before anyone {me} actually likes — because {them}'s the one who'd never flatter {me} about it." },   // 55
+    { text:"The war took the unit, the company, {home} — everyone easy to love. Never got its hands on {them}." },   // 56
+    { text:"Closed the gap with {them} at Static, one stool at a time, and never put a word to why." },   // 57
+    { text:"Asked who {them} was holding the door open for, and the answer, low, was {me}." },   // 58
+    { text:"Traded the edges of the war with {them} past last call, the parts that aren't anybody's medal." },   // 59
+    { text:"Laid out what {me} carries — {trauma} — to drive {them} off, and {them} didn't flinch and didn't reach to fix it." },   // 60
+    { text:"Stood shoulder to shoulder with {them} by the fire door at Static, close enough the cold quit mattering." },   // 61
+    { text:"Called {them} the one thing the city hadn't put a price on, and agreed to keep it quiet so it stayed that way." },   // 62
+    { text:"Turned down the walk home with {them} on the last song, and regretted it before the door even shut." },   // 63
+    { text:"Took the long way out of Static with {them}, looped the wet block twice rather than let the night end." },   // 64
+    { text:"Sat in the stool {them} had been guarding for {me}, and let two degrees of lean carry the whole of it." },   // 65
+    { text:"Reached across the sticky table and {them} met {me} halfway — the one thing the war never got to cash in." },   // 66
+    { text:"Watched a dead-voiced merc hum past at Static and told {them} the odds were worth it — {them} had decided long before." },   // 67
+    { text:"Said the whole of it under the dying neon, and {them} answered by pressing a forehead to {me}'s and not letting go." },   // 68
+    { text:"Took the next stool over from the new one and taught {them} the only trick that keeps a green vet old: pick one reason to walk back." },   // 69
+    { text:"Taught {them} to sit with the door in sight — passed the first rule of staying alive across a sticky table at Static." },   // 70
+    { text:"Sat with {them} through their first one lost and handed down the only mercy on the menu: keep the name, carry the weight." },   // 71
+    { text:"Told {them} the thing nobody told {me}: being good at the job is the company spending you. Said keep your own books." },   // 72
+    { text:"Told {them}, grown now, the thing {me} stopped softening years ago: we won by becoming the enemy, and {me} built them for it too." },   // 73
+    { text:"Watched {them} cross the floor to a scared new face and hand down {me}'s exact words. The list is in steadier hands now." },   // 74
   ],
   // say[i] : first-person reaction, index-aligned to events (text-only until the lore-forge voice gate).
   say: [
@@ -112,6 +175,69 @@ const OFFHOURS = {
     "Bad music, good company.",                        // 9
     "Some people you respect by fighting them.",       // 10
     "Didn't expect to find that here.",                // 11
+    "Names, not numbers. Ice went.",   // 12
+    "Asked her. Ended up answering.",   // 13
+    "She remembered them. Walked lighter.",   // 14
+    "Weighed a few grams less, said.",   // 15
+    "Gave her the names. Corners quit.",   // 16
+    "Left the war at the door.",   // 17
+    "She gave up the sky on purpose.",   // 18
+    "Stopped being a stranger. Kept coming.",   // 19
+    "Said it plain. Didn't sound stupid.",   // 20
+    "The person. She kept them.",   // 21
+    "Not only mine now. The mercy.",   // 22
+    "Got a coaster. Going to settle it.",   // 23
+    "Ate it cold. That was the sorry.",   // 24
+    "Gave them one true thing. Just one.",   // 25
+    "They're gone. Somebody heard me.",   // 26
+    "Now someone else carries the name.",   // 27
+    "Owned my half. One off the list.",   // 28
+    "Sat in the good part. Let it stand.",   // 29
+    "Keep it. So somebody remembers.",   // 30
+    "Gave the edges. Kept the center.",   // 31
+    "Said all of it. They held on.",   // 32
+    "Didn't call. Stopped hiding the line.",   // 33
+    "Called home. Let them hear me.",   // 34
+    "Caught the key. A door that's mine.",   // 35
+    "Same ground. Different year. Close enough.",   // 36
+    "Neither of us trusts the quiet.",   // 37
+    "Compared scraps. Wasn't nothing.",   // 38
+    "Quit explaining. Except to {them}.",   // 39
+    "Finished it. Just a nod, logged.",   // 40
+    "Some weight you hold together.",   // 41
+    "Said it. The one who'd believe it did.",   // 42
+    "Two names on it now.",   // 43
+    "No trade. Not letting them sit alone.",   // 44
+    "Stayed for the inch back up.",   // 45
+    "Traded ghosts. Two lists, leaned together.",   // 46
+    "Last good thing. It's mutual.",   // 47
+    "The wrong end. Where else.",   // 48
+    "Never says it back. Doesn't have to.",   // 49
+    "We take the next one together.",   // 50
+    "Neither of us slid off. That holds.",   // 51
+    "Don't like them. Drank next to them.",   // 52
+    "We built it. Neither of us clean.",   // 53
+    "Told them I'd hold their flank.",   // 54
+    "Trusted the one who won't flatter.",   // 55
+    "Too mean to lose each other.",   // 56
+    "Moved down a stool. Said nothing.",   // 57
+    "Turned out they waited on me.",   // 58
+    "Stayed past close. Didn't clock it.",   // 59
+    "They let me keep it whole.",   // 60
+    "Close enough the cold quit.",   // 61
+    "Don't tell. They'd price it.",   // 62
+    "Said no. Almost didn't.",   // 63
+    "Looped the block. Twice.",   // 64
+    "The stool was mine. It held.",   // 65
+    "Named it. Off the books.",   // 66
+    "Decided. Same as them.",   // 67
+    "Said all of it. Once.",   // 68
+    "Pointed the kid the right way. Once.",   // 69
+    "Showed them how the old ones sit.",   // 70
+    "Their first one. Helped carry it.",   // 71
+    "Told them the part nobody told me.",   // 72
+    "Couldn't lie to that one anymore.",   // 73
+    "The kid's the senior now. It's theirs.",   // 74
   ],
   // scenes[] : Scene objects. The counterpart OPENS; the bulleted choices are the VETERAN's lines.
   //   req: {venue, kind, minTier, maxTier, gate}  · choice: {approach, gate, line, check, land, miss}
@@ -309,12 +435,12 @@ const OFFHOURS = {
             { approach:'warm', line:"Take the glass. Let her talk.",
               land:{ reply:"\"Good,\" {npc} says. \"It's the ones who don't drink I watch.\" She pours herself a short one and waits.", next:1 } },
             { approach:'probing', gate:'dream', line:"Ask if she ever wanted out of this city.",
-              land:{ reply:"\"Out?\" She almost laughs. \"Tell me yours first.\" And somehow it's {me} saying it — {dream} — out loud, to a stranger pouring drinks.", ev:1 } },
+              land:{ reply:"\"Out?\" She almost laughs. \"Tell me yours first.\" And somehow it's {me} saying it — {dream} — out loud, to a stranger pouring drinks.", ev:13 } },
             { approach:'blunt', line:"\"I'm not here to get read.\"",
               land:{ reply:"\"Wasn't reading. Pouring.\" She slides it closer anyway, slower. \"I'll be here when you are.\"", pts:0 } } ] },
         { choices:[
             { approach:'warm', line:"Trade the week's dead. Names, not numbers.",
-              land:{ reply:"{npc} starts naming the ones you have in common. The ice outlasts the small talk, and {me} stays till the glass sweats.", ev:0 } },
+              land:{ reply:"{npc} starts naming the ones you have in common. The ice outlasts the small talk, and {me} stays till the glass sweats.", ev:12 } },
             { approach:'probing', line:"Ask what keeps her behind this bar.",
               land:{ reply:"\"Somebody's got to remember the names,\" she says, and tops {me} off like that settles it. Maybe it does." } } ] }
       ] },
@@ -330,12 +456,12 @@ const OFFHOURS = {
               land:{ reply:"\"Suit yourself.\" She doesn't push. \"I'll keep the names till you want them.\"", next:2 } } ] },
         { choices:[
             { approach:'probing', gate:'crime', line:"Finally say what {me} did before the company: {crime}.",
-              land:{ reply:"{npc} doesn't flinch. \"Yeah. Figured it was something that shape.\" Said out loud, to someone who stayed, it weighs a few grams less.", ev:2, fl:'ARC_UNLOCKED' } },
+              land:{ reply:"{npc} doesn't flinch. \"Yeah. Figured it was something that shape.\" Said out loud, to someone who stayed, it weighs a few grams less.", ev:15, fl:'ARC_UNLOCKED' } },
             { approach:'warm', line:"Talk about {fallen} instead — the ones who didn't walk back out.",
-              land:{ reply:"You trade the kind of small talk that only means anything after a war. {npc} remembers {fallen} too. {me} leaves a little lighter.", ev:0 } } ] },
+              land:{ reply:"You trade the kind of small talk that only means anything after a war. {npc} remembers {fallen} too. {me} leaves a little lighter.", ev:14 } } ] },
         { choices:[
             { approach:'warm', line:"Name one of the dead with her. Just one.",
-              land:{ reply:"\"{fallen},\" she repeats, like she's filing it somewhere safe. \"Got it. They don't get lost in here.\"", ev:0 } },
+              land:{ reply:"\"{fallen},\" she repeats, like she's filing it somewhere safe. \"Got it. They don't get lost in here.\"", ev:14 } },
             { approach:'blunt', line:"Nothing. Just the burn of the drink.",
               land:{ reply:"{npc} lets the quiet do its work and leaves the bottle in reach. Sometimes that's the whole conversation.", pts:0 } } ] }
       ] },
@@ -357,7 +483,7 @@ const OFFHOURS = {
           ] },
         { choices:[
         { approach:'warm', line:"Trade names. The dead {me} carries, for the ones she does.",
-          land:{ reply:"{npc} names hers, slow, like she's done it a hundred nights. {me} adds a few. The ice outlasts the talk, and the corners stop mattering for a while.", ev:0 } },
+          land:{ reply:"{npc} names hers, slow, like she's done it a hundred nights. {me} adds a few. The ice outlasts the talk, and the corners stop mattering for a while.", ev:16 } },
         { approach:'probing', line:"Ask what she figured out about {me}.",
           land:{ reply:"\"You're not running from anyone in this room. You're running from one back wherever home was.\" She tops {me} off. \"Ten minutes. Don't be impressed. Everyone in here's the same.\"" } },
           ] }
@@ -379,9 +505,9 @@ const OFFHOURS = {
           ] },
         { choices:[
         { approach:'warm', line:"Settle in at the dark end. Make it a habit.",
-          land:{ reply:"By the third visit she has the bottle down before {me} sits. The city stays loud and gone outside. In here, the gap at the rail is {me}'s. That's the trade, and it holds.", ev:3 } },
+          land:{ reply:"By the third visit she has the bottle down before {me} sits. The city stays loud and gone outside. In here, the gap at the rail is {me}'s. That's the trade, and it holds.", ev:17 } },
         { approach:'blunt', line:"Ask if the chromed merc ever pays his tab.",
-          land:{ reply:"\"He pays in songs from a dead man. I let it slide.\" She pours one more. \"Everybody in here runs on borrowed somebody. You'll fit.\"", ev:3 } },
+          land:{ reply:"\"He pays in songs from a dead man. I let it slide.\" She pours one more. \"Everybody in here runs on borrowed somebody. You'll fit.\"", ev:17 } },
           ] }
       ] },
     { id:'bar.shop_talk', venue:'bar', kind:'confidant', with:'bartender', req:{minTier:1, maxTier:2},
@@ -401,9 +527,9 @@ const OFFHOURS = {
           ] },
         { choices:[
         { approach:'warm', line:"Say it plain — better not to drink with strangers anymore.",
-          land:{ reply:"\"You stopped being a stranger about four visits ago.\" She tops {me} off, the bottle already half-knowing the pour. \"Don't make it weird. Just keep showing up.\"", ev:3 } },
+          land:{ reply:"\"You stopped being a stranger about four visits ago.\" She tops {me} off, the bottle already half-knowing the pour. \"Don't make it weird. Just keep showing up.\"", ev:19 } },
         { approach:'probing', line:"Ask if she ever thinks about flying again.",
-          land:{ reply:"\"Every time something loud goes over.\" She glances at the ceiling like she can see through it. \"Then it passes, and there's a glass to dry. I made that trade on purpose.\"", ev:0 } },
+          land:{ reply:"\"Every time something loud goes over.\" She glances at the ceiling like she can see through it. \"Then it passes, and there's a glass to dry. I made that trade on purpose.\"", ev:18 } },
           ] }
       ] },
     { id:'bar.want', venue:'bar', kind:'confidant', with:'bartender', req:{minTier:1, maxTier:2},
@@ -423,7 +549,7 @@ const OFFHOURS = {
           ] },
         { choices:[
         { approach:'warm', gate:'dream', line:"Say it. The thing {me} actually wants: {dream}.",
-          land:{ reply:"{npc} sets the glass down and listens, all the way to the end. \"That's a real one,\" she says when {me}'s done. \"Hold onto it. They don't make many.\" Out loud, for once. It doesn't sound stupid.", ev:1 } },
+          land:{ reply:"{npc} sets the glass down and listens, all the way to the end. \"That's a real one,\" she says when {me}'s done. \"Hold onto it. They don't make many.\" Out loud, for once. It doesn't sound stupid.", ev:20 } },
         { approach:'blunt', line:"Order another instead. Some wants stay in the glass.",
           land:{ reply:"\"Fair,\" {npc} says, and pours it. \"It'll keep. They always keep.\" She leaves the bottle in reach and lets the want stay nameless one more night." } },
           ] }
@@ -443,13 +569,13 @@ const OFFHOURS = {
           ] },
         { choices:[
         { approach:'warm', line:"Tell her what {fallen} was actually like. Not the soldier. The person.",
-          land:{ reply:"{me} talks until the ice goes to water — what they laughed at, what they couldn't stand. {npc} doesn't fill the gaps with comfort. She keeps them, the way she keeps all of them. That's the only kind that lasts.", ev:0 } },
+          land:{ reply:"{me} talks until the ice goes to water — what they laughed at, what they couldn't stand. {npc} doesn't fill the gaps with comfort. She keeps them, the way she keeps all of them. That's the only kind that lasts.", ev:21 } },
         { approach:'probing', line:"Ask how she stops their faces blurring together.",
-          land:{ reply:"\"I don't. I just say them out loud so the blur doesn't win.\" She nods at the full glass across from {me}. \"That's what that's for. Say one more before you go.\"", ev:0 } },
+          land:{ reply:"\"I don't. I just say them out loud so the blur doesn't win.\" She nods at the full glass across from {me}. \"That's what that's for. Say one more before you go.\"", ev:21 } },
           ] },
         { choices:[
         { approach:'warm', line:"Before {me} leaves — give her the name. Just once.",
-          land:{ reply:"\"{fallen},\" she says back, filing it somewhere safe. \"Got it. Come back when you can stand it, and we'll say the rest.\" {me} leaves the same weight, set down better than {me} found it.", ev:0 } },
+          land:{ reply:"\"{fallen},\" she says back, filing it somewhere safe. \"Got it. Come back when you can stand it, and we'll say the rest.\" {me} leaves the same weight, set down better than {me} found it.", ev:21 } },
         { approach:'blunt', line:"Finish the drink. Leave nothing on the bar but the glass.",
           land:{ reply:"{npc} watches {me} go and doesn't say goodbye — she's learned not to spend them. She clears the full glass last. Sometimes that's the whole eulogy.", pts:0 } },
           ] }
@@ -471,13 +597,13 @@ const OFFHOURS = {
           ] },
         { choices:[
         { approach:'probing', gate:'trauma', line:"Finally say the thing about {trauma}.",
-          land:{ reply:"{npc} doesn't reach over, doesn't soften it, doesn't say it gets better — she knows better than to lie. She stays, all the way through, and pours one for each of {me}. \"Now it's not only yours. That's the only mercy this job has.\" Said to someone who stayed, it stops being a stone {me} carries alone.", ev:0, fl:'ARC_UNLOCKED' } },
+          land:{ reply:"{npc} doesn't reach over, doesn't soften it, doesn't say it gets better — she knows better than to lie. She stays, all the way through, and pours one for each of {me}. \"Now it's not only yours. That's the only mercy this job has.\" Said to someone who stayed, it stops being a stone {me} carries alone.", ev:22, fl:'ARC_UNLOCKED' } },
         { approach:'blunt', line:"Get to the edge of it — then pull back to the war.",
           land:{ reply:"{npc} lets {me} steer away. \"Another night, maybe.\" The glass keeps turning in her hands. The thing about {trauma} stays caged. \"It'll keep. They always keep. I'll be here.\"", next:2 } },
           ] },
         { choices:[
         { approach:'warm', line:"Trade the dead instead. The names {me} can say.",
-          land:{ reply:"{me} gives her the ones {me} can talk about, and keeps the one {me} can't. {npc} takes them all without weighing which is which. \"These count too. Come back for the rest when you're ready.\"", ev:0 } },
+          land:{ reply:"{me} gives her the ones {me} can talk about, and keeps the one {me} can't. {npc} takes them all without weighing which is which. \"These count too. Come back for the rest when you're ready.\"", ev:22 } },
         { approach:'blunt', line:"Nothing more tonight. Just the burn.",
           land:{ reply:"{npc} leaves the bottle in reach and the question open. \"No rush. The thing's not going anywhere. Neither am I.\" Sometimes the not-saying is the whole conversation.", pts:0 } },
           ] }
@@ -496,9 +622,9 @@ const OFFHOURS = {
           ] },
         { choices:[
         { approach:'warm', line:"Take the road she maps. Mean it. Go settle it.",
-          land:{ reply:"{npc} writes a name and an address on a coaster and slides it over — someone in {home} who still owes the dead a favor. \"Use it. Then come tell me how it went, or don't, and I'll know it went the other way.\" She pours the last two. \"Go settle it. I'll keep your stool. I keep everything.\"", ev:4, fx:{t:'capstone'} } },
+          land:{ reply:"{npc} writes a name and an address on a coaster and slides it over — someone in {home} who still owes the dead a favor. \"Use it. Then come tell me how it went, or don't, and I'll know it went the other way.\" She pours the last two. \"Go settle it. I'll keep your stool. I keep everything.\"", ev:23, fx:{t:'capstone'} } },
         { approach:'blunt', line:"Ask her to keep one name above all the rest while {me}'s gone.",
-          land:{ reply:"\"Tell me which.\" {me} does. {npc} sets it at the top of the list only she can read. \"Above the rest. Done. Now go do the thing that name's been asking you to do since before you walked in here.\" She charges for nothing. \"Go home. The stool's yours till you're back.\"", ev:4, fx:{t:'capstone'} } },
+          land:{ reply:"\"Tell me which.\" {me} does. {npc} sets it at the top of the list only she can read. \"Above the rest. Done. Now go do the thing that name's been asking you to do since before you walked in here.\" She charges for nothing. \"Go home. The stool's yours till you're back.\"", ev:23, fx:{t:'capstone'} } },
           ] }
       ] },
     // --- diner/kin (multi-beat) ---
@@ -519,9 +645,9 @@ const OFFHOURS = {
           ] },
         { choices:[
         { approach:'warm', line:"Eat the cold broth without complaining. Let the quiet sit.",
-          land:{ reply:"You eat it cold, both of you, like that's the apology neither can say yet. The broth goes colder. Nobody walks out.", ev:5 } },
+          land:{ reply:"You eat it cold, both of you, like that's the apology neither can say yet. The broth goes colder. Nobody walks out.", ev:24 } },
         { approach:'blunt', line:"Ask if {npc} actually wants {me} here or just wanted to win the argument.",
-          land:{ reply:"\"Both,\" {npc} says, and the honesty of it almost gets a laugh out of you. \"Eat your broth. We'll fight about the rest later.\" Later means coming back.", ev:5 } },
+          land:{ reply:"\"Both,\" {npc} says, and the honesty of it almost gets a laugh out of you. \"Eat your broth. We'll fight about the rest later.\" Later means coming back.", ev:24 } },
           ] }
       ] },
     { id:'diner.what_to_call_you', venue:'diner', kind:'kin', req:{minTier:0, maxTier:1},
@@ -541,9 +667,9 @@ const OFFHOURS = {
           ] },
         { choices:[
         { approach:'warm', line:"Tell {npc} one small true thing about the war. Just one.",
-          land:{ reply:"You give them one — small, survivable, true. {npc} takes it like it's worth more than it is. \"There. Now I know one thing about it. Come back, I'll learn the next.\"", ev:5 } },
+          land:{ reply:"You give them one — small, survivable, true. {npc} takes it like it's worth more than it is. \"There. Now I know one thing about it. Come back, I'll learn the next.\"", ev:25 } },
         { approach:'probing', line:"Ask {npc} to tell {me} what {me} missed back in {home}.",
-          land:{ reply:"{npc} talks. Births, deaths, the corner store A&O bought and gutted. {me} listens to a life that kept going without {me} in it, and stays anyway. The broth goes cold, unnoticed.", ev:5 } },
+          land:{ reply:"{npc} talks. Births, deaths, the corner store A&O bought and gutted. {me} listens to a life that kept going without {me} in it, and stays anyway. The broth goes cold, unnoticed.", ev:25 } },
           ] }
       ] },
     { id:'diner.who_ordered', venue:'diner', kind:'kin', req:{minTier:0, maxTier:2, need:'fallen'},
@@ -562,9 +688,9 @@ const OFFHOURS = {
           ] },
         { choices:[
         { approach:'warm', line:"Tell {npc} the small thing about {fallen} — the laugh, the bad habit, the thing only {me} would remember.",
-          land:{ reply:"You give {npc} the part of {fallen} that wasn't a soldier. {npc} laughs in the right place, goes quiet in the right place. \"Sounds like they were good to know. Sorry I never did.\" Now there's a second person who carries the name.", ev:6 } },
+          land:{ reply:"You give {npc} the part of {fallen} that wasn't a soldier. {npc} laughs in the right place, goes quiet in the right place. \"Sounds like they were good to know. Sorry I never did.\" Now there's a second person who carries the name.", ev:27 } },
         { approach:'blunt', line:"\"They're gone. Saying it at a noodle counter doesn't change that.\"",
-          land:{ reply:"\"No,\" {npc} agrees. \"But you said it where someone heard. That's not nothing.\" The bowl's cold. {npc} orders two more, like the night's worth keeping open.", ev:5 } },
+          land:{ reply:"\"No,\" {npc} agrees. \"But you said it where someone heard. That's not nothing.\" The bowl's cold. {npc} orders two more, like the night's worth keeping open.", ev:26 } },
           ] }
       ] },
     { id:'diner.small_repairs', venue:'diner', kind:'kin', req:{minTier:1, maxTier:2},
@@ -584,9 +710,9 @@ const OFFHOURS = {
           ] },
         { choices:[
         { approach:'warm', line:"Settle one small old thing tonight — own {me}'s half of the one you can actually name.",
-          land:{ reply:"You name the small old wound and own your half. {npc} doesn't make a ceremony of it. \"Okay. That one's settled. There's a list. But that one's off it.\" {me} leaves lighter.", ev:7 } },
+          land:{ reply:"You name the small old wound and own your half. {npc} doesn't make a ceremony of it. \"Okay. That one's settled. There's a list. But that one's off it.\" {me} leaves lighter.", ev:28 } },
         { approach:'probing', line:"Ask what's still on the list, between you.",
-          land:{ reply:"\"Long,\" {npc} admits. \"Shorter than it was. We work it backward, one bad bowl of broth at a time.\" Not fixed. Not nothing. {me} leaves lighter.", ev:7 } },
+          land:{ reply:"\"Long,\" {npc} admits. \"Shorter than it was. We work it backward, one bad bowl of broth at a time.\" Not fixed. Not nothing. {me} leaves lighter.", ev:28 } },
           ] }
       ] },
     { id:'diner.photo_left', venue:'diner', kind:'kin', req:{minTier:1, maxTier:2},
@@ -606,9 +732,9 @@ const OFFHOURS = {
           ] },
         { choices:[
         { approach:'warm', line:"Tell {npc} to keep it. \"Somewhere you'll see it. So one of us remembers who I was.\"",
-          land:{ reply:"{npc} slips it back in a pocket, careful. \"I'll keep it where I'll see it. And you'll keep coming back, so I've got the new version to set beside it.\" {me} leaves lighter.", ev:7 } },
+          land:{ reply:"{npc} slips it back in a pocket, careful. \"I'll keep it where I'll see it. And you'll keep coming back, so I've got the new version to set beside it.\" {me} leaves lighter.", ev:30 } },
         { approach:'probing', line:"Ask {npc} to tell {me} something the photo doesn't show.",
-          land:{ reply:"{npc} talks about the day around the picture — who was alive, what {home} smelled like, the dumb argument right after. {me} sits in a life that was good once and lets it be true. The broth goes cold, unmourned.", ev:5 } },
+          land:{ reply:"{npc} talks about the day around the picture — who was alive, what {home} smelled like, the dumb argument right after. {me} sits in a life that was good once and lets it be true. The broth goes cold, unmourned.", ev:29 } },
           ] }
       ] },
     { id:'diner.reckoning', venue:'diner', kind:'kin', req:{minTier:2, maxTier:3, gate:'trauma'},
@@ -627,9 +753,9 @@ const OFFHOURS = {
           ] },
         { choices:[
         { approach:'probing', gate:'trauma', line:"Finally say the thing about {trauma}. At a noodle counter, of all places.",
-          land:{ reply:"It lands hard and quiet, the thing about {trauma}, said all the way through for the first time. {npc} doesn't recoil. {npc} reaches across the cold bowls, takes {me}'s hand, doesn't let go. \"I've got you. Should've had you the whole time.\"", ev:6, fl:'ARC_UNLOCKED' } },
+          land:{ reply:"It lands hard and quiet, the thing about {trauma}, said all the way through for the first time. {npc} doesn't recoil. {npc} reaches across the cold bowls, takes {me}'s hand, doesn't let go. \"I've got you. Should've had you the whole time.\"", ev:32, fl:'ARC_UNLOCKED' } },
         { approach:'warm', line:"Get most of the way there. Stop short of the worst of it.",
-          land:{ reply:"You give {npc} the shape of it, the edges, not the center. {npc} nods slow. \"More than I had. Keep the rest till you can carry it across the table. I'll be in the booth.\" Closer. Not all the way.", ev:5 } },
+          land:{ reply:"You give {npc} the shape of it, the edges, not the center. {npc} nods slow. \"More than I had. Keep the rest till you can carry it across the table. I'll be in the booth.\" Closer. Not all the way.", ev:31 } },
           ] }
       ] },
     { id:'diner.the_call_home', venue:'diner', kind:'kin', req:{minTier:2, maxTier:3},
@@ -648,9 +774,9 @@ const OFFHOURS = {
           ] },
         { choices:[
         { approach:'warm', line:"Pick up the handset. Let {npc} hear {me} say {me}'s still breathing.",
-          land:{ reply:"You dial with {npc} watching. Somebody back in {home} answers, goes quiet, then says your name like it costs them. You don't say much. You don't have to. {npc} just nods, like a debt got paid down a little.", ev:7 } },
+          land:{ reply:"You dial with {npc} watching. Somebody back in {home} answers, goes quiet, then says your name like it costs them. You don't say much. You don't have to. {npc} just nods, like a debt got paid down a little.", ev:34 } },
         { approach:'blunt', line:"Leave the handset on the table. \"Not tonight. Maybe not ever. But you can stop hiding it.\"",
-          land:{ reply:"{npc} pockets it without argument. \"It'll be in my coat. You decide.\" Not the call. But you stopped pretending the line wasn't there. {npc} takes the smaller thing and doesn't push for the larger.", ev:5 } },
+          land:{ reply:"{npc} pockets it without argument. \"It'll be in my coat. You decide.\" Not the call. But you stopped pretending the line wasn't there. {npc} takes the smaller thing and doesn't push for the larger.", ev:33 } },
           ] }
       ] },
     { id:'diner.the_door', venue:'diner', kind:'kin', req:{minTier:4, maxTier:4},
@@ -661,9 +787,9 @@ const OFFHOURS = {
             "{npc} waits till the last bowl's cleared, then puts a key on the table. \"You spent the whole war becoming the enemy to win it. Come home. There's a place that'll let you just be the {rel} again.\""],
           choices:[
         { approach:'warm', line:"Cover the key with {me}'s hand before it stops moving.",
-          land:{ reply:"{me}'s hand closes over the key while it's still sliding. {npc} lets out a breath held for years. \"Good,\" is all. Whatever the war does next, it can't reach this. There's a door back in {home}, and it's {me}'s.", ev:8, fl:'CLOSEST', fx:{t:'capstone'} } },
+          land:{ reply:"{me}'s hand closes over the key while it's still sliding. {npc} lets out a breath held for years. \"Good,\" is all. Whatever the war does next, it can't reach this. There's a door back in {home}, and it's {me}'s.", ev:35, fl:'CLOSEST', fx:{t:'capstone'} } },
         { approach:'probing', line:"Ask {npc} why they held the place through all of it, even the years they couldn't stand {me}.",
-          land:{ reply:"\"Because I always meant to give it back,\" {npc} says, simple. \"Even when I couldn't stand you. Even then.\" {me} takes the key. Someone held the door the whole time {me} was gone, and never said so till now.", ev:8, fx:{t:'capstone'} } },
+          land:{ reply:"\"Because I always meant to give it back,\" {npc} says, simple. \"Even when I couldn't stand you. Even then.\" {me} takes the key. Someone held the door the whole time {me} was gone, and never said so till now.", ev:35, fx:{t:'capstone'} } },
           ] }
       ] },
     // --- club/friend (multi-beat) ---
@@ -684,9 +810,9 @@ const OFFHOURS = {
           ] },
         { choices:[
         { approach:'warm', line:"Trade the one op you both probably touched.",
-          land:{ reply:"No shared roster, but a shared coordinate — some godforsaken ridge you both crawled off of, different years. Something clicks.", ev:9 } },
+          land:{ reply:"No shared roster, but a shared coordinate — some godforsaken ridge you both crawled off of, different years. Something clicks.", ev:36 } },
         { approach:'probing', line:"Ask what {them} did before the company found them.",
-          land:{ reply:"Same kind of hard, different gutter. The drinks go down easier with nobody pretending otherwise.", ev:9 } },
+          land:{ reply:"Same kind of hard, different gutter. The drinks go down easier with nobody pretending otherwise.", ev:36 } },
           ] }
       ] },
     { id:'club.leftovers', venue:'club', kind:'friend', req:{minTier:0, maxTier:1},
@@ -706,9 +832,9 @@ const OFFHOURS = {
           ] },
         { choices:[
         { approach:'warm', line:"Trade the cheapest good night either of you remembers from before.",
-          land:{ reply:"{them} digs one up. {me} matches it. Two leftovers comparing the scraps the war didn't get to. It's not much. It's more than this dump usually gives.", ev:11 } },
+          land:{ reply:"{them} digs one up. {me} matches it. Two leftovers comparing the scraps the war didn't get to. It's not much. It's more than this dump usually gives.", ev:38 } },
         { approach:'probing', line:"Ask what {them} would do if the noise ever stopped for good.",
-          land:{ reply:"\"Wouldn't know what to do with the quiet,\" {them} admits. \"Probably go looking for the next loud room.\" {them} lifts the glass. {me} lifts back.", ev:9 } },
+          land:{ reply:"\"Wouldn't know what to do with the quiet,\" {them} admits. \"Probably go looking for the next loud room.\" {them} lifts the glass. {me} lifts back.", ev:37 } },
           ] }
       ] },
     { id:'club.scar_count', venue:'club', kind:'friend', req:{minTier:1, maxTier:2},
@@ -726,13 +852,13 @@ const OFFHOURS = {
           ] },
         { choices:[
         { approach:'probing', line:"Ask {them} which scar they tell people came from a bar fight.",
-          land:{ reply:"{them} taps the wrong one — the easy lie — then taps the real one and says nothing. {me} does the same. Two people who quit explaining themselves to anyone but each other.", ev:9 } },
+          land:{ reply:"{them} taps the wrong one — the easy lie — then taps the real one and says nothing. {me} does the same. Two people who quit explaining themselves to anyone but each other.", ev:39 } },
         { approach:'warm', line:"Tell {them} the one you don't usually finish.",
-          land:{ reply:"{me} finishes it this time. {them} doesn't fix it or flinch — just nods, like a debt logged. Lighter, said to the one person who gets it.", ev:11 } },
+          land:{ reply:"{me} finishes it this time. {them} doesn't fix it or flinch — just nods, like a debt logged. Lighter, said to the one person who gets it.", ev:40 } },
           ] },
         { choices:[
         { approach:'warm', line:"Drop it. Just drink with {them} till the song turns over.",
-          land:{ reply:"No stories. Two glasses, a bad song, and neither of you leaving first. Does more than talking would have.", ev:9 } },
+          land:{ reply:"No stories. Two glasses, a bad song, and neither of you leaving first. Does more than talking would have.", ev:39 } },
         { approach:'blunt', line:"Nothing. Let the silence ride and the drinks empty.",
           land:{ reply:"{them} lets the quiet work. The week doesn't shrink, but it gets carried by two for an hour.", pts:0 } },
           ] }
@@ -753,13 +879,13 @@ const OFFHOURS = {
           ] },
         { choices:[
         { approach:'warm', line:"Say the thing about {fallen} only the two of you would believe.",
-          land:{ reply:"{me} tells the story that sounds like a lie to anyone who wasn't there. {them} was there. \"Yeah. They really did that.\" {fallen}'s realer in this booth than anywhere in the city tonight.", ev:11 } },
+          land:{ reply:"{me} tells the story that sounds like a lie to anyone who wasn't there. {them} was there. \"Yeah. They really did that.\" {fallen}'s realer in this booth than anywhere in the city tonight.", ev:42 } },
         { approach:'blunt', line:"\"We don't talk about whose call it was. Not ever.\"",
-          land:{ reply:"{them} holds {me}'s eyes, doesn't blink. \"No. We don't.\" Some things you guard together so neither carries them alone. The glass stays where it is.", ev:9 } },
+          land:{ reply:"{them} holds {me}'s eyes, doesn't blink. \"No. We don't.\" Some things you guard together so neither carries them alone. The glass stays where it is.", ev:41 } },
           ] },
         { choices:[
         { approach:'warm', line:"Lift {me}'s own glass at the full one. Don't say the name out loud.",
-          land:{ reply:"{them} lifts back. No toast — the bass would eat it. Just two people letting the dead sit at the table a while longer.", ev:9 } },
+          land:{ reply:"{them} lifts back. No toast — the bass would eat it. Just two people letting the dead sit at the table a while longer.", ev:41 } },
         { approach:'probing', line:"Ask if {them} still hears from anyone else off the old roster.",
           land:{ reply:"\"You. That's the list.\" {them} says it flat. The roster's down to two stools and a full glass. {me} doesn't fill the silence. {them} doesn't need {me} to.", pts:0 } },
           ] }
@@ -781,15 +907,15 @@ const OFFHOURS = {
           ] },
         { choices:[
         { approach:'warm', line:"Tell {them} the truth: you'd have made the same call. And carried it the same.",
-          land:{ reply:"{them} lets out a breath {them}'s looked like {them} held for years. \"Then we carry the same one.\" Said it to {me} because {me} won't drop it or absolve it. The bad call's got two names on it now.", ev:9, fl:'ARC_UNLOCKED' } },
+          land:{ reply:"{them} lets out a breath {them}'s looked like {them} held for years. \"Then we carry the same one.\" Said it to {me} because {me} won't drop it or absolve it. The bad call's got two names on it now.", ev:43, fl:'ARC_UNLOCKED' } },
         { approach:'probing', line:"Ask who {them} would've traded to take it back — and watch {them} find no one.",
-          land:{ reply:"{them} runs the math {them}'s run a thousand times and lands nowhere clean. \"No trade. There never was.\" {me} doesn't fix it. {me} just won't let {them} sit with it solo from here.", ev:11 } },
+          land:{ reply:"{them} runs the math {them}'s run a thousand times and lands nowhere clean. \"No trade. There never was.\" {me} doesn't fix it. {me} just won't let {them} sit with it solo from here.", ev:44 } },
           ] },
         { choices:[
         { approach:'warm', line:"\"When you're ready. I'll be on this stool.\"",
           land:{ reply:"{them} nods at the bottles. \"Yeah. You will.\" Didn't land tonight, but {them} knows where {me} sits now.", pts:0 } },
         { approach:'blunt', line:"Let it go. Order for both of you and talk about anything else.",
-          land:{ reply:"You bury it under noise and a worse song. Still unsaid, but you walked it back from the edge together.", ev:9 } },
+          land:{ reply:"You bury it under noise and a worse song. Still unsaid, but you walked it back from the edge together.", ev:43 } },
           ] }
       ] },
     { id:'club.couldnt_save', venue:'club', kind:'friend', req:{minTier:3, maxTier:3},
@@ -809,13 +935,13 @@ const OFFHOURS = {
           ] },
         { choices:[
         { approach:'warm', line:"Tell {them} the one you couldn't reach. Trade ghost for ghost.",
-          land:{ reply:"{me} gives {them} {me}'s own — the reach that came up short — so {them}'s not the only one at the table holding a name. {them} takes it like it matters that {me} trusted them with it. Two short lists, leaned against each other.", ev:11, fl:'CLOSEST' } },
+          land:{ reply:"{me} gives {them} {me}'s own — the reach that came up short — so {them}'s not the only one at the table holding a name. {them} takes it like it matters that {me} trusted them with it. Two short lists, leaned against each other.", ev:46, fl:'CLOSEST' } },
         { approach:'probing', line:"Ask what {them} thinks the one they lost would want from them now.",
-          land:{ reply:"{them} sits with it a long time under the bass. \"Not this. Not me half-dead on a stool.\" Not forgiveness. The first inch toward standing up under it. {me} stays for the inch.", ev:9 } },
+          land:{ reply:"{them} sits with it a long time under the bass. \"Not this. Not me half-dead on a stool.\" Not forgiveness. The first inch toward standing up under it. {me} stays for the inch.", ev:45 } },
           ] },
         { choices:[
         { approach:'warm', line:"Don't push the guilt. Just refuse to let {them} drink it alone tonight.",
-          land:{ reply:"{me} matches {them} drink for drink and skips the consoling thing {them} doesn't want. By the dregs {them}'s not fixed, but {them}'s not solo, and tonight that's the only honest offer.", ev:9 } },
+          land:{ reply:"{me} matches {them} drink for drink and skips the consoling thing {them} doesn't want. By the dregs {them}'s not fixed, but {them}'s not solo, and tonight that's the only honest offer.", ev:45 } },
         { approach:'blunt', line:"\"Keep the list, then. But you're not the only name on it as of now.\"",
           land:{ reply:"{them} looks at {me} like {me} just signed something binding. \"...Yeah. Alright.\" The guilt stays {them}'s. The carrying gets split.", pts:0 } },
           ] }
@@ -834,9 +960,9 @@ const OFFHOURS = {
           ] },
         { choices:[
         { approach:'warm', line:"\"Whatever the city does next — I want you on the wrong end of it with me.\"",
-          land:{ reply:"{them} lets the grin all the way out, the real one the war took. \"The wrong end. Where else.\" Not said back word for word. Doesn't have to be.", ev:11 } },
+          land:{ reply:"{them} lets the grin all the way out, the real one the war took. \"The wrong end. Where else.\" Not said back word for word. Doesn't have to be.", ev:48 } },
         { approach:'blunt', line:"\"You're the last good thing in this burned-down dump and we both know it.\"", check:true,
-          land:{ reply:"{them} doesn't deny it. \"Low bar. But yeah.\" Clinks {me}'s glass hard enough to spill. The one warm thing the city hadn't taken — now it knows it's mutual.", ev:9 },
+          land:{ reply:"{them} doesn't deny it. \"Low bar. But yeah.\" Clinks {me}'s glass hard enough to spill. The one warm thing the city hadn't taken — now it knows it's mutual.", ev:47 },
           miss:{ reply:"It lands heavier than the bass can cover and {them} looks away. \"Don't make it a eulogy. We're not dead yet.\" Fair. You drink instead.", pts:0 } },
           ] }
       ] },
@@ -848,9 +974,9 @@ const OFFHOURS = {
             "{them} waits till the floor clears. \"There's always a next bad call. You know there is. I'm not doing the next one with strangers.\""],
           choices:[
         { approach:'warm', line:"\"The next bad call, the next bad roster, the next bad city — you and me. No one else.\"",
-          land:{ reply:"{them} doesn't say it back. {them} never says it back. Just slides {me}'s glass against {me}'s hand and holds it there a beat too long. That's the whole vow. Whatever the war does next, it does it to the two of you.", ev:9, fl:'CLOSEST', fx:{t:'capstone'} } },
+          land:{ reply:"{them} doesn't say it back. {them} never says it back. Just slides {me}'s glass against {me}'s hand and holds it there a beat too long. That's the whole vow. Whatever the war does next, it does it to the two of you.", ev:49, fl:'CLOSEST', fx:{t:'capstone'} } },
         { approach:'probing', line:"Ask if {them} ever figured it'd be one other survivor that made the wreckage livable.",
-          land:{ reply:"\"No,\" {them} says, honest to the end. \"Figured I'd burn out alone like the rest. Then there was you, facing the same door.\" {them} lifts the glass. \"Next bad call, we take it together. No one else gets a vote.\" The city took everything but this.", ev:11, fl:'CLOSEST', fx:{t:'capstone'} } },
+          land:{ reply:"\"No,\" {them} says, honest to the end. \"Figured I'd burn out alone like the rest. Then there was you, facing the same door.\" {them} lifts the glass. \"Next bad call, we take it together. No one else gets a vote.\" The city took everything but this.", ev:50, fl:'CLOSEST', fx:{t:'capstone'} } },
           ] }
       ] },
     // --- club/rival (multi-beat) ---
@@ -868,7 +994,7 @@ const OFFHOURS = {
           ] },
         { choices:[
         { approach:'blunt', line:"Tell {them} {me} doesn't drink with people {me} respects, and {me}'s still on this stool.",
-          land:{ reply:"{them} holds the look, then drinks. \"Same.\" Said like a complaint. Whatever that is, you both know it's real.", ev:10 } },
+          land:{ reply:"{them} holds the look, then drinks. \"Same.\" Said like a complaint. Whatever that is, you both know it's real.", ev:51 } },
           ] }
       ] },
     { id:'club.samefront', venue:'club', kind:'rival', req:{minTier:0, maxTier:2},
@@ -884,7 +1010,7 @@ const OFFHOURS = {
           ] },
         { choices:[
         { approach:'blunt', line:"Tell {them} {me} doesn't like them and isn't going to start pretending.",
-          land:{ reply:"\"Good. I can drink next to honest.\" Two people who won't bother lying to each other. It works.", ev:10 } },
+          land:{ reply:"\"Good. I can drink next to honest.\" Two people who won't bother lying to each other. It works.", ev:52 } },
           ] },
         { choices:[
         { approach:'blunt', line:"Let it go. Some nights the bar wins.",
@@ -904,7 +1030,7 @@ const OFFHOURS = {
           ] },
         { choices:[
         { approach:'blunt', line:"Say it plain: A&O owns the wreckage now, and the two of you laid every brick.",
-          land:{ reply:"\"They sell resurrection off our dead and call it a service. We're the only ones in this city who remember the dead were people.\" Neither drinks for a while. That silence is the closest thing to trust either of you has left.", ev:10 } },
+          land:{ reply:"\"They sell resurrection off our dead and call it a service. We're the only ones in this city who remember the dead were people.\" Neither drinks for a while. That silence is the closest thing to trust either of you has left.", ev:53 } },
           ] }
       ] },
     { id:'club.thecall', venue:'club', kind:'rival', req:{minTier:1, maxTier:2},
@@ -920,7 +1046,7 @@ const OFFHOURS = {
           ] },
         { choices:[
         { approach:'blunt', line:"Tell {them} {me} would hold their flank in a fight, and that's the highest thing {me} has left to give.",
-          land:{ reply:"{them} nods once, hard. \"Don't say it twice. I'll hold you to it the rest of my life.\" A vow with the friction left in.", ev:10 } },
+          land:{ reply:"{them} nods once, hard. \"Don't say it twice. I'll hold you to it the rest of my life.\" A vow with the friction left in.", ev:54 } },
           ] }
       ] },
     { id:'club.crossed', venue:'club', kind:'rival', req:{minTier:2, maxTier:3, need:'fallen'},
@@ -936,7 +1062,7 @@ const OFFHOURS = {
           ] },
         { choices:[
         { approach:'blunt', line:"Tell {them} {me} will never like them — but {me} trusts them with the worst of it before anyone {me} does like.",
-          land:{ reply:"\"Worst thing anyone's ever said to me. And the only one I believe.\" The respect of someone who'll never flatter you. The easy ones never give you this.", ev:10, fl:'ARC_UNLOCKED' } },
+          land:{ reply:"\"Worst thing anyone's ever said to me. And the only one I believe.\" The respect of someone who'll never flatter you. The easy ones never give you this.", ev:55, fl:'ARC_UNLOCKED' } },
           ] }
       ] },
     { id:'club.nemesis', venue:'club', kind:'rival', req:{minTier:4, maxTier:4},
@@ -950,7 +1076,7 @@ const OFFHOURS = {
           ] },
         { choices:[
         { approach:'blunt', line:"Make it plain: enemies who'd bleed out for each other. Drink to it once, then never say it again.",
-          land:{ reply:"\"To being too mean to lose each other.\" You drink. The war took the unit, the company, {home}, everyone who was easy to love. It couldn't get its hands on this one — the bond made out of friction and kept honest the whole way down.", ev:10, fl:'CLOSEST', fx:{t:'capstone'} } },
+          land:{ reply:"\"To being too mean to lose each other.\" You drink. The war took the unit, the company, {home}, everyone who was easy to love. It couldn't get its hands on this one — the bond made out of friction and kept honest the whole way down.", ev:56, fl:'CLOSEST', fx:{t:'capstone'} } },
           ] }
       ] },
     // --- club/romance (multi-beat) ---
@@ -971,9 +1097,9 @@ const OFFHOURS = {
           ] },
         { choices:[
         { approach:'warm', line:"Move down a stool. Close the gap, say nothing about it.",
-          land:{ reply:"{me} sits where the look doesn't have to travel so far. {them} makes room without making a thing of it. The night goes quiet in the middle of all that noise.", ev:9 } },
+          land:{ reply:"{me} sits where the look doesn't have to travel so far. {them} makes room without making a thing of it. The night goes quiet in the middle of all that noise.", ev:57 } },
         { approach:'probing', line:"Ask {them} who they were watching the door for.",
-          land:{ reply:"\"Nobody,\" {them} says. Then, quieter: \"Not till you sat down.\" {me} lets that lie where it fell and doesn't pick at it.", ev:11 } },
+          land:{ reply:"\"Nobody,\" {them} says. Then, quieter: \"Not till you sat down.\" {me} lets that lie where it fell and doesn't pick at it.", ev:58 } },
           ] }
       ] },
     { id:'club.bad_sleeper', venue:'club', kind:'romance', req:{minTier:0, maxTier:1},
@@ -991,9 +1117,9 @@ const OFFHOURS = {
           ] },
         { choices:[
         { approach:'warm', line:"Trade the small stuff. What keeps you up. What used to.",
-          land:{ reply:"Not the war. The edges of it. {them} laughs at the wrong thing, the way only somebody who was there can. {me} stays past last call without clocking it.", ev:9 } },
+          land:{ reply:"Not the war. The edges of it. {them} laughs at the wrong thing, the way only somebody who was there can. {me} stays past last call without clocking it.", ev:59 } },
         { approach:'probing', gate:'trauma', line:"Tell {them} the thing about {trauma} — just to see if it scares them off.",
-          land:{ reply:"{them} doesn't flinch and doesn't try to fix it. \"Mine's worse,\" they say, almost level. \"We'll compare another night.\" Nobody's let {me} keep a thing without trying to mend it in a long time.", ev:11 } },
+          land:{ reply:"{them} doesn't flinch and doesn't try to fix it. \"Mine's worse,\" they say, almost level. \"We'll compare another night.\" Nobody's let {me} keep a thing without trying to mend it in a long time.", ev:60 } },
           ] }
       ] },
     { id:'club.smoke_break', venue:'club', kind:'romance', req:{minTier:0, maxTier:1},
@@ -1009,10 +1135,10 @@ const OFFHOURS = {
           ] },
         { choices:[
         { approach:'warm', line:"Stand close enough that the cold stops mattering.",
-          land:{ reply:"{them} doesn't move away. {me} doesn't either. Nobody names what the closeness is for. The bass leaks through the door and covers the rest.", ev:9 } },
+          land:{ reply:"{them} doesn't move away. {me} doesn't either. Nobody names what the closeness is for. The bass leaks through the door and covers the rest.", ev:61 } },
         { approach:'blunt', line:"Tell {them} this is the only good thing the city hasn't found a price for yet.", check:true,
-          land:{ reply:"{them} goes still. \"Then we don't tell anyone,\" they say. \"They'd find one.\" {me} agrees without a word. Some things you guard by keeping quiet about them.", ev:11 },
-          miss:{ reply:"{them} hears the weight in it and isn't carrying that weight tonight. \"Easy,\" they murmur. Not no. Just — not yet. The cold gets back into the conversation.", ev:9, pts:0 } },
+          land:{ reply:"{them} goes still. \"Then we don't tell anyone,\" they say. \"They'd find one.\" {me} agrees without a word. Some things you guard by keeping quiet about them.", ev:62 },
+          miss:{ reply:"{them} hears the weight in it and isn't carrying that weight tonight. \"Easy,\" they murmur. Not no. Just — not yet. The cold gets back into the conversation.", ev:61, pts:0 } },
           ] }
       ] },
     { id:'club.leaving_together', venue:'club', kind:'romance', req:{minTier:1, maxTier:2},
@@ -1027,13 +1153,13 @@ const OFFHOURS = {
           land:{ reply:"{them} shrugs, but it isn't careless. \"Company that doesn't need the lights on to feel safe.\" Then, lower: \"Yours, specifically.\" {me} gets the coat.", next:1 } },
         { approach:'blunt', line:"Say you don't do the walk-someone-home thing.", check:true,
           land:{ reply:"\"Good. Neither do I.\" {them} holds the door. \"So it's not that. Come on.\" And it isn't that. It's something with no name yet, and {me} follows it out.", next:1 },
-          miss:{ reply:"{them} takes it at face value and steps back. \"Fair.\" They go alone — but at the door they glance back once, to see if {me} changed {me}'s mind. {me} almost did.", ev:9, pts:0 } },
+          miss:{ reply:"{them} takes it at face value and steps back. \"Fair.\" They go alone — but at the door they glance back once, to see if {me} changed {me}'s mind. {me} almost did.", ev:63, pts:0 } },
           ] },
         { choices:[
         { approach:'warm', line:"Take the long way. Stretch the walk out.",
-          land:{ reply:"You loop the block twice rather than end it. {them} notices and doesn't say so. The place is a wreck and the rain's coming, and {me} would walk it all night anyway.", ev:11 } },
+          land:{ reply:"You loop the block twice rather than end it. {them} notices and doesn't say so. The place is a wreck and the rain's coming, and {me} would walk it all night anyway.", ev:64 } },
         { approach:'probing', line:"Ask {them} where they actually sleep, when they sleep.",
-          land:{ reply:"\"Wherever the door locks twice.\" {them} says it light, but {me} hears the years in it. \"Tonight I'm not in a hurry to get there.\" Neither is {me}.", ev:9 } },
+          land:{ reply:"\"Wherever the door locks twice.\" {them} says it light, but {me} hears the years in it. \"Tonight I'm not in a hurry to get there.\" Neither is {me}.", ev:63 } },
           ] }
       ] },
     { id:'club.the_unspoken', venue:'club', kind:'romance', req:{minTier:1, maxTier:2},
@@ -1050,9 +1176,9 @@ const OFFHOURS = {
           ] },
         { choices:[
         { approach:'warm', line:"Sit shoulder to shoulder and let the bad music be enough.",
-          land:{ reply:"You don't fill the quiet. You've stopped needing to. {them} leans a degree, {me} leans a degree, and the meaning lives entirely in those two degrees. Nobody names it. It holds anyway.", ev:11 } },
+          land:{ reply:"You don't fill the quiet. You've stopped needing to. {them} leans a degree, {me} leans a degree, and the meaning lives entirely in those two degrees. Nobody names it. It holds anyway.", ev:65 } },
         { approach:'probing', gate:'dream', line:"Tell {them} the thing {me} still wants, under all of it: {dream}.",
-          land:{ reply:"{them} listens like it's classified. When {me} finishes, they're quiet a long time. \"First time you've told anyone that?\" {me} nods. \"Then I'll keep it,\" they say. And {me} believes they will.", ev:11 } },
+          land:{ reply:"{them} listens like it's classified. When {me} finishes, they're quiet a long time. \"First time you've told anyone that?\" {me} nods. \"Then I'll keep it,\" they say. And {me} believes they will.", ev:65 } },
           ] }
       ] },
     { id:'club.naming_it', venue:'club', kind:'romance', req:{minTier:2, maxTier:3},
@@ -1071,9 +1197,9 @@ const OFFHOURS = {
           ] },
         { choices:[
         { approach:'warm', line:"Tell {them} this is the one thing you'd actually fight to keep.",
-          land:{ reply:"{them} goes quiet, the real kind. \"Everything we ever fought for, somebody else cashed in,\" they say. \"Not this. This one doesn't go on the books.\" {me} reaches across the sticky table, and {them} meets {me} halfway. Whatever it is, it's named now.", ev:11, fl:'ARC_UNLOCKED' } },
+          land:{ reply:"{them} goes quiet, the real kind. \"Everything we ever fought for, somebody else cashed in,\" they say. \"Not this. This one doesn't go on the books.\" {me} reaches across the sticky table, and {them} meets {me} halfway. Whatever it is, it's named now.", ev:66, fl:'ARC_UNLOCKED' } },
         { approach:'blunt', gate:'crime', line:"Lay out the worst of {me} first — what {me} did: {crime} — so they know what they're naming.",
-          land:{ reply:"{me} lays it out, the thing from before the company. {them} doesn't pull back. \"I know what we all were,\" they say. \"I'm not naming the soldier. I'm naming you.\" And it holds. Out loud, it holds.", ev:11, fl:'ARC_UNLOCKED' } },
+          land:{ reply:"{me} lays it out, the thing from before the company. {them} doesn't pull back. \"I know what we all were,\" they say. \"I'm not naming the soldier. I'm naming you.\" And it holds. Out loud, it holds.", ev:66, fl:'ARC_UNLOCKED' } },
           ] }
       ] },
     { id:'club.passing_through', venue:'club', kind:'romance', req:{minTier:2, maxTier:3},
@@ -1089,9 +1215,9 @@ const OFFHOURS = {
           ] },
         { choices:[
         { approach:'warm', line:"Tell {them} you've decided the odds are worth it.",
-          land:{ reply:"\"Decided.\" {them} tries the word out like it's heavier than it sounds. \"Me too. Decided a while back. Just didn't have the nerve to say it.\" The bad drinks go warm. Neither of you minds.", ev:11 } },
+          land:{ reply:"\"Decided.\" {them} tries the word out like it's heavier than it sounds. \"Me too. Decided a while back. Just didn't have the nerve to say it.\" The bad drinks go warm. Neither of you minds.", ev:67 } },
         { approach:'blunt', gate:'trauma', line:"Show {them} the truth about {trauma} — the part you never let anyone see.",
-          land:{ reply:"{me} shows them the worst of it. {them} doesn't look away once. When {me} runs out of words, they take {me}'s hand under the table, out of sight of the room. \"Still here,\" they say. They keep saying it. {me} doesn't quite believe it yet, but {me} stops bracing for them to go.", ev:11 } },
+          land:{ reply:"{me} shows them the worst of it. {them} doesn't look away once. When {me} runs out of words, they take {me}'s hand under the table, out of sight of the room. \"Still here,\" they say. They keep saying it. {me} doesn't quite believe it yet, but {me} stops bracing for them to go.", ev:67 } },
           ] }
       ] },
     { id:'club.devoted', venue:'club', kind:'romance', req:{minTier:4, maxTier:4},
@@ -1107,9 +1233,9 @@ const OFFHOURS = {
           ] },
         { choices:[
         { approach:'warm', line:"Say it plain, the whole of it, no armor left.",
-          land:{ reply:"{me} says it — all of it, the way you only get to once. {them} doesn't say it back in words. They press their forehead to {me}'s in the dying neon and stay there, and that's the whole of the answer. The city's billed {me} for everything else. It doesn't get this. Two soldiers, one warm thing, kept off the books.", ev:11, fl:'CLOSEST', fx:{t:'capstone'} } },
+          land:{ reply:"{me} says it — all of it, the way you only get to once. {them} doesn't say it back in words. They press their forehead to {me}'s in the dying neon and stay there, and that's the whole of the answer. The city's billed {me} for everything else. It doesn't get this. Two soldiers, one warm thing, kept off the books.", ev:68, fl:'CLOSEST', fx:{t:'capstone'} } },
         { approach:'blunt', line:"Skip the speech. Just don't let go of their hand.",
-          land:{ reply:"{me} hasn't got the words and doesn't reach for them. {me} just keeps {them}'s hand in {me}'s and doesn't let the night end on its own. {them} reads it the way only the two of you can. \"Yeah,\" they breathe. \"That's the one. That'll hold.\" The grate comes down. You stay.", ev:11, fl:'CLOSEST', fx:{t:'capstone'} } },
+          land:{ reply:"{me} hasn't got the words and doesn't reach for them. {me} just keeps {them}'s hand in {me}'s and doesn't let the night end on its own. {them} reads it the way only the two of you can. \"Yeah,\" they breathe. \"That's the one. That'll hold.\" The grate comes down. You stay.", ev:68, fl:'CLOSEST', fx:{t:'capstone'} } },
           ] }
       ] },
     // --- club/mentor (multi-beat) ---
@@ -1132,9 +1258,9 @@ const OFFHOURS = {
             "{them} turns the empty glass the way {me} used to. \"So how do you do it. Stay in. Not go—\" Doesn't finish."],
           choices:[
         { approach:'probing', line:"\"You don't stay whole. You stay alive. Two different jobs.\"",
-          land:{ reply:"{them} chews on that. \"That supposed to help.\" \"No,\" {me} says. \"It's supposed to make you old.\" That's the whole offer. The kid takes it.", ev:9 } },
+          land:{ reply:"{them} chews on that. \"That supposed to help.\" \"No,\" {me} says. \"It's supposed to make you old.\" That's the whole offer. The kid takes it.", ev:69 } },
         { approach:'warm', line:"\"Pick one person worth coming back for. Doesn't have to be a good reason.\"",
-          land:{ reply:"{them} almost laughs. \"That's it.\" \"That's the trick,\" {me} says. The kid looks less like meat. Pointed the right way, which is the most {me} can do tonight.", ev:9 } },
+          land:{ reply:"{them} almost laughs. \"That's it.\" \"That's the trick,\" {me} says. The kid looks less like meat. Pointed the right way, which is the most {me} can do tonight.", ev:69 } },
           ] },
         { open:[
             "{them} keeps their back to {me} now, drinking through the silence."],
@@ -1162,9 +1288,9 @@ const OFFHOURS = {
             "{them} has the angle now, watching the door like it's already second nature. \"You always sit like this.\""],
           choices:[
         { approach:'warm', line:"\"Every day since {lastmap}. You will too. Stops being a choice.\"",
-          land:{ reply:"{them} nods, slow, filing it. \"That's grim.\" \"That's old,\" {me} says. \"Grim's how you get there.\" The kid's learning the grammar of staying alive. That's the whole curriculum.", ev:9 } },
+          land:{ reply:"{them} nods, slow, filing it. \"That's grim.\" \"That's old,\" {me} says. \"Grim's how you get there.\" The kid's learning the grammar of staying alive. That's the whole curriculum.", ev:70 } },
         { approach:'probing', line:"\"What do you do when the door's the only thing you can't watch.\"",
-          land:{ reply:"{them} thinks. \"Find someone who'll watch it for me.\" \"Now you've got it,\" {me} says. Doesn't add that the someone gets spent too. The kid'll find that part out alone.", ev:9 } },
+          land:{ reply:"{them} thinks. \"Find someone who'll watch it for me.\" \"Now you've got it,\" {me} says. Doesn't add that the someone gets spent too. The kid'll find that part out alone.", ev:70 } },
           ] },
         { open:[
             "{them} stays in the bad seat, jaw set, proving a point to nobody."],
@@ -1192,9 +1318,9 @@ const OFFHOURS = {
             "{them} is quieter now. The worst of it has gone somewhere heavier and more permanent. \"Does it get easier. Honest.\""],
           choices:[
         { approach:'probing', line:"\"No. Longer list, thicker skin. That's the trade. That's all of it.\"",
-          land:{ reply:"{them} nods. Doesn't ask for comfort, because they can tell there isn't any. \"Keep their name, though,\" {me} adds. \"Somebody should.\" {them} writes {fallen} down somewhere only they'll find it. The lesson that costs. Learned.", ev:9 } },
+          land:{ reply:"{them} nods. Doesn't ask for comfort, because they can tell there isn't any. \"Keep their name, though,\" {me} adds. \"Somebody should.\" {them} writes {fallen} down somewhere only they'll find it. The lesson that costs. Learned.", ev:71 } },
         { approach:'warm', line:"\"It gets familiar. That's the closest thing to easier you'll be offered. Take it.\"",
-          land:{ reply:"{them} almost smiles, the broken kind. \"Familiar.\" \"You'll know the weight before you lift it,\" {me} says. \"Means you stop dropping things.\" The kid's older now than an hour ago. {me} did that. There's no clean way to feel about it.", ev:9 } },
+          land:{ reply:"{them} almost smiles, the broken kind. \"Familiar.\" \"You'll know the weight before you lift it,\" {me} says. \"Means you stop dropping things.\" The kid's older now than an hour ago. {me} did that. There's no clean way to feel about it.", ev:71 } },
           ] },
         { open:[
             "{them} drinks alone at the far end now, having walked off the worst of it."],
@@ -1222,9 +1348,9 @@ const OFFHOURS = {
             "{them} has stopped grinning. \"So what's the part. The thing nobody told you.\""],
           choices:[
         { approach:'probing', line:"\"The job pays best for the worst you can do. Get good at those and one day you won't notice you became the enemy. We did. Watch for it.\"",
-          land:{ reply:"{them} goes still. \"Hell of a thing to tell someone you trained.\" \"Only thing worth telling,\" {me} answers. \"Stay alive. Keep your name. Notice when the company's spending the second one.\" The kid carries that further than any drill. The lesson that costs the teacher.", ev:9 } },
+          land:{ reply:"{them} goes still. \"Hell of a thing to tell someone you trained.\" \"Only thing worth telling,\" {me} answers. \"Stay alive. Keep your name. Notice when the company's spending the second one.\" The kid carries that further than any drill. The lesson that costs the teacher.", ev:72 } },
         { approach:'warm', line:"\"Every clean job spends a little of you. Nobody hands you the bill. Keep your own books.\"",
-          land:{ reply:"{them} nods slow, the praise forgotten, the warning lodged. \"How do I keep the books.\" \"Count what scares you,\" {me} says. \"The day a thing stops scaring you, that's the page that matters.\" The kid's eyes are older now. That's on {me}.", ev:9 } },
+          land:{ reply:"{them} nods slow, the praise forgotten, the warning lodged. \"How do I keep the books.\" \"Count what scares you,\" {me} says. \"The day a thing stops scaring you, that's the page that matters.\" The kid's eyes are older now. That's on {me}.", ev:72 } },
           ] },
         { open:[
             "{them} drinks the praise they came for and not the warning, talking too fast about the next job already."],
@@ -1252,9 +1378,9 @@ const OFFHOURS = {
             "{them} sits with it, the whole ugly shape of it, finally named out loud between two people who lived it. \"So say it. All of it.\""],
           choices:[
         { approach:'warm', line:"\"Yeah. We won by becoming the enemy. A&O bought the wreckage and sells it back as salvation. And I trained you into the same machine. That part's on me.\"",
-          land:{ reply:"{them} doesn't look away. \"Why tell me. After all this.\" \"Because you're the one I couldn't lie to anymore,\" {me} says. \"Stay alive. Keep your name. Get out cleaner than I did — that's the only order I've got left.\" Something locks between you that doesn't come undone. Not a happy thing. A true one.", ev:9, fl:'ARC_UNLOCKED' } },
+          land:{ reply:"{them} doesn't look away. \"Why tell me. After all this.\" \"Because you're the one I couldn't lie to anymore,\" {me} says. \"Stay alive. Keep your name. Get out cleaner than I did — that's the only order I've got left.\" Something locks between you that doesn't come undone. Not a happy thing. A true one.", ev:73, fl:'ARC_UNLOCKED' } },
         { approach:'probing', line:"\"You can't unknow it now. Good. The ones who stay whole are the ones who didn't look. You looked.\"",
-          land:{ reply:"{them} nods, hollowed and steadier for it. \"Doesn't feel like a gift.\" \"It's not,\" {me} says. \"It's a weight. But it's yours, eyes open. The most this war lets you keep.\" The kid {me} raised is grown, and what they grew into is a clear-eyed thing in a machine that wanted neither clear nor eyed. {me} did that. No clean name for how it sits.", ev:9 } },
+          land:{ reply:"{them} nods, hollowed and steadier for it. \"Doesn't feel like a gift.\" \"It's not,\" {me} says. \"It's a weight. But it's yours, eyes open. The most this war lets you keep.\" The kid {me} raised is grown, and what they grew into is a clear-eyed thing in a machine that wanted neither clear nor eyed. {me} did that. No clean name for how it sits.", ev:73 } },
           ] },
         { open:[
             "{them} drinks alone now, the unanswered question sitting between you like a third stool nobody took."],
@@ -1271,12 +1397,12 @@ const OFFHOURS = {
             "{them} clocks the scared new face the same instant {me} does, and for once {them} moves first — already up, already knowing the script. {me} stays seated. Hands it over heavier than it looks from the giving end."],
           choices:[
         { approach:'warm', line:"\"Go on. You know the words. I taught you every one.\"",
-          land:{ reply:"{them} crosses the floor, sits beside the scared kid, slides the bad drink an inch closer. \"Drink it slow,\" {me} hears them say. \"First thing you learn off the line.\" The exact words, handed down whole — and the whole grim machine handed down with them. The line continues past {me}. Not saved. Just continued. {me} can't tell if that's mercy or just more of the same. Doesn't matter now. It's theirs.", ev:9, fl:'CLOSEST', fx:{t:'capstone'} } },
+          land:{ reply:"{them} crosses the floor, sits beside the scared kid, slides the bad drink an inch closer. \"Drink it slow,\" {me} hears them say. \"First thing you learn off the line.\" The exact words, handed down whole — and the whole grim machine handed down with them. The line continues past {me}. Not saved. Just continued. {me} can't tell if that's mercy or just more of the same. Doesn't matter now. It's theirs.", ev:74, fl:'CLOSEST', fx:{t:'capstone'} } },
         { approach:'probing', line:"\"You're better at this than I ever was. How do you keep them alive.\"",
-          land:{ reply:"{them} looks at {me} a long moment. \"Same as you kept me. Stay alive yourself so there's someone to come back to.\" The student outran the teacher and circled back to carry them. \"Go home,\" {them} says. \"I've got the bar tonight. And the kid. And the names.\" {me} goes. The list is in steadier hands. The most a survivor gets to call a win, which is to say not much.", ev:9, fl:'CLOSEST', fx:{t:'capstone'} } },
+          land:{ reply:"{them} looks at {me} a long moment. \"Same as you kept me. Stay alive yourself so there's someone to come back to.\" The student outran the teacher and circled back to carry them. \"Go home,\" {them} says. \"I've got the bar tonight. And the kid. And the names.\" {me} goes. The list is in steadier hands. The most a survivor gets to call a win, which is to say not much.", ev:74, fl:'CLOSEST', fx:{t:'capstone'} } },
         { approach:'blunt', line:"\"Don't lie to them the way the company lied to us. Truth early. Promise me.\"", check:true,
-          land:{ reply:"{them} doesn't blink. \"Been giving them the truth since before you noticed. Where do you think I learned it.\" The line lands and {me} has no answer for it but the obvious one. \"Then I'm done,\" {me} says. \"You've got it.\" \"Had it a while,\" {them} says, not unkind. The handover happened years ago. {me} was just the last to know. Bonded all the way through — and quietly, finally, replaced.", ev:9, fl:'CLOSEST', fx:{t:'capstone'} },
-          miss:{ reply:"Comes out like {me} doesn't trust them, after everything. {them} bristles — then lets it go, because they got better at letting go than {me} ever taught. \"I'll do right by them,\" they say. \"Should've trusted you raised someone who would.\" They cross to the scared kid. {me} watches the same words pass to a fresh pair of ears, carried by a hand steadier than {me}'s. Maybe that's the last lesson — knowing when to stop teaching. {me} doesn't feel taught. Just done.", ev:9, fl:'CLOSEST', fx:{t:'capstone'} } },
+          land:{ reply:"{them} doesn't blink. \"Been giving them the truth since before you noticed. Where do you think I learned it.\" The line lands and {me} has no answer for it but the obvious one. \"Then I'm done,\" {me} says. \"You've got it.\" \"Had it a while,\" {them} says, not unkind. The handover happened years ago. {me} was just the last to know. Bonded all the way through — and quietly, finally, replaced.", ev:74, fl:'CLOSEST', fx:{t:'capstone'} },
+          miss:{ reply:"Comes out like {me} doesn't trust them, after everything. {them} bristles — then lets it go, because they got better at letting go than {me} ever taught. \"I'll do right by them,\" they say. \"Should've trusted you raised someone who would.\" They cross to the scared kid. {me} watches the same words pass to a fresh pair of ears, carried by a hand steadier than {me}'s. Maybe that's the last lesson — knowing when to stop teaching. {me} doesn't feel taught. Just done.", ev:74, fl:'CLOSEST', fx:{t:'capstone'} } },
           ] }
       ] },
   ],
@@ -1290,6 +1416,72 @@ const OFFHOURS = {
     "{vet} finally said the thing. Hard to hear — glad they said it.",    // 6
     "Made peace with {vet} over bad noodles. We're alright now.",         // 7
     "Slid {vet} the key. There's a door back home that's theirs again.",  // 8
+    null,   // 9
+    null,   // 10
+    null,   // 11
+    null,   // 12
+    null,   // 13
+    null,   // 14
+    null,   // 15
+    null,   // 16
+    null,   // 17
+    null,   // 18
+    null,   // 19
+    null,   // 20
+    null,   // 21
+    null,   // 22
+    null,   // 23
+    "Ordered for {vet} before they asked. They ate it cold. Neither of us said sorry.",   // 24
+    "{vet} gave me one thing about the war. One. I'm keeping it for the next.",   // 25
+    "{vet} named their dead at my counter. Flat, no comfort. I heard it anyway.",   // 26
+    "{vet} told me the real {fallen} — the laugh, not the rank. I carry the name too now.",   // 27
+    "{vet} owned their half of an old one. No ceremony. We crossed it off.",   // 28
+    "{vet} let me talk around the old photo. Sat in {home} a while. Didn't bolt.",   // 29
+    "{vet} left me the old photo to keep, and promised a new one to set beside it.",   // 30
+    "{vet} gave me the edges of it. Told them to keep the rest till they can carry it.",   // 31
+    "{vet} finally said the whole thing about {trauma}. Took their hand. Should've had it sooner.",   // 32
+    "{vet} left the handset on the table. Didn't call {home}. But quit pretending there was no line.",   // 33
+    "{vet} picked up the handset and called {home}. Someone there said their name. A debt came down.",   // 34
+    "{vet} caught the key before it stopped sliding. Held that place for them through it all. Worth it.",   // 35
+    null,   // 36
+    null,   // 37
+    null,   // 38
+    null,   // 39
+    null,   // 40
+    null,   // 41
+    null,   // 42
+    null,   // 43
+    null,   // 44
+    null,   // 45
+    null,   // 46
+    null,   // 47
+    null,   // 48
+    null,   // 49
+    null,   // 50
+    null,   // 51
+    null,   // 52
+    null,   // 53
+    null,   // 54
+    null,   // 55
+    null,   // 56
+    null,   // 57
+    null,   // 58
+    null,   // 59
+    null,   // 60
+    null,   // 61
+    null,   // 62
+    null,   // 63
+    null,   // 64
+    null,   // 65
+    null,   // 66
+    null,   // 67
+    null,   // 68
+    null,   // 69
+    null,   // 70
+    null,   // 71
+    null,   // 72
+    null,   // 73
+    null,   // 74
   ],
   // bark[] : "unburdened" selection barks for a veteran whose confidant/kin arc is done (fl&8). Text-only.
   bark: [
