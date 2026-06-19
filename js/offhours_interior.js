@@ -36,12 +36,12 @@ function _ensureStyle(){
     padding:7px 13px;cursor:pointer;white-space:nowrap;box-shadow:0 4px 14px rgba(0,0,0,.5);transition:.12s;animation:ohiPop .16s ease both}
   .ohi-pie:hover{border-color:var(--ac,#5fe0ff);color:#fff;box-shadow:0 0 14px -2px var(--ac,#5fe0ff)}
   @keyframes ohiPop{from{opacity:0;transform:translate(-50%,-50%) scale(.7)}to{opacity:1}}
-  .ohi-choice{position:absolute;transform:translate(-50%,-50%);max-width:230px;font-family:'Spline Sans',system-ui,sans-serif;font-size:13px;line-height:1.35;
+  .ohi-choice{position:absolute;transform:translate(-50%,-50%);max-width:200px;font-family:'Spline Sans',system-ui,sans-serif;font-size:13px;line-height:1.35;
     color:#dfe6ee;background:linear-gradient(180deg,rgba(14,19,28,.97),rgba(9,13,20,.97));border:1px solid #273245;border-left:2px solid var(--ac,#ffce6a);
     border-radius:7px;padding:8px 11px;cursor:pointer;box-shadow:0 5px 18px rgba(0,0,0,.55);transition:.12s;animation:ohiPop .18s ease both}
   .ohi-choice:hover{border-color:var(--ac,#ffce6a);color:#fff;transform:translate(-50%,-50%) translateY(-1px)}
   .ohi-choice .ap{font-family:'JetBrains Mono',monospace;font-size:10px;color:#7a8698;opacity:.8;margin-right:5px}
-  .ohi-bubble{position:absolute;transform:translate(-50%,-100%);max-width:260px;font-family:'Spline Sans',system-ui,sans-serif;font-size:13px;line-height:1.4;
+  .ohi-bubble{position:absolute;transform:translate(-50%,-50%);max-width:200px;font-family:'Spline Sans',system-ui,sans-serif;font-size:13px;line-height:1.4;
     color:#cdd6e1;background:rgba(9,13,20,.95);border:1px solid #273245;border-left:3px solid var(--ac,#5fe0ff);border-radius:7px;padding:8px 11px;
     box-shadow:0 5px 18px rgba(0,0,0,.5);pointer-events:none;animation:ohiPop .18s ease both}
   .ohi-hint{position:absolute;left:50%;bottom:84px;transform:translateX(-50%);font-family:'JetBrains Mono',monospace;font-size:12px;letter-spacing:.08em;
@@ -317,8 +317,7 @@ function _showPie(o){
     b.addEventListener('click', function(ev){ ev.stopPropagation(); _pieAct(a.k, o); });
     ui.appendChild(b);
   });
-  _setCloseLabel(true);
-  _resolveCollisions();
+  _setCloseLabel(true);   // pie fans at 54° over a 132px radius → already non-overlapping by construction
 }
 function _pieAct(k, o){
   _clearUI();
@@ -353,33 +352,47 @@ function _interactionContext(vet, target){
     return { venue:'club', kind:ohKindName(bond.k), npcId, bond, vu };
   }
 }
+/* ---- the clock-dial: every dialog box orbits the talking unit, anti-clockwise from 12 o'clock ---- */
+// 12 = the spoken/context line (blue), then choices cascade 10 → ~8.5 → 7 … down the left. Tight, never overlapping.
+const _DIAL={ R:150, R12:170, hours:[10, 8.5, 7, 5.5, 4], leftBias:16, headFrac:0.58 };
+function _clockXY(C, hour, R){ const a=hour*Math.PI/6; return { x:C.x + Math.sin(a)*R, y:C.y - Math.cos(a)*R }; }
+function _dialCenter(unit, m){ m=m||_metrics(); return v2c(unit.x, unit.y - SPR_H*_DIAL.headFrac, m); }
+function _placeClock(el, C, hour, R, m){
+  const p=_clockXY(C, hour, R); let x=p.x; const y=p.y;
+  if(hour>=7 && hour<=9) x-=_DIAL.leftBias;                       // lower-left boxes sit a touch further left of the unit
+  el.style.left=Math.max(64, Math.min(m.cssW-64, x))+'px';        // centre-anchored (translate -50%,-50%): left/top ARE the centre
+  el.style.top =Math.max(64, Math.min(m.cssH-92, y))+'px';
+}
+function _dialBubble(text, tone){
+  const ui=$('oh-int-ui'); const el=document.createElement('div'); el.className='ohi-bubble';
+  el.style.setProperty('--ac', tone==='reply'?(_int.layout.accent||'#ffce6a'):(tone==='npc'?'#5fe0ff':'#5fd98a'));
+  el.textContent=text; ui.appendChild(el); return el;
+}
+function _dialChoice(approach, line, onClick){
+  const ui=$('oh-int-ui'); const el=document.createElement('div'); el.className='ohi-choice';
+  el.style.setProperty('--ac', _int.layout.accent||'#ffce6a');
+  el.innerHTML='<span class="ap">['+_esc(approach||'say')+']</span>'+_esc(line);
+  el.addEventListener('click', onClick); ui.appendChild(el); return el;
+}
 function _openScene(vet, target){
   _hideHint();
-  const cx=_interactionContext(vet, target);
-  const pick=(typeof ohSceneFor==='function')?ohSceneFor(cx.venue, cx.kind, cx.vu, cx.bond):null;
+  const ic=_interactionContext(vet, target);
+  const pick=(typeof ohSceneFor==='function')?ohSceneFor(ic.venue, ic.kind, ic.vu, ic.bond):null;
   if(!pick){ _showBubble(target, 'Nothing new to get into tonight.', 'npc', 2600); _int.mode='idle'; _int.selected=null; _syncHead(); return; }
-  _int.scene={ vet, target, pick, cx };
+  _int.scene={ vet, target, pick, cx:ic };
   _int.mode='scene';
-  _showBubble(target, ohFill(pick.scene.open, cx.vu, cx.npcId), 'npc', 0);
-  _showLinePicker(vet, target, pick, cx);
-}
-function _showLinePicker(vet, target, pick, cx){
-  const ui=$('oh-int-ui'); const m=_metrics(); const p=v2c(vet.x, vet.y, m);
-  const choices=pick.scene.choices.filter(c=> !c.gate || (typeof ohVetHas==='function' && ohVetHas(cx.vu, c.gate)));
-  const a0=-Math.PI*0.95, span=Math.PI*1.5;
+  const m=_metrics(), C=_dialCenter(vet, m);
+  const open=_dialBubble(ohFill(pick.scene.open, ic.vu, ic.npcId), 'npc');   // the context line → 12 o'clock
+  _placeClock(open, C, 12, _DIAL.R12, m);
+  const choices=pick.scene.choices.filter(c=> !c.gate || (typeof ohVetHas==='function' && ohVetHas(ic.vu, c.gate)));
   choices.forEach((c, idx)=>{
     const ci=pick.scene.choices.indexOf(c);
-    const A=a0 + (choices.length>1? span*idx/(choices.length-1) : span/2);
-    const R=120 + (idx%2)*26;
-    const b=document.createElement('div'); b.className='ohi-choice'; b.style.setProperty('--ac', _int.layout.accent||'#ffce6a');
-    b.style.left=Math.max(120, Math.min(m.cssW-120, p.x + Math.cos(A)*R))+'px';
-    b.style.top=Math.max(70, Math.min(m.cssH-110, p.y + Math.sin(A)*R - 60))+'px';
-    b.innerHTML='<span class="ap">['+(c.approach||'say')+']</span>'+_esc(ohFill(c.line, cx.vu, cx.npcId));
-    b.addEventListener('click', function(ev){ ev.stopPropagation(); _commitChoice(ci); });
-    ui.appendChild(b);
+    const el=_dialChoice(c.approach, ohFill(c.line, ic.vu, ic.npcId), function(ev){ ev.stopPropagation(); _commitChoice(ci); });
+    _placeClock(el, C, _DIAL.hours[Math.min(idx, _DIAL.hours.length-1)], _DIAL.R, m);   // 10, 8.5, 7 … anti-clockwise
   });
   _showStepAway();   // explicit exit — touch players need a visible way out (not just clicking empty space)
   _setCloseLabel(true);
+  _resolveDial(C);   // safety net: nudge any residual overlap outward along the dial (keeps the disposition)
 }
 function _commitChoice(ci){
   const sc=_int.scene; if(!sc) return; const cx=sc.cx;
@@ -391,11 +404,13 @@ function _commitChoice(ci){
   if(res && res.broke){ _flash('Not enough M3rit$.'); return; }   // keep the line-picker so they can step away / retry
   // success — bond + dossier are written; show the result and WAIT for the player to step away (no auto-fade)
   _clearUI();
-  _showBubble(sc.vet, (res&&res.reply)||'…', 'reply', 0);          // ttl 0 = persists until ✕ / Esc / Step away
-  if(res && res.wrote!=null) _showBubble(sc.target, 'A line goes into '+sc.vet.name+'’s file.', 'npc', 0, 30);
+  const m=_metrics(), C=_dialCenter(sc.vet, m);
+  const reply=_dialBubble((res&&res.reply)||'…', 'reply'); _placeClock(reply, C, 12, _DIAL.R12, m);   // 12 o'clock, persists
+  if(res && res.wrote!=null){ const note=_dialBubble('A line goes into '+sc.vet.name+'’s file.', 'npc'); _placeClock(note, C, _DIAL.hours[0], _DIAL.R, m); }
   _showStepAway();
   try{ if(typeof refreshUI==='function') refreshUI(); }catch(_){ }
   _int.scene=null; _int.mode='ended'; _int.selected=null; _syncHead(); _renderRoster(); _setCloseLabel(true);
+  _resolveDial(C);
 }
 function _doGift(vet, target){
   _hideHint(); const cx=_interactionContext(vet, target);
@@ -404,10 +419,12 @@ function _doGift(vet, target){
   let res=(typeof netOffhoursCommit==='function')?netOffhoursCommit(G,payload):(typeof applyOffhoursCommit==='function'?applyOffhoursCommit(G,payload):null);
   if(res && res.broke){ _flash('Not enough M3rit$.'); _int.mode='idle'; return; }
   _clearUI();
-  _showBubble(vet, (res&&res.reply)||'They take it with a nod.', 'reply', 0);   // persists until dismissed
+  const m=_metrics(), C=_dialCenter(vet, m);
+  const reply=_dialBubble((res&&res.reply)||'They take it with a nod.', 'reply'); _placeClock(reply, C, 12, _DIAL.R12, m);   // persists until dismissed
   _showStepAway();
   try{ if(typeof refreshUI==='function') refreshUI(); }catch(_){ }
   _int.mode='ended'; _int.selected=null; _syncHead(); _setCloseLabel(true);
+  _resolveDial(C);
 }
 
 /* ---- floating UI helpers ---- */
@@ -430,39 +447,43 @@ function _flash(t){   // visible INSIDE the overlay — the game toast is z-30, 
 // the only exit from an open/finished conversation — bottom-centre, persists until clicked (✕/Esc do the same)
 function _showStepAway(){
   const ui=$('oh-int-ui'); if(!ui) return; const m=_metrics();
-  const sx=document.createElement('div'); sx.className='ohi-choice'; sx.style.setProperty('--ac','#ff5d70');
+  const sx=document.createElement('div'); sx.className='ohi-choice ohi-stepaway'; sx.style.setProperty('--ac','#ff5d70');
   sx.style.left='50%'; sx.style.top=(m.cssH-152)+'px'; sx.style.textAlign='center'; sx.style.fontWeight='600';
   sx.textContent='✕ Step away'; sx.addEventListener('click', function(ev){ ev.stopPropagation(); _dismiss(); });
-  ui.appendChild(sx);
-  _resolveCollisions();
+  ui.appendChild(sx);   // pinned bottom-centre; _resolveDial (called by the dial) keeps it clear without moving it
 }
-// no two floating boxes (bubbles / choices / pie / step-away) may overlap — iteratively push them apart, keep on-screen
-function _resolveCollisions(){
-  const ui=$('oh-int-ui'); if(!ui) return;
-  const els=[].slice.call(ui.querySelectorAll('.ohi-bubble, .ohi-choice, .ohi-pie'));
+// RADIAL safety net — keep each box at its clock ANGLE from C and only push it further OUT to clear an overlap,
+// so the dial disposition (12 on top, 10/8.5 down the left) survives. Step-away stays pinned; others yield to it.
+function _resolveDial(C){
+  const ui=$('oh-int-ui'); if(!ui || !C) return;
+  const els=[].slice.call(ui.querySelectorAll('.ohi-bubble, .ohi-choice'));
   if(els.length<2) return;
-  const m=_metrics(), pad=12, minX=8, maxX=m.cssW-8, minY=52, maxY=m.cssH-78;
-  const B=els.map(function(el){ const r=el.getBoundingClientRect(); return { el:el, x0:r.left, y0:r.top, w:r.width, h:r.height, dx:0, dy:0 }; });
-  for(let pass=0; pass<24; pass++){
+  const m=_metrics(), pad=12, minX=10, maxX=m.cssW-10, minY=50, maxY=m.cssH-66;
+  const B=els.map(function(el){
+    const r=el.getBoundingClientRect(), cx=r.left+r.width/2, cy=r.top+r.height/2;   // centre is stable under the pop scale
+    const w=el.offsetWidth||r.width, h=el.offsetHeight||r.height;                    // …but SIZE must ignore the scale(.7) anim
+    const dx=cx-C.x, dy=cy-C.y;
+    return { el:el, w:w, h:h, th:Math.atan2(dy,dx), rad:Math.max(1,Math.hypot(dx,dy)),
+             fixed:el.classList.contains('ohi-stepaway') };
+  });
+  const cen=function(b){ return { x:C.x+Math.cos(b.th)*b.rad, y:C.y+Math.sin(b.th)*b.rad }; };
+  for(let pass=0; pass<28; pass++){
     let moved=false;
     for(let i=0;i<B.length;i++) for(let j=i+1;j<B.length;j++){
-      const a=B[i], b=B[j], ax=a.x0+a.dx, ay=a.y0+a.dy, bx=b.x0+b.dx, by=b.y0+b.dy;
-      const ox=Math.min(ax+a.w,bx+b.w)-Math.max(ax,bx)+pad, oy=Math.min(ay+a.h,by+b.h)-Math.max(ay,by)+pad;
+      const a=B[i], b=B[j], ca=cen(a), cb=cen(b);
+      const ox=(a.w+b.w)/2+pad-Math.abs(ca.x-cb.x), oy=(a.h+b.h)/2+pad-Math.abs(ca.y-cb.y);
       if(ox>0 && oy>0){ moved=true;
-        if(ox<=oy){ const dir=(ax+a.w/2<=bx+b.w/2)?-1:1, s=ox/2; a.dx+=dir*s; b.dx-=dir*s; }
-        else      { const dir=(ay+a.h/2<=by+b.h/2)?-1:1, s=oy/2; a.dy+=dir*s; b.dy-=dir*s; }
+        let mv=(a.rad>=b.rad)?a:b;                 // push the farther box outward along its own angle…
+        if(mv.fixed) mv=(mv===a)?b:a;              // …unless it's the pinned step-away, then move the other
+        mv.rad+=Math.min(ox,oy)+1;
       }
     }
-    for(const k of B){ const x=k.x0+k.dx, y=k.y0+k.dy;
-      if(x<minX) k.dx+=minX-x; if(x+k.w>maxX) k.dx+=maxX-(x+k.w);
-      if(y<minY) k.dy+=minY-y; if(y+k.h>maxY) k.dy+=maxY-(y+k.h); }
     if(!moved) break;
   }
-  for(const k of B){ if(Math.abs(k.dx)>0.5 || Math.abs(k.dy)>0.5){
-    const rx=k.x0+k.dx, ry=k.y0+k.dy;   // re-pin via left/top, honouring each box's center/bottom transform
-    if(k.el.classList.contains('ohi-bubble')){ k.el.style.left=(rx+k.w/2)+'px'; k.el.style.top=(ry+k.h)+'px'; }
-    else { k.el.style.left=(rx+k.w/2)+'px'; k.el.style.top=(ry+k.h/2)+'px'; }
-  }}
+  for(const b of B){ const c=cen(b);               // pin centres, clamped on-screen (centre-anchored boxes)
+    b.el.style.left=Math.max(minX+b.w/2, Math.min(maxX-b.w/2, c.x))+'px';
+    b.el.style.top =Math.max(minY+b.h/2, Math.min(maxY-b.h/2, c.y))+'px';
+  }
 }
 function _setMode(mode){ _int.mode=mode; if(mode==='idle'){ _int.selected=null; _clearUI(); } }
 function _clearUI(){ const ui=$('oh-int-ui'); if(ui) ui.innerHTML=''; }
