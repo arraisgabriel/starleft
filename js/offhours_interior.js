@@ -105,25 +105,45 @@ function _liveVets(){
   return ents.filter(e=>e&&!e.dead&&e.kind==='unit'&&e.owner==='player'&&e.lore);
 }
 function _populate(){
-  const L=_int.layout, occ=_int.occ;
-  // the venue's signature NPC (bar → bartender), fixed behind the counter
-  if(_int.kind==='bar'){
-    const id=OFFHOURS.barNpc;
-    if(typeof CAMPAIGN!=='undefined' && CAMPAIGN.npc){ CAMPAIGN.npc.byId=CAMPAIGN.npc.byId||{};
-      if(!CAMPAIGN.npc.byId[id]) CAMPAIGN.npc.byId[id]={fixed:'bartender',v:1,lvD:1,mv:0,hc:'',fl:0,ev:[]}; }
-    const d=(typeof buildNpcDossier==='function')?buildNpcDossier(id):null;
-    occ.push({ key:id, kind:'npc', npcId:id, name:(d&&d.first)||'the bartender', sprite:{type:'recruiter',owner:'player'},
-      x:L.bartender.x, y:L.bartender.y, tx:L.bartender.x, ty:L.bartender.y, face:1, fixed:true, wob:Math.random()*6 });
-  }
-  // a deterministic random subset of the roster already inside
-  const vets=_liveVets();
-  const seedBase=(typeof _loHash==='function')?_loHash(((_strHash(_int.kind))^(((typeof CAMPAIGN!=='undefined'&&CAMPAIGN)?CAMPAIGN.visit|0:0)+1))>>>0):1;
+  const kind=_int.kind;
+  const seedBase=(typeof _loHash==='function')?_loHash(((_strHash(kind))^(((typeof CAMPAIGN!=='undefined'&&CAMPAIGN)?CAMPAIGN.visit|0:0)+1))>>>0):1;
   const rng=(typeof makeRng==='function')?makeRng(seedBase%233280):Math.random;
-  const shuffled=vets.slice().sort((a,b)=> (rng()-0.5));
-  const n=Math.min(shuffled.length, 4 + ((rng()*3)|0));        // 4–6 already inside
-  const slots=_spreadSlots(L, rng);
+  const shuffled=_liveVets().slice().sort((a,b)=> (rng()-0.5));
+  if(kind==='bar') _seedBartender();
+  if(kind==='diner') _populateDiner(shuffled, rng);            // each vet + their own kin at a booth
+  else { _populateVets(shuffled, rng); if(kind==='club') _populateCrowd(rng); }
+}
+function _seedBartender(){
+  const L=_int.layout, id=OFFHOURS.barNpc;
+  if(typeof CAMPAIGN!=='undefined' && CAMPAIGN.npc){ CAMPAIGN.npc.byId=CAMPAIGN.npc.byId||{};
+    if(!CAMPAIGN.npc.byId[id]) CAMPAIGN.npc.byId[id]={fixed:'bartender',v:1,lvD:1,mv:0,hc:'',fl:0,ev:[]}; }
+  const d=(typeof buildNpcDossier==='function')?buildNpcDossier(id):null;
+  _int.occ.push({ key:id, kind:'npc', npcId:id, name:(d&&d.first)||'the bartender', sprite:{type:'recruiter',owner:'player'},
+    x:L.bartender.x, y:L.bartender.y, tx:L.bartender.x, ty:L.bartender.y, face:1, fixed:true, wob:Math.random()*6 });
+}
+function _populateVets(shuffled, rng){
+  const L=_int.layout, n=Math.min(shuffled.length, 4 + ((rng()*3)|0)), slots=_spreadSlots(L, rng);   // 4–6 already inside
   for(let i=0;i<n;i++){ _addVet(shuffled[i], slots[i] || { x:L.door.x+40+i*34, y:L.door.y-10 }); }
 }
+// MARISOL'S: each veteran sits at a booth across from their OWN kin (nr:<vetKey>) — you see the families waiting.
+function _populateDiner(shuffled, rng){
+  const L=_int.layout, booths=(L.booths||[]); let bi=0;
+  for(const u of shuffled){ if(bi>=booths.length) break; const b=booths[bi];
+    const cx=b.x+b.w/2, kinY=b.y-24, vetY=b.y+b.h+24, vk=ohUnitKey(u), kinId='nr:'+vk;
+    let kd=null; if(typeof buildNpcDossier==='function'){ try{ kd=buildNpcDossier(kinId); }catch(_){ kd=null; } }
+    _addVet(u, { x:cx, y:vetY, seat:{x:cx,y:vetY} });
+    if(kd && kd.first){ _int.occ.push({ key:kinId, kind:'npc', npcId:kinId, forVet:vk, name:kd.first,
+      sprite:{type:_kinSprite(kinId), owner:'player'}, x:cx, y:kinY, tx:cx, ty:kinY, face:1, fixed:true, wob:Math.random()*6 }); }
+    bi++;
+  }
+}
+// STATIC: ambient dancers on the floor — cosmetic decor, never a scene target.
+function _populateCrowd(rng){
+  const L=_int.layout, pool=['worker','hustler','recruiter'];
+  for(const c of (L.crowd||[])){ _int.occ.push({ kind:'ambient', sprite:{type:pool[(rng()*pool.length)|0], owner:'player'},
+    x:_jit(rng,c.x,16), y:_jit(rng,c.y,10), tx:c.x, ty:c.y, face:(rng()<0.5?-1:1), wob:rng()*6, _dance:true }); }
+}
+function _kinSprite(id){ const pool=['worker','hustler','recruiter']; return pool[_strHash(id)%pool.length]; }
 function _jit(rng, v, a){ return v + (rng()-0.5)*a; }
 // natural placement — little groups/couples: gathered round the tables, a pair at the bar,
 // a loose standing knot, and a couple of scattered singles, all with jitter so nobody lines up.
@@ -201,24 +221,49 @@ function _drawFloor(ctx,m,L){
   g.addColorStop(0,_hexA(L.accent||'#ffce6a',0.07)); g.addColorStop(1,'transparent'); ctx.fillStyle=g; ctx.fillRect(0,0,m.cssW,m.cssH);
 }
 function _rect(ctx,m,x,y,w,h,fill,stroke){ const p=v2c(x,y,m); ctx.fillStyle=fill; ctx.fillRect(p.x,p.y,w*m.scale,h*m.scale); if(stroke){ ctx.strokeStyle=stroke; ctx.lineWidth=Math.max(1,1.5*m.scale); ctx.strokeRect(p.x,p.y,w*m.scale,h*m.scale); } }
+// ---- neon helpers (draw to the INTERIOR ctx; the megasprites glow fns are hardwired to the MAIN canvas) ----
+function _glowE(ctx, cx, cy, rx, ry, color, a){
+  rx=Math.max(1,rx); ry=Math.max(1,ry);
+  const g=ctx.createRadialGradient(cx,cy,rx*0.05, cx,cy,rx);
+  g.addColorStop(0,_hexA(color,a)); g.addColorStop(0.55,_hexA(color,a*0.42)); g.addColorStop(1,_hexA(color,0));
+  ctx.save(); ctx.translate(cx,cy); ctx.scale(1,ry/rx); ctx.fillStyle=g; ctx.beginPath(); ctx.arc(0,0,rx,0,6.2832); ctx.fill(); ctx.restore();
+}
+function _strip(ctx, x1,y1,x2,y2, color, a, w){
+  ctx.save(); ctx.strokeStyle=_hexA(color,a); ctx.lineWidth=Math.max(1,w); ctx.lineCap='round';
+  ctx.shadowColor=color; ctx.shadowBlur=Math.max(4,w*3); ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x2,y2); ctx.stroke(); ctx.restore();
+}
+function _ellipseFurn(ctx,m,x,y,rx,ry,fill,stroke){ const p=v2c(x,y,m); ctx.fillStyle=fill; ctx.beginPath(); ctx.ellipse(p.x,p.y,rx*m.scale,ry*m.scale,0,0,6.28); ctx.fill(); if(stroke){ ctx.strokeStyle=stroke; ctx.lineWidth=1.5*m.scale; ctx.stroke(); } }
+function _drawCounter(ctx,m,L,c,edge){
+  _rect(ctx,m,c.x,c.y+c.h-14,c.w,14,'#1a1410'); const top=v2c(c.x,c.y,m);
+  const gr=ctx.createLinearGradient(top.x,top.y,top.x,top.y+(c.h-14)*m.scale); gr.addColorStop(0,L.counterTop||'#3a2c1d'); gr.addColorStop(1,L.counterBot||'#241a11');
+  ctx.fillStyle=gr; ctx.fillRect(top.x,top.y,c.w*m.scale,(c.h-14)*m.scale); ctx.strokeStyle='#0c0f15'; ctx.lineWidth=2*m.scale; ctx.strokeRect(top.x,top.y,c.w*m.scale,c.h*m.scale);
+  _rect(ctx,m,c.x,c.y,c.w,3,_hexA(edge,0.55));
+}
 function _drawFurniture(ctx,m,L,t){
-  const ac=L.accent||'#ffce6a';
-  // back wall band + neon sign
-  _rect(ctx,m,0,0,ROOM_W,96,'#0a0d12');
-  if(L.shelf){ _rect(ctx,m,L.shelf.x,L.shelf.y,L.shelf.w,L.shelf.h,'#10141b','#1c2533');
+  const ac=L.accent||'#ffce6a', ac2=L.accent2||ac;
+  _rect(ctx,m,0,0,ROOM_W,96,L.wallBand||'#0a0d12');                                        // back wall band
+  // club: vertical neon light strips down the side walls (alternating pulse)
+  if(L.neonWalls){ const lt=v2c(28,110,m),lb=v2c(28,ROOM_H-28,m),rt=v2c(ROOM_W-28,110,m),rb=v2c(ROOM_W-28,ROOM_H-28,m), pulse=0.5+0.5*Math.sin(t*2.2);
+    _strip(ctx,lt.x,lt.y,lb.x,lb.y,ac,0.35+0.3*pulse,3*m.scale); _strip(ctx,rt.x,rt.y,rb.x,rb.y,ac2,0.35+0.3*(1-pulse),3*m.scale); }
+  // club: the pulsing dance floor (on the floor, under occupants)
+  if(L.dancefloor){ const f=L.dancefloor, ts=f.w/8, o=v2c(f.x,f.y,m), tsc=ts*m.scale;
+    for(let gy=0; gy*ts<f.h; gy++) for(let gx=0; gx*ts<f.w; gx++){ const ph=0.5+0.5*Math.sin(t*3 + gx*0.55 + gy*0.5);
+      ctx.fillStyle=_hexA(((gx+gy)&1)?ac:ac2, 0.06+0.20*ph); ctx.fillRect(o.x+gx*tsc, o.y+gy*tsc, tsc+1, tsc+1); }
+    _glowE(ctx, o.x+f.w*m.scale/2, o.y+f.h*m.scale*0.35, f.w*0.65*m.scale, f.h*0.6*m.scale, ac, 0.10+0.05*Math.sin(t*2)); }
+  if(L.shelf){ _rect(ctx,m,L.shelf.x,L.shelf.y,L.shelf.w,L.shelf.h,'#10141b','#1c2533');     // bar: bottle shelf
     for(let i=0;i<14;i++){ const bx=L.shelf.x+12+i*((L.shelf.w-24)/14); const cols=['#5fd98a','#5fe0ff','#ffce6a','#cf8bff','#ff5d70']; _rect(ctx,m,bx,L.shelf.y+8,7,L.shelf.h-14,cols[i%cols.length]); } }
+  if(L.djbooth){ const d=L.djbooth; _rect(ctx,m,d.x,d.y,d.w,d.h,'#120a18',_hexA(ac,0.7)); const pc=v2c(d.x+d.w/2,d.y+d.h/2,m);  // club: DJ booth
+    _glowE(ctx, pc.x, pc.y, d.w*0.7*m.scale, d.h*1.6*m.scale, ac2, 0.16+0.10*Math.sin(t*4));
+    for(let i=0;i<6;i++){ const bh=(0.25+0.75*Math.abs(Math.sin(t*5+i*0.9)))*(d.h-10); _rect(ctx,m, d.x+10+i*((d.w-20)/6), d.y+d.h-5-bh, 6, bh, i%2?ac:ac2); } }
   if(L.sign){ const p=v2c(ROOM_W/2,40,m); ctx.save(); ctx.font='700 '+(20*m.scale)+'px Chakra Petch, sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
     ctx.shadowColor=ac; ctx.shadowBlur=14*m.scale*(0.7+0.3*Math.sin(t*2)); ctx.fillStyle=ac; ctx.fillText(L.sign, p.x, p.y); ctx.restore(); }
-  // the bar counter (wood top + dark front)
-  if(L.counter){ const c=L.counter; _rect(ctx,m,c.x,c.y+c.h-14,c.w,14,'#1a1410'); const top=v2c(c.x,c.y,m);
-    const gr=ctx.createLinearGradient(top.x,top.y,top.x,top.y+ (c.h-14)*m.scale); gr.addColorStop(0,'#3a2c1d'); gr.addColorStop(1,'#241a11');
-    ctx.fillStyle=gr; ctx.fillRect(top.x,top.y,c.w*m.scale,(c.h-14)*m.scale); ctx.strokeStyle='#0c0f15'; ctx.lineWidth=2*m.scale; ctx.strokeRect(top.x,top.y,c.w*m.scale,c.h*m.scale);
-    _rect(ctx,m,c.x,c.y,c.w,3,_hexA(ac,0.5)); }
-  // stools
-  for(const s of (L.stools||[])){ const p=v2c(s.x,s.y,m); ctx.fillStyle='#2a2018'; ctx.beginPath(); ctx.ellipse(p.x,p.y,12*m.scale,6*m.scale,0,0,6.28); ctx.fill(); }
-  // round tables
-  for(const tb of (L.tables||[])){ const p=v2c(tb.x,tb.y,m); ctx.fillStyle='#171c24'; ctx.beginPath(); ctx.ellipse(p.x,p.y,tb.r*m.scale,tb.r*0.55*m.scale,0,0,6.28); ctx.fill(); ctx.strokeStyle='#222a35'; ctx.lineWidth=2*m.scale; ctx.stroke(); }
-  // door
+  if(L.counter){ _drawCounter(ctx,m,L,L.counter,ac); }                                       // bar / diner counter
+  if(L.bar){ _drawCounter(ctx,m,L,L.bar,ac2); }                                              // club service bar
+  for(const b of (L.booths||[])){ _rect(ctx,m,b.x-7,b.y-15,b.w+14,13,'#241710'); _rect(ctx,m,b.x-7,b.y+b.h+2,b.w+14,13,'#241710');  // diner booths (benches)
+    _rect(ctx,m,b.x,b.y,b.w,b.h,'#2a1d12','#3a2a1a'); const bp=v2c(b.x,b.y,m); _strip(ctx,bp.x,bp.y,bp.x+b.w*m.scale,bp.y,ac,0.4,2*m.scale); }  // table + warm rim
+  for(const s of (L.stools||[])){ _ellipseFurn(ctx,m,s.x,s.y,12,6,'#2a2018'); }              // bar stools
+  for(const tb of (L.tables||[])){ _ellipseFurn(ctx,m,tb.x,tb.y,tb.r,tb.r*0.55,'#171c24','#222a35'); }  // round tables
+  for(const h of (L.hightops||[])){ _ellipseFurn(ctx,m,h.x,h.y,(h.r||26),(h.r||26)*0.5,'#141019',_hexA(ac,0.4)); }  // club high-tops
   if(L.door){ _rect(ctx,m,L.door.x-22,L.door.y-58,44,64,'#0e1218','#1c2533'); }
 }
 function _drawOcc(ctx,m,o,t){
@@ -282,7 +327,8 @@ function _onClose(){ if(_dismiss()) return; closeInterior(); }
 function _setCloseLabel(inDialog){ const b=$('oh-int-close'); if(b) b.textContent=inDialog?'✕ Close':'✕ Leave'; }
 function _pick(cx,cy){
   const m=_metrics(); let best=null, bd=1e9;
-  for(const o of _int.occ){ const p=v2c(o.x,o.y,m); const S=SPR_H*m.scale;
+  for(const o of _int.occ){ if(o.kind==='ambient') continue;   // club dancers are decor, not scene targets
+    const p=v2c(o.x,o.y,m); const S=SPR_H*m.scale;
     if(cx>=p.x-S*0.26 && cx<=p.x+S*0.26 && cy>=p.y-S*0.95 && cy<=p.y+S*0.12){ const d=Math.abs(cx-p.x)+Math.abs(cy-(p.y-S*0.4)); if(d<bd){ bd=d; best=o; } } }
   return best;
 }
@@ -338,11 +384,18 @@ function _startInteraction(vet, target){
 }
 
 /* ---- the scene + floating line-picker ---- */
+function _npcBondKind(venue, npcId){
+  if(npcId===OFFHOURS.barNpc) return 'confidant';
+  if(venue==='diner' || /^nr:/.test(npcId||'')) return 'kin';
+  return 'friend';
+}
 function _interactionContext(vet, target){
   const vetKey=vet.key, vu=vet.unit;
   if(target.kind==='npc'){
-    const npcId=target.npcId; const kind=(npcId===OFFHOURS.barNpc)?'confidant':'friend';
+    const kind=_npcBondKind(_int.kind, target.npcId);
+    const npcId=(kind==='kin') ? ('nr:'+vetKey) : target.npcId;   // a veteran talks to THEIR OWN kin (correct pairing)
     if(kind==='confidant' && typeof ohSeedConfidant==='function') ohSeedConfidant(vetKey);
+    if(kind==='kin' && typeof ohSeedVetBonds==='function') ohSeedVetBonds(vetKey, vu);   // mint the kin bond from the vet's relative
     const bond=ohGetBond(vetKey, npcId) || ohEnsureBond(vetKey, npcId, kind);
     return { venue:_int.kind, kind, npcId, bond, vu };
   } else {

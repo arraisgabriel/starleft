@@ -70,6 +70,29 @@ const OFFHOURS = {
       door:{ x:70, y:498 },                          // called-in vets enter here
       wander:[ {x:320,y:350},{x:560,y:360},{x:470,y:320},{x:660,y:345},{x:200,y:380} ],
     },
+    // MARISOL'S — warm amber neon through grime; each vet sits at a booth across from their kin.
+    diner: {
+      name:"MARISOL'S", accent:'#e8923c', accent2:'#ff6a4d', floorA:'#191310', floorB:'#221a14', wall:'#0d0a07',
+      counter:{ x:332, y:116, w:296, h:46 }, counterTop:'#3a2a1a', counterBot:'#241710',   // service counter + pie-case
+      sign:"MARISOL'S",
+      booths:[ {x:150,y:240,w:98,h:50}, {x:150,y:402,w:98,h:50}, {x:712,y:240,w:98,h:50}, {x:712,y:402,w:98,h:50} ],
+      seats:[ {x:199,y:216},{x:199,y:314},{x:199,y:378},{x:199,y:476},{x:761,y:216},{x:761,y:314},{x:761,y:378},{x:761,y:476} ],
+      door:{ x:70, y:500 },
+      wander:[ {x:430,y:300},{x:520,y:380},{x:400,y:430},{x:560,y:300} ],
+    },
+    // STATIC — electric magenta + cyan; a pulsing dance floor is the showpiece, vets bond vet↔vet.
+    club: {
+      name:'STATIC', accent:'#cf6bff', accent2:'#3df0ff', floorA:'#0e0a14', floorB:'#150e1d', wall:'#070509', neonWalls:true,
+      dancefloor:{ x:330, y:248, w:300, h:212 },
+      djbooth:{ x:410, y:104, w:140, h:40 },
+      bar:{ x:96, y:126, w:208, h:44 },
+      hightops:[ {x:782,y:248,r:30},{x:822,y:404,r:30},{x:726,y:454,r:30} ],
+      sign:'STATIC',
+      crowd:[ {x:392,y:300},{x:470,y:340},{x:560,y:306},{x:420,y:404},{x:530,y:418},{x:486,y:362} ],
+      seats:[ {x:782,y:248},{x:822,y:404},{x:726,y:454} ],
+      door:{ x:70, y:500 },
+      wander:[ {x:230,y:404},{x:690,y:300},{x:300,y:484},{x:664,y:474},{x:170,y:300} ],
+    },
   },
 
   // ---- hand-authored fixed NPC identities (D3). buildNpcDossier short-circuits to these (D2). ----
