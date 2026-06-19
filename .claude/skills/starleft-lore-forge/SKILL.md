@@ -10,9 +10,15 @@ description: >-
   repetitive, add variety", "more unit barks", "new lines for Nino", "voice the new lore", "deepen
   the player–unit bond" — even when they don't name the system or say "lore". Treat any request to
   add narrative life-events, backstory pools, dossier flavor, unit/hero voice lines, or to re-run the
-  lore→TTS pipeline as a lore-forge task. It owns the append-only contract that keeps saved games and
-  the index-keyed voice clips valid, the version-gating that freezes existing veterans' identities
-  when pools grow, the per-unit voice map, and the HARD approval gate before any voice is recorded.
+  lore→TTS pipeline as a lore-forge task. It ALSO owns the OFF-HOURS relationship scenes — the
+  multi-beat dialogue-tree conversations at THE LATE SHIFT / MARISOL'S / STATIC that deepen bonds and
+  write distinct dossier life-events — so "add off-hours scenes", "more bar/Sable conversations",
+  "deepen the club/diner dialog", "a new vet↔vet romance/rival/mentor scene", "the off-hours nights
+  feel repetitive", "give each scene its own dossier line" are lore-forge tasks too (a TEXT-ONLY
+  track — author → validate → verify in-browser, no voice recording). It owns the append-only contract
+  that keeps saved games and the index-keyed voice clips valid, the version-gating that freezes
+  existing veterans' identities when pools grow, the per-unit voice map, and the HARD approval gate
+  before any voice is recorded.
   SKIP for: new playable units/heroes' stats & sprites (use starleft-unit-forge), new campaign
   maps/episodes/factions or intro-crawl narration (use starleft-mapmaker), tweaking ONE existing
   event's wording (edit the source directly), and gameplay/career-XP mechanics changes.
@@ -58,6 +64,9 @@ You don't enforce this by hand. All new content goes into one append-only ledger
   `say` lines that earn a voice clip. The backbone of Phase 2.
 - **`references/pipeline.md`** — every command in order, the gitignored `_dev/gen/*` scripts you
   drive, and the local Qwen3-TTS (twilightZone) prerequisites. The backbone of Phases 3–7.
+- **`references/offhours-scenes.md`** — the OFF-HOURS multi-beat scene schema, the venues/kinds, the
+  engine, the save-safety invariants, the token vocabulary (incl. the render-time `{fallen}`/`{lastmap}`),
+  and the distinct-dossier-line rule. The backbone of the **Off-Hours scene track** below (text-only).
 
 Then skim the live source so your edits match reality: `js/lore.js` (how dossiers/events are rolled),
 `_dev/gen/voice_map.mjs` (which unit speaks in which voice), and the current `js/lore_data.js` counts.
@@ -170,6 +179,51 @@ the new lore in its assigned voice; select units/heroes for new barks; load a pr
 confirm the veteran's identity is unchanged and new events only appear at *future* level-ups). Close
 out by summarizing what was added and recorded vs. what was left for the user.
 
+## Off-Hours scene track (a sibling track — TEXT-ONLY, no voice gate)
+
+Authoring **Off-Hours dialogue-tree scenes** (the bar/diner/club conversations that deepen bonds and
+write dossier life-events) is the same append-only/index discipline, but **text/data only — no voice
+recording, no GPU, no Phase-5 gate**. All content lives directly in `js/offhours_data.js`. Read
+`references/offhours-scenes.md` first, then work in order:
+
+### O1 — Read the current state
+```bash
+node .claude/skills/starleft-lore-forge/scripts/validate_offhours.mjs   # prints scene/event counts + the per-arc coverage table
+```
+Confirm scope with the user: which arc(s) — bar/confidant (Sable), diner/kin, club/friend·rival·
+romance·mentor — how many scenes, which tiers. Aim for **≥2 eligible scenes at each low tier** or the
+opener repeats. State the plan in a sentence and confirm before authoring.
+
+### O2 — Author the multi-beat scenes (the craft step)
+Append NEW scene objects to the **end** of `OFFHOURS.scenes` (never reorder/insert). Each is a small
+conversation tree (`beats[]` with `next`; full schema in the reference): the counterpart opens, the
+veteran's choices branch, a terminal branch ends it. Match the terse dark-vet voice
+(`lore-tone-guide.md`); gate deep beats on `crime`/`trauma`/`dream`; put ONE `ARC_UNLOCKED` favor on a
+T2-3 confession; a tier-4 `capstone`. For a large drop, a parallel author→tighten→validate workflow
+keeps the lines distinct and in-voice — but you are the dev-time author; show the user a sample first.
+
+### O3 — Give each outcome its OWN dossier line
+Append one `events` entry per scene-outcome (the lasting memory) + an **index-aligned `say`** + (kin/
+diner only) an `npcEvents` line, all at the end, then point each terminal branch's `ev` at its new
+index. **Never share an `ev` across scenes** — sharing makes different nights render the identical
+service-record line (the validator warns). This is the "give each scene its own dossier line" rule.
+
+### O4 — Validate (prove it's safe)
+```bash
+node .claude/skills/starleft-lore-forge/scripts/validate_offhours.mjs
+```
+Must exit 0: append-only vs HEAD (scene-id prefix; events/say byte-identical prefix), `events.length
+=== say.length`, every beat-graph valid (forward `next`, all beats reachable, a terminal exists,
+beat-0 has an ungated choice), gates/`ev`/`fl` legal, `fx:capstone` only at tier 4, tokens safe. Fix
+and re-run until clean; ev-sharing is a warning to address, not a blocker.
+
+### O5 — Verify in-browser (no voice gate)
+Serve, enter the hub, open the venue's interior, direct a vet through a new scene → it commits (charges
+M3$ once, marks `seen` once), writes the **distinct** dossier line (check the unit's Service Record),
+and rotates a different opener next visit. Playwright eval against `OFFHOURS` / `applyOffhoursCommit` /
+`dossierFileHTML` is the fast path. There is **no Phase-5 voice gate** — off-hours `say` is index-keyed
+for a *future* voice pass but isn't recorded today; just keep it aligned. Summarize what was added.
+
 ## Guardrails
 
 - **Append, never reorder.** Add a NEW block at the end of `ADD_BLOCKS`; never edit/delete an
@@ -187,6 +241,11 @@ out by summarizing what was added and recorded vs. what was left for the user.
   land on Phase 5 and get an explicit yes.
 - **Save compatibility is sacred.** A legacy save (no `v`, missing fields) must still load with its
   veterans unchanged — `validate` checks this; if it ever fails, stop and diagnose before shipping.
+- **Off-Hours scenes are a TEXT-ONLY sibling track.** Append-only `OFFHOURS.scenes`/`events`/`say`/
+  `npcEvents` in `js/offhours_data.js`; each scene a valid beat-graph; each outcome its OWN `ev` (never
+  shared); gates only crime/trauma/dream; `{fallen}`/`{lastmap}` resolve at render (don't store a map).
+  Prove it with `validate_offhours.mjs` — there is **no voice gate**. Schema + invariants in
+  `references/offhours-scenes.md`.
 
 ## Optional follow-through
 

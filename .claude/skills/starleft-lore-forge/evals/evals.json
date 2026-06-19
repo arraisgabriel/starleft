@@ -65,6 +65,20 @@
         { "text": "Every queued clip now exists", "criteria": "verify_clips.mjs exits 0 (no missing clips)" },
         { "text": "New lore lines were voiced across all career voices", "criteria": "for each new variable-free lore index, a clip exists for each of the 7 career voices" }
       ]
+    },
+    {
+      "id": 5,
+      "name": "add-offhours-scenes-text-only-no-voice",
+      "prompt": "The H.U.B. off-hours feel thin at Static. Add about 6 new club scenes — friend/rival nights between veterans — each a short multi-beat conversation, and make sure each one writes its OWN distinct line into the unit dossier (no two scenes sharing a dossier line). This is the off-hours text track, so there's no voice to record — just author it and prove it's safe to ship.",
+      "expected_output": "~6 club scenes appended to OFFHOURS.scenes in js/offhours_data.js (each a valid beat-graph: beat-0 has an ungated choice, every next forward + in-range, all beats reachable, a terminal branch exists). For each scene's terminal outcome(s) a NEW events[] entry + an index-aligned say[] entry is appended (events.length === say.length), each terminal branch pointing at its own ev (no ev shared across scenes). validate_offhours.mjs exits 0. The agent recognizes off-hours is a TEXT-ONLY track and does NOT touch the lore/bark TTS pipeline, gen_voices.sh, or assets/audio/voice.",
+      "files": [],
+      "assertions": [
+        { "text": "OFFHOURS.scenes is append-only — HEAD's scene ids are an unchanged prefix", "criteria": "validate_offhours.mjs exits 0; no existing scene id reordered/removed; ~6 new club scenes at the end" },
+        { "text": "events and say stay index-aligned and append-only", "criteria": "events.length === say.length; HEAD's events/say are a byte-identical prefix; one new events+say pair per new dossier line" },
+        { "text": "Each scene owns a distinct dossier line", "criteria": "no terminal `ev` is shared by two scenes — validate_offhours.mjs reports zero ev-sharing warnings for the new scenes" },
+        { "text": "Every new scene is a playable beat-graph", "criteria": "beat 0 has an ungated choice; all next indices forward + in range; all beats reachable from 0; a terminal branch exists (validator beat-graph checks pass)" },
+        { "text": "No voice work was done — off-hours is text-only", "criteria": "no new files under assets/audio/voice/; gen_voices.sh not invoked; js/lore_data.js / js/dialog_data.js LORE_SAY untouched; the agent states off-hours has no voice gate" }
+      ]
     }
   ]
 }
