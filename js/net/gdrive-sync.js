@@ -49,13 +49,6 @@ let GD_contLock = 0;               // ref-count of in-flight PULLS whose resume 
 let GD_pullActive = {};            // pool.id → true while a pull runs; race-free dedup so overlapping triggers don't double-pull
 let GD_signinPromptedThisSession = false;   // the menu sign-in/decline panel shows at most once per page load (cloudDeclined() stops it across sessions)
 
-/* ---- TEMP double-pull diagnostics (localhost only; remove once the ▶ Continue double-disable is pinned down) ---- */
-const GD_DBG = (()=>{ try{ return /^(localhost|127\.0\.0\.1|\[?::1\]?)$/.test(location.hostname); }catch(_){ return false; } })();
-let GD_dbgN = 0;
-function gdlog(){ if(!GD_DBG) return; try{ console.log.apply(console, ['%c[gdrive]','color:#5cf;font-weight:bold'].concat([].slice.call(arguments))); }catch(_){} }
-function gdCaller(){ try{ return (new Error().stack||'').split('\n').slice(3,6).map(s=>s.trim().replace(/^at\s+/,'')).join('  ←  '); }catch(_){ return '?'; } }
-if(GD_DBG){ try{ console.log('%c[gdrive] sync module LOADED — double-pull diagnostics ON (build '+Date.now()+')','color:#5cf;font-weight:bold'); }catch(_){} }
-
 const GD_sleep = ms => new Promise(r => setTimeout(r, ms));
 function cloudOn(){ try{ return localStorage.getItem('starleft_cloud_on')==='1'; }catch(_){ return false; } }
 function setCloudOn(v){ try{ if(v){ localStorage.setItem('starleft_cloud_on','1'); localStorage.removeItem('starleft_cloud_declined'); } else { localStorage.removeItem('starleft_cloud_on'); } }catch(_){} }
@@ -242,11 +235,7 @@ async function gdrivePruneCloud(pool){
 async function gdrivePull(opts){
   opts = opts || {}; const pool = opts.pool || GD_solo();
   const autoApply = !!opts.autoApply;   // seamless menu/boot pull: fast-forward newer cloud slots in place, NEVER prompt
-  const _dbgId = ++GD_dbgN;
-  gdlog('gdrivePull #'+_dbgId, { pool:pool.id, autoApply, interactive:!!opts.interactive, silent:!!opts.silent,
-    pullActive:!!GD_pullActive[pool.id], lastPull: GD_lastPullAt ? (nowMs()-GD_lastPullAt)+'ms ago' : 'never',
-    contLock:GD_contLock, inflight:GD_syncInflight }, '\n    caller:', gdCaller());
-  if(!gisAvailable()) { gdlog('gdrivePull #'+_dbgId+' → SKIP unavailable'); return { ok:false, reason:'unavailable' }; }
+  if(!gisAvailable()) return { ok:false, reason:'unavailable' };
   // Dedup authority for the seamless fast-forwards (boot gdriveMenuSync + the menu-show call + a focus-fired
   // gdriveSeamlessPull). Running two of them back-to-back disables ▶ Continue, re-enables it, then disables it again.
   // Both guards below are claimed SYNCHRONOUSLY (no await before them) so NO entry-point ordering can slip a second
@@ -260,10 +249,9 @@ async function gdrivePull(opts){
   // "Sync now"/"Restore" buttons are interactive but autoApply:false, so they stay exempt and always run — the latch +
   // throttle below are BOTH gated on `seamless` so an explicit pull is never dropped by a background seamless one.
   const seamless = autoApply && !!pool.autoKey;
-  if(seamless && GD_pullActive[pool.id]) { gdlog('gdrivePull #'+_dbgId+' → SKIP inflight (another seamless pull of pool '+pool.id+' is running)'); return { ok:false, reason:'inflight' }; }
-  if(seamless && GD_lastPullAt > 0 && (nowMs() - GD_lastPullAt) < GD_PULL_MIN_INTERVAL) { gdlog('gdrivePull #'+_dbgId+' → SKIP throttled ('+(nowMs()-GD_lastPullAt)+'ms < '+GD_PULL_MIN_INTERVAL+'ms)'); return { ok:false, reason:'throttled' }; }
+  if(seamless && GD_pullActive[pool.id]) return { ok:false, reason:'inflight' };
+  if(seamless && GD_lastPullAt > 0 && (nowMs() - GD_lastPullAt) < GD_PULL_MIN_INTERVAL) return { ok:false, reason:'throttled' };
   if(seamless){ GD_pullActive[pool.id] = true; GD_lastPullAt = nowMs(); }
-  gdlog('gdrivePull #'+_dbgId+' → RUN  (seamless='+seamless+', gates Continue='+(autoApply && !!pool.autoKey)+')');
   // Gate ▶ Continue only when THIS pull can auto-overwrite the local autosave it resumes: an autoApply pull of a
   // pool that has an autosave (solo). A non-autoApply pull only prompts (never auto-writes), and the MP pool has
   // no autosave — neither should disable Continue.
@@ -300,6 +288,10 @@ async function gdrivePull(opts){
       for(const f of recreate)    if(!target || f.savedAt > target.savedAt) target = f;
       let localMax = 0; for(const s of localByKey.values()) if(s.savedAt > localMax) localMax = s.savedAt;
       if(target && target.savedAt > localMax){                       // resume target is an incoming cloud slot → write it first
+        // A cloud-ONLY manual target (in `recreate`, no local copy) ADDS a slot — make room first so we never exceed
+        // MANUAL_CAP. (reconcileAndRecreate only enforces the cap for slots IT writes; a fastForward/autosave target
+        // overwrites an existing slKey in place, so it doesn't grow the count and must NOT pre-evict.)
+        if(target.slKey!==pool.autoKey && recreate.indexOf(target)>=0){ try{ pool.enforceCap(); }catch(_){} }
         if(await recreateSlot(target)){                              // on success drop it from the background queue (avoid a double-write)
           let i = fastForward.indexOf(target); if(i>=0) fastForward.splice(i,1);
           else { i = recreate.indexOf(target); if(i>=0) recreate.splice(i,1); }
@@ -391,7 +383,6 @@ function showCloudConflict(conflicts){
 
 /* ---- sync triggers ---- */
 function gdriveConnect(){
-  gdlog('gdriveConnect() CALLED', '\n    caller:', gdCaller());
   whenGsi(async ()=>{
     if(!gisAvailable()){ if(typeof toast==='function') toast('Cloud save unavailable here'); return; }
     // Capture the PREVIOUSLY-connected account (the persisted hint) BEFORE sign-in overwrites it.
@@ -417,7 +408,6 @@ async function gdrivePushAll(opts){ let r=null; for(const p of gdPools()){ r=awa
 // no prompt) to match the no-clicks intent — the explicit "Sync now" / "Restore from cloud" buttons still prompt.
 // setCloudOn(true) also clears any prior "declined" flag.
 function gdriveDoConnect(){
-  gdlog('gdriveDoConnect() CALLED — push-all + interactive autoApply pull-all', '\n    caller:', gdCaller());
   setCloudOn(true);
   (async ()=>{ await gdrivePushAll({ interactive:true }); await gdrivePullAll({ interactive:true, autoApply:true }); gdriveRefreshUI(); })();
 }
@@ -618,7 +608,7 @@ function gdSyncLeave(){
   if(GD_syncInflight===0){ clearTimeout(GD_syncWatchdog); GD_syncStuck=false; }
   gdriveRenderStatus();
 }
-function gdriveRenderStatus(){
+function gdriveRenderStatus(){ try{   // guarded so a render error can never leak through gdSyncEnter/gdSyncLeave/syncStatus callers
   const email = (window.GDRIVE && GDRIVE.currentEmail && GDRIVE.currentEmail()) || '';
   let txt;
   switch(GD_statusState){
@@ -649,7 +639,6 @@ function gdriveRenderStatus(){
   const cont=document.getElementById('btn-continue');
   if(cont){
     const syncing = GD_contLock > 0 && !GD_syncStuck;
-    if(GD_DBG && cont.disabled !== syncing) gdlog('▶ Continue '+(syncing?'DISABLED':'ENABLED')+'  (contLock='+GD_contLock+', stuck='+GD_syncStuck+')', '\n    caller:', gdCaller());
     cont.classList.toggle('syncing', syncing);
     cont.disabled = syncing;
     cont.setAttribute('aria-busy', syncing ? 'true' : 'false');
@@ -666,7 +655,7 @@ function gdriveRenderStatus(){
       }
     }
   }
-}
+}catch(_){} }
 function gdriveRefreshUI(){
   const panel=document.getElementById('cloudPanel'); if(!panel) return;
   const acts=document.getElementById('cloudActions');
