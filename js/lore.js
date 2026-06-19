@@ -297,10 +297,13 @@ function _ohVenueTag(npcId){
 }
 // one Off-Hours night as a <li>. Marked by WHO it was with (the counterpart), falling back to WHERE (the venue) when
 // the other party isn't currently resolvable — NOT by "Lv N" (its `lvl` is a downtime-visit counter, which read as a wrong level).
-function _ohEventLi(d, ev){
+function _ohEventLi(u, d, ev){
   const oe=(typeof OFFHOURS!=='undefined' && OFFHOURS.events[ev.i]); if(!oe) return '';
   const who=(ev.npc && typeof ohPartyName==='function')?ohPartyName(ev.npc):'';
   let line=d.fill(oe.text); if(who) line=line.replace(/\{npc\}|\{them\}/g, who);
+  // campaign-aware tokens resolve at render: {fallen} → a deceased comrade's name; {lastmap} → neutral (not stored per memory).
+  if(line.indexOf('{fallen}')>=0) line=line.replace(/\{fallen\}/g, (typeof ohFallenName==='function')?ohFallenName(u):'the ones we lost');
+  if(line.indexOf('{lastmap}')>=0) line=line.replace(/\{lastmap\}/g, 'the last drop');
   const tag=(who && who!=='them') ? who : _ohVenueTag(ev.npc);
   return `<li><b>${_loCap(tag)}</b> — ${_loCap(line)}</li>`;
 }
@@ -318,7 +321,7 @@ function dossierFileHTML(u){
     h += `<div class="dk">Service record</div><ol class="dossier-log">`;
     let _ohAny=false; const _ohSeen=new Set();
     for(const ev of u.lore.events){ if(!ev.oh) continue; const _k=ev.i+'|'+(ev.npc||''); if(_ohSeen.has(_k)) continue; _ohSeen.add(_k);
-      const li=_ohEventLi(d, ev); if(li){ h += li; _ohAny=true; } }
+      const li=_ohEventLi(u, d, ev); if(li){ h += li; _ohAny=true; } }
     if(!_ohAny) h += `<li>No entries yet.</li>`;
     h += `</ol>`;
     return h;
@@ -338,7 +341,7 @@ function dossierFileHTML(u){
   const _ohSeen=new Set();
   for(const ev of u.lore.events){
     // Off-Hours scene lines (oh:1): ONE entry per (memory, counterpart) — further nights deepen the bond, they don't re-log the same line.
-    if(ev.oh){ const _k=ev.i+'|'+(ev.npc||''); if(_ohSeen.has(_k)) continue; _ohSeen.add(_k); const li=_ohEventLi(d, ev); if(li) h += li; continue; }
+    if(ev.oh){ const _k=ev.i+'|'+(ev.npc||''); if(_ohSeen.has(_k)) continue; _ohSeen.add(_k); const li=_ohEventLi(u, d, ev); if(li) h += li; continue; }
     const t = LORE_DATA.events[ev.i]; if(!t) continue;
     h += `<li><b>Lv ${ev.lvl}</b> — ${_loCap(d.fill(t.text))}</li>`; }
   h += `</ol>`;
