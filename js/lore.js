@@ -286,6 +286,24 @@ function dossierHeadHTML(u){
   return `<h2>${def.icon?def.icon+' ':''}${d.full}</h2>`
     + `<div class="dossier-sub">${careerTitle(lvl)} ${def.name} · Level ${lvl} · from ${d.home}</div>`;
 }
+// the off-hours venue a night happened at, derived from the counterpart id (robust — no entity lookup needed).
+function _ohVenueTag(npcId){
+  if(typeof npcId==='string'){
+    if(/^np:/.test(npcId)) return 'the Late Shift';
+    if(/^nr:/.test(npcId)) return "Marisol's";
+    if(/^(lore:|hero:|unit:)/.test(npcId)) return 'Static';
+  }
+  return 'After hours';
+}
+// one Off-Hours night as a <li>. Marked by WHO it was with (the counterpart), falling back to WHERE (the venue) when
+// the other party isn't currently resolvable — NOT by "Lv N" (its `lvl` is a downtime-visit counter, which read as a wrong level).
+function _ohEventLi(d, ev){
+  const oe=(typeof OFFHOURS!=='undefined' && OFFHOURS.events[ev.i]); if(!oe) return '';
+  const who=(ev.npc && typeof ohPartyName==='function')?ohPartyName(ev.npc):'';
+  let line=d.fill(oe.text); if(who) line=line.replace(/\{npc\}|\{them\}/g, who);
+  const tag=(who && who!=='them') ? who : _ohVenueTag(ev.npc);
+  return `<li><b>${_loCap(tag)}</b> — ${_loCap(line)}</li>`;
+}
 // the personnel file body (prose + service record), everything after the header.
 function dossierFileHTML(u){
   const d = buildDossier(u), def = DEF[u.type], lvl = u.stars||0;
@@ -299,10 +317,7 @@ function dossierFileHTML(u){
     // even on a sealed file, surface the OFF-HOURS nights the player deliberately staged (the combat record stays sealed).
     h += `<div class="dk">Service record</div><ol class="dossier-log">`;
     let _ohAny=false;
-    for(const ev of u.lore.events){ if(!ev.oh) continue;
-      const oe=(typeof OFFHOURS!=='undefined' && OFFHOURS.events[ev.i]); if(!oe) continue;
-      let line=d.fill(oe.text); if(ev.npc && typeof ohPartyName==='function') line=line.replace(/\{npc\}|\{them\}/g, ohPartyName(ev.npc));
-      h += `<li><b>Lv ${ev.lvl}</b> — ${_loCap(line)}</li>`; _ohAny=true; }
+    for(const ev of u.lore.events){ if(!ev.oh) continue; const li=_ohEventLi(d, ev); if(li){ h += li; _ohAny=true; } }
     if(!_ohAny) h += `<li>No entries yet.</li>`;
     h += `</ol>`;
     return h;
@@ -320,10 +335,8 @@ function dossierFileHTML(u){
   }
   h += `<div class="dk">Service record</div><ol class="dossier-log">`;
   for(const ev of u.lore.events){
-    // Off-Hours scene lines (oh:1) render from the OFFHOURS pool (append-only); {npc} fills from the recorded counterpart.
-    if(ev.oh){ const oe=(typeof OFFHOURS!=='undefined' && OFFHOURS.events[ev.i]); if(!oe) continue;
-      let line=d.fill(oe.text); if(ev.npc && typeof ohPartyName==='function') line=line.replace(/\{npc\}|\{them\}/g, ohPartyName(ev.npc));
-      h += `<li><b>Lv ${ev.lvl}</b> — ${_loCap(line)}</li>`; continue; }
+    // Off-Hours scene lines (oh:1) render from the OFFHOURS pool (append-only); marked by counterpart/venue, not a level.
+    if(ev.oh){ const li=_ohEventLi(d, ev); if(li) h += li; continue; }
     const t = LORE_DATA.events[ev.i]; if(!t) continue;
     h += `<li><b>Lv ${ev.lvl}</b> — ${_loCap(d.fill(t.text))}</li>`; }
   h += `</ol>`;
