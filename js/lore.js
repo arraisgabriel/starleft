@@ -296,7 +296,15 @@ function dossierFileHTML(u){
     h += `<div class="dk">Personnel file</div><div class="dossier-prose">`;
     h += `<p>${d.first} ${d.last}, of ${_loCap(d.home)}. That much HR will confirm.</p>`;
     h += `<p class="assess">Full file sealed — clearance unlocks at Level 2. Keep them alive long enough to read it.</p></div>`;
-    h += `<div class="dk">Service record</div><ol class="dossier-log"><li>No entries yet.</li></ol>`;
+    // even on a sealed file, surface the OFF-HOURS nights the player deliberately staged (the combat record stays sealed).
+    h += `<div class="dk">Service record</div><ol class="dossier-log">`;
+    let _ohAny=false;
+    for(const ev of u.lore.events){ if(!ev.oh) continue;
+      const oe=(typeof OFFHOURS!=='undefined' && OFFHOURS.events[ev.i]); if(!oe) continue;
+      let line=d.fill(oe.text); if(ev.npc && typeof ohPartyName==='function') line=line.replace(/\{npc\}|\{them\}/g, ohPartyName(ev.npc));
+      h += `<li><b>Lv ${ev.lvl}</b> — ${_loCap(line)}</li>`; _ohAny=true; }
+    if(!_ohAny) h += `<li>No entries yet.</li>`;
+    h += `</ol>`;
     return h;
   }
   // narrative prose: one deterministically-chosen paragraph per lore area, slots resolved here
