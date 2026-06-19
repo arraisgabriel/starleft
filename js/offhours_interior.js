@@ -318,6 +318,7 @@ function _showPie(o){
     ui.appendChild(b);
   });
   _setCloseLabel(true);
+  _resolveCollisions();
 }
 function _pieAct(k, o){
   _clearUI();
@@ -433,6 +434,35 @@ function _showStepAway(){
   sx.style.left='50%'; sx.style.top=(m.cssH-152)+'px'; sx.style.textAlign='center'; sx.style.fontWeight='600';
   sx.textContent='✕ Step away'; sx.addEventListener('click', function(ev){ ev.stopPropagation(); _dismiss(); });
   ui.appendChild(sx);
+  _resolveCollisions();
+}
+// no two floating boxes (bubbles / choices / pie / step-away) may overlap — iteratively push them apart, keep on-screen
+function _resolveCollisions(){
+  const ui=$('oh-int-ui'); if(!ui) return;
+  const els=[].slice.call(ui.querySelectorAll('.ohi-bubble, .ohi-choice, .ohi-pie'));
+  if(els.length<2) return;
+  const m=_metrics(), pad=12, minX=8, maxX=m.cssW-8, minY=52, maxY=m.cssH-78;
+  const B=els.map(function(el){ const r=el.getBoundingClientRect(); return { el:el, x0:r.left, y0:r.top, w:r.width, h:r.height, dx:0, dy:0 }; });
+  for(let pass=0; pass<24; pass++){
+    let moved=false;
+    for(let i=0;i<B.length;i++) for(let j=i+1;j<B.length;j++){
+      const a=B[i], b=B[j], ax=a.x0+a.dx, ay=a.y0+a.dy, bx=b.x0+b.dx, by=b.y0+b.dy;
+      const ox=Math.min(ax+a.w,bx+b.w)-Math.max(ax,bx)+pad, oy=Math.min(ay+a.h,by+b.h)-Math.max(ay,by)+pad;
+      if(ox>0 && oy>0){ moved=true;
+        if(ox<=oy){ const dir=(ax+a.w/2<=bx+b.w/2)?-1:1, s=ox/2; a.dx+=dir*s; b.dx-=dir*s; }
+        else      { const dir=(ay+a.h/2<=by+b.h/2)?-1:1, s=oy/2; a.dy+=dir*s; b.dy-=dir*s; }
+      }
+    }
+    for(const k of B){ const x=k.x0+k.dx, y=k.y0+k.dy;
+      if(x<minX) k.dx+=minX-x; if(x+k.w>maxX) k.dx+=maxX-(x+k.w);
+      if(y<minY) k.dy+=minY-y; if(y+k.h>maxY) k.dy+=maxY-(y+k.h); }
+    if(!moved) break;
+  }
+  for(const k of B){ if(Math.abs(k.dx)>0.5 || Math.abs(k.dy)>0.5){
+    const rx=k.x0+k.dx, ry=k.y0+k.dy;   // re-pin via left/top, honouring each box's center/bottom transform
+    if(k.el.classList.contains('ohi-bubble')){ k.el.style.left=(rx+k.w/2)+'px'; k.el.style.top=(ry+k.h)+'px'; }
+    else { k.el.style.left=(rx+k.w/2)+'px'; k.el.style.top=(ry+k.h/2)+'px'; }
+  }}
 }
 function _setMode(mode){ _int.mode=mode; if(mode==='idle'){ _int.selected=null; _clearUI(); } }
 function _clearUI(){ const ui=$('oh-int-ui'); if(ui) ui.innerHTML=''; }
