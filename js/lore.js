@@ -316,8 +316,9 @@ function dossierFileHTML(u){
     h += `<p class="assess">Full file sealed — clearance unlocks at Level 2. Keep them alive long enough to read it.</p></div>`;
     // even on a sealed file, surface the OFF-HOURS nights the player deliberately staged (the combat record stays sealed).
     h += `<div class="dk">Service record</div><ol class="dossier-log">`;
-    let _ohAny=false;
-    for(const ev of u.lore.events){ if(!ev.oh) continue; const li=_ohEventLi(d, ev); if(li){ h += li; _ohAny=true; } }
+    let _ohAny=false; const _ohSeen=new Set();
+    for(const ev of u.lore.events){ if(!ev.oh) continue; const _k=ev.i+'|'+(ev.npc||''); if(_ohSeen.has(_k)) continue; _ohSeen.add(_k);
+      const li=_ohEventLi(d, ev); if(li){ h += li; _ohAny=true; } }
     if(!_ohAny) h += `<li>No entries yet.</li>`;
     h += `</ol>`;
     return h;
@@ -334,9 +335,10 @@ function dossierFileHTML(u){
     h += `<p class="assess">${fillP(d.paras.assessment)}</p></div>`;
   }
   h += `<div class="dk">Service record</div><ol class="dossier-log">`;
+  const _ohSeen=new Set();
   for(const ev of u.lore.events){
-    // Off-Hours scene lines (oh:1) render from the OFFHOURS pool (append-only); marked by counterpart/venue, not a level.
-    if(ev.oh){ const li=_ohEventLi(d, ev); if(li) h += li; continue; }
+    // Off-Hours scene lines (oh:1): ONE entry per (memory, counterpart) — further nights deepen the bond, they don't re-log the same line.
+    if(ev.oh){ const _k=ev.i+'|'+(ev.npc||''); if(_ohSeen.has(_k)) continue; _ohSeen.add(_k); const li=_ohEventLi(d, ev); if(li) h += li; continue; }
     const t = LORE_DATA.events[ev.i]; if(!t) continue;
     h += `<li><b>Lv ${ev.lvl}</b> — ${_loCap(d.fill(t.text))}</li>`; }
   h += `</ol>`;

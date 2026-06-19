@@ -353,19 +353,24 @@ function applyOffhoursCommit(state, payload){
   // CANON write: the last branch on the path that carries an ev wins (the meaningful outcome) → vet's dossier (oh:1)
   let wrote=null, evVal=null;
   branches.forEach(function(b){ if(b.br.ev!=null) evVal=b.br.ev|0; });
+  // dedup by (line, counterpart): a relationship milestone is logged ONCE — later nights deepen the bond, not re-log it.
   if(evVal!=null && vet && vet.lore){
     if(!Array.isArray(vet.lore.events)) vet.lore.events=[];
-    vet.lore.events.push({ lvl:(visit||(vet.stars|0)), i:evVal, oh:1, npc:npcId||null });
-    wrote = evVal;
-    if(typeof _npcEvPush==='function' && CAMPAIGN.npc && CAMPAIGN.npc.byId && npcId && CAMPAIGN.npc.byId[npcId]
-       && OFFHOURS.npcEvents && OFFHOURS.npcEvents[evVal])
-      _npcEvPush(CAMPAIGN.npc.byId[npcId], visit, 4000 + evVal);
+    const dup=vet.lore.events.some(function(e){ return e&&e.oh&&(e.i|0)===evVal&&(e.npc||null)===(npcId||null); });
+    if(!dup){
+      vet.lore.events.push({ lvl:(visit||(vet.stars|0)), i:evVal, oh:1, npc:npcId||null });
+      wrote = evVal;
+      if(typeof _npcEvPush==='function' && CAMPAIGN.npc && CAMPAIGN.npc.byId && npcId && CAMPAIGN.npc.byId[npcId]
+         && OFFHOURS.npcEvents && OFFHOURS.npcEvents[evVal])
+        _npcEvPush(CAMPAIGN.npc.byId[npcId], visit, 4000 + evVal);
+    }
   }
-  // vet↔vet: the OTHER veteran shares the night — mirror the dossier line into their file too
+  // vet↔vet: the OTHER veteran shares the night — mirror the dossier line into their file too (also deduped)
   if(evVal!=null && npcId && /^(lore:|hero:|unit:)/.test(npcId)){
     const other=_ohFindVet(state, npcId);
     if(other && other.lore){ if(!Array.isArray(other.lore.events)) other.lore.events=[];
-      other.lore.events.push({ lvl:(visit||(other.stars|0)), i:evVal, oh:1, npc:payload.vetKey }); }
+      const dup2=other.lore.events.some(function(e){ return e&&e.oh&&(e.i|0)===evVal&&(e.npc||null)===payload.vetKey; });
+      if(!dup2) other.lore.events.push({ lvl:(visit||(other.stars|0)), i:evVal, oh:1, npc:payload.vetKey }); }
   }
   // light fx — capstone delegates to the existing dream-fulfillment path; relief reuses the field-relief shape
   branches.forEach(function(b){ if(b.br.fx && vet){
