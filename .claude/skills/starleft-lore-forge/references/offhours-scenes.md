@@ -90,8 +90,21 @@ Unlike the life-event track there is **no `_dev/gen` ledger / generator** — of
 | `diner` (MARISOL'S) | `kin` | the directed vet's **own relative** `nr:<vetKey>` (per-vet, deterministic) | each vet sits across from their kin at a booth |
 | `club` (STATIC) | `friend`/`rival`/`romance`/`mentor` | **another veteran** (`ohUnitKey(other)`) | your vets + a cosmetic ambient crowd |
 
-- The **kind** of a vet↔vet bond is seeded by `ohSeedClub` (star-gap → mentor; high compat → romance;
-  else friend/rival). The interior routes a vet↔vet "talk" to `venue:'club', kind:ohKindName(bond.k)`.
+- The **kind** of a vet↔vet bond is seeded by `ohSeedClub` (star-gap → `mentor`; else `friend`/`rival`
+  by compat). The interior routes a vet↔vet "talk" to `venue:'club', kind:ohKindName(bond.k)`.
+- **Romance is emergent, never minted.** `ohSeedClub` never returns `romance` — so it is never the first
+  conversation type. **Any vet↔vet bond drifts into romance**: on each tier-up `ohMaybeRomance` checks the
+  pair's `ohRomanceSpark` (0–1, a *separate* permissive score that rewards the *same* hometown / *same* dream /
+  opposite archetype — **not** gated on a shared hometown) and flips `bond.k` (`friend` / `rival` / `mentor`)
+  → `romance` once the bond reaches the chemistry-set tier (`ohRomanceSpeed`: strong spark couples at tier 1,
+  faint is a slow burn at tier 2–3, only `< romanceFloor` stays platonic — ≈5% of pairs). Friends fall for
+  each other, rivals can't quit each other, a mentor bond deepens — so the player can couple almost any two.
+  The bond's `seen[]`/tier/points are untouched (romance scenes have their own indices), so it's a clean kind
+  flip — host-authoritative, deterministic, save-safe. Tuning lives in `tune.compat`
+  (`romancePull/Floor/Warm/Fast/Tier`); full table in `docs/hub-offhours-tuning.md`. **Authoring implication:**
+  write `kind:'romance'` scenes for the *courtship after* the drift (the early ones at `minTier:0–1` are
+  "a spark" / first flirt); do **not** author a romance scene that assumes it is a *first* meeting — by the
+  time `romance` scenes show, the pair already had a history.
 - **No Founder/avatar** — every line is the veteran or the counterpart. (Same canon rule as the rest of
   the lore system.)
 - **Interiors** are presentation only — `OFFHOURS.interiors[venue]` (canvas-drawn rooms; routing is

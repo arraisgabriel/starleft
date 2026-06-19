@@ -21,9 +21,23 @@
 ## Compatibility (vet↔vet) — RimWorld / Wildermyth
 Deterministic score `C ∈ [−1, 1]` from the two dossiers (`tune.compat`):
 `+0.30` shared hometown · `+0.25` complementary dream themes · `−0.30` clashing trauma · `−0.35` one carries a `crime` the other's nature judges · `±` small unit-type archetype friction.
-- `C > 0.33` (`friendT`) → trends **friend** (→ romance if sustained + eligible, opt-in).
+- `C > 0.33` (`friendT`) → trends **friend**.
 - `C < −0.20` (`rivalT`) → trends **rival**.
-RimWorld biases random social outcomes by compatibility; we make it deterministic (netRole-safe) the Wildermyth way (over procedural characters via dossier slots).
+- a `≥3`-star gap (`mentorGap`) → **mentor**.
+
+`ohSeedClub` mints **only** friend / rival / mentor — **never romance**, so romance is never the first conversation type a pair has. RimWorld biases random social outcomes by compatibility; we make it deterministic (netRole-safe) the Wildermyth way (over procedural characters via dossier slots).
+
+## Romance — an emergent drift (Wildermyth soulmates), not a starting state
+Romance is **never minted**; it grows out of a relationship the player has already invested in. A *separate*, deliberately permissive **spark** score `S ∈ [0,1]` (`ohRomanceSpark`, **not** gated on a shared hometown — it rewards the SAME hometown / SAME dream / opposite archetype, with wide jitter) decides **how fast** a bond turns, not whether:
+
+| spark `S` | `tune.compat` key | drift fires at tier | feel |
+|---|---|---|---|
+| `S ≥ 0.58` | `romanceFast` | `romanceTier` (=1) | strong — couples fast |
+| `S ≥ 0.45` | `romanceWarm` | `romanceTier + 1` | warm — a tier later |
+| `S ≥ 0.30` | `romanceFloor` | `romanceTier + 2` | a slow burn |
+| `S < 0.30` | (below `romanceFloor`) | never | the rare pair that just doesn't click |
+
+`romancePull = 0.38` sets the baseline. On every bond tier-up (and on a gift), `ohMaybeRomance` flips **any** vet↔vet `friend` / `rival` / `mentor` bond (enemies-to-lovers and deepening-mentor included — so the player can couple almost any two they choose) to `romance` once it reaches the spark-set tier; the early `kind:'romance'` scenes then play as the courtship. It is a clean `bond.k` flip — `seen[]`/tier/points untouched, host-authoritative, deterministic, save-safe. **Deliberate target: ≈5% of arbitrary pairs have `S < romanceFloor` and stay platonic forever** — small enough that "make these two a couple" is reliably achievable, large enough that not every pairing is romanceable. Tune `romanceFloor`↓ / `romancePull`↑ to shrink that set.
 
 ## Vet↔vet bond ladder (XCOM 2: WotC)
 Cohesion accrues from Off-Hours nights **and** co-deployments. XCOM resets cohesion and raises the bar each level (10 → +15 → +20); `tune.cohesion = {l1:10, l2:15, l3:20}` (per-level increments). Per-level **opt-in** synergy when the pair is deployed together — tiny, scaled to STARLEFT's envelope: L1 a small shared-morale aura, L2 a minor adjacency edge, L3 a modest combo. Rivalry pairs get a symmetric competitive variant. A bonded partner's death deepens the existing grief beats (no stat effect).

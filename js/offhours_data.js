@@ -31,8 +31,17 @@ const OFFHOURS = {
     checkBase: 0.45, checkPerTier: 0.13, checkMin: 0.20, checkMax: 0.95,
     // approach: [pointWeight ×{1,2,3}, checkBias]
     approach: { warm:[1, 0.10], probing:[2, 0.0], blunt:[1, -0.12] },
-    // compatibility weights (vet↔vet) — RimWorld/Wildermyth
-    compat: { home:0.30, dream:0.25, trauma:-0.30, crime:-0.35, type:0.12, friendT:0.33, rivalT:-0.20, romanceT:0.45, mentorGap:3 },
+    // compatibility weights (vet↔vet) — RimWorld/Wildermyth. romance is NOT minted at first contact (ohSeedClub
+    // makes friend/rival/mentor only); a close FRIENDSHIP drifts into it — see ohRomanceSpark/ohMaybeRomance.
+    // A pair's romance "spark" (0..1, NOT gated on a shared hometown) decides HOW FAST a friendship turns, not
+    // whether — so it's easy to make almost any two hook up; chemistry just shortens the courtship:
+    //   romancePull  = spark baseline (high → most pairs can eventually couple),
+    //   romanceFloor = below this spark a friendship stays platonic forever (the rare pair that never clicks),
+    //   romanceFast  = spark >= this couples at the first eligible tier (romanceTier),
+    //   romanceWarm  = spark >= this couples a tier later; floor..warm is a slow burn one tier on again,
+    //   romanceTier  = earliest tier the drift can fire (>=1 so romance is NEVER the opening conversation).
+    compat: { home:0.30, dream:0.25, trauma:-0.30, crime:-0.35, type:0.12, friendT:0.33, rivalT:-0.20,
+              romancePull:0.38, romanceFloor:0.30, romanceWarm:0.45, romanceFast:0.58, romanceTier:1, mentorGap:3 },
     cohesion: { l1:10, l2:15, l3:20 },   // per-level increments to bond up (XCOM cohesion ladder)
   },
 

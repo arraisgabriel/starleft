@@ -484,6 +484,7 @@ function _finalizeScene(payload){
   _clearUI();
   const m=_metrics(), C=_dialCenter(sc.vet, m);
   const reply=_dialBubble((res&&res.reply)||sc.lead||'…', 'reply'); _placeClock(reply, C, 12, _DIAL.R12, m);   // 12 o'clock, persists
+  if(res && res.romanced){ const rb=_dialBubble('✦ Something shifts. The two of them leave together.', 'reply'); _placeClock(rb, C, _DIAL.hours[1], _DIAL.R, m); }
   if(res && res.wrote!=null){ const note=_dialBubble('A line goes into '+sc.vet.name+'’s file.', 'npc'); _placeClock(note, C, _DIAL.hours[0], _DIAL.R, m); }
   _showStepAway();
   try{ if(typeof refreshUI==='function') refreshUI(); }catch(_){ }
@@ -499,6 +500,7 @@ function _doGift(vet, target){
   _clearUI();
   const m=_metrics(), C=_dialCenter(vet, m);
   const reply=_dialBubble((res&&res.reply)||'They take it with a nod.', 'reply'); _placeClock(reply, C, 12, _DIAL.R12, m);   // persists until dismissed
+  if(res && res.romanced){ const rb=_dialBubble('✦ Something shifts. The two of them leave together.', 'reply'); _placeClock(rb, C, _DIAL.hours[1], _DIAL.R, m); }
   _showStepAway();
   try{ if(typeof refreshUI==='function') refreshUI(); }catch(_){ }
   _int.mode='ended'; _int.selected=null; _syncHead(); _setCloseLabel(true);

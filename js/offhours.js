@@ -156,17 +156,59 @@ function ohCompat(a, b){
   return Math.max(-1, Math.min(1, c));
 }
 function ohCompatKind(score){ const T=OFFHOURS.tune.compat; return (score<=T.rivalT) ? 'rival' : 'friend'; }
-// vet↔vet kind at mint: a wide star gap → mentor (senior takes a junior under their wing); strong mutual pull →
-// romance; otherwise friend/rival by compatibility. Deterministic; idempotent (never changes an existing bond's kind).
+// vet↔vet kind at mint: a wide star gap → mentor (senior takes a junior under their wing); otherwise friend/rival by
+// compatibility. Romance is NEVER minted here — it is never the first conversation type. It DRIFTS out of a close
+// friendship (ohMaybeRomance) so the player builds to it. Deterministic; idempotent (never changes an existing kind).
 function ohSeedClub(vetKeyA, vetA, vetKeyB, vetB){
   if(!vetKeyA || !vetKeyB) return null;
   const T=OFFHOURS.tune.compat, score=ohCompat(vetA, vetB);
   const gap=Math.abs((vetA&&vetA.stars||0)-(vetB&&vetB.stars||0));
-  let kind;
-  if(gap >= (T.mentorGap||3)) kind='mentor';
-  else if(score >= (T.romanceT||0.55)) kind='romance';
-  else kind=ohCompatKind(score);
+  const kind = (gap >= (T.mentorGap||3)) ? 'mentor' : ohCompatKind(score);   // friend | rival | mentor — never romance
   return ohEnsureBond(vetKeyA, vetKeyB, kind);
+}
+// romantic chemistry — SEPARATE from ohCompat and deliberately PERMISSIVE: a high positive baseline and NO shared-
+// hometown requirement. Rewards SHARED VALUES (same hometown / same dream / opposite archetype) that genuinely vary
+// pair-to-pair, so a real spread emerges instead of "everyone clicks". Deterministic (seeded off the pair's lore
+// seeds), range 0..1. Reads dossiers; returns 0 if either lacks one (so it never flips). Drives ohRomanceSpeed.
+function ohRomanceSpark(a, b){
+  if(!a || !b || !a.lore || !b.lore || typeof buildDossier!=='function') return 0;
+  let da, db; try{ da=buildDossier(a); db=buildDossier(b); }catch(_){ return 0; }
+  const T=OFFHOURS.tune.compat; let c = (T.romancePull!=null ? T.romancePull : 0.38);   // baseline pull → easy
+  if(da.home  && da.home===db.home)   c += 0.16;   // the SAME hometown — an uncommon, real draw (NOT required)
+  if(da.dream && da.dream===db.dream) c += 0.13;   // the SAME dream — kindred ambition
+  if(a.type!==b.type)                 c += 0.06;   // opposites attract; same archetype is a touch flat…
+  else                                c -= 0.05;   // …two of a kind cool slightly
+  if(da.trauma && db.trauma)          c += 0.05;   // two haunted people lean on each other
+  const seed=(_loHash(((a.lore.seed ^ b.lore.seed ^ 0x9e3779b9) >>> 0))) % 233280;   // distinct from ohCompat's seed
+  c += (makeRng(seed)() - 0.5) * 0.34;            // wide jitter → genuine spread (some pairs just never click)
+  return Math.max(0, Math.min(1, c));
+}
+// the friend tier at which a pair's friendship drifts into romance: strong chemistry couples FAST (the first eligible
+// tier), faint chemistry is a slow burn a tier or two on, and only a near-zero spark stays platonic forever. So it's
+// easy to make almost ANY two hook up — chemistry sets the SPEED, not whether — yet a few pairs stay just friends.
+function ohRomanceSpeed(spark){
+  const T=OFFHOURS.tune.compat, base=(T.romanceTier!=null ? T.romanceTier : 1);
+  if(spark < (T.romanceFloor!=null ? T.romanceFloor : 0.30)) return Infinity;        // never clicks → platonic
+  if(spark >= (T.romanceFast!=null ? T.romanceFast : 0.58)) return base;             // strong → couples fast
+  if(spark >= (T.romanceWarm!=null ? T.romanceWarm : 0.45)) return base+1;           // warm → a tier later
+  return base+2;                                                                     // faint → a slow burn
+}
+// E7 — a vet↔vet bond drifts into romance. Call on a bond's tier-up: once it reaches the chemistry-set drift tier
+// (always >= romanceTier, so never the opener), a friend / rival / mentor bond becomes a romance — friends fall for
+// each other, rivals can't quit each other (enemies-to-lovers), a mentor bond deepens — and the early romance scenes
+// (the held look, the smoke break) then play as the courtship. ANY vet↔vet relationship can get there so the player
+// can couple almost any two they choose (the "must be easy to hook up" rule); only the rare low-spark pair stays as
+// it was. The bond's seen[]/tier/points are untouched (romance scenes have their own indices), so it's a clean kind
+// flip. Returns true if it just flipped. Host-authoritative (only applyOffhoursCommit calls it).
+function ohMaybeRomance(state, bond, aKey, bKey){
+  if(!bond) return false;
+  if((bond.k|0) === ohKindCode('romance')) return false;                      // already a couple
+  if(!/^(lore:|hero:|unit:)/.test(bKey||'')) return false;                    // vet↔vet only (excludes kin/bartender)
+  const a=_ohFindVet(state, aKey), b=_ohFindVet(state, bKey);
+  if(!a || !b) return false;
+  if((bond.t|0) < ohRomanceSpeed(ohRomanceSpark(a, b))) return false;         // chemistry-gated tier (never < romanceTier)
+  bond.k = ohKindCode('romance');                                            // friend / rival / mentor → romance
+  return true;
 }
 
 /* ---- the thin mood layer (G1) — transient/derived, NEVER identity ---- */
@@ -313,8 +355,10 @@ function applyOffhoursCommit(state, payload){
     const first=!(g.fl & OH_FL.KEEPSAKE);
     ohGrantPoints(g, OFFHOURS.tune.giftPts, (typeof CAMPAIGN!=='undefined'?(CAMPAIGN.visit|0):0));
     ohSetFlag(g, OH_FL.KEEPSAKE, true);                         // first gift returns a keepsake (H5)
-    return { ok:true, gift:true, keepsake:first, tier:g.t,
-      reply: first ? 'You bring something worth more than M3rit$. They keep it — and press something back into your hand.'
+    const romanced = ohMaybeRomance(state, g, payload.vetKey, payload.npcId);   // a gift can be the move that tips a friendship over
+    return { ok:true, gift:true, keepsake:first, romanced:romanced, tier:g.t,
+      reply: romanced ? 'You bring something worth more than M3rit$. They go still — then their hand closes over yours and stays.'
+           : first ? 'You bring something worth more than M3rit$. They keep it — and press something back into your hand.'
                    : 'They take it with a nod. The gauge ticks up.' };
   }
   const scene = OFFHOURS.scenes[payload.sceneIdx|0]; if(!scene) return null;
@@ -347,6 +391,9 @@ function applyOffhoursCommit(state, payload){
   branches.forEach(function(b,i){ const term=(i===branches.length-1);
     totalPts += (b.br.pts!=null) ? (b.br.pts|0) : (term ? Math.round(OFFHOURS.tune.scenePts*ohApproachWeight(b.approach)) : 0); });
   const lvl = ohGrantPoints(bond, totalPts, visit);
+  // E7 — a close-enough friendship quietly becomes a couple once it reaches the chemistry-set tier (never the first
+  // night; gated inside ohMaybeRomance). Cheap to call every commit — it early-returns for non-friend/non-vet bonds.
+  const romanced = ohMaybeRomance(state, bond, payload.vetKey, npcId);
   ohMarkSeen(bond, payload.sceneIdx|0);                                       // a scene is logged seen ONCE, on completion
   branches.forEach(function(b){ if(b.br.fl && OH_FL[b.br.fl]!=null) ohSetFlag(bond, OH_FL[b.br.fl], true); });  // e.g. ARC_UNLOCKED
   if(bond.t>=OFFHOURS.tune.maxTier) ohSetFlag(bond, OH_FL.ARC_DONE, true);   // arc complete → "unburdened" barks (M2)
@@ -377,7 +424,7 @@ function applyOffhoursCommit(state, payload){
     if(b.br.fx.t==='capstone' && typeof applyEventFx==='function') applyEventFx(vet, b.br.fx, state);
     else if(b.br.fx.t==='relief') ohApplyRelief(vet, b.br.fx, state);
   } });
-  return { ok:true, landed:lastLanded, reply: ohFill(lastReply, vet, npcId), leveled: lvl.leveled, tier: bond.t, points: bond.p, wrote };
+  return { ok:true, landed:lastLanded, reply: ohFill(lastReply, vet, npcId), leveled: lvl.leveled, romanced: romanced, tier: bond.t, points: bond.p, wrote };
 }
 function _ohFindVet(state, vetKey){
   const ents = (state && state.entities) ? state.entities : ((typeof G!=='undefined'&&G)?G.entities:[]);
@@ -402,6 +449,7 @@ if(typeof window !== 'undefined'){
   window.ohVetHasArc = ohVetHasArc;
   window.ohPartyName = ohPartyName;
   window.ohCompat = ohCompat; window.ohCompatKind = ohCompatKind; window.ohSeedClub = ohSeedClub;
+  window.ohRomanceSpark = ohRomanceSpark; window.ohRomanceSpeed = ohRomanceSpeed; window.ohMaybeRomance = ohMaybeRomance;
   window.ohVetMood = ohVetMood; window.ohNeedsNight = ohNeedsNight;
   window.ohDeploySynergy = ohDeploySynergy; window.ohGriefPartners = ohGriefPartners; window.ohKeepsakeBonus = ohKeepsakeBonus;
   window.ohLatestVersion = ohLatestVersion; window.ohPoolLens = ohPoolLens; window.ohPickN = ohPickN;
