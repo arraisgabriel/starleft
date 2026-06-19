@@ -183,10 +183,10 @@
     </div>
     <nav class="menu-nav">
       <button class="sc-btn" id="btn-continue" data-menu="continue" onclick="continueGame()" style="display:none;">▶ Continue<small id="btn-continue-sub"></small></button>
+      <button class="sc-btn" data-menu="load_game" onclick="openLoadMenu()">Load Game</button>
       <button class="sc-btn" data-menu="new_campaign" onclick="startGame(0)">New Campaign</button>
       <button class="sc-btn" id="btn-mp" data-menu="multiplayer" onclick="showMpLobby()">Multiplayer</button>
       <button class="sc-btn" data-menu="skirmish" onclick="showSkirmish()">Skirmish</button>
-      <button class="sc-btn" data-menu="load_game" onclick="openLoadMenu()">Load Game</button>
       <button class="sc-btn" data-menu="settings" onclick="showSettings()">Settings</button>
       <div class="menu-cloud-status" id="menuCloudStatus" style="display:none;"></div>
     </nav>
@@ -575,6 +575,7 @@
 <script src="js/villain_neon_maps.js"></script><!-- per-frame villain glow anchors (authored later via the calibrator); aura works without it -->
 <script src="js/quests.js"></script><!-- multi-objective quests: cfg.quests evaluation + quest-driven victory (checkWinLose quest branch); maps without cfg.quests keep the legacy win chain -->
 <script src="js/waves.js"></script><!-- reusable HOLDOUT/wave-defense engine: cfg.holdout drives a staged "hold the position through N escalating waves (+ optional boss)" objective; bridges into quests via the 'holdout' quest type. Host/solo only; waves+boss are synced entities -->
+<script src="js/hub_objectives.js"></script><!-- H.U.B.-side objectives: per-episode + contextual objectives on CAMPAIGN state, rendered through the in-mission objectives chip (updateQuestHud); pays M3$ on completion. Needs quests.js (render pattern), madosis.js (madThreshold), hub.js (CAMPAIGN) -->
 <script src="js/ai.js"></script>
 <script src="js/render.js"></script>
 <script src="js/lyrics.js"></script><!-- runtime-loaded timed song subtitles (LRC/plain); text lives in assets/, not code -->

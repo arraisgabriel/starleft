@@ -107,6 +107,10 @@ function hubDefaultCampaign(){
     visit:0,
     gambled:false,
     lastReward:null,
+    // H.U.B. objectives (js/hub_objectives.js): per-objective progress + the lifetime completed set,
+    // plus the monotonic counters its metrics read. Legacy saves default these via the deserialize merge.
+    objectives:{ byId:{}, completed:[] },
+    stats:{ trainSessions:0, wakeStarts:0, healedHighMad:0 },
     // narrative gates (story-polish §6/§7). Legacy saves default these false via the deserialize merge.
     // altarSeen: the Ep XI Biba↔Nino reveal has played (gates Biba's post-altar bark tier).
     // perfectExtraction: last extraction lost zero veterans (arms the hub memorial-clearing beat).
@@ -148,6 +152,11 @@ function deserializeHubCampaign(data){
     CAMPAIGN.offhours = Object.assign({ v:0, nights:(typeof OFFHOURS!=='undefined' ? OFFHOURS.tune.nightsPerVisit : 3), bonds:{}, visited:{} }, data.offhours||{});
     if(!CAMPAIGN.offhours.bonds || typeof CAMPAIGN.offhours.bonds!=='object') CAMPAIGN.offhours.bonds={};
     if(!CAMPAIGN.offhours.visited || typeof CAMPAIGN.offhours.visited!=='object') CAMPAIGN.offhours.visited={};
+    // legacy-safe: saves predating H.U.B. objectives load with empty progress + zeroed counters
+    CAMPAIGN.objectives = Object.assign({byId:{}, completed:[]}, data.objectives||{});
+    if(!CAMPAIGN.objectives.byId || typeof CAMPAIGN.objectives.byId!=='object') CAMPAIGN.objectives.byId={};
+    if(!Array.isArray(CAMPAIGN.objectives.completed)) CAMPAIGN.objectives.completed=[];
+    CAMPAIGN.stats = Object.assign({trainSessions:0, wakeStarts:0, healedHighMad:0}, data.stats||{});
   }
 }
 function hubOwnerCtrl(){ return 'p1'; }
@@ -1912,6 +1921,7 @@ function hubTrainCreateSession(keyA, keyB){
   t.staged=t.staged.filter(s=>s!==a && s!==b);
   t.sessions.push({ id:'ts_'+(HUB.nextId++), type:mentor.type, a:mentor, b:junior,
     startMax:v.max, startMin:v.min, target:v.target, hoursTotal:v.hours, secElapsed:0, done:false });
+  if(CAMPAIGN.stats) CAMPAIGN.stats.trainSessions++;   // H.U.B. objective counter (hub_objectives.js)
   toast('Training started — both reach Level '+v.target+' in '+v.hours+'h.');
   refreshUI();
   return true;
@@ -2057,6 +2067,7 @@ function hubWakeStart(fid){
     startedAt:Date.now(), durationSec:rebornDurationSec(),                       // REAL-WORLD wall clock: a flat 4h, ticking even while the game is closed
     hoursTotal:rebornHours(f), secElapsed:0, done:false, cost });                // hoursTotal/secElapsed kept for legacy/display readers only
   f.reborn=true;   // dim the wall immediately + prevent a double-enqueue across a save
+  if(CAMPAIGN.stats) CAMPAIGN.stats.wakeStarts++;   // H.U.B. objective counter (hub_objectives.js)
   if(typeof eventToast==='function') eventToast('⚡ <b>'+(f.name||'A veteran')+'</b> is fed into The Wake. The lightning takes them.', 9000);
   refreshUI();
   return true;
@@ -2223,6 +2234,11 @@ function hubHealReleaseSnap(state, fac, snap){
 // session completes. Legacy/un-accelerated case: snap.madosis === start, so this still yields start-heal.
 function hubHealApply(state, ses){
   const snap=ses.unit, start=(ses.startMadosis!=null)?ses.startMadosis:(snap.madosis||0);
+  // H.U.B. objective counter (hub_objectives.js): count units that were ABOVE their breakdown threshold
+  // at intake. madThreshold is 0 for non-vets, so the >0 guard avoids counting every routine heal.
+  if(CAMPAIGN.stats && typeof madThreshold==='function' && ses.startMadosis!=null){
+    const thr=madThreshold(snap); if(thr>0 && ses.startMadosis>=thr) CAMPAIGN.stats.healedHighMad++;
+  }
   const healed=Math.max(0, start - (ses.heal||0));
   snap.madosis=Math.min((snap.madosis!=null?snap.madosis:start), healed);
   const u=hubHealLiveUnit(state, snap); if(u) u.madosis=snap.madosis;

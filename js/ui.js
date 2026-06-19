@@ -164,40 +164,63 @@ function refreshUI(){
    every frame would kill scroll position and waste layout). Runs identically on solo/host/client:
    it only READS G.quests (clients receive it via snapshots), so quest toasts fire on clients too. */
 function questMapKey(){ return (typeof mapIndex==='number'?mapIndex:0)+':'+((G&&G.runSalt)||0); }
+/* Resolve which objective set drives the topbar chip this frame:
+   - 'quest' : a combat map's cfg.quests (reads G.quests)                  — unchanged behavior
+   - 'hub'   : H.U.B. objectives (reads CAMPAIGN.objectives via hub_objectives.js)
+   - null    : legacy plain #objective text (HUB w/ zero objectives, extraction, tutorial,
+               quest-less maps, legacy saves). The Quarter-I tutorial stays on this path. */
+function questHudSource(tutOn){
+  const qdefs=(G.cfg && G.cfg.quests) || null;
+  if(qdefs && qdefs.length && !G.hub && !G.extractReady && !tutOn){
+    const Q=G.quests||{};
+    return { mode:'quest', defs:qdefs, state:id=>Q[id],
+      header:'Episode '+((G.cfg&&G.cfg.name)||''), toasts:true };
+  }
+  if(G.hub && !tutOn && typeof hubObjActiveDefs==='function'){
+    const hd=hubObjActiveDefs();
+    if(hd && hd.length){
+      const by={}; for(const d of hd) by[d.id]=d;
+      const header=(typeof saveEpisodeLabel==='function' && typeof CAMPAIGN!=='undefined')
+        ? saveEpisodeLabel(CAMPAIGN.nextMapIndex, false) : 'H.U.B.';
+      return { mode:'hub', defs:hd, state:id=>hubObjUiState(by[id]), header, toasts:false };
+    }
+  }
+  return null;
+}
 function updateQuestHud(){
   const chip=document.getElementById('obj-chip'), lab=document.getElementById('objective'),
         cnt=document.getElementById('obj-count'), panel=document.getElementById('quest-panel');
   if(!chip||!lab||!panel) return;
-  const defs=(G.cfg && G.cfg.quests) || null;
   const tutOn=(typeof TUTORIAL!=='undefined' && TUTORIAL.isActive && TUTORIAL.isActive());
-  const questMode=!!(defs && defs.length && !G.hub && !G.extractReady && !tutOn);
-  if(!questMode){                       // ---- legacy mode: behave exactly like the old #objective ----
+  const src=questHudSource(tutOn);
+  if(!src){                             // ---- legacy mode: behave exactly like the old #objective ----
     chip.classList.add('plain');
-    const txt=G.cfg.objective||'';
+    const txt=(G.cfg&&G.cfg.objective)||'';
     if(lab.textContent!==txt) lab.textContent=txt;
     if(panel._sig){ panel.innerHTML=''; panel._sig=''; panel.style.display='none';
       chip.classList.remove('open'); chip.setAttribute('aria-expanded','false'); }
     return;
   }
   chip.classList.remove('plain');
-  const Q=G.quests||{};
+  const defs=src.defs, st=src.state;
   if(lab.textContent!=='OBJECTIVES') lab.textContent='OBJECTIVES';
   let done=0,total=0;
-  for(const d of defs){ const q=Q[d.id]; if(q&&q.na) continue; total++; if(q&&q.done&&!q.failed) done++; }
+  for(const d of defs){ const q=st(d.id); if(q&&q.na) continue; total++; if(q&&q.done&&!q.failed) done++; }
   const c=done+'/'+total; if(cnt.textContent!==c) cnt.textContent=c;
 
-  // ---- structural signature: rebuild rows only when the set or the flags flip ----
-  const sig=defs.map(d=>{ const q=Q[d.id]; return d.id+(q?(q.na?'n':q.done?'!':q.failed?'x':''):'?'); }).join('|');
+  // ---- structural signature: rebuild rows only when the set or the flags flip (mode-prefixed so a
+  //      hub↔quest transition always forces a rebuild) ----
+  const sig=src.mode+'|'+defs.map(d=>{ const q=st(d.id); return d.id+(q?(q.na?'n':q.done?'!':q.failed?'x':''):'?'); }).join('|');
   if(sig!==panel._sig){
-    questToasts(defs, Q, panel._sig!=null && panel._sig!=='' && panel._mapKey===questMapKey());
+    if(src.toasts) questToasts(defs, G.quests||{}, panel._sig!=null && panel._sig!=='' && panel._mapKey===questMapKey());
     panel._sig=sig; panel._mapKey=questMapKey();
     panel.innerHTML='';
     // episode label, relocated from the top bar → the objectives panel's header
     const eph=document.createElement('div'); eph.className='q-ep-head';
-    eph.textContent='Episode '+((G.cfg&&G.cfg.name)||'');
+    eph.textContent=src.header;
     panel.appendChild(eph);
     for(const d of defs){
-      const q=Q[d.id]; if(q&&q.na) continue;           // not applicable this run (e.g. no hero deployed)
+      const q=st(d.id); if(q&&q.na) continue;           // not applicable this run (e.g. no hero deployed)
       const row=document.createElement('div');
       row.className='q-row'+(q&&q.failed?' failed':q&&q.done?' done':'');
       row.setAttribute('role','listitem');
@@ -212,7 +235,7 @@ function updateQuestHud(){
   // ---- cheap per-frame counter refresh (progress 3/8, timers ⏳ 212s) ----
   for(const row of panel.children){
     const d=row._qdef; if(!d) continue;
-    const q=Q[row._qid], el=row.querySelector('.q-count'); if(!el) continue;
+    const q=st(row._qid), el=row.querySelector('.q-count'); if(!el) continue;
     let txt='';
     if(q && typeof QUEST_PROGRESS_TYPES!=='undefined' && QUEST_PROGRESS_TYPES[d.type]){
       // holdout/seizure: a filling ▰▰▱▱ "transfer" bar (time passing), not an (n/m) counter
@@ -663,11 +686,12 @@ function dossierBodyHTML(u){
     +   `<div class="dossier-headrow">`
     +     `<button class="sc-btn back dossier-back" onclick="closeDossier()">◀ Back</button>`
     +     `<div class="dossier dossier-head">${dossierHeadHTML(u)}</div>`
-    +     (typeof shareCard==='function' ? `<button class="sc-btn back dossier-share" onclick="shareCard(dossierUnit)" title="Share this personnel file as an image">⇪ Share File</button>` : '')
     +   `</div>`
     +   `<div class="dossier">${dossierFileHTML(u)}</div>`
     + `</div>`
-    + `<div class="dossier-col-right">${dossierCardHTML(u)}</div>`
+    + `<div class="dossier-col-right">${dossierCardHTML(u)}`
+    +   (typeof shareCard==='function' ? `<button class="sc-btn back dossier-share" onclick="shareCard(dossierUnit)" title="Share this personnel file as an image">⇪ Share File</button>` : '')
+    + `</div>`
     + `</div>`;
 }
 // the live player card markup — a big version of the HUB unit card (hubMenuUnitCard).
@@ -2497,6 +2521,11 @@ function startNgPlus(){
     CAMPAIGN.nextMapIndex=0;
     CAMPAIGN.villainCleared={};        // the lap re-fights its bosses (incl. the finale)
     CAMPAIGN.mode='combat';
+    // H.U.B. objectives re-arm for the new lap: clear progress + the lifetime counters so the
+    // episode-keyed beats reappear and lifetime-count objectives require fresh actions. Condos/reborn
+    // carry over, so delta-mode objectives re-capture a correct baseline on next activation.
+    CAMPAIGN.objectives={byId:{}, completed:[]};
+    CAMPAIGN.stats={trainSessions:0, wakeStarts:0, healedHighMad:0};
   }
   const es=document.getElementById('endScreen'); if(es) es.style.display='none';
   mapIndex=0;

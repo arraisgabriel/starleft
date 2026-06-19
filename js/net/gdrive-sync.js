@@ -5,9 +5,11 @@
    SAVE_PREFIX/MANUAL_CAP). Covers SOLO + H.U.B. saves only (co-op is never written to localStorage).
    NEVER changes the save format or its back-compat contract — it only reads/writes whole slots.
 
-   Data model: ONE Drive file per local slot in appDataFolder. media body = the PLAIN JSON from
-   saveRawJson(key) (byte-identical to exportSave, portable); appProperties carry a cheap-to-list index.
-   Matching is ALWAYS by appProperties.slKey, never filename/id. ≤13 files (12 manual + 1 autosave). */
+   Data model: ONE Drive file per local slot in appDataFolder. media body = the slot's save JSON, stored
+   LZ-compressed (base64, GD_LZ_MARK-prefixed) to cut transfer time on big late-game saves; legacy PLAIN-JSON
+   bodies (which start with '{') are still read transparently, so this is fully back-compatible. appProperties
+   carry a cheap-to-list index. Matching is ALWAYS by appProperties.slKey, never filename/id; the logical save
+   round-trips byte-for-byte through saveRawJson/saveWrite. ≤13 files (12 manual + 1 autosave). */
 
 /* ---- config ---- */
 const GD_API   = 'https://www.googleapis.com/drive/v3/files';
@@ -21,6 +23,9 @@ const GD_CLOUD_MANUAL_CAP = 50;    // cloud retention: keep the newest N MANUAL 
                                    // still treats as current is very unlikely to be trimmed. Pruned in the push tail.
 const GD_TOAST_MS = 40000;         // long-lived toast (~40s) for the wordy cloud-sync notices — the default 1.8s is far too
                                    // short to read them. Toasts are still replaced by the next toast / clearToast().
+const GD_SYNC_DISABLE_MAX = 20000; // ▶ Continue is disabled while a pull's resume slot is unresolved; this caps the
+                                   // disable so a hung network call can never trap the button — re-enables even mid-sync.
+const GD_LZ_MARK = String.fromCharCode(1);   // 1st char of a compressed Drive body (control char — never starts JSON '{' or base64)
 
 /* ---- save pools ----
    The cloud layer syncs TWO disjoint pools, each tagged in Drive by appProperties.app so they never mix in
@@ -38,7 +43,18 @@ let GD_tok = null;                 // bearer for the in-flight push/pull batch (
 let GD_cloudIndex = [];            // last listed cloud index: [{id,name,slKey,savedAt,mapName,mapIndex,hub,auto,modifiedTime}]
 let GD_pushTimer = null, GD_pullTimer = null, GD_lastPullAt = 0, GD_lastSyncAt = 0;
 let GD_statusState = '', GD_statusInfo = null;
+let GD_syncWatchdog = null, GD_syncStuck = false;   // watchdog so a hung sync can't leave ▶ Continue disabled forever
+let GD_syncInflight = 0;            // ref-count of ALL concurrent syncs (push+pull) → drives the "☁ Syncing…" indicator
+let GD_contLock = 0;               // ref-count of in-flight PULLS whose resume (autosave) slot isn't resolved yet → disables ▶ Continue
+let GD_pullActive = {};            // pool.id → true while a pull runs; race-free dedup so overlapping triggers don't double-pull
 let GD_signinPromptedThisSession = false;   // the menu sign-in/decline panel shows at most once per page load (cloudDeclined() stops it across sessions)
+
+/* ---- TEMP double-pull diagnostics (localhost only; remove once the ▶ Continue double-disable is pinned down) ---- */
+const GD_DBG = (()=>{ try{ return /^(localhost|127\.0\.0\.1|\[?::1\]?)$/.test(location.hostname); }catch(_){ return false; } })();
+let GD_dbgN = 0;
+function gdlog(){ if(!GD_DBG) return; try{ console.log.apply(console, ['%c[gdrive]','color:#5cf;font-weight:bold'].concat([].slice.call(arguments))); }catch(_){} }
+function gdCaller(){ try{ return (new Error().stack||'').split('\n').slice(3,6).map(s=>s.trim().replace(/^at\s+/,'')).join('  ←  '); }catch(_){ return '?'; } }
+if(GD_DBG){ try{ console.log('%c[gdrive] sync module LOADED — double-pull diagnostics ON (build '+Date.now()+')','color:#5cf;font-weight:bold'); }catch(_){} }
 
 const GD_sleep = ms => new Promise(r => setTimeout(r, ms));
 function cloudOn(){ try{ return localStorage.getItem('starleft_cloud_on')==='1'; }catch(_){ return false; } }
@@ -78,17 +94,36 @@ async function driveFetch(url, opts){
   throw { kind:'http', status:res.status };
 }
 
-// multipart/related upload (create=POST, update=PATCH). metadata part + plain-JSON media part.
-async function driveMultipart(method, url, metadata, mediaJson){
+// multipart/related upload (create=POST, update=PATCH). metadata part + media part (compressed or plain JSON).
+async function driveMultipart(method, url, metadata, mediaBody, mediaType){
   const boundary = 'starleft_' + Date.now() + '_' + Math.random().toString(36).slice(2);
   const body =
     '--'+boundary+'\r\n'+
     'Content-Type: application/json; charset=UTF-8\r\n\r\n'+ JSON.stringify(metadata) +'\r\n'+
     '--'+boundary+'\r\n'+
-    'Content-Type: application/json\r\n\r\n'+ mediaJson +'\r\n'+
+    'Content-Type: '+(mediaType||'application/json')+'\r\n\r\n'+ mediaBody +'\r\n'+
     '--'+boundary+'--';
   const res = await driveFetch(url, { method, headers:{ 'Content-Type':'multipart/related; boundary='+boundary }, body });
   return res.json();
+}
+
+// Cloud body codec: compress the (large, plain-JSON) save so it transfers ~8-12× smaller. base64 keeps the
+// multipart body ASCII-safe; GD_LZ_MARK lets the reader tell a compressed body from a legacy plain-JSON one.
+function gdEncodeBody(json){
+  if(typeof LZString!=='undefined'){
+    try{ return { body: GD_LZ_MARK + LZString.compressToBase64(json), type:'text/plain; charset=UTF-8' }; }catch(_){}
+  }
+  return { body: json, type:'application/json' };   // no LZString → upload plain (still readable by everyone)
+}
+// Inverse: legacy plain JSON (starts with '{') passes through; a GD_LZ_MARK-prefixed body is inflated. null on failure
+// → recreateSlot skips that slot (a safe no-op). The LZString-missing branch is only reachable on a stale cached tab
+// predating the lz-string include; it just won't fast-forward compressed slots until reloaded — never corrupts.
+function gdDecodeBody(body){
+  if(body && body.charAt(0)===GD_LZ_MARK){
+    if(typeof LZString==='undefined') return null;
+    try{ return LZString.decompressFromBase64(body.slice(1)); }catch(_){ return null; }
+  }
+  return body;
 }
 
 // List the appDataFolder index (metadata only — no bodies). Caches into GD_cloudIndex.
@@ -125,12 +160,14 @@ function slotFileName(s, pool){
   return s.auto ? 'starleft-autosave.json' : (pre+slug+'-'+String(s.savedAt||0).slice(-6)+'.json');
 }
 async function driveCreate(s, json, pool){
+  const enc = gdEncodeBody(json);
   return driveMultipart('POST', GD_UP+'?uploadType=multipart&fields='+GD_FIELDS,
-    Object.assign({ name:slotFileName(s,pool), parents:['appDataFolder'] }, { appProperties:slotMeta(s,pool) }), json);
+    Object.assign({ name:slotFileName(s,pool), parents:['appDataFolder'] }, { appProperties:slotMeta(s,pool) }), enc.body, enc.type);
 }
 async function driveUpdate(id, s, json, pool){
+  const enc = gdEncodeBody(json);
   return driveMultipart('PATCH', GD_UP+'/'+id+'?uploadType=multipart&fields='+GD_FIELDS,
-    { name:slotFileName(s,pool), appProperties:slotMeta(s,pool) }, json);   // PATCH must NOT include parents
+    { name:slotFileName(s,pool), appProperties:slotMeta(s,pool) }, enc.body, enc.type);   // PATCH must NOT include parents
 }
 async function driveDownload(id){
   const res = await driveFetch(GD_API+'/'+id+'?alt=media', { method:'GET' });
@@ -157,7 +194,7 @@ async function gdrivePush(opts){
   opts = opts || {}; const pool = opts.pool || GD_solo();
   if(!gisAvailable()) return { ok:false, reason:'unavailable' };
   if(!(await gdAcquire(opts.interactive))) return { ok:false, reason:'noauth' };
-  syncStatus('syncing');
+  gdSyncEnter(false);   // a push is local→cloud only; it never re-points ▶ Continue, so it doesn't disable it
   try{
     const cloud = await driveList();
     const byKey = new Map(cloud.filter(f=>f.pool===pool.id).map(f=>[f.slKey, f]));   // only THIS pool's files
@@ -179,6 +216,7 @@ async function gdrivePush(opts){
     syncStatus(conflicts.length ? 'conflict' : 'ok', { pushed, skipped, conflicts });
     return { ok:true, pushed, skipped, conflicts };
   }catch(e){ syncStatus(statusFor(e)); return { ok:false, reason:'error', err:e }; }
+  finally{ gdSyncLeave(); }
 }
 
 /* ---- background cloud retention: keep only the newest GD_CLOUD_MANUAL_CAP manual files ----
@@ -204,11 +242,41 @@ async function gdrivePruneCloud(pool){
 async function gdrivePull(opts){
   opts = opts || {}; const pool = opts.pool || GD_solo();
   const autoApply = !!opts.autoApply;   // seamless menu/boot pull: fast-forward newer cloud slots in place, NEVER prompt
-  if(!gisAvailable()) return { ok:false, reason:'unavailable' };
-  const acqMode = opts.interactive ? true : (opts.silent ? 'silent' : false);
-  if(!(await gdAcquire(acqMode))) return { ok:false, reason:'noauth' };
-  syncStatus('syncing');
+  const _dbgId = ++GD_dbgN;
+  gdlog('gdrivePull #'+_dbgId, { pool:pool.id, autoApply, interactive:!!opts.interactive, silent:!!opts.silent,
+    pullActive:!!GD_pullActive[pool.id], lastPull: GD_lastPullAt ? (nowMs()-GD_lastPullAt)+'ms ago' : 'never',
+    contLock:GD_contLock, inflight:GD_syncInflight }, '\n    caller:', gdCaller());
+  if(!gisAvailable()) { gdlog('gdrivePull #'+_dbgId+' → SKIP unavailable'); return { ok:false, reason:'unavailable' }; }
+  // Dedup authority for the seamless fast-forwards (boot gdriveMenuSync + the menu-show call + a focus-fired
+  // gdriveSeamlessPull). Running two of them back-to-back disables ▶ Continue, re-enables it, then disables it again.
+  // Both guards below are claimed SYNCHRONOUSLY (no await before them) so NO entry-point ordering can slip a second
+  // pull through — the entry-point throttle can be raced because gdriveMenuSync's no-token branch only stamps
+  // GD_lastPullAt AFTER an async token grant. (1) in-flight latch covers overlapping pulls; (2) the 30s throttle,
+  // re-checked + re-stamped here, covers sequential ones. Interactive/explicit pulls (Connect/Sync now/Restore) and
+  // MP pulls are exempt — they must always run.
+  // A "fast-forward" pull is any autoApply pull of a pool with an autosave — that's the boot/menu gdriveMenuSync pull
+  // AND gdriveDoConnect's post-sign-in pull (interactive:true but ALSO autoApply). They do the identical thing and BOTH
+  // gate ▶ Continue, so both must dedup against each other. Keyed on autoApply (NOT !interactive): the explicit
+  // "Sync now"/"Restore" buttons are interactive but autoApply:false, so they stay exempt and always run — the latch +
+  // throttle below are BOTH gated on `seamless` so an explicit pull is never dropped by a background seamless one.
+  const seamless = autoApply && !!pool.autoKey;
+  if(seamless && GD_pullActive[pool.id]) { gdlog('gdrivePull #'+_dbgId+' → SKIP inflight (another seamless pull of pool '+pool.id+' is running)'); return { ok:false, reason:'inflight' }; }
+  if(seamless && GD_lastPullAt > 0 && (nowMs() - GD_lastPullAt) < GD_PULL_MIN_INTERVAL) { gdlog('gdrivePull #'+_dbgId+' → SKIP throttled ('+(nowMs()-GD_lastPullAt)+'ms < '+GD_PULL_MIN_INTERVAL+'ms)'); return { ok:false, reason:'throttled' }; }
+  if(seamless){ GD_pullActive[pool.id] = true; GD_lastPullAt = nowMs(); }
+  gdlog('gdrivePull #'+_dbgId+' → RUN  (seamless='+seamless+', gates Continue='+(autoApply && !!pool.autoKey)+')');
+  // Gate ▶ Continue only when THIS pull can auto-overwrite the local autosave it resumes: an autoApply pull of a
+  // pool that has an autosave (solo). A non-autoApply pull only prompts (never auto-writes), and the MP pool has
+  // no autosave — neither should disable Continue.
+  const gatesCont = autoApply && !!pool.autoKey;
+  let contHeld = false, entered = false;
+  const releaseCont = ()=>{ if(contHeld){ contHeld=false; gdContUnlock(); } };
+  // Everything past the latch runs in try/finally so the latch + sync counters ALWAYS release — even if gdAcquire or
+  // gdSyncEnter throws — so a stray rejection can never strand the pool's latch (which would block all its pulls).
   try{
+    const acqMode = opts.interactive ? true : (opts.silent ? 'silent' : false);
+    if(!(await gdAcquire(acqMode))) return { ok:false, reason:'noauth' };
+    contHeld = gatesCont; entered = true;   // gdSyncEnter's first act (inflight++) can't fail → commit to gdSyncLeave
+    gdSyncEnter(gatesCont);
     const cloud = (await driveList()).filter(f=>f.pool===pool.id);   // only THIS pool's files
     const localByKey = new Map(pool.list().map(s=>[s.key, s]));
     const recreate = [], fastForward = [], conflicts = [];
@@ -221,20 +289,42 @@ async function gdrivePull(opts){
       }
       // f.savedAt <= local → local newer-or-equal; pull does nothing (push will carry it up)
     }
-    await reconcileAndRecreate(recreate, pool);
-    for(const f of fastForward) await recreateSlot(f);               // overwrite the older local slot (incl. the autosave/Continue slot)
+    const recN = recreate.length, ffN = fastForward.length;
+    // ▶ Continue resumes latestSave() — the NEWEST slot by savedAt across the autosave AND every manual slot
+    // (save.js), not just the autosave. So fetch whichever INCOMING cloud slot will become that resume target
+    // FIRST, then re-enable Continue; the rest download in the background. If the newest slot is already a current
+    // local one (nothing incoming outranks it), no fetch is needed and Continue re-enables immediately.
+    if(gatesCont){
+      let target = null;                                             // the incoming cloud slot that will be latestSave(), if any
+      for(const f of fastForward) if(!target || f.savedAt > target.savedAt) target = f;
+      for(const f of recreate)    if(!target || f.savedAt > target.savedAt) target = f;
+      let localMax = 0; for(const s of localByKey.values()) if(s.savedAt > localMax) localMax = s.savedAt;
+      if(target && target.savedAt > localMax){                       // resume target is an incoming cloud slot → write it first
+        if(await recreateSlot(target)){                              // on success drop it from the background queue (avoid a double-write)
+          let i = fastForward.indexOf(target); if(i>=0) fastForward.splice(i,1);
+          else { i = recreate.indexOf(target); if(i>=0) recreate.splice(i,1); }
+        }                                                            // on failure leave it queued so the background pass retries it THIS pull
+      }
+      if(typeof syncContinueButton==='function') syncContinueButton();// re-point Continue (or keep the already-current one)
+      releaseCont();                                                  // resume slot is final → Continue safe even mid-sync
+    }
+    await reconcileAndRecreate(recreate, pool);                       // remaining cloud-only slots (resume target already handled above)
+    for(const f of fastForward) await recreateSlot(f);               // remaining newer slots
     gdriveRefreshMenus();
     GD_lastSyncAt = nowMs();
     if(!autoApply && conflicts.length){ syncStatus('conflict', { conflicts }); showCloudConflict(conflicts); }
     else syncStatus('ok');
-    return { ok:true, recreated:recreate.length, fastForwarded:fastForward.length, conflicts };
+    return { ok:true, recreated:recN, fastForwarded:ffN, conflicts };
   }catch(e){ syncStatus(statusFor(e)); return { ok:false, reason:'error', err:e }; }
+  finally{ releaseCont(); if(entered) gdSyncLeave(); if(seamless) GD_pullActive[pool.id] = false; }   // only seamless pulls own the latch
 }
 
 // Download a cloud file and write it locally under its OWN slKey, PRESERVING savedAt (the deliberate
 // deviation from importSaveFile, which re-stamps — preserving keeps last-write-wins coherent + pull idempotent).
 async function recreateSlot(f){
-  let json; try{ json = await driveDownload(f.id); }catch(_){ return false; }
+  let body; try{ body = await driveDownload(f.id); }catch(_){ return false; }
+  const json = gdDecodeBody(body);          // legacy plain JSON passes through; compressed bodies are inflated
+  if(json==null) return false;
   let d=null; try{ d=JSON.parse(json); }catch(_){ return false; }
   if(!isSaveBlob(d) || !saveVersionOk(d)) return false;
   try{ saveWrite(f.slKey, d); }catch(_){ return false; }
@@ -301,6 +391,7 @@ function showCloudConflict(conflicts){
 
 /* ---- sync triggers ---- */
 function gdriveConnect(){
+  gdlog('gdriveConnect() CALLED', '\n    caller:', gdCaller());
   whenGsi(async ()=>{
     if(!gisAvailable()){ if(typeof toast==='function') toast('Cloud save unavailable here'); return; }
     // Capture the PREVIOUSLY-connected account (the persisted hint) BEFORE sign-in overwrites it.
@@ -326,6 +417,7 @@ async function gdrivePushAll(opts){ let r=null; for(const p of gdPools()){ r=awa
 // no prompt) to match the no-clicks intent — the explicit "Sync now" / "Restore from cloud" buttons still prompt.
 // setCloudOn(true) also clears any prior "declined" flag.
 function gdriveDoConnect(){
+  gdlog('gdriveDoConnect() CALLED — push-all + interactive autoApply pull-all', '\n    caller:', gdCaller());
   setCloudOn(true);
   (async ()=>{ await gdrivePushAll({ interactive:true }); await gdrivePullAll({ interactive:true, autoApply:true }); gdriveRefreshUI(); })();
 }
@@ -384,8 +476,7 @@ function gdriveSeamlessPull(){
   whenGsi(()=>{
     if(!cloudOn() || !gisAvailable()) return;
     if(typeof running!=='undefined' && running) return;
-    if(nowMs() - GD_lastPullAt < GD_PULL_MIN_INTERVAL) return;
-    GD_lastPullAt = nowMs();
+    if(nowMs() - GD_lastPullAt < GD_PULL_MIN_INTERVAL) return;   // fast-path only; gdrivePull is the authoritative throttle + setter
     gdrivePull({ interactive:false, silent:true, autoApply:true });
   });
 }
@@ -399,8 +490,7 @@ function gdriveMenuSync(){
     if(cloudDeclined()) return;                          // player chose "Don't sync" → respect it, stay silent
     const hasTok = !!(GDRIVE.hasValidToken && GDRIVE.hasValidToken());
     if(hasTok){                                          // already authed → silent fast-forward, throttled
-      if(nowMs() - GD_lastPullAt < GD_PULL_MIN_INTERVAL) return;
-      GD_lastPullAt = nowMs();
+      if(nowMs() - GD_lastPullAt < GD_PULL_MIN_INTERVAL) return;   // fast-path; gdrivePull re-checks + stamps GD_lastPullAt
       gdrivePull({ interactive:false, silent:true, autoApply:true });
       return;
     }
@@ -409,8 +499,7 @@ function gdriveMenuSync(){
     GD_signinPromptedThisSession = true;
     if(await gdAcquire('silent')){                       // active Google session + standing consent → no window shown
       setCloudOn(true);                                  // silent success implies the account already authorized us
-      GD_lastPullAt = nowMs();
-      gdrivePull({ interactive:false, silent:true, autoApply:true });
+      gdrivePull({ interactive:false, silent:true, autoApply:true });   // gdrivePull's synchronous throttle dedups any concurrent seamless pull
     } else {
       showCloudSignInPanel();                            // expired session / never granted / never opted in
     }
@@ -509,6 +598,26 @@ function gdriveRefreshMenus(){
 function nowMs(){ return new Date().getTime(); }
 function statusFor(e){ const k=e&&e.kind; if(k==='auth') return 'signin'; if(k==='network') return 'offline'; return 'fail'; }
 function syncStatus(state, info){ GD_statusState=state; GD_statusInfo=info||null; if(state==='ok') GD_lastSyncAt=nowMs(); gdriveRenderStatus(); }
+// Bracket the network work of a push/pull with enter/leave. GD_syncInflight (push+pull) drives the "☁ Syncing…"
+// indicator. Only a PULL gates ▶ Continue (a pull can fast-forward the local autosave; a push never touches local
+// saves), via GD_contLock — and the pull releases that lock (gdContUnlock) the moment its autosave slot is resolved,
+// not when the whole pull finishes, so Continue re-enables without waiting on the background manual-slot downloads.
+// A gating pull arms a hung-fetch watchdog; once inflight hits 0 it's dropped. gdriveRenderStatus() reads the counters.
+function gdSyncEnter(isPull){
+  GD_syncInflight++;
+  if(isPull){               // ONLY a Continue-gating pull touches the lock + watchdog; a push must never reset the
+    GD_contLock++;          // watchdog (else a routine push could un-stick the rescue and re-disable Continue while a
+    GD_syncStuck=false; clearTimeout(GD_syncWatchdog);   // hung pull still holds the lock — see the watchdog rationale)
+    GD_syncWatchdog=setTimeout(()=>{ GD_syncStuck=true; gdriveRenderStatus(); }, GD_SYNC_DISABLE_MAX);   // a hung socket can't trap Continue
+  }
+  syncStatus('syncing');
+}
+function gdContUnlock(){ GD_contLock=Math.max(0, GD_contLock-1); gdriveRenderStatus(); }   // pull's resume slot resolved → re-enable Continue
+function gdSyncLeave(){
+  GD_syncInflight=Math.max(0, GD_syncInflight-1);
+  if(GD_syncInflight===0){ clearTimeout(GD_syncWatchdog); GD_syncStuck=false; }
+  gdriveRenderStatus();
+}
 function gdriveRenderStatus(){
   const email = (window.GDRIVE && GDRIVE.currentEmail && GDRIVE.currentEmail()) || '';
   let txt;
@@ -526,16 +635,37 @@ function gdriveRenderStatus(){
   const mini=document.getElementById('menuCloudStatus');
   if(mini){
     let m='';
-    if(GD_statusState==='syncing')      m='☁ Syncing…';
+    if(GD_syncInflight > 0)             m='☁ Syncing…';   // any sync in flight (survives an overlapping push's interim 'ok')
     else if(GD_statusState==='ok')      m='☁ Synced ✓';
     else if(GD_statusState==='offline') m='☁ Offline — will sync later';
     else if(GD_statusState==='fail')    m='☁ Sync failed';
     mini.textContent=m;
     mini.style.display = m ? '' : 'none';
   }
-  // Pulse ▶ Continue while a sync is in flight — it may re-point to a newer cloud autosave.
+  // ▶ Continue while its resume slot is being fetched: pulse it, DISABLE it, and relabel it. A pull can re-point
+  // Continue to a newer cloud autosave, so resuming the stale local save mid-fast-forward would load the wrong game —
+  // block it until that autosave slot is resolved (GD_contLock, released early so background slots don't keep it
+  // disabled). GD_syncStuck (watchdog) re-enables it if a sync hangs.
   const cont=document.getElementById('btn-continue');
-  if(cont) cont.classList.toggle('syncing', GD_statusState==='syncing');
+  if(cont){
+    const syncing = GD_contLock > 0 && !GD_syncStuck;
+    if(GD_DBG && cont.disabled !== syncing) gdlog('▶ Continue '+(syncing?'DISABLED':'ENABLED')+'  (contLock='+GD_contLock+', stuck='+GD_syncStuck+')', '\n    caller:', gdCaller());
+    cont.classList.toggle('syncing', syncing);
+    cont.disabled = syncing;
+    cont.setAttribute('aria-busy', syncing ? 'true' : 'false');
+    // Swap only the leading text node ("▶ Continue"); the episode/elapsed <small> sub-label is a separate child
+    // that syncContinueButton() owns, so we leave it intact. Stash the original label to restore it verbatim.
+    const lead = cont.firstChild;
+    if(lead && lead.nodeType===3){
+      if(syncing){
+        if(cont.dataset.contLabel==null) cont.dataset.contLabel = lead.nodeValue;
+        lead.nodeValue = '☁ Syncing saves…';
+      } else if(cont.dataset.contLabel!=null){
+        lead.nodeValue = cont.dataset.contLabel;
+        delete cont.dataset.contLabel;
+      }
+    }
+  }
 }
 function gdriveRefreshUI(){
   const panel=document.getElementById('cloudPanel'); if(!panel) return;

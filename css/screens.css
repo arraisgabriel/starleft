@@ -281,7 +281,8 @@ body.dossier-open #bottom{ display:none; }   /* like the HUB menu: hide the bott
 .carry-card{ position:relative; }
 .cc-share{ position:absolute; top:4px; right:6px; font-size:14px; color:#9fc6dd; cursor:pointer; padding:2px 5px; }
 .cc-share:hover{ color:#fff; }
-.dossier-share{ margin-left:auto; }
+/* Share File now lives in the right column, directly under the live unit card. */
+.dossier-share{ width:100%; min-width:0; margin:14px 0 0; }
 .roster-row { display:block; width:100%; text-align:left; background:rgba(40,20,28,.6);
   border:1px solid #5a2f3a; border-radius:6px; padding:8px 10px; margin-bottom:6px; color:#f0d6da; cursor:pointer; }
 button.roster-row:hover { background:rgba(60,28,40,.85); color:#fff; }

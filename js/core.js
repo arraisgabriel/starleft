@@ -7,6 +7,7 @@ function update(state, dt){
   if(typeof updateTrainingSessions==='function') updateTrainingSessions(dt);
   if(typeof updateRebornProduction==='function') updateRebornProduction(dt);   // The Wake clock — charges in HUB & missions
   if(typeof updateMentalHealthAccel==='function') updateMentalHealthAccel(dt); // merit-paid accelerated madosis recovery — drains on the HUB city clock (HUB only)
+  if(state.hub && typeof hubObjTick==='function') hubObjTick();   // H.U.B. objectives: poll/award merits (host/solo; client-guarded inside)
   if(typeof updateSprint==='function') updateSprint(state, dt);   // decay the tap window / ramp accel
   recomputeSupply(state);
   // run-summary stat (T1-9/T3-3): track the army's high-water mark
