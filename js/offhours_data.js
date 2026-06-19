@@ -32,7 +32,7 @@ const OFFHOURS = {
     // approach: [pointWeight ×{1,2,3}, checkBias]
     approach: { warm:[1, 0.10], probing:[2, 0.0], blunt:[1, -0.12] },
     // compatibility weights (vet↔vet) — RimWorld/Wildermyth
-    compat: { home:0.30, dream:0.25, trauma:-0.30, crime:-0.35, type:0.12, friendT:0.33, rivalT:-0.20 },
+    compat: { home:0.30, dream:0.25, trauma:-0.30, crime:-0.35, type:0.12, friendT:0.33, rivalT:-0.20, romanceT:0.55, mentorGap:3 },
     cohesion: { l1:10, l2:15, l3:20 },   // per-level increments to bond up (XCOM cohesion ladder)
   },
 
@@ -296,6 +296,48 @@ const OFFHOURS = {
         { approach:'blunt', line:"\"I didn't come here to get figured out.\"", check:true,
           land:{ reply:"\"Nobody does,\" {npc} says, and slides the glass over anyway. \"I'm not figuring. I'm just still here.\" {me} drinks, and the wall comes down a little on its own." },
           miss:{ reply:"{npc} lets it drop and moves down the bar. {me} finishes the drink alone and keeps the rest to {me}.", pts:0 } },
+      ] },
+    // --- MULTI-BEAT confidant scenes (B-multi vertical slice / TEMPLATE) — a scene is a `beats[]` conversation tree.
+    //     A choice's land/miss may carry `next` (advance to that beat index); no `next` = terminal (the night ends).
+    //     Played locally beat-by-beat; committed ONCE at the terminal branch via payload.path[] (host re-derives). ---
+    { id:'bar.weight', venue:'bar', kind:'confidant', with:'bartender', req:{minTier:0, maxTier:1},
+      beats:[
+        { open:[
+            "{npc} slides a drink {me} didn't order and leans on the rail. \"Three rosters I've poured for. You've all got the same walk in. Sit.\"",
+            "{npc} sets a glass at the dark end of the bar and tips her head at it. \"Slow night. Take the weight off — I've got nowhere to be.\""],
+          choices:[
+            { approach:'warm', line:"Take the glass. Let her talk.",
+              land:{ reply:"\"Good,\" {npc} says. \"It's the ones who don't drink I watch.\" She pours herself a short one and waits.", next:1 } },
+            { approach:'probing', gate:'dream', line:"Ask if she ever wanted out of this city.",
+              land:{ reply:"\"Out?\" She almost laughs. \"Tell me yours first.\" And somehow it's {me} saying it — {dream} — out loud, to a stranger pouring drinks.", ev:1 } },
+            { approach:'blunt', line:"\"I'm not here to get read.\"",
+              land:{ reply:"\"Wasn't reading. Pouring.\" She slides it closer anyway, slower. \"I'll be here when you are.\"", pts:0 } } ] },
+        { choices:[
+            { approach:'warm', line:"Trade the week's dead. Names, not numbers.",
+              land:{ reply:"{npc} starts naming the ones you have in common. The ice outlasts the small talk, and {me} stays till the glass sweats.", ev:0 } },
+            { approach:'probing', line:"Ask what keeps her behind this bar.",
+              land:{ reply:"\"Somebody's got to remember the names,\" she says, and tops {me} off like that settles it. Maybe it does." } } ] }
+      ] },
+    { id:'bar.unloading', venue:'bar', kind:'confidant', with:'bartender', req:{minTier:2, maxTier:3},
+      beats:[
+        { open:[
+            "{npc} doesn't look up from the glass she's drying. \"You came in heavier than {lastmap} should've cost. Talk or drink. Both work.\"",
+            "\"{fallen} would've had something to say about that face,\" {npc} says, not unkind. \"Talk, or just sit. I'll keep pouring.\""],
+          choices:[
+            { approach:'warm', line:"Sit. Let it out.",
+              land:{ reply:"She sets the glass down and gives {me} the room. \"Start anywhere. I've heard worse, and I've poured for worse.\"", next:1 } },
+            { approach:'blunt', line:"Just drink. Not tonight.",
+              land:{ reply:"\"Suit yourself.\" She doesn't push. \"I'll keep the names till you want them.\"", next:2 } } ] },
+        { choices:[
+            { approach:'probing', gate:'crime', line:"Finally say what {me} did before the company: {crime}.",
+              land:{ reply:"{npc} doesn't flinch. \"Yeah. Figured it was something that shape.\" Said out loud, to someone who stayed, it weighs a few grams less.", ev:2, fl:'ARC_UNLOCKED' } },
+            { approach:'warm', line:"Talk about {fallen} instead — the ones who didn't walk back out.",
+              land:{ reply:"You trade the kind of small talk that only means anything after a war. {npc} remembers {fallen} too. {me} leaves a little lighter.", ev:0 } } ] },
+        { choices:[
+            { approach:'warm', line:"Name one of the dead with her. Just one.",
+              land:{ reply:"\"{fallen},\" she repeats, like she's filing it somewhere safe. \"Got it. They don't get lost in here.\"", ev:0 } },
+            { approach:'blunt', line:"Nothing. Just the burn of the drink.",
+              land:{ reply:"{npc} lets the quiet do its work and leaves the bottle in reach. Sometimes that's the whole conversation.", pts:0 } } ] }
       ] },
   ],
   // gossip[] = ambient world-bubble lines — Phase 3 (G3).

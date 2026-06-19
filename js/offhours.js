@@ -123,13 +123,24 @@ function ohPartyName(id){
   return 'them';
 }
 // slot-fill a line for a (vet, counterpart) pair: vet-dossier slots + {npc}/{them} (the counterpart's name)
+// + campaign-aware tokens {fallen}/{lastmap} (degrade to neutral phrasing if the data isn't there yet).
 function ohFill(text, vet, npcId){
   if(text==null) return '';
   let s=String(text);
   if(vet && vet.lore && typeof buildDossier==='function'){ try{ s = buildDossier(vet).fill(s); }catch(_){ } }
   s = s.replace(/\{npc\}|\{them\}/g, npcId ? ohPartyName(npcId) : '');
+  if(s.indexOf('{fallen}')>=0) s = s.replace(/\{fallen\}/g, ohFallenName(vet));
+  if(s.indexOf('{lastmap}')>=0) s = s.replace(/\{lastmap\}/g, ohLastMap());
   return s;
 }
+// a fallen comrade's first name — deterministic per vet so a scene names the same person each time. Safe noun.
+function ohFallenName(vet){
+  const F=(typeof fallenVets!=='undefined' && Array.isArray(fallenVets))?fallenVets:[];
+  if(!F.length) return 'the ones who didn’t make it back';
+  const seed=(vet&&vet.lore&&vet.lore.seed!=null)?(vet.lore.seed>>>0):0;
+  const f=F[seed % F.length]; const nm=(f&&f.name)?String(f.name).split(' ')[0]:''; return nm||'them';
+}
+function ohLastMap(){ return (typeof G!=='undefined' && G && G.cfg && G.cfg.name) ? G.cfg.name : 'the last drop'; }
 
 /* ---- compatibility (B3) — deterministic vet↔vet bias (RimWorld/Wildermyth) ---- */
 function ohCompat(a, b){
@@ -145,9 +156,16 @@ function ohCompat(a, b){
   return Math.max(-1, Math.min(1, c));
 }
 function ohCompatKind(score){ const T=OFFHOURS.tune.compat; return (score<=T.rivalT) ? 'rival' : 'friend'; }
+// vet↔vet kind at mint: a wide star gap → mentor (senior takes a junior under their wing); strong mutual pull →
+// romance; otherwise friend/rival by compatibility. Deterministic; idempotent (never changes an existing bond's kind).
 function ohSeedClub(vetKeyA, vetA, vetKeyB, vetB){
   if(!vetKeyA || !vetKeyB) return null;
-  const kind = ohCompatKind(ohCompat(vetA, vetB));
+  const T=OFFHOURS.tune.compat, score=ohCompat(vetA, vetB);
+  const gap=Math.abs((vetA&&vetA.stars||0)-(vetB&&vetB.stars||0));
+  let kind;
+  if(gap >= (T.mentorGap||3)) kind='mentor';
+  else if(score >= (T.romanceT||0.55)) kind='romance';
+  else kind=ohCompatKind(score);
   return ohEnsureBond(vetKeyA, vetKeyB, kind);
 }
 
@@ -227,7 +245,9 @@ function ohSceneEligible(scene, idx, vet, bond){
   if(r.minTier!=null && tier < r.minTier) return false;
   if(r.maxTier!=null && tier > r.maxTier) return false;
   if(r.gate && !_ohVetHas(vet, r.gate)) return false;
-  if(!scene.choices.some(c => _ohVetHas(vet, c.gate))) return false;   // every choice gated out → skip
+  if(r.need==='fallen' && !(typeof fallenVets!=='undefined' && fallenVets && fallenVets.length)) return false;   // campaign-aware: only fires once the player has losses
+  const entry = (scene.beats && scene.beats[0]) ? scene.beats[0].choices : scene.choices;   // multi-beat gates on the ENTRY beat
+  if(!entry || !entry.some(c => _ohVetHas(vet, c.gate))) return false;   // every entry choice gated out → skip
   return true;
 }
 // the venue's current scene for (vet, npc): one of the eligible, unseen scenes matching venue (+kind).
@@ -248,7 +268,7 @@ function ohSceneFor(venue, kind, vet, bond){
 // (visit, bond) so it's stable within a visit and rotates across visits. Always returns a string (legacy-safe).
 function ohSceneOpen(scene, bond){
   if(!scene) return '';
-  const o=scene.open;
+  const o = (scene.beats && scene.beats[0]) ? scene.beats[0].open : scene.open;   // multi-beat: the entry beat opens
   if(!Array.isArray(o)) return o||'';
   if(o.length<2) return o[0]||'';
   const visit=(typeof CAMPAIGN!=='undefined'&&CAMPAIGN)?(CAMPAIGN.visit|0):0;
@@ -266,6 +286,19 @@ function ohCheckLands(bond, sceneIdx, choiceIdx, visit, approach){
   const p=Math.max(T.checkMin, Math.min(T.checkMax, T.checkBase + T.checkPerTier*tier + ohApproachBias(approach)));
   const seed=(_loHash((sceneIdx+1)*131 ^ (choiceIdx+1)*977 ^ ((visit|0)+1)*2654435761 ^ (bond?(bond.p|0):0)>>>0)) % 233280;
   return makeRng(seed)() < p;
+}
+// resolve ONE beat-choice deterministically WITHOUT mutating — shared by the UI (to navigate a conversation) and by
+// the host (to re-derive the taken path on commit), so client and host always agree. Returns the chosen land/miss
+// branch and the next beat index (null = terminal/scene-ends). Works for legacy single-beat scenes too (beatIdx 0).
+function ohBeatStep(sceneIdx, scene, beatIdx, choiceIdx, bond, visit){
+  const beat = (scene && scene.beats) ? scene.beats[beatIdx|0] : null;
+  const choice = beat ? (beat.choices||[])[choiceIdx|0] : ((scene&&scene.choices)?scene.choices[choiceIdx|0]:null);
+  if(!choice) return null;
+  const seed = (scene && scene.beats) ? ((beatIdx|0)*101 + (choiceIdx|0)) : (choiceIdx|0);   // distinct per (beat,choice)
+  const landed = choice.check ? ohCheckLands(bond, sceneIdx|0, seed, visit, choice.approach) : true;
+  const br = landed ? choice.land : (choice.miss || choice.land);
+  const next = (br && br.next!=null) ? (br.next|0) : null;
+  return { landed:landed, br:br, choice:choice, next:next };
 }
 
 /* ---- commit a scene outcome (E6) — HOST-AUTHORITATIVE (entered via netOffhoursCommit) ---- */
@@ -285,44 +318,61 @@ function applyOffhoursCommit(state, payload){
                    : 'They take it with a nod. The gauge ticks up.' };
   }
   const scene = OFFHOURS.scenes[payload.sceneIdx|0]; if(!scene) return null;
-  const choice = scene.choices[payload.choiceIdx|0]; if(!choice) return null;
   const npcId = payload.npcId || (scene.with==='bartender' ? OFFHOURS.barNpc : null);
   const vet = _ohFindVet(state, payload.vetKey);
   const bond = ohEnsureBond(payload.vetKey, npcId, scene.kind); if(!bond) return null;
   if(ohHasSeen(bond, payload.sceneIdx|0)) return { already:true };          // idempotent
-  // economy: a deep scene costs M3$ + a downtime night (host-gated). Ambient/caught are free & never committed here.
+  // economy: a whole scene costs M3$ ONCE (not per beat). Ambient/caught are free & never committed here.
   if(typeof hubSpend==='function' && !hubSpend(OFFHOURS.tune.sceneCost|0)) return { broke:true };  // M3$ is the only gate (the per-visit 'nights' cap was removed)
   const visit = (typeof CAMPAIGN!=='undefined' && CAMPAIGN) ? (CAMPAIGN.visit|0) : 0;
-  const landed = choice.check ? ohCheckLands(bond, payload.sceneIdx|0, payload.choiceIdx|0, visit, choice.approach) : true;
-  const br = landed ? choice.land : (choice.miss || choice.land);
-  const pts = (br.pts!=null) ? (br.pts|0) : Math.round(OFFHOURS.tune.scenePts * ohApproachWeight(choice.approach));
-  const lvl = ohGrantPoints(bond, pts, visit);
-  ohMarkSeen(bond, payload.sceneIdx|0);
-  if(br.fl && OH_FL[br.fl]!=null) ohSetFlag(bond, OH_FL[br.fl], true);       // e.g. ARC_UNLOCKED (the Hades favor)
+  // re-walk the taken path: multi-beat scenes carry payload.path[] (one choiceIdx per beat); legacy scenes have a
+  // single payload.choiceIdx. ohBeatStep is the SAME resolver the UI used to navigate, so the host re-derives identically.
+  const branches=[]; let lastLanded=true, lastReply='…';
+  if(Array.isArray(scene.beats) && scene.beats.length){
+    const path = Array.isArray(payload.path) ? payload.path : [payload.choiceIdx|0];
+    let bi=0, step=0;
+    while(bi!=null && bi>=0 && bi<scene.beats.length && step<path.length && step<16){
+      const r=ohBeatStep(payload.sceneIdx|0, scene, bi, path[step]|0, bond, visit); if(!r) break;
+      branches.push({ br:r.br, approach:r.choice.approach, landed:r.landed });
+      lastLanded=r.landed; lastReply=r.br.reply; bi=r.next; step++;
+    }
+  } else {
+    const r=ohBeatStep(payload.sceneIdx|0, scene, 0, payload.choiceIdx|0, bond, visit); if(!r) return null;
+    branches.push({ br:r.br, approach:r.choice.approach, landed:r.landed });
+    lastLanded=r.landed; lastReply=r.br.reply;
+  }
+  if(!branches.length) return null;
+  // points: sum each branch on the path; the terminal branch defaults to scenePts×approach-weight, mid-beats to 0
+  let totalPts=0;
+  branches.forEach(function(b,i){ const term=(i===branches.length-1);
+    totalPts += (b.br.pts!=null) ? (b.br.pts|0) : (term ? Math.round(OFFHOURS.tune.scenePts*ohApproachWeight(b.approach)) : 0); });
+  const lvl = ohGrantPoints(bond, totalPts, visit);
+  ohMarkSeen(bond, payload.sceneIdx|0);                                       // a scene is logged seen ONCE, on completion
+  branches.forEach(function(b){ if(b.br.fl && OH_FL[b.br.fl]!=null) ohSetFlag(bond, OH_FL[b.br.fl], true); });  // e.g. ARC_UNLOCKED
   if(bond.t>=OFFHOURS.tune.maxTier) ohSetFlag(bond, OH_FL.ARC_DONE, true);   // arc complete → "unburdened" barks (M2)
-  // CANON write: a new life-event line in the vet's dossier (ohCode sentinel `oh:1`; rendered by dossierFileHTML)
-  let wrote=null;
-  if(br.ev!=null && vet && vet.lore){
+  // CANON write: the last branch on the path that carries an ev wins (the meaningful outcome) → vet's dossier (oh:1)
+  let wrote=null, evVal=null;
+  branches.forEach(function(b){ if(b.br.ev!=null) evVal=b.br.ev|0; });
+  if(evVal!=null && vet && vet.lore){
     if(!Array.isArray(vet.lore.events)) vet.lore.events=[];
-    vet.lore.events.push({ lvl:(visit||(vet.stars|0)), i:(br.ev|0), oh:1, npc:npcId||null });
-    wrote = br.ev|0;
-    // the NPC counterpart's own life-event log (NPC-perspective pool; off-hours codes 4000+; rendered by npcStatusEvents)
+    vet.lore.events.push({ lvl:(visit||(vet.stars|0)), i:evVal, oh:1, npc:npcId||null });
+    wrote = evVal;
     if(typeof _npcEvPush==='function' && CAMPAIGN.npc && CAMPAIGN.npc.byId && npcId && CAMPAIGN.npc.byId[npcId]
-       && OFFHOURS.npcEvents && OFFHOURS.npcEvents[br.ev|0])
-      _npcEvPush(CAMPAIGN.npc.byId[npcId], visit, 4000 + (br.ev|0));
+       && OFFHOURS.npcEvents && OFFHOURS.npcEvents[evVal])
+      _npcEvPush(CAMPAIGN.npc.byId[npcId], visit, 4000 + evVal);
   }
   // vet↔vet: the OTHER veteran shares the night — mirror the dossier line into their file too
-  if(br.ev!=null && npcId && /^(lore:|hero:|unit:)/.test(npcId)){
+  if(evVal!=null && npcId && /^(lore:|hero:|unit:)/.test(npcId)){
     const other=_ohFindVet(state, npcId);
     if(other && other.lore){ if(!Array.isArray(other.lore.events)) other.lore.events=[];
-      other.lore.events.push({ lvl:(visit||(other.stars|0)), i:(br.ev|0), oh:1, npc:payload.vetKey }); }
+      other.lore.events.push({ lvl:(visit||(other.stars|0)), i:evVal, oh:1, npc:payload.vetKey }); }
   }
   // light fx — capstone delegates to the existing dream-fulfillment path; relief reuses the field-relief shape
-  if(br.fx && vet){
-    if(br.fx.t==='capstone' && typeof applyEventFx==='function') applyEventFx(vet, br.fx, state);
-    else if(br.fx.t==='relief') ohApplyRelief(vet, br.fx, state);
-  }
-  return { ok:true, landed, reply: ohFill(br.reply, vet, npcId), leveled: lvl.leveled, tier: bond.t, points: bond.p, wrote };
+  branches.forEach(function(b){ if(b.br.fx && vet){
+    if(b.br.fx.t==='capstone' && typeof applyEventFx==='function') applyEventFx(vet, b.br.fx, state);
+    else if(b.br.fx.t==='relief') ohApplyRelief(vet, b.br.fx, state);
+  } });
+  return { ok:true, landed:lastLanded, reply: ohFill(lastReply, vet, npcId), leveled: lvl.leveled, tier: bond.t, points: bond.p, wrote };
 }
 function _ohFindVet(state, vetKey){
   const ents = (state && state.entities) ? state.entities : ((typeof G!=='undefined'&&G)?G.entities:[]);
@@ -358,7 +408,7 @@ if(typeof window !== 'undefined'){
   window.OH_FL = OH_FL; window.ohSetFlag = ohSetFlag; window.ohHasFlag = ohHasFlag;
   window.ohFixedNpc = ohFixedNpc; window.ohNpcName = ohNpcName; window.ohFill = ohFill;
   window.ohSeedConfidant = ohSeedConfidant; window.ohSeedVetBonds = ohSeedVetBonds;
-  window.ohSceneFor = ohSceneFor; window.ohSceneOpen = ohSceneOpen; window.ohSceneChoices = ohSceneChoices; window.ohSceneEligible = ohSceneEligible;
+  window.ohSceneFor = ohSceneFor; window.ohSceneOpen = ohSceneOpen; window.ohSceneChoices = ohSceneChoices; window.ohSceneEligible = ohSceneEligible; window.ohBeatStep = ohBeatStep;
   window.ohApproachWeight = ohApproachWeight; window.applyOffhoursCommit = applyOffhoursCommit;
   window.ohVetHas = _ohVetHas;
 }

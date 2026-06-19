@@ -379,34 +379,58 @@ function _openScene(vet, target){
   const ic=_interactionContext(vet, target);
   const pick=(typeof ohSceneFor==='function')?ohSceneFor(ic.venue, ic.kind, ic.vu, ic.bond):null;
   if(!pick){ _showBubble(target, 'Nothing new to get into tonight.', 'npc', 2600); _int.mode='idle'; _int.selected=null; _syncHead(); return; }
-  _int.scene={ vet, target, pick, cx:ic };
+  _int.scene={ vet, target, pick, cx:ic, beatIdx:0, path:[], lead:null };   // beatIdx/path/lead drive the multi-beat conversation
   _int.mode='scene';
-  const m=_metrics(), C=_dialCenter(vet, m);
-  const openLine=(typeof ohSceneOpen==='function')?ohSceneOpen(pick.scene, ic.bond):pick.scene.open;
-  const open=_dialBubble(ohFill(openLine, ic.vu, ic.npcId), 'npc');   // the context line (a variant, if the scene has several) → 12 o'clock
-  _placeClock(open, C, 12, _DIAL.R12, m);
-  const choices=pick.scene.choices.filter(c=> !c.gate || (typeof ohVetHas==='function' && ohVetHas(ic.vu, c.gate)));
-  choices.forEach((c, idx)=>{
-    const ci=pick.scene.choices.indexOf(c);
-    const el=_dialChoice(c.approach, ohFill(c.line, ic.vu, ic.npcId), function(ev){ ev.stopPropagation(); _commitChoice(ci); });
+  const openLine=(typeof ohSceneOpen==='function')?ohSceneOpen(pick.scene, ic.bond):pick.scene.open;   // entry-beat opener (variant-picked)
+  _int.scene.lead = ohFill(openLine, ic.vu, ic.npcId);
+  _renderBeat();
+}
+function _curBeat(sc){ const s=sc.pick.scene; return (s.beats && s.beats[sc.beatIdx]) ? s.beats[sc.beatIdx] : null; }
+// render the current beat: the counterpart's lead line at 12 o'clock + the veteran's gated choices on the dial
+function _renderBeat(){
+  const sc=_int.scene; if(!sc) return; const ic=sc.cx; const beat=_curBeat(sc);
+  const all=(beat?beat.choices:sc.pick.scene.choices)||[];
+  const choices=all.filter(c=> !c.gate || (typeof ohVetHas==='function' && ohVetHas(ic.vu, c.gate)));
+  _clearUI();
+  const m=_metrics(), C=_dialCenter(sc.vet, m);
+  const lead=_dialBubble(sc.lead||'…', 'npc'); _placeClock(lead, C, 12, _DIAL.R12, m);
+  choices.forEach(function(c, idx){
+    const ci=all.indexOf(c);
+    const el=_dialChoice(c.approach, ohFill(c.line, ic.vu, ic.npcId), function(ev){ ev.stopPropagation(); _beatChoose(ci); });
     _placeClock(el, C, _DIAL.hours[Math.min(idx, _DIAL.hours.length-1)], _DIAL.R, m);   // 10, 8.5, 7 … anti-clockwise
   });
   _showStepAway();   // explicit exit — touch players need a visible way out (not just clicking empty space)
   _setCloseLabel(true);
-  _resolveDial(C);   // safety net: nudge any residual overlap outward along the dial (keeps the disposition)
+  _resolveDial(C);    // safety net: nudge any residual overlap outward along the dial (keeps the disposition)
 }
-function _commitChoice(ci){
-  const sc=_int.scene; if(!sc) return; const cx=sc.cx;
+// a choice: navigate to the next beat (multi-beat) or commit the whole path (terminal / legacy single-beat)
+function _beatChoose(ci){
+  const sc=_int.scene; if(!sc) return; const ic=sc.cx; const scene=sc.pick.scene;
+  if(!(Array.isArray(scene.beats) && scene.beats.length)){ _finalizeScene({ vetKey:sc.vet.key, npcId:ic.npcId, sceneIdx:sc.pick.idx, choiceIdx:ci }); return; }
+  const visit=(typeof CAMPAIGN!=='undefined'&&CAMPAIGN)?(CAMPAIGN.visit|0):0;
+  const step=(typeof ohBeatStep==='function')?ohBeatStep(sc.pick.idx, scene, sc.beatIdx, ci, ic.bond, visit):null;   // local, deterministic, no mutation
+  if(!step) return;
+  sc.path.push(ci);
+  sc.lead = ohFill(step.br.reply, ic.vu, ic.npcId);                       // the counterpart's reply leads into the next beat
+  if(step.next!=null){                                                     // continue the conversation
+    sc.beatIdx=step.next; const nb=_curBeat(sc);
+    if(nb && nb.open!=null){ const o=nb.open; sc.lead=ohFill(Array.isArray(o)?o[0]:o, ic.vu, ic.npcId); }   // an explicit beat opener overrides the reply
+    _renderBeat();
+  } else {                                                                // terminal → commit the full path ONCE
+    _finalizeScene({ vetKey:sc.vet.key, npcId:ic.npcId, sceneIdx:sc.pick.idx, path:sc.path.slice() });
+  }
+}
+function _finalizeScene(payload){
+  const sc=_int.scene; if(!sc) return;
   if((typeof CAMPAIGN!=='undefined') && (CAMPAIGN.m3|0) < (OFFHOURS.tune.sceneCost|0)){ _flash('Not enough M3rit$ for a round.'); return; }
-  const payload={ vetKey:sc.vet.key, npcId:cx.npcId, sceneIdx:sc.pick.idx, choiceIdx:ci };
   let res=null;
   if(typeof netOffhoursCommit==='function') res=netOffhoursCommit(G, payload);
   else if(typeof applyOffhoursCommit==='function') res=applyOffhoursCommit(G, payload);
-  if(res && res.broke){ _flash('Not enough M3rit$.'); return; }   // keep the line-picker so they can step away / retry
+  if(res && res.broke){ _flash('Not enough M3rit$.'); return; }   // keep the last beat so they can step away / retry
   // success — bond + dossier are written; show the result and WAIT for the player to step away (no auto-fade)
   _clearUI();
   const m=_metrics(), C=_dialCenter(sc.vet, m);
-  const reply=_dialBubble((res&&res.reply)||'…', 'reply'); _placeClock(reply, C, 12, _DIAL.R12, m);   // 12 o'clock, persists
+  const reply=_dialBubble((res&&res.reply)||sc.lead||'…', 'reply'); _placeClock(reply, C, 12, _DIAL.R12, m);   // 12 o'clock, persists
   if(res && res.wrote!=null){ const note=_dialBubble('A line goes into '+sc.vet.name+'’s file.', 'npc'); _placeClock(note, C, _DIAL.hours[0], _DIAL.R, m); }
   _showStepAway();
   try{ if(typeof refreshUI==='function') refreshUI(); }catch(_){ }

@@ -48,9 +48,7 @@ function refreshUI(){
   const _inc=document.getElementById('income');
   if(_inc){ const r=(!G.hub && !G.over) ? incomePerSec(_eco) : null; _inc.textContent = r==null ? '' : ('+'+r.toFixed(1)+'/s'); }
   document.getElementById('supply').textContent = _eco.supply+'/'+_eco.supplyCap;
-  const _mn=document.getElementById('mapname');
-  _mn.textContent = G.cfg.name;
-  if(_mn.parentElement && _mn.parentElement.title!==G.cfg.name) _mn.parentElement.title = G.cfg.name;   // hover recovery when short viewports ellipsize the label
+  // (episode label moved OUT of the top bar → it is now the objectives-panel header; built in updateQuestHud)
   updateQuestHud();
   updateBossBar();
 
@@ -194,6 +192,10 @@ function updateQuestHud(){
     questToasts(defs, Q, panel._sig!=null && panel._sig!=='' && panel._mapKey===questMapKey());
     panel._sig=sig; panel._mapKey=questMapKey();
     panel.innerHTML='';
+    // episode label, relocated from the top bar → the objectives panel's header
+    const eph=document.createElement('div'); eph.className='q-ep-head';
+    eph.textContent='Episode '+((G.cfg&&G.cfg.name)||'');
+    panel.appendChild(eph);
     for(const d of defs){
       const q=Q[d.id]; if(q&&q.na) continue;           // not applicable this run (e.g. no hero deployed)
       const row=document.createElement('div');
@@ -640,7 +642,7 @@ function showDossier(u){
 // keep the full-bleed dossier below the (possibly 2-row, responsive) topbar — mirrors hubMenuSyncTop.
 function dossierSyncTop(){
   const v=document.getElementById('dossierScreen'); if(!v) return;
-  if(typeof VIEW_TOP==='number'){ const t=VIEW_TOP+'px'; if(v.style.top!==t) v.style.top=t; }
+  if(typeof HUD_TOP_VIS==='number'){ const t=HUD_TOP_VIS+'px'; if(v.style.top!==t) v.style.top=t; }
 }
 function dossierSyncHud(){
   if(typeof syncHud==='function'){ syncHud(); if(typeof G!=='undefined' && G && typeof clampCam==='function') clampCam(G); }
@@ -775,10 +777,10 @@ function buildHubMenuBody(){
   if(spec.staffPoi){ const strip=hubMenuStaffStrip(spec.staffPoi); if(strip) body.appendChild(strip); }
   updateHubStatusLines(body);   // fill status lines immediately (the 5 Hz tick takes over after)
 }
-// keep the panel below the (possibly 2-row, responsive) topbar — VIEW_TOP is the measured topbar height
+// keep the panel below the (possibly 2-row, responsive) topbar — HUD_TOP_VIS is the measured topbar VISUAL height (VIEW_TOP is 0; the bar floats)
 function hubMenuSyncTop(){
   const v=document.getElementById('hubMenuView'); if(!v) return;
-  if(typeof VIEW_TOP==='number'){ const t=VIEW_TOP+'px'; if(v.style.top!==t) v.style.top=t; }
+  if(typeof HUD_TOP_VIS==='number'){ const t=HUD_TOP_VIS+'px'; if(v.style.top!==t) v.style.top=t; }
 }
 function hubMenuTick(){
   const v=document.getElementById('hubMenuView');
@@ -980,7 +982,7 @@ function showHubCrumb(label, onClick){
   if(!_hubCrumbEl){ _hubCrumbEl=document.createElement('button'); _hubCrumbEl.id='hub-crumb'; document.body.appendChild(_hubCrumbEl); }
   _hubCrumbEl.textContent='◀ '+label;
   _hubCrumbEl.style.display='block';
-  if(typeof VIEW_TOP==='number') _hubCrumbEl.style.top=(VIEW_TOP+8)+'px';
+  if(typeof HUD_TOP_VIS==='number') _hubCrumbEl.style.top=(HUD_TOP_VIS+8)+'px';
   _hubCrumbEl.onclick=()=>{ hideHubCrumb(); if(onClick) onClick(); };
   clearTimeout(_hubCrumbTimer); _hubCrumbTimer=setTimeout(hideHubCrumb, 8000);
 }
@@ -999,7 +1001,7 @@ function updateHubClockChip(state){
   const txt='🕘 '+String(c.h).padStart(2,'0')+':'+String(mm).padStart(2,'0')+' · '+c.phase.toUpperCase();
   if(_hubClockEl.style.display!=='block') _hubClockEl.style.display='block';
   if(txt!==_hubClockTxt){ _hubClockTxt=txt; _hubClockEl.textContent=txt; }
-  if(typeof VIEW_TOP==='number'){ const t=(VIEW_TOP+8)+'px'; if(_hubClockEl.style.top!==t) _hubClockEl.style.top=t; }
+  if(typeof HUD_TOP_VIS==='number'){ const t=(HUD_TOP_VIS+8)+'px'; if(_hubClockEl.style.top!==t) _hubClockEl.style.top=t; }
 }
 
 /* ---- NPC dossier: reuses the #dossierScreen shell + CSS with a bar-less card ---- */
@@ -1520,6 +1522,7 @@ function _venuePick(){
   _venue.bond=bond;
   const sceneKind=(_venue.kind==='club' && bond)?ohKindName(bond.k):_venueBondKind(_venue.kind);
   _venue.pick=(typeof ohSceneFor==='function')?ohSceneFor(_venue.kind, sceneKind, _venue.vet, bond):null;
+  _venue.beatIdx=0; _venue.path=[]; _venue.lead=null;   // reset the multi-beat conversation cursor for the new scene
 }
 function _venueHasNext(){
   if(!_venue) return false;
@@ -1558,7 +1561,7 @@ function openVenueMenu(poi, who){
 function _venueSig(){
   if(!_venue) return 'x';
   const b=_venue.npcId?ohGetBond(_venue.vetKey,_venue.npcId):null, L=ohLedger();
-  return 'oh|'+_venue.rev+'|'+(b?b.t:0)+'|'+(b?b.p:0)+'|'+(L?(L.nights|0):0)+'|'+(_venue.pick?_venue.pick.idx:-1)+'|'+(_venue.result?1:0)+'|'+(CAMPAIGN.m3|0);
+  return 'oh|'+_venue.rev+'|'+(b?b.t:0)+'|'+(b?b.p:0)+'|'+(L?(L.nights|0):0)+'|'+(_venue.pick?_venue.pick.idx:-1)+'|'+(_venue.beatIdx|0)+'|'+(_venue.result?1:0)+'|'+(CAMPAIGN.m3|0);
 }
 function _venueBuild(body){
   if(!_venue || !body) return;
@@ -1589,15 +1592,17 @@ function _venueBuild(body){
     h+='<button '+btn+' data-act="leave">Call it a night</button></div>';
   } else if(_venue.pick){
     const scene=_venue.pick.scene;
-    const sceneOpen=(typeof ohSceneOpen==='function')?ohSceneOpen(scene,bond):scene.open;
-    h+='<div class="dk">'+_vEsc((tierName||'tonight').toUpperCase())+'</div><div class="dossier-prose"><p>'+_vEsc(ohFill(sceneOpen,vet,npcId))+'</p></div>';
+    const beat=(scene.beats && scene.beats[_venue.beatIdx|0]) ? scene.beats[_venue.beatIdx|0] : null;   // multi-beat: the current beat
+    const leadLine=(_venue.lead!=null) ? _venue.lead : ((typeof ohSceneOpen==='function')?ohSceneOpen(scene,bond):scene.open);   // prior reply leads in, else the opener
+    h+='<div class="dk">'+_vEsc((tierName||'tonight').toUpperCase())+'</div><div class="dossier-prose"><p>'+_vEsc(ohFill(leadLine,vet,npcId))+'</p></div>';
     h+='<div '+acts+'>';
-    scene.choices.forEach(function(c,ci){
+    ((beat?beat.choices:scene.choices)||[]).forEach(function(c,ci){
       if(c.gate && typeof ohVetHas==='function' && !ohVetHas(vet,c.gate)) return;
       const tag=c.approach?'<span style="opacity:.55;font-family:monospace;font-size:11px">['+c.approach+'] </span>':'';
       h+='<button '+btn+' data-ci="'+ci+'">'+tag+_vEsc(ohFill(c.line,vet,npcId))+'</button>';
     });
-    if(_venue.npcId) h+='<button '+btn+' data-act="gift">Bring '+_vEsc(npcName||'them')+' something · M3$ '+(OFFHOURS.tune.giftCost|0)+'</button>';
+    const atStart=((_venue.beatIdx|0)===0 && !(_venue.path&&_venue.path.length));
+    if(_venue.npcId && atStart) h+='<button '+btn+' data-act="gift">Bring '+_vEsc(npcName||'them')+' something · M3$ '+(OFFHOURS.tune.giftCost|0)+'</button>';
     h+='</div><p class="assess" style="opacity:.6">Each round costs M3$ '+(OFFHOURS.tune.sceneCost|0)+'. A gift opens the door faster.</p>';
   } else {
     h+='<div class="dk">Tonight</div><div class="dossier-prose"><p>'+_vEsc(npcName||'The bartender')+' nods at '+_vEsc(vetName)+'. Nothing new to get into tonight — come back after the next deployment.</p></div>';
@@ -1622,7 +1627,34 @@ function _venueGift(){
 }
 function _venueChoose(ci){
   if(!_venue || !_venue.pick) return;
-  const L=ohLedger();
+  const scene=_venue.pick.scene;
+  // multi-beat: navigate the conversation locally (deterministic, no mutation) until a terminal branch, then commit ONCE
+  if(Array.isArray(scene.beats) && scene.beats.length){
+    const visit=(typeof CAMPAIGN!=='undefined'&&CAMPAIGN)?(CAMPAIGN.visit|0):0;
+    const bond=_venue.npcId?ohGetBond(_venue.vetKey,_venue.npcId):null;
+    const step=(typeof ohBeatStep==='function')?ohBeatStep(_venue.pick.idx, scene, _venue.beatIdx|0, ci, bond, visit):null;
+    if(!step) return;
+    if(!Array.isArray(_venue.path)) _venue.path=[];
+    _venue.path.push(ci);
+    if(step.next!=null){                                                   // continue the conversation
+      _venue.lead=ohFill(step.br.reply, _venue.vet, _venue.npcId);
+      _venue.beatIdx=step.next|0;
+      const nb=scene.beats[_venue.beatIdx|0];
+      if(nb && nb.open!=null){ const o=nb.open; _venue.lead=ohFill(Array.isArray(o)?o[0]:o, _venue.vet, _venue.npcId); }
+      _venue.rev++; return;
+    }
+    if((CAMPAIGN.m3|0) < (OFFHOURS.tune.sceneCost|0)){ if(typeof toast==='function') toast('Not enough M3rit$ for a round.'); return; }
+    const payloadM={ vetKey:_venue.vetKey, npcId:_venue.npcId, sceneIdx:_venue.pick.idx, path:_venue.path.slice() };
+    let resM=null;
+    if(typeof netOffhoursCommit==='function') resM=netOffhoursCommit(G, payloadM);
+    else if(typeof applyOffhoursCommit==='function') resM=applyOffhoursCommit(G, payloadM);
+    if(resM && resM.broke){ if(typeof toast==='function') toast('Not enough M3rit$.'); return; }
+    _venue.result=(resM && resM.already)?{ reply:'Already lived that one.' }:(resM||{ reply:'…' });
+    _venue.rev++;
+    if(typeof refreshUI==='function') refreshUI();
+    return;
+  }
+  // legacy single-beat
   if((CAMPAIGN.m3|0) < (OFFHOURS.tune.sceneCost|0)){ if(typeof toast==='function') toast('Not enough M3rit$ for a round.'); return; }
   const payload={ vetKey:_venue.vetKey, npcId:_venue.npcId, sceneIdx:_venue.pick.idx, choiceIdx:ci };
   let res=null;
