@@ -192,6 +192,15 @@ const OFFHOURS = {
     { text:"Told {them} the thing nobody told {me}: being good at the job is the company spending you. Said keep your own books." },   // 72
     { text:"Told {them}, grown now, the thing {me} stopped softening years ago: we won by becoming the enemy, and {me} built them for it too." },   // 73
     { text:"Watched {them} cross the floor to a scared new face and hand down {me}'s exact words. The list is in steadier hands now." },   // 74
+    // de-shared dossier lines (E8): each legacy single-beat scene now writes its OWN line instead of reusing 0/5/9/10/11.
+    { text:"Sat the slow end of the Late Shift while {npc} owned the worst of the job out loud — somebody has to be at the bar when the news comes in — and stayed in the quiet with her instead of drinking through it." },   // 75  (bar.closing_time)
+    { text:"Ate the broth {npc} had already ordered, in the first quiet with them that wasn't a fight — let the bowl go empty while {npc} watched and said nothing. That was plenty." },   // 76  (diner.cold_broth)
+    { text:"Told {npc} {me} thinks about {home} more than {me} lets on, and {npc} said it back, quiet — so the old booth held two again." },   // 77  (diner.same_side)
+    { text:"Told {them} {me}'d take the next bad call with them and nobody else. {them} didn't say it back, didn't have to. Inseparable, after that." },   // 78  (club.tight)
+    { text:"Squared off with {them} over a held stool and a matched drink — not warmth, nothing like it, but a line both could stand on. It held." },   // 79  (club.measure)
+    { text:"Split the angle on the door with {them} without a word — backs covered, eyes on the room, the way you both still sit. Nobody named it. It didn't need naming." },   // 80  (club.exits)
+    { text:"Covered {them}'s round when the pension came late and waved off the thanks — and after that, who picks up the chits stopped being a question between them." },   // 81  (club.tab, warm)
+    { text:"Said it flat to {them} — the company owes them both more than it'll ever pay — and clinked the worst drink in the place against theirs. Two people the same machine used up, splitting what was left." },   // 82  (club.tab, blunt)
   ],
   // say[i] : first-person reaction, index-aligned to events (text-only until the lore-forge voice gate).
   say: [
@@ -270,6 +279,14 @@ const OFFHOURS = {
     "Told them the part nobody told me.",   // 72
     "Couldn't lie to that one anymore.",   // 73
     "The kid's the senior now. It's theirs.",   // 74
+    "Better her than a wall, she said. Sat in it.",   // 75
+    "Quiet that wasn't a fight. Plenty.",   // 76
+    "Said I think about home. So does she.",   // 77
+    "Next bad call, just them. Didn't need it said back.",   // 78
+    "Not warmth. A line that holds.",   // 79
+    "Backs to the wall, both of us. Didn't name it.",   // 80
+    "Covered it. Stopped being a question.",   // 81
+    "Same machine used us both. Split what's left.",   // 82
   ],
   // scenes[] : Scene objects. The counterpart OPENS; the bulleted choices are the VETERAN's lines.
   //   req: {venue, kind, minTier, maxTier, gate}  · choice: {approach, gate, line, check, land, miss}
@@ -359,7 +376,7 @@ const OFFHOURS = {
       open:"{them} saves {me} a seat without being asked. The bass is the only thing louder than the quiet between you.",
       choices:[
         { approach:'warm', line:"Tell {them} you'd take the next bad call with them and no one else.",
-          land:{ reply:"{them} doesn't say it back. Doesn't have to. Inseparable, now.", ev:9, fl:'CLOSEST' } },
+          land:{ reply:"{them} doesn't say it back. Doesn't have to. Inseparable, now.", ev:78, fl:'CLOSEST' } },
       ] },
     { id:'club.friction', venue:'club', kind:'rival', req:{minTier:0, maxTier:4},
       open:[
@@ -380,11 +397,11 @@ const OFFHOURS = {
         "{them} takes the stool that watches the door, sees {me} already wanted it, and slides over one. \"We'll split the angle.\""],
       choices:[
         { approach:'warm', line:"Take the open stool. Say nothing about why it's the good one.",
-          land:{ reply:"You sit the way you both still sit. Backs covered, eyes on the room. Nobody names it. It doesn't need naming.", ev:9 } },
+          land:{ reply:"You sit the way you both still sit. Backs covered, eyes on the room. Nobody names it. It doesn't need naming.", ev:80 } },
         { approach:'probing', line:"Ask {them} how long since they slept with the lights off.",
           land:{ reply:"\"Longer than I'll admit sober.\" {them} doesn't dress it up. Neither do you. The bass takes the rest.", ev:11 } },
         { approach:'blunt', line:"Tell {them} the war's over and the chair won't move itself.", check:true,
-          land:{ reply:"{them} snorts. \"Says the one facing the door.\" Caught, both of you. First easy thing in weeks.", ev:9 },
+          land:{ reply:"{them} snorts. \"Says the one facing the door.\" Caught, both of you. First easy thing in weeks.", ev:80 },
           miss:{ reply:"It comes out harder than {me} meant. {them} just nods, slow, and lets the bass have the table back.", pts:0 } },
       ] },
     { id:'club.tab', venue:'club', kind:'friend', req:{minTier:1, maxTier:2},
@@ -394,9 +411,9 @@ const OFFHOURS = {
         "{them} is short for the round and trying not to show it. {me} covers it without making it a thing."],
       choices:[
         { approach:'warm', line:"Wave off the thanks. \"You'd have done it. Drink.\"",
-          land:{ reply:"{them} drinks. Doesn't make a speech of it. Next bad week you both know who picks up the chits. It stops being a question.", ev:9 } },
+          land:{ reply:"{them} drinks. Doesn't make a speech of it. Next bad week you both know who picks up the chits. It stops being a question.", ev:81 } },
         { approach:'blunt', line:"Tell {them} the company still owes you both more than a round.", check:true,
-          land:{ reply:"\"More than they'll ever pay,\" {them} says, and clinks the bad drink against yours. Two people the same machine used up, splitting what it left them.", ev:11 },
+          land:{ reply:"\"More than they'll ever pay,\" {them} says, and clinks the bad drink against yours. Two people the same machine used up, splitting what it left them.", ev:82 },
           miss:{ reply:"{them} goes quiet at the bitterness in it. \"Yeah,\" is all. The drinks go warm before either of you tries again.", pts:0 } },
         { approach:'probing', line:"Ask if the pension's ever once come on time.",
           land:{ reply:"{them} laughs, tired. \"Not since the first roster.\" You trade the small humiliations of getting paid late by people who spend you freely. Grim. But not alone." } },
@@ -408,12 +425,12 @@ const OFFHOURS = {
         "{them} sets the glass down hard enough to hear over the bass. \"Didn't figure you for the type that drinks here.\""],
       choices:[
         { approach:'blunt', line:"Take the next stool over. Don't give an inch.", check:true,
-          land:{ reply:"{them} snorts. \"Stubborn.\" Neither moves. Neither has to. It's not warmth, but it holds.", ev:10 },
+          land:{ reply:"{them} snorts. \"Stubborn.\" Neither moves. Neither has to. It's not warmth, but it holds.", ev:79 },
           miss:{ reply:"{them} drinks, eyes on the bottles. The silence wins. Nothing settles tonight.", pts:0 } },
         { approach:'probing', line:"Ask {them} which front they came off of.",
           land:{ reply:"{them} names it. {me} names {me}'s. Same war, wrong ends of it. That doesn't make {them} family. Makes {them} someone {me} can't write off." } },
         { approach:'blunt', line:"Match {them}'s drink. Order the same, say nothing.", check:true,
-          land:{ reply:"{them} watches the pour, then lifts the glass an inch. Not a toast. A line drawn. {me} lifts back.", ev:10 },
+          land:{ reply:"{them} watches the pour, then lifts the glass an inch. Not a toast. A line drawn. {me} lifts back.", ev:79 },
           miss:{ reply:"{them} leaves before the second round. {me} drinks both. Some respect you earn twice.", pts:0 } },
       ] },
     { id:'diner.cold_broth', venue:'diner', kind:'kin', req:{minTier:0, maxTier:1},
@@ -422,7 +439,7 @@ const OFFHOURS = {
         "{npc} is in the corner booth again, two bowls already steaming. \"Knew you'd come the long way around. You always did. Runs in the blood.\""],
       choices:[
         { approach:'warm', line:"Sit. Eat the broth {npc} ordered without being asked.",
-          land:{ reply:"You eat in the quiet that isn't a fight, for once. {npc} watches the bowl go empty and says nothing. That's plenty.", ev:5 } },
+          land:{ reply:"You eat in the quiet that isn't a fight, for once. {npc} watches the bowl go empty and says nothing. That's plenty.", ev:76 } },
         { approach:'probing', line:"Ask if {npc} still keeps the booth on the bad weeks.",
           land:{ reply:"\"Every week's a bad week,\" {npc} says, not unkind. \"Booth's here. So am I.\" Said like it costs nothing. It costs plenty." } },
         { approach:'blunt', line:"Say it straight — you didn't think {npc} would still be waiting.", check:true,
@@ -435,7 +452,7 @@ const OFFHOURS = {
         "Same booth, same chipped formica. {npc} looks up slow, older than you let yourself remember. \"Long time since you sat on this side.\""],
       choices:[
         { approach:'warm', line:"Tell {npc} you think about {home} more than you let on.",
-          land:{ reply:"{npc} goes still. \"Yeah. Me too. Every time the broth comes out right.\" Nobody leaves. The booth holds two again.", ev:5 } },
+          land:{ reply:"{npc} goes still. \"Yeah. Me too. Every time the broth comes out right.\" Nobody leaves. The booth holds two again.", ev:77 } },
         { approach:'probing', line:"Ask what's left back home, with you gone this long.",
           land:{ reply:"\"Dust. The booth. Me.\" {npc} turns the cup a half-turn. \"Enough to come back to, if you wanted.\" Said low, no weight on it. All the weight on it." } },
         { approach:'blunt', line:"Ask if {npc} blames you for the years you stayed gone.", check:true,
@@ -450,7 +467,7 @@ const OFFHOURS = {
         { approach:'warm', line:"Take the stool. Ask how long she's worked this bar.",
           land:{ reply:"\"Long enough to stop counting,\" {npc} says. \"You learn the ones who come back and the ones who don't.\" She doesn't say which {me} is. The night goes easy after that." } },
         { approach:'probing', line:"Ask if it gets to her — pouring for the ones who don't come back.",
-          land:{ reply:"{npc} keeps drying the same glass. \"Somebody's at the bar when the news comes in. Better me than a wall.\" She lets the quiet sit. {me} sits in it with her.", ev:0 } },
+          land:{ reply:"{npc} keeps drying the same glass. \"Somebody's at the bar when the news comes in. Better me than a wall.\" She lets the quiet sit. {me} sits in it with her.", ev:75 } },
         { approach:'blunt', line:"\"I didn't come here to get figured out.\"", check:true,
           land:{ reply:"\"Nobody does,\" {npc} says, and slides the glass over anyway. \"I'm not figuring. I'm just still here.\" {me} drinks, and the wall comes down a little on its own." },
           miss:{ reply:"{npc} lets it drop and moves down the bar. {me} finishes the drink alone and keeps the rest to {me}.", pts:0 } },
@@ -1514,6 +1531,14 @@ const OFFHOURS = {
     null,   // 72
     null,   // 73
     null,   // 74
+    null,   // 75  (bar.closing_time — bartender confidant, no mirror line)
+    "{vet} ate the broth I ordered and didn't turn it into a fight. The bowl went empty. That was plenty.",   // 76  (diner.cold_broth)
+    "{vet} admitted they still think about {home}. So do I. The booth held two of us again.",   // 77  (diner.same_side)
+    null,   // 78  (club.tight — vet↔vet, mirrors via the other vet's file)
+    null,   // 79  (club.measure)
+    null,   // 80  (club.exits)
+    null,   // 81  (club.tab, warm)
+    null,   // 82  (club.tab, blunt)
   ],
   // bark[] : "unburdened" selection barks for a veteran whose confidant/kin arc is done (fl&8). Text-only.
   bark: [
