@@ -38,18 +38,30 @@ html,body{ overscroll-behavior:none; -webkit-touch-callout:none; }
 /* ---------- HUD ---------- */
 #topbar {
   position:fixed; top:0; left:0; right:0;
-  height:auto; min-height:var(--top-h);   /* grows when the objective wraps; syncHud()'s ResizeObserver re-syncs VIEW_TOP */
-  display:flex; align-items:center; gap:24px;
-  padding:4px 18px; padding-top:calc(4px + var(--safe-t));   /* longhand AFTER shorthand keeps the notch inset alive */
-  background:linear-gradient(180deg,rgba(38,20,24,.95),rgba(30,15,17,.88));
-  border-bottom:1px solid #522a32; box-shadow:0 2px 10px rgba(0,0,0,.5);
-  /* >#bottom(20) & #lns-ingame(21): #topbar forms a stacking context, so its dropdown
-     (#topmenu-panel) only paints above the floating minimap overlay — which lives in
-     #bottom's own z:20 context — if the WHOLE topbar context outranks #bottom. Equal
-     z-index would tie-break by DOM order (#bottom is later), letting the minimap win. */
+  height:auto; min-height:var(--top-h);   /* visual only — the bar FLOATS; syncHud() measures this into HUD_TOP_VIS, VIEW_TOP stays 0 */
+  display:flex; align-items:center; gap:14px;
+  padding:6px 16px; padding-top:calc(6px + var(--safe-t));   /* longhand AFTER shorthand keeps the notch inset alive */
+  /* INVISIBLE BAR: no fill / border / shadow — the live world shows straight through. pointer-events:none
+     lets clicks fall through the empty gaps to the canvas; each control re-enables pointer-events below and
+     carries its OWN high-contrast scrim so it stays legible over bright OR dark world pixels. */
+  background:none; border:0; box-shadow:none;
+  pointer-events:none;
+  /* >#bottom(20) & #lns-ingame(21): #topbar forms a stacking context so its dropdowns paint above the
+     floating minimap overlay (which lives in #bottom's own z:20 context). */
   z-index:22; font-size:14px;
 }
-.stat { display:flex; align-items:center; gap:7px; font-weight:600; }
+#topbar > *{ pointer-events:auto; }   /* only the controls capture pointer; the transparent gaps pass through to the world */
+/* high-contrast "glass pod" — readable funding/headcount readout over any world background */
+.stat { display:flex; align-items:center; gap:7px; font-weight:700;
+  padding:5px 11px; border-radius:8px;
+  background:linear-gradient(180deg,rgba(18,9,12,.74),rgba(8,4,6,.66));
+  border:1px solid rgba(255,120,128,.22);
+  box-shadow:0 2px 12px rgba(0,0,0,.5), inset 0 0 0 1px rgba(255,255,255,.03);
+  -webkit-backdrop-filter:blur(6px); backdrop-filter:blur(6px);
+  text-shadow:0 1px 2px rgba(0,0,0,.9); }
+#topbar #gold{ color:#ffe39a; font-weight:800; letter-spacing:.3px; }
+#topbar #supply{ color:#ffe1e4; font-weight:800; }
+#topbar .lbl{ color:#e6b6bd; }
 .stat .ico { width:16px; height:16px; border-radius:3px; display:inline-block; }
 .ico.gold { background:linear-gradient(135deg,#ffe27a,#f0a500); box-shadow:0 0 6px #f0a50080;}
 .ico.sup  { background:linear-gradient(135deg,#ffb0a0,#d64141); box-shadow:0 0 6px #d6414180;}
@@ -90,6 +102,17 @@ html,body{ overscroll-behavior:none; -webkit-touch-callout:none; }
 /* stats + episode label never flex-squeeze into multi-line; the objectives chip wraps instead and the
    (height:auto) bar grows — syncHud()'s ResizeObserver re-syncs VIEW_TOP */
 #topbar .stat, #topbar > .lbl { flex:0 0 auto; }
+/* ---- floating-HUD contrast: every control must read over the live world ---- */
+#obj-chip{ -webkit-backdrop-filter:blur(6px); backdrop-filter:blur(6px);
+  box-shadow:0 2px 12px rgba(0,0,0,.5); text-shadow:0 1px 2px rgba(0,0,0,.85); }
+#obj-chip.plain{ text-shadow:0 1px 3px rgba(0,0,0,.95), 0 0 2px rgba(0,0,0,.9); }
+#obj-chip.plain #objective{ color:#f0d2d8; }
+#topbar #btn-topmenu{ -webkit-backdrop-filter:blur(6px); backdrop-filter:blur(6px);
+  box-shadow:0 2px 12px rgba(0,0,0,.55); }
+/* episode label, relocated from the top bar → the objectives panel's header */
+.q-ep-head{ font-size:13px; font-weight:800; letter-spacing:1px; color:#ff7676;
+  text-transform:uppercase; padding-bottom:8px; margin-bottom:2px;
+  border-bottom:1px solid rgba(255,90,90,.28); text-shadow:0 1px 2px rgba(0,0,0,.8); }
 
 /* ---------- Boss (VILLAIN) HP bar ----------
    Floating, map-wide while a villain lives. position:fixed so it overlays the canvas WITHOUT being

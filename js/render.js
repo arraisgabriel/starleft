@@ -54,7 +54,8 @@ function isVisiblePix(state,x,y){
    ===================================================================== */
 // HUD bands reserved at top/bottom. `let` (not const) because the responsive CSS
 // resizes the bars per breakpoint and syncHud() copies the real heights back here.
-let VIEW_TOP=46, VIEW_BOT=150;
+let VIEW_TOP=0, VIEW_BOT=150;   // VIEW_TOP pinned to 0: the top HUD now FLOATS over the world (reserves no band) — see syncHud()
+let HUD_TOP_VIS=46;             // measured VISUAL height of the floating top controls; overlays clear THIS, not VIEW_TOP
 let cssH=innerHeight;   // canvas CSS-pixel height (cv.height is device px once DPR-scaled)
 
 /* ---- Idle "life" animation (render-only; reuses existing sprites) ----
@@ -91,9 +92,14 @@ function resize(){
 // viewport always matches the (responsive) DOM.
 function syncHud(){
   const tb=document.getElementById('topbar'), bp=document.getElementById('bottom');
-  if(tb) VIEW_TOP = Math.ceil(tb.getBoundingClientRect().height || tb.offsetHeight || 0);
+  // The top bar floats over the world (transparent, pointer-through gaps): it reserves NO canvas band, so
+  // VIEW_TOP is pinned to 0 and the world renders + maps full-height behind it. We still measure the bar's
+  // visual height into HUD_TOP_VIS so the overlays anchored below the controls (--hud-top-h CSS consumers +
+  // the dossier / HUB-menu / hub-crumb / hub-clock JS) clear the buttons exactly as before.
+  if(tb) HUD_TOP_VIS = Math.ceil(tb.getBoundingClientRect().height || tb.offsetHeight || 0);
+  VIEW_TOP = 0;
   if(bp) VIEW_BOT = Math.ceil(bp.getBoundingClientRect().height || bp.offsetHeight || 0);
-  if(document.documentElement) document.documentElement.style.setProperty('--hud-top-h', VIEW_TOP+'px');
+  if(document.documentElement) document.documentElement.style.setProperty('--hud-top-h', HUD_TOP_VIS+'px');
   if(document.documentElement) document.documentElement.style.setProperty('--hud-bottom-h', VIEW_BOT+'px');
   const news=document.getElementById('lns-ingame');   // live-news ticker reserves a band above the bottom HUD when shown
   if(news && news.offsetHeight) VIEW_BOT += news.offsetHeight;
