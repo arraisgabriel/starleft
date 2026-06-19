@@ -382,7 +382,8 @@ function _openScene(vet, target){
   _int.scene={ vet, target, pick, cx:ic };
   _int.mode='scene';
   const m=_metrics(), C=_dialCenter(vet, m);
-  const open=_dialBubble(ohFill(pick.scene.open, ic.vu, ic.npcId), 'npc');   // the context line → 12 o'clock
+  const openLine=(typeof ohSceneOpen==='function')?ohSceneOpen(pick.scene, ic.bond):pick.scene.open;
+  const open=_dialBubble(ohFill(openLine, ic.vu, ic.npcId), 'npc');   // the context line (a variant, if the scene has several) → 12 o'clock
   _placeClock(open, C, 12, _DIAL.R12, m);
   const choices=pick.scene.choices.filter(c=> !c.gate || (typeof ohVetHas==='function' && ohVetHas(ic.vu, c.gate)));
   choices.forEach((c, idx)=>{

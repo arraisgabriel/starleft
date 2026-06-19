@@ -230,13 +230,30 @@ function ohSceneEligible(scene, idx, vet, bond){
   if(!scene.choices.some(c => _ohVetHas(vet, c.gate))) return false;   // every choice gated out → skip
   return true;
 }
-// the venue's current scene for (vet, npc): the lowest-index eligible, unseen scene matching venue (+kind)
+// the venue's current scene for (vet, npc): one of the eligible, unseen scenes matching venue (+kind).
+// When several are eligible we pick DETERMINISTICALLY among them — stable within a hub visit, but rotating
+// across visits (and as scenes get marked seen). No Math.random → solo/host/client agree, saves replay the same.
 function ohSceneFor(venue, kind, vet, bond){
+  const elig=[];
   for(let i=0;i<OFFHOURS.scenes.length;i++){ const s=OFFHOURS.scenes[i];
     if(s.venue!==venue) continue; if(kind && s.kind && s.kind!==kind) continue;
-    if(ohSceneEligible(s, i, vet, bond)) return { scene:s, idx:i };
+    if(ohSceneEligible(s, i, vet, bond)) elig.push({ scene:s, idx:i });
   }
-  return null;
+  if(elig.length<2) return elig[0] || null;
+  const visit=(typeof CAMPAIGN!=='undefined'&&CAMPAIGN)?(CAMPAIGN.visit|0):0;
+  const seed=_loHash((((visit+1)*73856093) ^ (((bond?bond.p|0:0)+1)*19349663) ^ (elig.length*83492791)) >>> 0) % 233280;
+  return elig[(makeRng(seed)() * elig.length) | 0];
+}
+// pick one opening line for a scene — `open` may be a single string or an array of variants. Deterministic per
+// (visit, bond) so it's stable within a visit and rotates across visits. Always returns a string (legacy-safe).
+function ohSceneOpen(scene, bond){
+  if(!scene) return '';
+  const o=scene.open;
+  if(!Array.isArray(o)) return o||'';
+  if(o.length<2) return o[0]||'';
+  const visit=(typeof CAMPAIGN!=='undefined'&&CAMPAIGN)?(CAMPAIGN.visit|0):0;
+  const seed=_loHash((((visit+1)*2971215073) ^ (o.length*433494437) ^ (((bond?bond.p|0:0)+1)*28657)) >>> 0) % 233280;
+  return o[(makeRng(seed)() * o.length) | 0] || o[0] || '';
 }
 // the choices a vet can actually pick in a scene (aspect-gated by their dossier)
 function ohSceneChoices(scene, vet){ return scene ? scene.choices.filter(c => _ohVetHas(vet, c.gate)) : []; }
@@ -341,7 +358,7 @@ if(typeof window !== 'undefined'){
   window.OH_FL = OH_FL; window.ohSetFlag = ohSetFlag; window.ohHasFlag = ohHasFlag;
   window.ohFixedNpc = ohFixedNpc; window.ohNpcName = ohNpcName; window.ohFill = ohFill;
   window.ohSeedConfidant = ohSeedConfidant; window.ohSeedVetBonds = ohSeedVetBonds;
-  window.ohSceneFor = ohSceneFor; window.ohSceneChoices = ohSceneChoices; window.ohSceneEligible = ohSceneEligible;
+  window.ohSceneFor = ohSceneFor; window.ohSceneOpen = ohSceneOpen; window.ohSceneChoices = ohSceneChoices; window.ohSceneEligible = ohSceneEligible;
   window.ohApproachWeight = ohApproachWeight; window.applyOffhoursCommit = applyOffhoursCommit;
   window.ohVetHas = _ohVetHas;
 }

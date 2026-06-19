@@ -1589,7 +1589,8 @@ function _venueBuild(body){
     h+='<button '+btn+' data-act="leave">Call it a night</button></div>';
   } else if(_venue.pick){
     const scene=_venue.pick.scene;
-    h+='<div class="dk">'+_vEsc((tierName||'tonight').toUpperCase())+'</div><div class="dossier-prose"><p>'+_vEsc(ohFill(scene.open,vet,npcId))+'</p></div>';
+    const sceneOpen=(typeof ohSceneOpen==='function')?ohSceneOpen(scene,bond):scene.open;
+    h+='<div class="dk">'+_vEsc((tierName||'tonight').toUpperCase())+'</div><div class="dossier-prose"><p>'+_vEsc(ohFill(sceneOpen,vet,npcId))+'</p></div>';
     h+='<div '+acts+'>';
     scene.choices.forEach(function(c,ci){
       if(c.gate && typeof ohVetHas==='function' && !ohVetHas(vet,c.gate)) return;
