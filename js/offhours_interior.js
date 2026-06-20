@@ -66,7 +66,7 @@ function _ensureStyle(){
 /* ---- the intimate virtual CAMERA: a fixed cutscene-close zoom you can't change, panned by drag and
    glided to centre whoever you select. All cosmetic, local to the transient _int — no save/net impact. ---- */
 function _fitScale(cssW,cssH){ return Math.min(cssW/ROOM_W, cssH/ROOM_H)*0.97; }   // == the OLD fit-to-screen scale; our baseline
-const _CAM={ focusMul:1.9, ease:3.0, snapPos:0.6, margin:30, dragTh:5 };            // z = focusMul × fit (locked); the only zoom knob
+const _CAM={ focusMul:1.9, ease:10, snapPos:0.6, margin:30, dragTh:5 };              // z = focusMul × fit (locked); ease=snappy ~0.5s settle
 function _camSetZoom(){ const cv=$('oh-interior'); const cssW=cv.clientWidth||window.innerWidth, cssH=cv.clientHeight||window.innerHeight; if(_int&&_int.cam) _int.cam.z=_fitScale(cssW,cssH)*_CAM.focusMul; }
 // keep the visible window inside the room (+small overscroll); centre the axis if the room is smaller than the view
 function _clampCam(){
