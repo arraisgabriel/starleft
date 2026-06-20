@@ -155,6 +155,12 @@
     // a hold-last cutscene (e.g. the EX-TERMINATOR escape) parks on its FINAL line indefinitely — only the
     // player's click (advanceFlashCutscene) closes it, so the last beat doesn't auto-dismiss with the action.
     if(cs._holdLast && cs.i >= cs.lines.length-1) return;
+    // VILLAIN cutscenes (every boss arrival + death/escape) advance ONLY on the player's click — on EVERY
+    // line, not just the last — so the boss's lines never auto-skip while the player is still reading. The
+    // speaker is the villain entity on solo/host AND on the co-op client mirror (mp.js focuses the villain),
+    // so each peer's sim correctly waits for its own click (no per-line sync needed). A generic cs.manual
+    // flag lets any future cutscene opt into the same click-to-advance behavior.
+    if(cs.manual || (cs.speaker && cs.speaker.villain)) return;
     // advance when the clip has finished (and the floor has elapsed) or the hard cap is hit
     if((cs.clipDone && cs.t>=MIN_LINE) || cs.t>=MAX_LINE) advanceFlashCutscene();
   };

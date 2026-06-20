@@ -1006,6 +1006,7 @@ function tryBossDeathCutscene(state){
   if(!focus) return false;
   state._bossDeathCsDone=true;
   startFlashCutscene(state, focus, lines);   // victory routes on the natural checkWinLose re-check after the cutscene closes
+  if(state.flashCutscene) state.flashCutscene.manual=true;   // villain DEATH lines are click-to-advance even though we frame a player unit (the dead boss can't be framed)
   return true;
 }
 
