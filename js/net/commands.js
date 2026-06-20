@@ -137,6 +137,20 @@
   window.netAmove=netAmove; window.netStance=netStance; window.netAbility=netAbility; window.netHeroAbility=netHeroAbility;
   window.netOffhoursCommit=netOffhoursCommit;
 
+  /* ---------------- presentation cinematics (mirror a host cutscene to the client) ----------------
+     Wrap a host-side cutscene/overlay so the SAME presentation plays on the client. SOLO: just play
+     locally (zero behavior change). HOST: play locally AND emit a seq-stamped cue (NET.cueSend) so the
+     client mirrors it. CLIENT: never originates — it only ever plays via a received cue (NET.playCue).
+     opts.hold freezes both sides (running=false) until the host calls NET.cueResume(). Presentation
+     only — never mutate authoritative sim state from here. */
+  function cinematic(type, data, playLocalFn, opts){
+    opts = opts || {};
+    if(typeof netRole!=='undefined' && netRole==='client') return;   // clients mirror cues, they don't author them
+    if(typeof playLocalFn==='function') playLocalFn();
+    if(typeof netRole!=='undefined' && netRole==='host' && NET.cueSend) NET.cueSend(type, data||{}, !!opts.hold);
+  }
+  window.cinematic = cinematic;
+
   /* ---------------- host: validate + replay a remote command ---------------- */
   function idIndex(state){ const m=new Map(); for(const e of state.entities) if(!e.dead) m.set(e.id,e); return m; }
 

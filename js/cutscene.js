@@ -61,6 +61,8 @@
   function endFlashCutscene(state){
     if(!state) return;
     const cs=state.flashCutscene;
+    const onEnd = cs && cs._onEnd;
+    const coopHold = !!(cs && cs._coopHold);   // this was a co-op host-frozen map cutscene → resume the sim + unfreeze the client
     // mid-mission cutscenes zoom the camera onto the speaker; restore the player's prior view on exit
     // (hub cutscenes intentionally stay framed on the hub, so _camRestore is only set off-hub).
     if(cs && cs._camRestore){
@@ -71,22 +73,32 @@
     if(typeof document!=='undefined') document.body.classList.remove('scene-cutscene');
     const el=captionEl(); if(el) el.classList.remove('show');
     if(typeof VOICE!=='undefined' && VOICE.stopScene) VOICE.stopScene();
+    // CO-OP: a host-frozen map cutscene ends → resume the sim and tell the client to unfreeze. The client's
+    // own endFlashCutscene never resumes (host-authoritative) — it waits for this resume cue.
+    if(coopHold && typeof netRole!=='undefined' && netRole==='host'){
+      if(typeof NET!=='undefined' && NET.cueResume) NET.cueResume();
+      if(!state.over) running=true;
+    }
     if(typeof refreshUI==='function') refreshUI();
     // T1-7: the Ep VII flash monologue resolves onto the MEMORIAL — the canonical moment the
     // whole roster joins it. Auto-open once, right after Nino's last line fades.
     if(state.hub && typeof fallenVets!=='undefined' && fallenVets.length && typeof showRoster==='function')
       setTimeout(()=>{ try{ showRoster(); }catch(e){} }, 700);
+    if(typeof onEnd==='function'){ try{ onEnd(); }catch(e){} }   // deferred continuation (e.g. boss victory routing after the death lines)
   }
 
   // Begin the cutscene; falls back to simply framing the hub if there's nothing (or no speaker) to play.
-  window.startFlashCutscene=function(state, speaker, lines){
+  // onEnd (optional): a callback fired once the last line closes — used to DEFER a boss's victory routing
+  // until its death lines have played (villains.js bossOutcome).
+  window.startFlashCutscene=function(state, speaker, lines, onEnd){
     if(!state) return;
     if(!speaker || !lines || !lines.length){
       if(typeof hubFocusUltra==='function') hubFocusUltra(state);
       if(typeof clampCam==='function') clampCam(state);
+      if(typeof onEnd==='function') onEnd();           // nothing to play → run the continuation immediately
       return;
     }
-    state.flashCutscene={ lines, i:0, t:0, speaker, clipDone:false, started:false,
+    state.flashCutscene={ lines, i:0, t:0, speaker, clipDone:false, started:false, _onEnd:onEnd||null,
       // off-hub (in-mission) reveals zoom onto the speaker — remember the player's view to restore on end
       _camRestore: state.hub ? null : { zoom:state.zoom||1, camX:state.camX||0, camY:state.camY||0 } };
     if(typeof document!=='undefined') document.body.classList.add('scene-cutscene');
@@ -136,17 +148,34 @@
      frozen by main.js while a cutscene plays, so this only fires between cutscenes. One-shot per name.
        cfg.introCutscene : 'NAME'                       → play once at mission start (state.time < 4s)
        cfg.reachCutscene : { name, at:{x,y}, radius }   → play once when a player unit reaches the spot
+       cfg.villainCutscene : 'NAME' (+ villainCutsceneRadius) → play once when a player unit gets NEAR the
+           LIVE boss (so the player can SEE him); waits for a deferred boss to surface. Focuses the boss.
      If no named speaker is on the field, the beat is silently skipped (still marked done — no retry loop). */
   function armByName(state, name){
     const lines = (typeof window!=='undefined' && window[name]) || null;
     if(!lines || !lines.length) return;
     let focus=null;
     for(const ln of lines){ if(!ln.speaker) continue; const e=state.entities.find(x=>x.heroId===ln.speaker && !x.dead && !x.storedIn); if(e){ focus=e; break; } }
-    if(focus) window.startFlashCutscene(state, focus, lines);
+    // villain bosses have no heroId — let them narrate their own arrival by focusing the live boss
+    if(!focus) focus=state.entities.find(x=>x.villain && !x.dead && !x.storedIn);
+    if(!focus) return;
+    // CO-OP host: freeze the sim behind the cutscene (running=false → host-clock stops stepping + no
+    // snapshots) and mirror it to the client as a hold-cue so the ally plays the SAME beat, also frozen.
+    // The client finds the speaker by heroId in its synced entities; endFlashCutscene resumes both peers.
+    // Solo plays it locally with no freeze — the main-loop guard already pauses update() while a cutscene runs.
+    if(typeof netRole!=='undefined' && netRole==='host' && typeof cinematic==='function'){
+      running=false;
+      cinematic('mapcut', { linesKey:name, speaker: focus.heroId||null }, function(){
+        window.startFlashCutscene(state, focus, lines);
+        if(state.flashCutscene) state.flashCutscene._coopHold=true;     // mark so endFlashCutscene resumes + sends the resume cue
+      }, { hold:true });
+    } else {
+      window.startFlashCutscene(state, focus, lines);
+    }
   }
   window.mapCutsceneTick=function(state){
     if(!state || state.hub || state.over || state.flashCutscene) return;
-    if(typeof netRole!=='undefined' && netRole!=='solo') return;               // solo-only (co-op keeps toast framing)
+    if(typeof netRole!=='undefined' && netRole==='client') return;             // the client plays map cutscenes only via host cues (it has no authoritative positions)
     if(typeof window!=='undefined' && window._rbReplaying) return;
     const cfg=state.cfg; if(!cfg) return;
     const played = state._csPlayed || (state._csPlayed={});                    // transient one-shot guard (per session)
@@ -159,6 +188,21 @@
         if(e.dead || e.owner!=='player' || e.kind!=='unit') continue;
         const dx=e.x-ax, dy=e.y-ay;
         if(dx*dx+dy*dy<=r2){ played[rc.name]=1; armByName(state, rc.name); return; }
+      }
+    }
+    // VILLAIN ARRIVAL: fire once when a player unit gets NEAR the LIVE boss (so the player can SEE him).
+    // Anchored to the boss ENTITY, not a fixed tile, so it works for an immediate boss AND a deferred one
+    // (it waits until the boss has surfaced). NEVER fires on map load. armByName focuses the live boss.
+    const vc=cfg.villainCutscene;
+    if(vc && !played[vc]){
+      const boss=state.entities.find(e=>e.villain && !e.dead && !e.storedIn);
+      if(boss){
+        const T=(typeof TILE!=='undefined')?TILE:32, rad=((cfg.villainCutsceneRadius||7))*T, r2=rad*rad;
+        for(const e of state.entities){
+          if(e.dead || e.owner!=='player' || e.kind!=='unit') continue;
+          const dx=e.x-boss.x, dy=e.y-boss.y;
+          if(dx*dx+dy*dy<=r2){ played[vc]=1; armByName(state, vc); return; }
+        }
       }
     }
   };

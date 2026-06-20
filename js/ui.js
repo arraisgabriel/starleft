@@ -2409,7 +2409,32 @@ function showCrawl(idx, done){
   else begin(estA);
 }
 
+// CO-OP client end screen: a READ-ONLY mirror of the host's win/loss. The host stays authoritative for
+// every advance (carryover, next Quarter, retry, IPO/NG+), so the client only SEES the outcome + summary
+// and waits — none of the host-only buttons/wiring run on the client. Reached from mpUiClientGameOver
+// (defeat / skirmish / terminal); a normal campaign WIN transitions the client to the H.U.B. instead.
+function clientEndScreen(win){
+  running=false;
+  if(typeof syncPauseBtn==='function') syncPauseBtn();
+  const es=document.getElementById('endScreen'); if(!es) return;
+  es.className='overlay '+(win?'win':'lose'); es.style.display='flex';
+  if(win){
+    if(typeof ACH!=='undefined') ACH.fire('victory', { idx:(typeof mapIndex==='number'?mapIndex:0) });   // client unlocks its own achievement locally
+    es.innerHTML=`<div class="big">📉</div><h1>QUARTER SECURED</h1>
+      <h2>The competition has pivoted to bankruptcy</h2>
+      ${typeof victorySummaryHTML==='function'?victorySummaryHTML():''}
+      <p style="opacity:.8">⏳ Waiting for the host to choose the next move…</p>
+      <div style="display:flex;gap:12px;flex-wrap:wrap;justify-content:center;">
+        <button class="btn" style="background:linear-gradient(180deg,#3a4656,#222b36);" onclick="showRoster()">🕯 Veterans &amp; Memorial</button>
+      </div>`;
+  } else {
+    es.innerHTML=`<div class="big">💸</div><h1>OUT OF RUNWAY</h1>
+      <h2>The board has "decided to go in a different direction"</h2>
+      <p style="opacity:.8">⏳ Waiting for the host to retry or stand down…</p>`;
+  }
+}
 function onVictory(){
+  if(typeof netRole!=='undefined' && netRole==='client' && !(G&&G._pvp)){ clientEndScreen(true); return; }   // duels keep their own synced _pvp screen
   running=false;
   if(typeof TELE!=='undefined') TELE.event('episode_won', { idx: (typeof mapIndex==='number'?mapIndex:0) });
   if(typeof ACH!=='undefined'){ const _m=MAPS[mapIndex]||{};
@@ -2606,6 +2631,7 @@ function buildCarryChooser(listEl, countEl, vets, cap, nextBtn, proceed){
 }
 
 function onDefeat(){
+  if(typeof netRole!=='undefined' && netRole==='client' && !(G&&G._pvp)){ clientEndScreen(false); return; }   // duels keep their own synced _pvp screen
   running=false;
   if(typeof TELE!=='undefined') TELE.event('episode_lost', { idx: (typeof mapIndex==='number'?mapIndex:0) });
   if(typeof syncPauseBtn==='function') syncPauseBtn();
@@ -2619,6 +2645,9 @@ function onDefeat(){
       <button class="btn" style="background:linear-gradient(180deg,#566,#344);" onclick="if(typeof recordLedgerRun==='function')recordLedgerRun('collapse');location.reload()">⟲ Restart Campaign</button>
     </div>`;
   document.getElementById('retryBtn').onclick=()=>{ es.style.display='none';
+    // CO-OP host: re-run the full match-start handshake so the ally is pulled back into the retried Quarter
+    // (loadMap is host-local and would strand the client on its frozen "waiting for the host" screen).
+    if(typeof netRole!=='undefined' && netRole==='host' && typeof mpHostStart==='function'){ mpHostStart(mapIndex, 'campaign'); return; }
     LOADER.beginMission(missionTags(mapIndex));               // usually settled already → instant passthrough
     gateMission(mapIndex, ()=>loadMap(mapIndex)); };
 }

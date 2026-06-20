@@ -17,7 +17,18 @@
 
   // one authoritative step, paced by a REAL-TIME clamped dt (not the rAF loop's dt)
   function hostStep(){
-    if(netRole!=='host' || !G || !running || G.over) return;
+    if(netRole!=='host' || !G || G.over) return;
+    // CO-OP presentation finale (Ep VII): the sim is frozen (running=false) but the cinematic clock must
+    // keep advancing even when this tab is backgrounded (rAF stalled), or the host never reaches the
+    // authoritative hub hand-off and BOTH peers deadlock. The worker is the only off-focus driver; main.js
+    // drives it (and stamps the clock via hostMarkRaf) while we're visible, so exactly one driver runs.
+    if(!running){
+      if(G.cinematic && typeof cinematicTick==='function'){
+        const tc = now(); let dc = (tc - hostLast)/1000; hostLast = tc;
+        if(dc > 0) cinematicTick(G, Math.min(0.1, dc));
+      }
+      return;
+    }
     const t = now();
     let dt = (t - hostLast)/1000; hostLast = t;
     if(dt <= 0) return;
@@ -29,6 +40,10 @@
   // called from the rAF loop while the host window is visible — rAF is the primary driver, and
   // stamping lastRaf keeps the worker dormant (it only steps when rAF has gone stale).
   NET.hostRafStep = function(){ lastRaf = now(); hostStep(); };
+  // called from the rAF loop while FOREGROUND-driving a co-op finale (running=false, so hostRafStep is
+  // skipped): keep the worker dormant (lastRaf fresh) and the cinematic clock (hostLast) primed for a clean
+  // handoff when the tab backgrounds. Never called during normal play, so it can't disturb the sim dt.
+  NET.hostMarkRaf = function(){ lastRaf = hostLast = now(); };
 
   function startWorker(){
     if(worker) return;

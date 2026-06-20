@@ -797,7 +797,10 @@ function addCoopPlayer(state, slot){
   for(let i=0;i<nW;i++) mkUnit(state,'worker','player', origin.x+(i%5), mrow+((i/5)|0));
   mrow += Math.ceil(nW/5);
   for(let i=0;i<nS;i++) mkUnit(state,'soldier','player', origin.x-1+(i%7), mrow+((i/7)|0));
-  // NOTE: deliberately no spawnVets/spawnHeroes/startUnits — those are p1's campaign roster (no clone of Nino).
+  // NOTE: deliberately no spawnVets/spawnHeroes/startUnits for p1 here — those are p1's campaign roster.
+  // CO-OP: the ALLY's carried veterans (set at hub dispatch) DO redeploy here, near the p2 base, tagged
+  // p2 via _defaultCtrl. Host-only matters — the client gets these units via the snapshot.
+  if(typeof spawnVetsP2==='function') spawnVetsP2(state, origin);
   state._defaultCtrl=prev;
 
   for(let y=-8;y<=12;y++)for(let x=-8;x<=11;x++){ const gx=origin.x+x, gy=origin.y+y;   // reveal p2's spread start

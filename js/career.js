@@ -100,6 +100,18 @@ function gainXp(u, killed, state){
   promoteIfReady(u, state);
 }
 
+// Direct lump-sum XP grant (e.g. the squad-wide bonus for downing a villain) — same career gating and
+// promotion path as gainXp, so it levels + mints dossiers + rolls life-events exactly like combat XP.
+// Deterministic sim state (no _rbReplaying guard here — the grant MUST replay; promoteIfReady guards its
+// own cosmetic toast/ACH). Skips workers (non-career) and units mid-breakdown.
+function awardBonusXp(u, amount, state){
+  if(!(amount>0) || u.owner!=='player' || !isCareerUnit(u)) return;
+  if(u.madDog || u.subdued) return;
+  u.xp = (u.xp||0) + amount;
+  if(typeof ensureDossier==='function') ensureDossier(u);
+  promoteIfReady(u, state);
+}
+
 // award career points to a hero medic (Biba) for HP actually restored to allies; promote on thresholds.
 // `baseHealed` is BASE-rate HP credited (caller divides out healMul) so the leveling pace stays flat
 // regardless of how fast she heals — no level→faster-heal→more-XP runaway. Fractional XP carries frames.
@@ -121,6 +133,7 @@ function promoteIfReady(u, state){
   while(s < CAREER.maxStars && u.xp >= CAREER.xpFor(s+1)) s++;
   if(s === old) return;
   u.stars = s; applyVetHp(u, false);
+  if(typeof spawnLevelArrow==='function' && !window._rbReplaying) spawnLevelArrow(state, u);   // cosmetic level-up arrow (skip on rollback re-sim; clients get it via the star-delta in sync.js)
   if(typeof ACH!=='undefined' && !window._rbReplaying) ACH.fire('promote',{stars:s});   // T3-5
   if(state && typeof hubEnsureStats==='function'){ const _hs=hubEnsureStats(state); _hs.promotions=(_hs.promotions||0)+(s-old); }   // run summary (T1-9)
   if(s>=1 && typeof ensureDossier==='function') ensureDossier(u);   // T0-5: identity exists from Lv1 (prose still gates at Lv2)
@@ -188,6 +201,10 @@ function drawStars(u, px, topY){
 
 /* ---- veteran persistence (module global — survives the newMap() rebuild) ---- */
 let carryoverVets = [];
+// CO-OP: the ally's (p2) surviving veterans ride a PARALLEL track so p1/solo carryover stays byte-identical.
+// Set by the host at hub dispatch (setCarryoverP2), consumed only by the HOST's newMap (spawnVetsP2 inside
+// addCoopPlayer); the client receives the redeployed p2 units via the host's snapshot, so it never reads this.
+let carryoverVetsP2 = [];
 // Named heroes persist on their OWN track, separate from the chooser-driven vet carryover: once a
 // hero appears, they auto-deploy to every subsequent map until killed — never selectable, never
 // counted against the vet carry cap. (Reset alongside carryoverVets when a new campaign starts.)
@@ -216,6 +233,27 @@ function eligibleVets(state){
 function setCarryover(units){
   carryoverVets = units.map(e=>({type:e.type, stars:e.stars, xp:e.xp, lore:e.lore,
     madosis:e.madosis||0, sanityThreshold:e.sanityThreshold||0, scarred:!!e.scarred, reborn:!!e.reborn}));
+  if(!units.length) carryoverVetsP2 = [];   // a fresh start (skirmish / NG+ / new campaign) clears the co-op ally track too
+}
+// CO-OP: snapshot the ally's surviving veterans for redeployment at the p2 base next Quarter. Mirror of
+// setCarryover; the host calls it at hub dispatch. The p1 track is untouched.
+function setCarryoverP2(units){
+  carryoverVetsP2 = (units||[]).map(e=>({type:e.type, stars:e.stars, xp:e.xp, lore:e.lore,
+    madosis:e.madosis||0, sanityThreshold:e.sanityThreshold||0, scarred:!!e.scarred, reborn:!!e.reborn}));
+}
+// CO-OP: deploy the ally's carried veterans near the p2 base. Caller (addCoopPlayer) has set
+// state._defaultCtrl='p2', so mkUnit tags them p2-owned. Mirrors spawnVets but takes an explicit origin.
+function spawnVetsP2(state, origin){
+  if(!state || !origin || !carryoverVetsP2.length) return;
+  if(state.cfg && state.cfg.noCarryVets) return;
+  carryoverVetsP2.slice(0, vetCarryCount()).forEach((v,i)=>{
+    const u=mkUnit(state, v.type, 'player', origin.x-3+(i%6), origin.y+8+((i/6)|0));
+    u.stars=v.stars; u.xp=v.xp; if(v.lore) u.lore=v.lore;
+    u.madosis=v.madosis||0; u.sanityThreshold=v.sanityThreshold||0; u.scarred=!!v.scarred;
+    u.reborn=!!v.reborn;
+    if(typeof hubApplyUpgrades==='function') hubApplyUpgrades(u);
+    applyVetHp(u, true);
+  });
 }
 // auto-pick fallback: carry all eligible (spawnVets slices to the count). Player choice uses the
 // victory-screen chooser (ui.js) → setCarryover() instead.

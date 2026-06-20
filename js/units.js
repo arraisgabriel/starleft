@@ -920,8 +920,9 @@ function updateUnit(state,u,dt){
   if(atk){
     // a unit beginning a NEW engagement rallies nearby idle allies to join the fight
     if(u._engagedId!==atk.id){ u._engagedId=atk.id; callToArms(state, atk, u.owner, u); }
-    // effective stats (Auditor gains range/dmg/splash while sieged)
-    let aRange=u.range, aDmg=u.dmg, aSplash=def.splash||0, aSplashR=def.splashR||1.3;
+    // effective stats (Auditor gains range/dmg/splash while sieged). u.splash overrides def.splash so a
+    // villain (base type has none) can splash its BASIC attack too — THE EX-TERMINATOR's every swing is AOE.
+    let aRange=u.range, aDmg=u.dmg, aSplash=(u.splash!=null?u.splash:(def.splash||0)), aSplashR=(u.splashR!=null?u.splashR:(def.splashR||1.3));
     if(def.siege && u.sieged){ const sg=def.siege; aRange=sg.range; aDmg=sg.dmg; aSplash=Math.round(sg.dmg*0.6); aSplashR=sg.splashR; }
     const _m = vetDmgMul(u)*(u.hubDmgMul||1)*(typeof vetBuff==='function'?vetBuff(u,state).dmgMul:1)*(typeof madDmgMul==='function'?madDmgMul(u):1)*(u.bossDmgMul||1); aDmg = Math.round(aDmg*_m); aSplash = Math.round(aSplash*_m);  // career-rank + HUB implant + life-event + madosis + boss-phase damage mods
     const reach = aRange*TILE + entRadius(atk);

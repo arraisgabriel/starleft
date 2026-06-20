@@ -259,10 +259,20 @@ if(typeof window!=='undefined'){
       drawDistantMushroom(cx, gy, dt, S);
     }
   }
+  // The active nuke-cinematic clock (seconds). SOLO drives it from extractFlight (the bomber-approach
+  // extraction); CO-OP drives it from state.cinematic (the shared finale on its own presentation clock,
+  // advanced by cinematicTick OUTSIDE the sim guard so it animates on the non-simulating client too).
+  // Returns -1 when neither is live so the renderer bails. Byte-equivalent to the old `extractFlight.t`
+  // read for solo. Lets one set of draw fns serve both paths unchanged.
+  function nukeClock(state){
+    if(state && state.cinematic && state.cinematic.kind==='nuke') return state.cinematic.t||0;
+    const f=state && state.extractFlight;
+    return f ? (f.t||0) : -1;
+  }
   // both distant nukes, anchored to the panorama horizon (drawn in the pano's CSS-px space, clipped to the image)
   function drawDistantNukes(state){
-    const f=state && state.extractFlight; if(!f) return;
-    const t=f.t||0; if(t < NUKE_T_DISTANT_START) return;
+    const t=nukeClock(state); if(t<0) return;
+    if(t < NUKE_T_DISTANT_START) return;
     if(typeof hubPanoMetrics!=='function') return;
     const fit=hubPanoMetrics(), S=fit.dh*NUKE_DISTANT_SCALE, d=(typeof dpr!=='undefined'?dpr:1);
     ctx.save(); ctx.setTransform(d,0,0,d,0,0);
@@ -276,8 +286,7 @@ if(typeof window!=='undefined'){
   // js/lyrics.js — never stored here). Shown only while the singer is singing: NUKE_T_LYRICS_START..NUKE_DURATION.
   function drawLyricSubtitle(state){
     if(typeof LYRICS==='undefined') return;
-    const f=state && state.extractFlight; if(!f) return;
-    const t=f.t||0;
+    const t=nukeClock(state); if(t<0) return;
     if(!LYRICS.isLoaded()) LYRICS.load((typeof ASSET_BASE!=='undefined'?ASSET_BASE:'assets/')+'scenes/hub/sad_god_lyrics', NUKE_T_LYRICS_START, NUKE_DURATION);
     if(t < NUKE_T_LYRICS_START || t > NUKE_DURATION) return;       // only while the music's vocals play
     const line=LYRICS.lineAt(t); if(!line || !line.text) return;
@@ -300,8 +309,8 @@ if(typeof window!=='undefined'){
   }
 
   function drawNukeFinale(state){
-    const f=state && state.extractFlight; if(!f) return;
-    const t=f.t||0, W=cv.width, H=cv.height, px=(typeof dpr!=='undefined'?dpr:1);
+    const t=nukeClock(state); if(t<0) return;
+    const W=cv.width, H=cv.height, px=(typeof dpr!=='undefined'?dpr:1);
     const cx=W*0.5, groundY=H*0.66;
     ctx.save(); ctx.setTransform(1,0,0,1,0,0);
     if(t < NUKE_T_TITLE_IN){

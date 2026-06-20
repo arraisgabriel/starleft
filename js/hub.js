@@ -175,7 +175,8 @@ function hubSnapUnit(u){
   const key=hubUnitKey(u);
   return { key, type:u.type, stars:u.stars||0, xp:u.xp||0, lore:u.lore||null,
     hero:!!u.hero, heroId:u.heroId||null, spriteType:u.spriteType||null, hp:u.hp, maxHp:u.maxHp,
-    madosis:u.madosis||0, sanityThreshold:u.sanityThreshold||0, scarred:!!u.scarred, reborn:!!u.reborn };
+    madosis:u.madosis||0, sanityThreshold:u.sanityThreshold||0, scarred:!!u.scarred, reborn:!!u.reborn,
+    ctrl:u.ctrl||'p1' };   // CO-OP: remember which co-founder owns this vet (legacy/solo rosters read missing as 'p1')
 }
 function hubBuildRosterFromCombat(state){
   const seen=new Set(), out=[];
@@ -184,7 +185,8 @@ function hubBuildRosterFromCombat(state){
   const requireGarrison = !!(state.extractReady && netRole==='solo');
   for(const u of state.entities){
     if(u.dead || u.owner!=='player' || u.kind!=='unit') continue;
-    if(netRole!=='solo' && (u.ctrl||'p1')!==hubOwnerCtrl()) continue;
+    // CO-OP: keep BOTH co-founders' veterans (the ally's p2 units used to be discarded here). hubSnapUnit
+    // records each unit's ctrl so hubSpawnRoster respawns them p2-owned and they redeploy at the p2 base.
     if(requireGarrison){
       if(!u.storedIn) continue;        // only units garrisoned inside an HQ are extracted
       if((u.stars||0) < 2) continue;   // only Level 2+ veterans carry over to the H.U.B.
@@ -389,6 +391,92 @@ function updateExtraction(state, dt){
     enterHubFromCombat(state);
   }
 }
+
+/* ---- CO-OP Episode VII finale (the "flash") ---------------------------------------------------
+   Co-op skips the interactive garrison + bomber-approach extraction, but BOTH players still get the
+   full nuke set-piece. The host arms it on the Ep VII win (coopCampaignWin) and mirrors it to the client
+   with a hold-cue ('finale' → beginCoopFinale on the client). It runs off a PRESENTATION clock
+   (state.cinematic.t, advanced by cinematicTick OUTSIDE the sim guard) so it animates identically on the
+   non-simulating client. nukeClock() (nuke_finale.js) lets the shared renderer read whichever clock is
+   live (extractFlight for solo, cinematic for co-op). Authoritative side-effects — the roster wipe at
+   detonation and the H.U.B. hand-off at the end — run host-only; the client just animates and is carried
+   into the hub by the host's 'mphub' snapshot. This MIRRORS updateExtraction's phase==='nuke' block
+   above — keep the two in sync if the choreography ever changes. */
+window.beginCoopFinale=function(state){
+  if(!state || (state.cinematic && state.cinematic.kind==='nuke')) return;   // idempotent (e.g. a duplicate cue)
+  state.cinematic={ kind:'nuke', t:0, detonated:false, panoStarted:false, musicStopped:false,
+                    camBaseX:state.camX, camBaseY:state.camY };
+  if(typeof document!=='undefined') document.body.classList.add('scene-flash');
+  if(typeof MUSIC!=='undefined' && MUSIC.playCinematic && typeof MUSIC_FLASH!=='undefined') MUSIC.playCinematic(MUSIC_FLASH);   // cue the bomb-drop track
+  if(typeof LOADER!=='undefined' && typeof missionTagsHub==='function') LOADER.beginMission(missionTagsHub());   // the ~73s cinematic is the hub's download window
+};
+// Generic per-frame cinematic ticker. Called from main.js for ALL roles OUTSIDE the sim guard (like
+// updateFlashCutscene / updateDispatchFlight) so it advances even while running=false on a frozen client.
+window.cinematicTick=function(state, dt){
+  const c=state && state.cinematic; if(!c) return;
+  c.t+=dt;
+  if(c.kind==='nuke') coopNukeStep(state, c, dt);
+};
+// Mirrors updateExtraction's phase==='nuke' block, reading the presentation clock c.t. Detonation + the
+// hub hand-off are host-authoritative; the client only animates (its CAMPAIGN/hub arrive via 'mphub').
+function coopNukeStep(state, c, dt){
+  const T_IMP=(typeof NUKE_T_IMPACT!=='undefined'?NUKE_T_IMPACT:10.0);
+  const T_END=(typeof NUKE_T_ANIM_END!=='undefined'?NUKE_T_ANIM_END:28.0);
+  const T_TITLE=(typeof NUKE_T_TITLE_IN!=='undefined'?NUKE_T_TITLE_IN:10);
+  const _dur=(typeof NUKE_DURATION!=='undefined'?NUKE_DURATION:67.0);
+  const _tail=(typeof NUKE_T_ECHO_TAIL!=='undefined'?NUKE_T_ECHO_TAIL:6.0);
+  const isClient=(typeof netRole!=='undefined' && netRole==='client');
+  if(!c.detonated && c.t>=T_IMP){                  // the bomb hits the crash site
+    c.detonated=true;
+    if(!isClient && typeof epSevenFlashAftermath==='function') epSevenFlashAftermath(state);   // host: memorialize all + clear the roster (the client's CAMPAIGN is host-synced)
+    if(typeof clearToast==='function') clearToast();
+  }
+  // screen-shake (presentation): builds from a tremor at impact to a heavy climax at the white-out
+  let amp=0;
+  if(c.t>=T_IMP && c.t<T_END){ const g=Math.max(0, Math.min(1, (c.t-T_IMP)/(T_END-T_IMP))); amp=42*(0.10+0.90*Math.pow(g,1.3)); }
+  const sx=Math.sin(c.t*20)+0.5*Math.sin(c.t*37+2.0), sy=Math.sin(c.t*17+1.7)+0.5*Math.sin(c.t*31+0.4);
+  state.camX=(c.camBaseX!=null?c.camBaseX:state.camX)+sx*amp;
+  state.camY=(c.camBaseY!=null?c.camBaseY:state.camY)+sy*amp;
+  if(c.t>=T_TITLE){ if(!c.panoStarted){ c.panoStarted=true; if(typeof resetHubPanoDrones==='function') resetHubPanoDrones(); } if(typeof updateHubPanoDrones==='function') updateHubPanoDrones(state, dt); }
+  if(typeof MUSIC!=='undefined' && MUSIC.cinematicEcho && c.t>=_dur-6 && c.t<_dur) MUSIC.cinematicEcho((c.t-(_dur-6))/6);
+  if(!c.musicStopped && c.t>=_dur){ c.musicStopped=true; if(typeof MUSIC!=='undefined' && MUSIC.stopCinematic) MUSIC.stopCinematic(); }
+  // end → hub. Host runs the authoritative hand-off. The CLIENT keeps the cinematic running so the final
+  // STARLEFT-title/panorama frame holds (no flash of the frozen combat view) until the host's 'mphub'
+  // rebuilds G in beginClientHub, which discards the cinematic and drops it into the H.U.B.
+  if(!isClient && c.t >= _dur+_tail && ((typeof LOADER==='undefined') || LOADER.missionReady() || c.t >= _dur+_tail+15)){
+    state.cinematic=null;
+    coopFinaleEnterHub(state);
+  }
+  // CLIENT liveness backstop: the host should deliver the post-finale H.U.B. ('mphub' → beginClientHub, which
+  // discards this cinematic) by ~_dur+_tail. The snapshot watchdog is disarmed during the hold (running=false),
+  // so if the cinematic overruns by a wide margin the host is genuinely gone — recover instead of hanging.
+  else if(isClient && c.t >= _dur+_tail+25 && !c._lost){
+    c._lost=true;
+    if(typeof NET!=='undefined' && typeof NET.onHostLost==='function') NET.onHostLost();
+  }
+}
+// Host: the finale ended → solo-style flash hand-off (build hub, spawn Nino, host monologue), then publish
+// the authoritative hub to the client and unfreeze it. A best-effort 'flash' cue mirrors Nino's monologue
+// (it plays on the client only if Nino has synced in by then — otherwise the client simply lands in the hub).
+function coopFinaleEnterHub(state){
+  if(typeof enterHubFlashAftermath==='function') enterHubFlashAftermath(state);   // G=newHubMap, running=true, Nino monologue (host)
+  if(typeof mpHostEnterHub==='function') mpHostEnterHub();                          // 'mphub' + full snapshot → client builds the same hub (Nino included)
+  if(typeof NET!=='undefined' && NET.cueResume) NET.cueResume();                    // clear the finale hold on the client
+  if(typeof NET!=='undefined' && NET.cueSend) NET.cueSend('flash', { linesKey:'NINO_FLASH_LINES', speaker:'Nino' }, false);
+}
+// Host co-op campaign WIN router: Episode VII plays the shared nuke finale; every other Quarter cuts
+// straight to the H.U.B. (enterHubFromCombat already publishes it to the client via mpHostEnterHub).
+window.coopCampaignWin=function(state){
+  // snapshot co-op only: the shared finale is a presentation cinematic incompatible with lockstep rollback,
+  // so under USE_ROLLBACK Ep VII falls back to the plain hub hand-off (matches the pre-change behavior).
+  if(mapIndex===6 && !window.USE_ROLLBACK && typeof beginCoopFinale==='function'){
+    running=false;                                    // freeze the sim behind the finale (host-clock stops stepping)
+    if(typeof cinematic==='function') cinematic('finale', {}, function(){ beginCoopFinale(state); }, { hold:true });
+    else beginCoopFinale(state);
+    return;
+  }
+  if(typeof enterHubFromCombat==='function') enterHubFromCombat(state);
+};
 function drawExtractionFlight(state){
   const f=state.extractFlight; if(!f || f.phase==='panorama' || f.phase==='nuke') return;   // panorama draws its own bomber; the nuke consumes it
   const u={type:'bomber', owner:'player', x:f.x, y:f.y, air:true, r:16, _face:f.phase==='out'?(f.exitX<f.x?-1:1):(f.hqX<f.x?-1:1)};
@@ -1221,6 +1309,7 @@ function hubSpawnRoster(state){
     if(!home) continue;
     const n=posByCondo[cid] || 0; posByCondo[cid]=n+1;
     const u=mkUnit(state,r.type,'player',home.tx+2+(n%5),home.ty+home.h+1+((n/5)|0));
+    if(r.ctrl && r.ctrl!=='p1') u.ctrl=r.ctrl;   // CO-OP: the ally's veterans stay p2-owned in the hub (and redeploy as p2)
     u.hubKey=r.key; u.stars=r.stars||0; u.xp=r.xp||0; u.lore=r.lore||null;
     u.hero=!!r.hero; u.heroId=r.heroId||null; u.spriteType=r.spriteType||null;
     u.madosis=r.madosis||0; u.sanityThreshold=r.sanityThreshold||0; u.scarred=!!r.scarred;   // sanity persists in the roster
@@ -1419,11 +1508,26 @@ function hubDispatchNextEpisode(){
   // Grounds trainees are exempt — their minds are occupied). Operates on the persistent roster.
   if(typeof madosisRestDecay==='function') madosisRestDecay(new Set(live.map(u=>hubUnitKey(u))));
   setCarryover(vets.slice(0,cap)); captureHeroes({entities:heroes});
+  // CO-OP: the ally can't operate the H.U.B. (it's p1-only), so the host AUTO-carries the ally's surviving
+  // veterans — up to the same cap — so they redeploy at the p2 base next Quarter (spawnVetsP2). Heroes are
+  // captured above (captureHeroes is owner-agnostic); this is the non-hero p2 rank-and-file.
+  if(typeof netRole!=='undefined' && netRole==='host' && typeof setCarryoverP2==='function'){
+    const p2live=(G.entities||[]).filter(u=>u && !u.dead && u.owner==='player' && u.kind==='unit' && (u.ctrl||'p1')==='p2' && !u.hero);
+    setCarryoverP2(p2live.slice(0, cap));
+  }
   CAMPAIGN.mode='combat';
   // gate villains interrupt; past the last episode the FINALE boss is the deployment (T2-7)
   let idx=(typeof hubNextDeployIndex==='function') ? hubNextDeployIndex()
         : Math.max(0, Math.min(CAMPAIGN.nextMapIndex, MAPS.length-1));
   mapIndex=idx;
+  // CO-OP: the host re-runs the full match-start handshake so the ally is pulled out of the H.U.B. into
+  // the SAME Quarter and plays the SAME opening crawl. mpHostStart keeps the carryover/heroes we just set
+  // (campaign mode never resets them) and ships mpstart + the first snapshot. Solo keeps its hub-dispatch
+  // crawl→gate→loadMap path below unchanged.
+  if(typeof netRole!=='undefined' && netRole==='host' && typeof mpHostStart==='function'){
+    mpHostStart(idx, 'campaign');
+    return;
+  }
   hubStartDispatchFlight(G, 0);                 // dur refined by showCrawl once narration length is known
   if(typeof LOADER!=='undefined') LOADER.beginMission(missionTags(idx));   // the dispatch crawl doubles as the download window
   showCrawl(idx, ()=>{ gateMission(idx, ()=>{ endDispatchFlight(G); loadMap(idx); }); });

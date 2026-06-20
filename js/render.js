@@ -472,6 +472,19 @@ function render(state){
   // top of the facility, standing on their shooting-range lanes.
   if(state.hub && typeof drawHubTrainees==='function') drawHubTrainees(state, ox, oy);
   if(state.extractFlight && typeof drawExtractionFlight==='function') drawExtractionFlight(state);
+  // EX-TERMINATOR escape: the A&O (black+green) Buzzword Bomber that airlifts the beaten boss out — drawn over
+  // the frozen cutscene, its world position driven by bossExtractFrame's clock so it stays in sync with the
+  // death lines. Still in world space (camera transform active), so world coords map through camera/zoom.
+  if(state.bossExtract && typeof bossExtractFrame==='function' && typeof unitWalk==='function' && typeof blitFrame==='function'){
+    const f=bossExtractFrame(state);
+    if(f && f.bomberVisible){
+      const anim=unitWalk('bomber','enemy','ao') || unitWalk('bomber','enemy');
+      if(anim && anim.ready){
+        const h=(typeof UNIT_SPRITE_H!=='undefined' && UNIT_SPRITE_H.bomber)||153.6;
+        blitFrame({type:'bomber', _face:f.bomberFace}, f.bomberX, f.bomberY-16, anim, h, (((state.time||0)*8)|0)%anim.frames.length);
+      }
+    }
+  }
 
   // ---- ambient particles: FRONT pass (fireflies/embers/snow/dust/motes) — over the sprites ----
   if(PERF.on) PERF.mark('partFront');
@@ -547,6 +560,9 @@ function render(state){
   // ---- floating damage/heal numbers (T0-4) — additive, above the sprites ----
   drawFloaters(state,ox,oy);
 
+  // ---- level-up promotion arrows (cosmetic) — hop beside the unit's bars on a star gain ----
+  if(typeof drawLevelArrows==='function') drawLevelArrows(state,ox,oy);
+
   // ---- alt-win objective beacon + escort VIP marker (T2-1) — gold, fog-independent (it's YOUR objective) ----
   drawWinObjective(state,ox,oy);
 
@@ -599,7 +615,7 @@ function render(state){
   if(typeof isGamePaused==='function' && isGamePaused()) drawPausedOverlay();
   // Episode VII "flash": full-screen nuke cinematic over the (shaken, dying) world. Manages its own
   // device-space transform; the DOM HUD is hidden by body.scene-flash while this phase plays.
-  if(state.extractFlight && state.extractFlight.phase==='nuke' && typeof drawNukeFinale==='function') drawNukeFinale(state);
+  if(((state.extractFlight && state.extractFlight.phase==='nuke') || (state.cinematic && state.cinematic.kind==='nuke')) && typeof drawNukeFinale==='function') drawNukeFinale(state);
   ctx.setTransform(1,0,0,1,0,0);
   if(PERF.on){ PERF.lap('overlays'); PERF.mark('minimap'); }
 
@@ -1606,7 +1622,7 @@ function _rebornScratch(w,h){
   if(!_rbScratch) _rbScratch=document.createElement('canvas');
   const c=_rbScratch; if(c.width<w) c.width=w; if(c.height<h) c.height=h; return c;
 }
-function drawRebornRim(u, anim, px, pyB, S, fi, t){
+function drawRebornRim(u, anim, px, pyB, S, fi, t, c1, c2){
   if(!anim || !anim.img || !anim.frames || !anim.fh) return;
   const n=anim.frames.length, fr=anim.frames[((fi%n)+n)%n];
   if(!fr) return;
@@ -1629,11 +1645,11 @@ function drawRebornRim(u, anim, px, pyB, S, fi, t){
   ctx.save(); ctx.globalCompositeOperation='lighter';
   // PASS 1 — the steady silver rim (the main, dominant color), faint breath
   const sil=rm?0.5:(0.5+0.5*Math.sin(t*2.0+seed*1.3));
-  tint('#c4d2e6'); ctx.globalAlpha=0.20+0.05*sil; blit();
+  tint(c1||'#c4d2e6'); ctx.globalAlpha=0.20+0.05*sil; blit();
   // PASS 2 — an A&O toxic-green sheen that breathes CONTINUOUSLY over the silver (ebbs and flows). Slower,
   // out-of-phase sine so it reads as organic flow, not a strobe; capped so the silver stays dominant.
   const grn=rm?0.45:(0.5+0.5*Math.sin(t*1.25+seed*0.7));
-  tint('#32e060'); ctx.globalAlpha=0.03+0.15*grn; blit();
+  tint(c2||'#32e060'); ctx.globalAlpha=0.03+0.15*grn; blit();
   ctx.restore(); ctx.globalAlpha=1;
 }
 function drawRebornCore(u, anim, px, pyB, S, fi, t, key){
@@ -1698,6 +1714,7 @@ function drawUnit(state,u,ox,oy){
 
   ctx.save();
   if(u._ninjaHidden){ const _nN=(_vdef&&_vdef.ninja)||{}; ctx.globalAlpha*=(_nN.hideAlpha||0.16); }   // smoke-bomb vanish: dim the whole sprite (+ glow) within this save
+  if(state.bossExtract && u._extracting && typeof bossExtractFrame==='function'){ const _ef=bossExtractFrame(state); if(_ef) ctx.globalAlpha *= (1-_ef.bossFade); }   // EX-TERMINATOR fades out as he boards the bomber (in lockstep with the bomber's hover)
   // selection ring — a ground ellipse under the sprite's FEET, scaled to the sprite (no shadow)
   if(u.selected){
     const fy=py-alt+vh*0.3, rx=vh*0.34, ry=vh*0.14;
@@ -1740,8 +1757,9 @@ function drawUnit(state,u,ox,oy){
     let fi, useAnim, useKey='walk', bScale=1, bShift=0;   // useKey: which strip is drawn (for the reborn optic anchor); bScale/bShift: idle breathing
     if(act){
       useAnim = act; useKey = u._actState; const n=act.frames.length;
-      if(u._actState==='attack'){ const t = state.time-(u._actStamp||0);          // swing windup→strike→recover across the strip
-        fi = t<0.8 ? Math.min(n-1, (t/0.8*n)|0) : 0; }
+      if(u._actState==='attack' || u._actState.indexOf('attack')===0){ const t = state.time-(u._actStamp||0);   // swing windup→strike→recover across the strip ('attack', and EX-TERMINATOR's attack_melee/_pistol/_minigun)
+        const adur = u._actDur || 0.8;                                              // bosses stretch the strip over the FULL ability so the move is legible; normal units keep the 0.8s swing
+        fi = t<adur ? Math.min(n-1, (t/adur*n)|0) : (u._actDur ? n-1 : 0); }        // hold the follow-through frame at the end for a boss; normal units snap back to neutral
       else { fi = ((state.time*7)|0) % n; }                                        // mine / heal loop
     } else {
       // ---- IDLE PATH: walk frame 0 when still, plus render-only "life" layers ----
@@ -1791,6 +1809,7 @@ function drawUnit(state,u,ox,oy){
     // REBORN-CYBORG marker (render-only, body UNTOUCHED): a glowing red silhouette RIM drawn behind
     // the sprite — pixel-exact to the art, identical every frame (no swim), on any unit shape.
     if(u.reborn) drawRebornRim(u, useAnim, px, pyB, S*bScale, fi, state.time||0);
+    else if(u.villain && _vdef && _vdef.cyborgRim) drawRebornRim(u, useAnim, px, pyB, S*bScale, fi, state.time||0, '#3ad070', '#7dffa6');   // GREEN cyborg silhouette rim (EX-TERMINATOR) — render-only FX, body sprite untouched
     const dh = blitFrame(u,px,pyB,useAnim,S*bScale,fi);
     // remember what was just blitted (screen px, valid this frame only) so the post-depth
     // pass can re-draw a faint ghost when a building sprite occludes this unit
@@ -2017,6 +2036,53 @@ function drawFloaters(state, ox, oy){
   }
   ctx.restore(); ctx.globalAlpha=1;
   floaters=floaters.filter(f=>f.t<FLOATER_LIFE);
+}
+
+/* ---- level-up "promotion" arrow (cosmetic): a bold yellow upward arrow that HOPS in a loop
+   beside a unit's HP/stars bars for LVLARROW_LIFE seconds when it gains a career star.
+   Module-local (never on G) → save/rollback/net untouched. Spawned from promoteIfReady() on
+   host/solo (gated !_rbReplaying, js/career.js) and from snapshot star-deltas on co-op clients
+   (js/net/sync.js). Stores the unit id (not a ref) and resolves the live entity each frame, so the
+   arrow tracks the moving unit and self-cleans the instant it leaves G.entities (death/transport). ---- */
+let levelArrows=[];
+const LVLARROW_CAP=12, LVLARROW_LIFE=5;
+function spawnLevelArrow(state, tgt){
+  if(!state || state.hub || !tgt) return;
+  const z=state.zoom||1, m=TILE*2;
+  if(tgt.x<state.camX-m || tgt.x>state.camX+viewW()/z+m ||
+     tgt.y<state.camY-m || tgt.y>state.camY+viewH()/z+m) return;   // off-screen cull (player units are never fogged)
+  for(const a of levelArrows){ if(a.tid===tgt.id){ a.t=0; return; } }  // multi-level / re-promotion replays the ONE arrow
+  if(levelArrows.length>=LVLARROW_CAP) levelArrows.shift();
+  levelArrows.push({tid:tgt.id, t:0});
+}
+function drawLevelArrows(state, ox, oy){
+  if(!levelArrows.length) return;
+  const z=state.zoom||1, s=Math.min(1.6, 1/z);   // counter-scale: a constant comic-size pop (clamped at low zoom)
+  const rm=(typeof megaReducedMotion==='function' && megaReducedMotion());
+  for(const a of levelArrows){
+    a.t+=1/60;
+    if(a.t>=LVLARROW_LIFE) continue;
+    const u=state.entities.find(e=>e.id===a.tid && !e.dead);
+    if(!u || u.hp<=0 || u.storedIn || u.captive){ a.t=LVLARROW_LIFE; continue; }   // drop on death/board/capture
+    const vh=(typeof unitDrawH==='function')?unitDrawH(u):(u.r||10)*2, alt=u.air?16:0;
+    const ax=u.x+ox+Math.max(vh*0.3,16)+6;          // clear the bar (vh*0.6 wide) AND the fixed 28px star row
+    const baseY=u.y+oy-alt-vh*0.72-8;               // bar/stars band; anchor in WORLD units (not counter-scaled)
+    const p=a.t/LVLARROW_LIFE;
+    const fade = p<0.06 ? p/0.06 : (p>0.8 ? (1-p)/0.2 : 1);   // ~0.3s in, hold, ~1s out
+    const hopP=(a.t/0.45)%1, hop=rm?0:(1-(2*hopP-1)*(2*hopP-1))*11*s;   // looping parabolic bounce (~0.45s/jump)
+    ctx.save();
+    ctx.translate(ax, baseY-hop); ctx.scale(s,s);
+    ctx.globalAlpha=Math.max(0,Math.min(1,fade));
+    ctx.beginPath();                                // bold up-arrow: wide head + short shaft
+    ctx.moveTo(0,-9); ctx.lineTo(7,-1); ctx.lineTo(3,-1); ctx.lineTo(3,6);
+    ctx.lineTo(-3,6); ctx.lineTo(-3,-1); ctx.lineTo(-7,-1); ctx.closePath();
+    if(!rm){ ctx.shadowColor='#ffd23f'; ctx.shadowBlur=8; }   // neon bloom (skip when motion is reduced)
+    ctx.fillStyle='#ffd23f'; ctx.fill(); ctx.shadowBlur=0;
+    ctx.lineWidth=1.6; ctx.strokeStyle='#1a1206'; ctx.stroke();   // dark comicbook outline
+    ctx.restore();
+  }
+  ctx.globalAlpha=1;
+  levelArrows=levelArrows.filter(a=>a.t<LVLARROW_LIFE);
 }
 function spawnRing(wx,wy,color){ rings.push({x:wx,y:wy,r:6,max:26,color,t:1}); }
 // ninja smoke-bomb vanish: a DENSE, glowing cyan→blue cloud — layered soft puffs that billow out, rise and

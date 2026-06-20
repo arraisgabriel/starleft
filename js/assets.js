@@ -288,10 +288,15 @@ const UNIT_WALK = {
   rust:walkPair('rust','walk'),
   // VILLAIN BOSSES — bespoke sprites (visual-only via u.spriteType; gameplay stays soldier/founder).
   ninja:walkPair('ninja','walk'),         rex:walkPair('rex','walk'),
+  ex_terminator:walkPair('ex_terminator','walk'),   // recurring nemesis boss (native sheet only — never recolored)
 };
 // drawn sprite HEIGHT per type — ~2× the old values (bigger on screen). Collision
 // radius r / speed / range in DEF are UNCHANGED, so gameplay is unaffected.
-const UNIT_SPRITE_H = { worker:46, soldier:68, ranger:62, recruiter:54, psychologist:54, hustler:56, lobbyist:64, foodtruck:64, auditor:72, founder:92, courier:36, bomber:153.6, biba:60.6, rust:92, ninja:44, rex:92 };
+const UNIT_SPRITE_H = { worker:46, soldier:68, ranger:62, recruiter:54, psychologist:54, hustler:56, lobbyist:64, foodtruck:64, auditor:72, founder:92, courier:36, bomber:153.6, biba:60.6, rust:92, ninja:44, rex:92, ex_terminator:60 };
+// ex_terminator:60 → fight 1 (×bossScale 2.0) draws a body ≈ the FOUNDER MECH's (~91px on screen), and fight 2
+// (×3.2) a bigger ~146px. The uniform 159px-tall frame is only 0.76 body (the rest is transparent headroom for the
+// extended gun/leg), so 60 — not 92 — lands the on-screen body at founder size. One frame box shared by walk + all
+// 3 attack strips (pack_exterminator.py), so the body never size-pops between locomotion and the attacks.
 // rust:92 matches the Founder Mech (he IS a founder chassis); his walk & attack strips share one 308px
 // frame height (slice_rust.py pad_top_to) so the crouched slam doesn't size-pop against the walk.
 // ninja:44 → ×bossScale 2.1 ≈ 92px drawn, the same on-screen size as a Founder Mech (visual only; bossScale/collision r unchanged).
@@ -334,6 +339,10 @@ const UNIT_ACTION = {
   biba:{ heal:walkPair('biba','heal') },               // hero Recruiter — custom heal animation
   rust:{ attack:walkPair('rust','attack') },           // hero Founder Mech — custom foundry-orange slam
   ninja:{ attack:walkPair('ninja','attack') },         rex:{ attack:walkPair('rex','attack') },   // villain bosses
+  // EX-TERMINATOR: three distinct attack strips, one per AOE ability kind (villains.js AOE_KINDS → u._actState)
+  ex_terminator:{ attack_melee:walkPair('ex_terminator','attack_melee'),
+                  attack_pistol:walkPair('ex_terminator','attack_pistol'),
+                  attack_minigun:walkPair('ex_terminator','attack_minigun') },
 };
 function actionAnim(type,action,owner,faction){ const t=UNIT_ACTION[type]; const a=t&&t[action]; if(!a) return null;
   const x=(faction && a[faction] && a[faction].ready) ? a[faction] : a[factionKey(owner)]; return (x&&x.ready)?x:null; }

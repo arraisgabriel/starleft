@@ -17,7 +17,8 @@ function gestureBegin(e){
   // selection/commands reach the world until it finishes.
   if(G.flashCutscene){ e.preventDefault(); if(typeof advanceFlashCutscene==='function') advanceFlashCutscene(); return; }
   // Ep VII "flash" cinematic (bomb drop → mushroom → white → STARLEFT logo → panorama): no interaction.
-  if(G.extractFlight && G.extractFlight.phase==='nuke'){ e.preventDefault(); return; }
+  // (solo drives it via extractFlight; co-op via the shared cinematic clock — swallow taps in both.)
+  if((G.extractFlight && G.extractFlight.phase==='nuke') || (G.cinematic && G.cinematic.kind==='nuke')){ e.preventDefault(); return; }
   if(typeof isGamePaused==='function' && isGamePaused()){
     e.preventDefault();
     return;
@@ -457,6 +458,8 @@ function loop(now){
       }
     }
     updateCamera(G,dt);
+    if(typeof cinematicTick==='function') cinematicTick(G,dt);                // co-op Episode VII nuke finale on its own presentation clock — advances for ALL roles even while running=false (frozen client)
+    if(typeof netRole!=='undefined' && netRole==='host' && !running && G.cinematic && typeof NET!=='undefined' && NET.hostMarkRaf) NET.hostMarkRaf();   // we're foreground-driving the finale → keep the off-focus worker dormant (else it double-steps the cinematic)
     if(typeof updateFlashCutscene==='function') updateFlashCutscene(G,dt);   // mandatory scripted dialog (camera ease + line advance); no-op unless G.flashCutscene
     if(typeof updateHubDrones==='function') updateHubDrones(G,dt);   // decorative HUB drones — netRole-agnostic, gated on state.hub internally
     if(typeof HUBNPC!=='undefined') HUBNPC.update(G,dt);             // living-city NPCs (clock/cursors/lazy legs) — cosmetic, gated on state.hub internally

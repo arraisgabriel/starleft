@@ -174,11 +174,12 @@ window.NET = window.NET || {};
               e.ftx=o.ftx; e.fty=o.fty; e.r=o.r; e.dead=false; return; }
     // T0-4 client path: floating numbers derive from snapshot hp-deltas (the client never runs damage()).
     // Known entity only (first sighting has no delta); constructing buildings "heal" as they raise → skip.
-    const _oldHp = e.hp;
+    const _oldHp = e.hp, _oldStars = e.stars||0;
     if(_oldHp!=null && Number.isFinite(_oldHp) && o.hp!=null && typeof spawnFloater==='function' && o.k!=='echo'){
       const dHp = o.hp - _oldHp;
       if(dHp <= -1) spawnFloater(G, e, -dHp, o.hp<=0?'crit':'dmg');
-      else if(dHp >= 1 && o.k==='unit') spawnFloater(G, e, dHp, 'heal');
+      // a level-up's applyVetHp bumps maxHp→hp; that's a promotion, not a heal — don't paint a green +N over the arrow
+      else if(dHp >= 1 && o.k==='unit' && (o.st||0) <= _oldStars) spawnFloater(G, e, dHp, 'heal');
     }
     const d=DEF[o.t]||{};
     e.type=o.t; e.owner=o.o; e.kind=o.k; e.ctrl=o.c; e.hp=o.hp; e.maxHp=o.mh; e.dead=false;
@@ -204,6 +205,7 @@ window.NET = window.NET || {};
       if(o.ast!=null){ if(o.ast!==e._lastAst){ e._actStamp=(G.time||0)-(snapTime-o.ast); e._lastAst=o.ast; } }
       else e._lastAst=null;
       e.carrying=o.cr||0; e.stars=o.st||0; e.spriteType=o.sp||null;
+      if((o.st||0) > _oldStars && typeof spawnLevelArrow==='function') spawnLevelArrow(G, e);   // client derives the level-up arrow from the star-delta (never runs promoteIfReady)
       e.hero=!!o.h; e.sieged=!!o.sg; e.captive=!!o.cap; e.sprinting=!!o.spr; e._vip=!!o.vip;
       if(o.si!=null) e.storedIn=o.si; else delete e.storedIn;
       e._tgtId = o.tg!=null ? o.tg : null;

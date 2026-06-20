@@ -1360,6 +1360,38 @@ const REX_PRELUDE_LINES = [
 ];
 if(typeof window!=='undefined') window.REX_PRELUDE_LINES = REX_PRELUDE_LINES;
 
+/* ---- THE EX-TERMINATOR — appearance + death cutscenes for his two encounters (same shape as
+   EP11_ALTAR_LINES; text-only, ids reserved for a later TTS pass). speaker 'ExTerminator' matches no
+   hero, so armByName falls back to focusing the live boss (arrival) and tryBossDeathCutscene frames a
+   live player unit (death). Both deaths CLOSE on "I'll be back". FIRST fight (3.5) keeps A&O/Tusk hidden;
+   SECOND (XVI) reveals him as Tusk's enforcer. ---- */
+const EXTERM_ARRIVAL_1 = [
+  { id:'exterm_arr1_00', speaker:'ExTerminator', text:"Don't reach for a name. I don't carry one — and you won't live long enough to misremember it." },
+  { id:'exterm_arr1_01', speaker:'ExTerminator', text:"I read your whole operation on the walk over. Forty seconds. Nothing in it ends me. Everything in it ends." },
+  { id:'exterm_arr1_02', speaker:'ExTerminator', text:"You built an army. That's adorable. I'm the part of the day where it stops mattering." },
+];
+if(typeof window!=='undefined') window.EXTERM_ARRIVAL_1 = EXTERM_ARRIVAL_1;
+
+const EXTERM_DEATH_1 = [
+  { id:'exterm_dth1_00', speaker:'ExTerminator', text:"...Unexpected. Recalculating." },
+  { id:'exterm_dth1_01', speaker:'ExTerminator', text:"You didn't win. You bought a quarter — and time was never on your side. I'll be back." },
+];
+if(typeof window!=='undefined') window.EXTERM_DEATH_1 = EXTERM_DEATH_1;
+
+const EXTERM_ARRIVAL_2 = [
+  { id:'exterm_arr2_00', speaker:'ExTerminator', text:"You remember me. Good — Mr. Tusk finds introductions tedious." },
+  { id:'exterm_arr2_01', speaker:'ExTerminator', text:"I said postponed, not pardoned. Same machine. Just more of it." },
+  { id:'exterm_arr2_02', speaker:'ExTerminator', text:"Rust. You traded a pension for these people. I'm the invoice — with interest." },
+];
+if(typeof window!=='undefined') window.EXTERM_ARRIVAL_2 = EXTERM_ARRIVAL_2;
+
+const EXTERM_DEATH_2 = [
+  { id:'exterm_dth2_00', speaker:'ExTerminator', text:"Twice. Statistically interesting. Strategically irrelevant." },
+  { id:'exterm_dth2_01', speaker:'ExTerminator', text:"Tusk doesn't run out of me, and the contract doesn't expire." },
+  { id:'exterm_dth2_02', speaker:'ExTerminator', text:"Scrap this chassis — the next one's already warm. I'll be back." },
+];
+if(typeof window!=='undefined') window.EXTERM_DEATH_2 = EXTERM_DEATH_2;
+
 /* ---- Event-triggered hero banter (story-polish §5.3): a watching hero reacts to a battlefield
    event. Cosmetic + local, throttled per kind in dialogs.js sayHeroEvent(). Voice key <hero>_<kind>.
      grief — a veteran fell while a hero was on the field (lore.js recordFallen)

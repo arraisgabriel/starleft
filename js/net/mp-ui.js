@@ -148,6 +148,12 @@
       if(typeof onVictory==='function' && won){ G._skirmish=true; onVictory(); return; }   // skirmish-style cleared screen
       if(typeof onDefeat==='function' && !won){ onDefeat(); return; }
     }
+    // Campaign/skirmish: mirror the host's outcome (the host syncs _outcome via the snapshot scalars).
+    // onVictory/onDefeat render a READ-ONLY screen for a client (see their netRole==='client' guard). A
+    // normal campaign WIN never lands here — the host transitions BOTH peers to the H.U.B. via 'mphub'
+    // instead of ending the match — so in practice this is the defeat / skirmish / terminal-screen path.
+    if(G && G._outcome==='lose' && typeof onDefeat==='function'){ onDefeat(); return; }
+    if(G && G._outcome==='win'  && typeof onVictory==='function'){ onVictory(); return; }
     toast('Match over');
   };
 

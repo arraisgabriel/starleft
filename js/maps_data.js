@@ -1158,12 +1158,19 @@ Weaponize your buzzwords, circle back, and disrupt MegaCorp into bankruptcy. The
     crawl:{ episode:'EPISODE XVI', title:'THE SEVERANCE PACKAGE',
       text:'They expensed Rust the quarter he turned fifty and kept his face for the brochure. Now A&O wants the chassis back.\n\nA recovery division rolls in with the paperwork pre-signed — and Rust, reading his own file off their network, goes quiet at one line. The founder who signed his layoff has not aged in a render since the year he supposedly died.\n\nDefend your new asset. Raze the division. And start asking what Dell Tusk actually is....',
       summary:`A&O sends a whole recovery division to repossess its "depreciated asset" — and pulling his own file off their network, Rust finds the thread that unravels everything: the founder who signed his layoff hasn't aged in a marketing render since the year he supposedly died. Defend Rust, raze the division, and start asking what Tusk really is.` },
-    objective:'A&O\'s recovery division has come for Rust — raze all FIVE of its repossession bases and keep PEDRO "RUST" alive.',
+    objective:'A&O\'s recovery division has come for Rust — raze all FIVE of its repossession bases, then put down the enforcer they send to finish the job. Keep PEDRO "RUST" alive.',
     quests:[
       { id:'raze',   text:'Raze all five A&O repossession bases',            type:'razeAll', required:true },
+      { id:'duel',   text:'Destroy THE EX-TERMINATOR',                       type:'defeatVillain', required:true },
       { id:'defend', text:'No hero falls — Rust walks out of this one',      type:'heroesAlive', reward:150 },
       { id:'lean',   text:'Keep losses under 18',                            type:'maxUnitsLost', count:17, reward:100 },
     ],
+    // Climax boss: once the five bases fall (after:'raze'), Tusk's enforcer surfaces at the central yard as
+    // the bigger, fuller-kit return of THE EX-TERMINATOR (now with the flyer-shredding minigun rake). The
+    // defeatVillain win-gate (villainCheckWinLose) takes over from razeAll. villainCutscene plays his
+    // arrival the moment he spawns; his death cutscene (EXTERM_DEATH_2) closes on "I'll be back".
+    villain:{ id:'ex_terminator_mk2', x:84, y:46, after:'raze' },
+    villainCutscene:'EXTERM_ARRIVAL_2',
     w:108, h:88, seed:16016,
     player:{ x:10, y:78 },
     terrain:{ biomes:['tech'], temp:{ axis:'diag', base:0.28, gradient:0.14, noise:0.14 }, seaFrac:0.10, mtnFrac:0.08, forest:0 },
@@ -1187,5 +1194,33 @@ Weaponize your buzzwords, circle back, and disrupt MegaCorp into bankruptcy. The
     goldNodes:[ {x:6,y:80,amt:3200},{x:12,y:84,amt:3000},{x:8,y:72,amt:2600},{x:20,y:80,amt:2200},
                 {x:52,y:46,amt:3400},{x:38,y:38,amt:2800},{x:72,y:40,amt:2800},{x:92,y:54,amt:2400},
                 {x:100,y:14,amt:1900},{x:58,y:6,amt:1900},{x:100,y:82,amt:1900},{x:56,y:84,amt:1900} ],
+  },
+  {
+    // EX-TERMINATOR INTERLUDE #1 — APPENDED (isVillain → exempt from linear numbering & crawl-index keying,
+    // so NOTHING after Ep III shifts). gateAfter:2 (Ep III) / returnTo:3 (Ep IV) route it: villainGateBefore
+    // keys on returnTo===3, so finishing Ep III detours here, and the win resumes the linear track at Ep IV.
+    // A MYSTERIOUS lone-machine duel — no A&O banner, no Tusk, no GRAAL: just a nameless contractor who
+    // appears, hunts, and (for now) dies promising to return. Native sprite, NEVER recolored.
+    name:'THE CONTRACTOR',
+    isVillain:true, gateAfter:2, returnTo:3, displayEp:'3.5',
+    enemyName:'???',
+    aggression:1.0, startGold:600, startWorkers:4, startSoldiers:4, startBarracks:true,
+    graceTime:9999, waveTimer:9999,              // boss duel — no enemy waves; the machine IS the encounter
+    crawl:{ episode:'EPISODE 3.5', title:'THE CONTRACTOR',
+      text:'Three campuses fell to you this quarter, and someone took notice.\n\nNo logo rode in with it. No press release, no warband — just one figure that walked through your perimeter like the fence was a suggestion, and a single line on an intercept your analysts can\'t source: contract opened, asset flagged, closure authorized. The asset is you.\n\nIt does not negotiate and it does not stop. Pin the thing down on open ground and put it in the dirt — before it finishes the job it was paid for....',
+      summary:`Your wins drew a contract. No faction claims it — just one machine that walked through your perimeter like it wasn't there, hunting you on someone else's invoice. It doesn't negotiate and it doesn't stop. Corner it and put it down before it closes the contract.` },
+    objective:'A nameless killing machine has been contracted to end you. There is no base to raze — only the machine. Pin down THE EX-TERMINATOR and destroy it.',
+    quests:[
+      { id:'duel',  text:'Destroy THE EX-TERMINATOR',                type:'defeatVillain', required:true },
+      { id:'hold',  text:'Survive the contract — keep losses under 8', type:'maxUnitsLost', count:7, reward:75 },
+    ],
+    w:38, h:30, seed:30530,
+    player:{ x:6, y:24 },
+    terrain:{ biomes:['tech'], seaFrac:0.04, mtnFrac:0.06, forest:0 },
+    enemies:[],                                  // boss duel — no enemy bases
+    villain:{ id:'ex_terminator', x:30, y:7 },
+    villainCutscene:'EXTERM_ARRIVAL_1',          // his nameless arrival — fires when a unit gets NEAR him (not on map load)
+    lakes:[], rockClusters:[ {x:16,y:11,n:8}, {x:24,y:20,n:6} ], forests:[],
+    goldNodes:[ {x:6,y:26,amt:1500}, {x:4,y:20,amt:1300}, {x:11,y:27,amt:1300} ],
   },
 ];

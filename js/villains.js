@@ -38,7 +38,7 @@ const VILLAINS = {
     spriteType:'ninja',        // bespoke cyborg-ninja sprite (assets/units/ninja); gameplay still soldier via base
     spriteFaction:'player',    // render the CYAN player variant (not enemy-red) so the body's own cyan lights match the glow
     neonId:'ninja', neonColor:'#50e6ff', auraColor:[80,230,255], bossScale:2.1,   // own neon map; ao_enforcer keeps 'cyanNinja'
-    hp:7000, dmg:8, range:1.8, cd:0.42, speed:4.6, sight:11,    // dmg LOW: he strikes in fast flurries (combo), so each cut is weak — a leveled tank must survive a long duel
+    hp:7000, dmg:8, range:1.8, cd:0.42, speed:4.6, sight:11, killXp:180,    // dmg LOW: he strikes in fast flurries (combo), so each cut is weak — a leveled tank must survive a long duel
     dmgReduce:0.35, hpVpiScale:1/60, dmgVpiScale:1/240,   // ≈ 10.8k effective HP at VPI 0; gentler dmg scaling so a veteran (high-VPI) roster isn't melted
     aiKind:'ninja',            // bespoke hit-and-run AI (updateNinja) fully owns movement+combat; updateUnit yields for it
     ninja:{
@@ -80,7 +80,7 @@ const VILLAINS = {
     name:'THE A&O NINJA',
     base:'soldier', spriteType:'ninja', spriteFaction:'ao',    // force the black+green _ao sheet (aoSide / _vdef.spriteFaction, render.js)
     neonId:'ninja_ao', neonColor:'#4aee60', auraColor:[74,238,96], bossScale:1.9,   // A&O toxic-green aura (works without a neon map)
-    hp:3600, dmg:8, range:1.8, cd:0.42, speed:4.6, sight:11,    // mini-boss: ~half the cyan ninja's 7000
+    hp:3600, dmg:8, range:1.8, cd:0.42, speed:4.6, sight:11, killXp:300,    // mini-boss: ~half the cyan ninja's 7000
     dmgReduce:0.30, hpVpiScale:1/90, dmgVpiScale:1/240,         // gentler HP scaling than the full duel ninja
     aiKind:'ninja',
     ninja:{
@@ -105,7 +105,7 @@ const VILLAINS = {
     name:'THE A&O ENFORCER',
     base:'soldier', spriteType:'soldier',
     neonId:'cyanNinja', neonColor:'#7bff5b', auraColor:[120,255,110], bossScale:1.9,   // A&O toxic-green hunter
-    hp:4200, dmg:38, range:1.8, cd:0.5, speed:4.2, sight:11,
+    hp:4200, dmg:38, range:1.8, cd:0.5, speed:4.2, sight:11, killXp:240,
     dmgReduce:0.28, hpVpiScale:1/70, dmgVpiScale:1/160,
     aiKind:'ninja',
     ninja:{ dashSpeed:13, hopLen:2.1, hopGap:0.8, lungeRange:2.4, strikeWindup:0.45, exposeMul:0.45,
@@ -123,7 +123,7 @@ const VILLAINS = {
     name:'THE DARK TOWER GUARDIAN',
     base:'founder', ao:true,
     neonId:'rex', neonColor:'#b05bff', auraColor:[176,91,255], bossScale:2.6,   // violet lattice-warden
-    hp:9000, dmg:55, range:3.6, cd:1.4, speed:1.4, sight:10,
+    hp:9000, dmg:55, range:3.6, cd:1.4, speed:1.4, sight:10, killXp:460,
     dmgReduce:0.25, hpVpiScale:1/75, dmgVpiScale:1/170,
     abilities:[
       {k:'stomp', cd:11, range:5.5, dmg:48, waveR:3.0, jumpDur:0.65, capFrac:0.45},
@@ -143,7 +143,7 @@ const VILLAINS = {
     spriteType:'rex',          // bespoke alien A&O mech sprite (assets/units/rex/*_ao); gameplay still founder via base
     spriteFaction:'ao',        // always render the A&O toxic-green variant (robust even if a map omits enemyFaction:'ao')
     neonId:'rexBoss', neonColor:'#7bff5b', auraColor:[120,255,90], bossScale:4.0,   // own neon map; tower_guardian keeps 'rex'
-    hp:18000, dmg:80, range:4.0, cd:1.3, speed:1.5, sight:10,
+    hp:18000, dmg:80, range:4.0, cd:1.3, speed:1.5, sight:10, killXp:700,   // finale boss — the biggest payout
     dmgReduce:0.28, hpVpiScale:1/80, dmgVpiScale:1/160,   // ≈ 25k effective HP at VPI 0 — the finale superboss
     // two telegraphed AREA specials (updateMech). capFrac caps EACH blast to a % of a unit's maxHp,
     // so neither move can ever one-shot — they chunk clumped units and force the player to spread out.
@@ -168,7 +168,7 @@ const VILLAINS = {
     name:'PEDRO "RUST"',
     base:'founder', ao:true,
     neonId:'rust', neonColor:'#ff8c3c', auraColor:[255,140,60], bossScale:2.6,   // foundry orange
-    hp:9000, dmg:60, range:3.6, cd:1.3, speed:1.4, sight:10,
+    hp:9000, dmg:60, range:3.6, cd:1.3, speed:1.4, sight:10, killXp:380,
     dmgReduce:0.24, hpVpiScale:1/78, dmgVpiScale:1/168,
     abilities:[
       {k:'stomp', cd:12, range:6.0, dmg:52, waveR:3.2, jumpDur:0.7, capFrac:0.45},
@@ -180,6 +180,68 @@ const VILLAINS = {
       phase:['Fine. Off the clock now.', 'You want overtime? You\'ve got it.'],
       stomp:['Foreclosure on three.', 'Mind the footprint.'],
       death:['Depreciated asset, huh… we\'ll see.'],
+    },
+  },
+  // THE EX-TERMINATOR — A&O's recurring nemesis machine (Dell Tusk's right hand). FIRST fight (the
+  // appended "3.5" interlude after Ep III): a mysterious lone killer. Native dark sprite, NEVER recolored
+  // (spriteFaction:'player' forces the base sheet over the enemy-red/_ao paths). base:'soldier' gives a
+  // chasing melee chassis; the two AOE specials below are his signature. Egoic, certain — units are a chore.
+  ex_terminator: {
+    name:'THE EX-TERMINATOR',
+    base:'soldier', spriteType:'ex_terminator', spriteFaction:'player',   // render the native sheet — never recolored
+    neonId:null, neonColor:'#3cff7a', auraColor:[50,210,110], bossScale:2.0, cyborgRim:true,   // GREEN cyborg rim + aura (render-only FX overlay; body sprite stays native/untouched)
+    fleeExtract:true,                                        // DEFEATED → airlifted out by an A&O bomber (escape cinematic), not killed — "I'll be back"
+    // FIRST fight = a SKILL CHECK, never a hard gate. A 12-Lobbyist (range 7.5) + 5-Recruiter team that
+    // KITES + heals must endure: lighter HP, thin armor, lower damage, and — crucially — speed BELOW the
+    // boss's old sprint so the snipers can actually keep their distance (was 3.4 > lobbyist 2.2). The Ep XVI
+    // mk2 stays tough; only this opening encounter is softened.
+    hp:5200, dmg:17, range:1.9, cd:1.0, speed:2, sight:12, killXp:120,   // squad-wide bonus XP on kill (lowest — the first boss)   // speed 2 < Lobbyist 2.2 → the snipers can fully kite him; soldier-tier basic dmg
+    dmgReduce:0.16, hpVpiScale:1/95, dmgVpiScale:1/210,      // thin armor + gentle career-scaling so a leveled roster isn't walled
+    splashFrac:0.5, splashR:1.9,                             // his BASIC swing still splashes, but softer (~50%)
+    // windup/recover are LONG on purpose: the render plays the 10-frame attack strip across the whole
+    // (windup+recover) window, so ~1.3-1.5s per move = a readable ~7fps telegraph, not a 0.8s blur.
+    abilities:[
+      { k:'melee_aoe',  cd:6.0, range:2.3, dmg:26, splashR:2.5, capFrac:0.20, windup:0.45, recover:0.85 },   // ~1.3s — nearby units all take a (capped) hit
+      { k:'pistol_aoe', cd:8.0, range:8,   dmg:22, splashR:1.9, capFrac:0.18, windup:0.55, recover:0.90 },   // ~1.45s — splash at the target
+    ],
+    phases:[ {at:0.45, dmgMul:1.28, cdMul:0.8, speedMul:1.10, tint:[90,255,140]} ],   // a gentler enrage, later — stays GREEN (brighter), never red
+    flee:false,
+    taunts:{
+      intro:['You won\'t live long enough to misremember my name.', 'Your army is the part of the day where it stops mattering.'],
+      phase:['Recalculating. Conclusion unchanged.', 'Now I stop being polite about it.'],
+      melee:['Stand closer. It\'s faster for both of us.', 'Hands are cheaper than ammunition.'],
+      pistol:['One each. I itemize.', 'Hold still — you\'re ruining my average.'],
+      death:['You bought a quarter. I\'ll be back.'],
+    },
+  },
+  // SECOND fight (the climax of Ep XVI, deferred after the A&O bases fall): same machine, BIGGER frame
+  // (bossScale 3.2) and a bigger kit — adds the minigun rake that hits FLYERS too (antiAir on the basic
+  // shot as well). Now revealed as Tusk's enforcer. Reuses the same native sprite set; only scale differs.
+  ex_terminator_mk2: {
+    name:'THE EX-TERMINATOR',
+    base:'soldier', spriteType:'ex_terminator', spriteFaction:'player',
+    neonId:null, neonColor:'#3cff7a', auraColor:[50,210,110], bossScale:3.2, cyborgRim:true,   // GREEN cyborg rim + aura; visibly larger second encounter
+    fleeExtract:true,                                        // also escapes by A&O bomber (drop this line to make the XVI climax a definitive kill)
+    hp:16000, dmg:48, range:2.0, cd:0.65, speed:3.2, sight:12, killXp:560,
+    dmgReduce:0.32, hpVpiScale:1/76, dmgVpiScale:1/165,     // basic/melee/pistol stay GROUND-only; only the minigun rake hits flyers (per spec)
+    splashFrac:0.7, splashR:2.2,                            // basic swing is area damage too (bigger radius than fight 1)
+    // minigun FIRST: the ability dispatch fires the first ready+in-range ability and breaks, so the
+    // rarest/biggest move must lead or the short-cooldown melee/pistol would starve it. Result: a big
+    // minigun rake roughly every 12s, with melee (adjacent) / pistol (mid-range) filling the gaps.
+    abilities:[
+      { k:'minigun_aoe', cd:12,  range:9.5, dmg:30, splashR:3.0, capFrac:0.34, windup:0.80, recover:1.10, sweep:3 },   // ~1.9s heavy rake, HITS FLYERS
+      { k:'melee_aoe',   cd:4.5, range:2.6, dmg:48, splashR:2.8, capFrac:0.32, windup:0.45, recover:0.85 },            // ~1.3s
+      { k:'pistol_aoe',  cd:6.5, range:8.5, dmg:40, splashR:2.0, capFrac:0.28, windup:0.55, recover:0.90 },            // ~1.45s
+    ],
+    phases:[ {at:0.50, dmgMul:1.55, cdMul:0.65, speedMul:1.2, tint:[90,255,140]} ],   // enrage stays GREEN, never red
+    flee:false,
+    taunts:{
+      intro:['Postponed, not pardoned. Same machine — more of it.', 'Mr. Tusk sends his compliments. I send the rest.'],
+      phase:['Escalation authorized. Enjoy.', 'You\'ve cost me forty seconds. A new record.'],
+      melee:['Closer. I do my best work in your personal space.', 'Sit down.'],
+      pistol:['Three rounds, three obituaries.', 'I never reload in vain.'],
+      minigun:['Open the sky. Nothing up there is exempt.', 'EVERYTHING in range. Itemized.'],
+      death:['Scrap the chassis — the next one\'s already warm. I\'ll be back.'],
     },
   },
 };
@@ -217,6 +279,8 @@ function villainDeferredSpawn(state){
       }
       const def=VILLAINS[v.id];
       if(typeof toast==='function') toast('🥷 '+((def&&def.name)||'A contractor')+' has surfaced — find and finish him.');
+      // (the arrival cutscene is NOT fired here — cfg.villainCutscene plays via mapCutsceneTick once a player
+      //  unit gets near the now-surfaced boss, so it only triggers when the player can actually see him.)
     }
     break;                                                             // one deferred villain per map
   }
@@ -255,12 +319,13 @@ function spawnVillainEntry(state, v){
     u.maxHp = u.hp = Math.round(def.hp * (1 + vpi*(def.hpVpiScale||0)));
     u.dmg   = Math.round(def.dmg * (1 + vpi*(def.dmgVpiScale||0)));
     if(def.dmgReduce>0) u.dmgReduce = def.dmgReduce;          // flat incoming-damage mitigation (damage(), units.js)
+    if(def.splashFrac){ u.splash=Math.max(1, Math.round(u.dmg*def.splashFrac)); u.splashR=def.splashR||1.8; }   // basic attack splashes too (units.js u.splash override) → an AOE bruiser, not a single-target meleer; tracks the VPI-scaled dmg
     u.range=def.range; u.speed=def.speed; u.sight=def.sight;
     u._bossCd=def.cd; u.cd=0; u.bossDmgMul=1;
     u.r = Math.round((DEF[def.base].r||12) * def.bossScale * 0.6);   // collision grows sub-linearly (pathing stays sane)
     u._abilCd={};                                            // {blink:0, slam:0}
     if(def.aiKind==='ninja'){ u._ninjaAI=true; u._ninjaState='approach'; u._zig=1; u._exposeMul=(def.ninja&&def.ninja.exposeMul)||0.4; }   // hand ninja-AI villains (THE SEVERANCIER et al.) to updateNinja
-    if((def.abilities||[]).some(a=>a.k==='missile'||a.k==='stomp')){ u._mech=true; u._mechImpacts=[]; }   // Rex: multi-tick area specials (updateMech)
+    if((def.abilities||[]).some(a=>a.k==='missile'||a.k==='stomp'||AOE_KINDS[a.k])){ u._mech=true; u._mechImpacts=[]; }   // Rex / EX-TERMINATOR: multi-tick area specials (updateMech)
     state._villainSpawned=true;
     if(!window._rbReplaying) bossTaunt(state, u, 'intro');
   }
@@ -338,6 +403,8 @@ function updateVillain(state, u, dt){
       if(d <= a.range*TILE){ startMissile(state, u, a, tgt, def); break; }   // begin a 3-missile barrage
     } else if(a.k==='stomp'){
       if(d <= a.range*TILE){ startStomp(state, u, a, def); break; }          // begin the thruster jump-stomp
+    } else if(AOE_KINDS[a.k]){
+      if(d <= a.range*TILE){ startAoe(state, u, a, tgt, def); break; }       // EX-TERMINATOR: melee/pistol/minigun area burst
     }
   }
 }
@@ -352,9 +419,10 @@ function updateVillain(state, u, dt){
 // AREA damage with distance falloff and a hard per-unit cap (the "never one-shot / never wipe" rule).
 // Optional volleyId: a unit can be hit at most once per volley, so the 3 missiles of one barrage spread
 // across the cluster instead of stacking ≥2 blasts on the same body (keeps a single volley ≤ capFrac).
-function bossAreaDamage(state, src, cx, cy, R, dmg, capFrac, volleyId){
+function bossAreaDamage(state, src, cx, cy, R, dmg, capFrac, volleyId, hitAir){
   for(const o of state.entities){
     if(o.dead||o.storedIn||o.owner!=='player'||o.kind!=='unit') continue;
+    if(hitAir===false && o.air) continue;               // ground-only blasts (melee/pistol); minigun/missile pass true/omit → flyers included
     if(volleyId!=null && o._volleyHit===volleyId) continue;
     const dd=Math.hypot(o.x-cx, o.y-cy);
     if(dd>R) continue;
@@ -415,6 +483,7 @@ function stepMech(state, u, dt, def){
   u._mechT = (u._mechT||0)+dt;
   if(u._mechAct==='missile') stepMissile(state, u, dt, def);
   else if(u._mechAct==='stomp') stepStomp(state, u, dt, def);
+  else if(AOE_KINDS[u._mechAct]) stepAoe(state, u, dt, def);
   else u._mechAct=null;
 }
 
@@ -497,6 +566,54 @@ function stepStomp(state, u, dt, def){
   }
   // RECOVER — a brief rooted opening, then hand back to normal combat
   if(u._mechT>=tRec){ u._mechAct=null; u._mechAirborne=false; u._stomp=null; u._stompPhase=0; }
+}
+
+/* =====================================================================
+   THE EX-TERMINATOR — three telegraphed AREA attacks built on the same u._mechAct
+   sub-state machine as Rex's specials, but each resolves its damage in ONE burst at
+   the apex (no projectile flight) so it reads as a melee shockwave / a pistol splash /
+   a minigun rake. The boss is ROOTED for the move (u._mechAirborne → updateUnit yields,
+   units.js) and each distinct attack drives its own action sprite (u._actState). The
+   capFrac in bossAreaDamage still guarantees no single burst one-shots a unit.
+     melee_aoe   — self-centred ring, GROUND only (fists/kick clear everything adjacent)
+     pistol_aoe  — splash at the target, GROUND only
+     minigun_aoe — wide multi-centre rake at the target that ALSO hits FLYERS (mk2 only)
+   ===================================================================== */
+const AOE_KINDS = {
+  melee_aoe:   { act:'attack_melee',   self:true,  air:false, taunt:'melee'   },
+  pistol_aoe:  { act:'attack_pistol',  self:false, air:false, taunt:'pistol'  },
+  minigun_aoe: { act:'attack_minigun', self:false, air:true,  taunt:'minigun' },
+};
+function startAoe(state, u, a, tgt, def){
+  const K=AOE_KINDS[a.k];
+  u._mechAct=a.k; u._mechT=0; u._mechAirborne=true; u.vx=0; u.vy=0;     // root: updateUnit yields while this runs
+  u._abilCastT=state.time; u._actStamp=state.time; u._actState=K.act; u._abilCd[a.k]=a.cd;
+  u._actDur=(a.windup||0.28)+(a.recover||0.30);                        // render stretches the attack strip over the FULL move so it's legible (not a 0.8s blur)
+  u._aoe={ a, K, tx:K.self?u.x:tgt.x, ty:K.self?u.y:tgt.y, fired:false };
+  if(!window._rbReplaying) bossTaunt(state, u, K.taunt);
+}
+function stepAoe(state, u, dt, def){
+  const v=u._aoe; if(!v){ u._mechAct=null; u._mechAirborne=false; u._actDur=0; return; }
+  const a=v.a, K=v.K; u._actState=K.act;
+  if(K.self){ v.tx=u.x; v.ty=u.y; } else { u._face=(v.tx<u.x)?-1:1; }
+  const wind=a.windup||0.28, rec=a.recover||0.30;
+  if(u._mechT < wind) return;                                          // rooted telegraph (the player's punish window)
+  if(!v.fired){
+    v.fired=true;
+    const R=(a.splashR||2.2)*TILE, dmg=Math.round((a.dmg||30)*(u.bossDmgMul||1)), cap=a.capFrac||0.30;
+    const sweep=Math.max(1, a.sweep||1), vid=state.time;
+    for(let i=0;i<sweep;i++){
+      const jx = sweep>1 ? (i-(sweep-1)/2)*TILE*1.4 : 0;               // rake the minigun across the cluster
+      bossAreaDamage(state, u, v.tx+jx, v.ty, R, dmg, cap, vid, K.air);
+    }
+    if(!window._rbReplaying){
+      if(typeof spawnShockwave==='function') spawnShockwave(v.tx, v.ty, R);
+      if(typeof spawnExplosion==='function') spawnExplosion(v.tx, v.ty);
+      if(typeof spawnDust==='function' && K.self) spawnDust(u.x, u.y);
+    }
+    state._shake = Math.max(state._shake||0, K.air?13:7);
+  }
+  if(u._mechT >= wind+rec){ u._mechAct=null; u._aoe=null; u._mechAirborne=false; u._actStamp=state.time; u._actDur=0; }
 }
 
 /* =====================================================================
@@ -830,6 +947,8 @@ function villainCheckWinLose(state){
   if(!state._villainSpawned) return true;                     // not spawned yet → never auto-win
   const aliveBoss = state.entities.some(e=>e.villain && !e.dead && !e.escaped);
   if(!aliveBoss){
+    // (EX-TERMINATOR death cutscene is gated earlier, at the top of checkWinLose — it fires for quest AND
+    // villain maps before any victory routes, then the natural re-check after it closes lands here.)
     if(state._villainEscaped) bossOutcome(state, 'fled');     // ninja slipped the net — partial win, still gates
     else bossOutcome(state, 'win');                           // boss(es) killed
     return true;
@@ -860,8 +979,100 @@ function bossOutcome(state, kind){
   }
   if(state._skirmish){ state.over=true; state._outcome='win'; if(!window.USE_ROLLBACK && typeof onVictory==='function') onVictory(); return; }   // T3-2
   if(netRole==='solo' && typeof beginExtractionPhase==='function'){ beginExtractionPhase(state); return; }
-  if(netRole==='host' && typeof window!=='undefined' && window.MP_SESSION && MP_SESSION.mode==='campaign' && typeof enterHubFromCombat==='function'){ enterHubFromCombat(state); return; }
+  if(netRole==='host' && typeof window!=='undefined' && window.MP_SESSION && MP_SESSION.mode==='campaign' && typeof coopCampaignWin==='function'){ coopCampaignWin(state); return; }   // Ep VII → finale; else → H.U.B.
   state.over=true; state._outcome='win'; if(!window.USE_ROLLBACK && typeof onVictory==='function') onVictory();
+}
+
+// EX-TERMINATOR death cutscene: with the boss down, play his death lines (ending on "I'll be back")
+// BEFORE routing the win — startFlashCutscene's onEnd resumes bossOutcome('win') once the lines close, so
+// the sim stays frozen on the cutscene meanwhile (main.js). Solo only (co-op keeps the toast flow); one-shot
+// via _bossDeathCsDone. Returns true when it takes over the win this tick.
+function tryBossDeathCutscene(state){
+  if(window._rbReplaying) return false;
+  if(typeof netRole!=='undefined' && netRole!=='solo') return false;
+  if(typeof startFlashCutscene!=='function') return false;
+  const vl=state.cfg && state.cfg.villain;
+  const vids=(Array.isArray(vl)?vl:(vl?[vl]:[])).map(v=>v&&v.id);
+  let name=null;
+  if(vids.includes('ex_terminator')) name='EXTERM_DEATH_1';
+  else if(vids.includes('ex_terminator_mk2')) name='EXTERM_DEATH_2';
+  if(!name) return false;
+  const lines=(typeof window!=='undefined') && window[name];
+  if(!lines || !lines.length) return false;
+  // the dead boss can't be framed — focus a LIVE player unit (prefer a hero, e.g. Rust on Ep XVI)
+  const focus = state.entities.find(e=>e.owner==='player'&&!e.dead&&e.kind==='unit'&&e.hero)
+             || state.entities.find(e=>e.owner==='player'&&!e.dead&&e.kind==='unit')
+             || state.entities.find(e=>e.owner==='player'&&!e.dead);
+  if(!focus) return false;
+  state._bossDeathCsDone=true;
+  startFlashCutscene(state, focus, lines);   // victory routes on the natural checkWinLose re-check after the cutscene closes
+  return true;
+}
+
+// EX-TERMINATOR FLEE: instead of dying, the beaten boss is AIRLIFTED OUT by an A&O Buzzword Bomber while his
+// death lines ("I'll be back") play. He stays on-field (alive + untargetable) so the cutscene can frame the
+// extraction; on the cutscene's close he's marked escaped → the defeatVillain quest reads done → a normal
+// (fled) WIN that advances the campaign. The bomber + his board-fade are presentation-only (bossExtractFrame,
+// read by render.js off the cutscene clock). Solo plays the full cinematic; co-op / rollback finalize at once.
+function beginBossExtract(state, boss){
+  if(!boss || boss._extracting) return;
+  boss._extracting=true; boss._untargetable=true; boss.guard=true;
+  boss.hp=Math.max(1, boss.hp);                                   // stay alive (not <=0) so the cleanup loop won't re-kill him
+  boss.autoTarget=null; boss.cmd=null; boss.vx=0; boss.vy=0; boss.path=null;
+  boss._mechAct=null; boss._mechAirborne=false; boss._aoe=null;   // cancel any in-progress special
+  if(typeof awardVillainKillXp==='function') awardVillainKillXp(state, boss);   // the player DEFEATED him → pay the win XP now (the normal kill path is skipped)
+  state._bossDeathCsDone=true;                                    // the death-cutscene gate must not also fire
+  const name = (boss.villainId==='ex_terminator_mk2') ? 'EXTERM_DEATH_2' : 'EXTERM_DEATH_1';
+  const lines = (typeof window!=='undefined') && window[name];
+  const solo = (typeof netRole==='undefined' || netRole==='solo') && !window._rbReplaying;
+  if(solo && lines && lines.length && typeof startFlashCutscene==='function'){
+    const fromRight = boss.x < state.W*TILE*0.5;                  // enter from whichever side crosses the framed boss
+    state.bossExtract = { id:boss.id, ex:boss.x, ey:boss.y, fromRight };
+    startFlashCutscene(state, boss, lines, ()=>finalizeBossExtract(state, boss));   // focus the LIVE boss; onEnd finalizes the escape
+  } else {
+    if(typeof toast==='function' && !window._rbReplaying) toast('🛩️ THE EX-TERMINATOR is airlifted out by an A&O bomber — "I\'ll be back."');
+    finalizeBossExtract(state, boss);
+  }
+}
+function finalizeBossExtract(state, boss){
+  if(!boss) return;
+  boss.escaped=true; boss.dead=true; boss._extracting=false;     // mirrors the ninja-flee end state
+  state._villainEscaped=true; state.bossExtract=null;            // checkWinLose → defeatVillain done (escaped) → WIN
+}
+// Presentation frame for the extraction (read by render.js): the A&O bomber's world position + facing and the
+// boss's board-fade, all computed from the cutscene clock so the bomber and his vanish stay locked to the lines.
+function bossExtractFrame(state){
+  const bx=state.bossExtract; if(!bx) return null;
+  const cs=state.flashCutscene, t=cs?(cs.t||0):0, TS=TILE, ex=bx.ex, ey=bx.ey;
+  const T_IN=2.6, T_BOARD=4.6, T_OUT=7.2;
+  const hoverX=ex, hoverY=ey-TS*2.3, face=bx.fromRight?-1:1;
+  const offIn = bx.fromRight ? ex+TS*15 : ex-TS*15;
+  const offOut= bx.fromRight ? ex-TS*17 : ex+TS*17;
+  const ease=(p)=> p<=0?0 : p>=1?1 : p*p*(3-2*p);
+  let X,Y,vis=true,fade=0;
+  if(t<T_IN){ const p=ease(t/T_IN);          X=offIn+(hoverX-offIn)*p; Y=(ey-TS*8)+(hoverY-(ey-TS*8))*p; }       // swoop in
+  else if(t<T_BOARD){                         X=hoverX; Y=hoverY; fade=(t-T_IN)/(T_BOARD-T_IN); }                  // hover — he boards (fades)
+  else if(t<T_OUT){ const p=ease((t-T_BOARD)/(T_OUT-T_BOARD)); X=hoverX+(offOut-hoverX)*p; Y=hoverY+((ey-TS*10)-hoverY)*p; fade=1; }   // lift off + exit
+  else {                                       X=offOut; Y=ey-TS*10; fade=1; vis=false; }                          // gone
+  return { bomberX:X, bomberY:Y, bomberFace:face, bomberVisible:vis, bossFade: fade<0?0:(fade>1?1:fade) };
+}
+
+// SQUAD-WIDE BONUS XP for KILLING a villain (any villain). Every SURVIVING player career unit (combat
+// veterans + healers) gets def.killXp — a big lump that levels the survivors, so beating a boss visibly
+// makes veterans. Escalates per villain along the campaign (tougher/later boss → more XP). Fired from the
+// core.js cleanup the tick the boss reaches 0 HP — a FLED ninja (escaped, hp>0) is skipped, so only a real
+// KILL pays out. XP is deterministic sim state (replays); only the toast is cosmetic-guarded.
+function awardVillainKillXp(state, dead){
+  const def = dead && VILLAINS[dead.villainId]; if(!def) return;
+  const amt = def.killXp||0; if(!(amt>0) || typeof awardBonusXp!=='function') return;
+  let n=0;
+  for(const o of state.entities){
+    if(o.dead || o.storedIn || o.owner!=='player' || o.kind!=='unit') continue;
+    const before=o.xp||0;
+    awardBonusXp(o, amt, state);                       // no-ops on workers / non-hero healers (no career)
+    if((o.xp||0) > before) n++;                        // count only units that actually leveled-eligible gained
+  }
+  if(n && typeof toast==='function' && !window._rbReplaying) toast('🎖️ '+def.name+' DOWN — your '+n+' veterans each earn '+amt+' XP.');
 }
 
 // player-loss conditions only — the boss-map analogue of checkWinLose's lose checks, with NO
@@ -944,7 +1155,8 @@ if(typeof window!=='undefined'){
   window.VILLAINS=VILLAINS; window.spawnVillain=spawnVillain; window.villainDeferredSpawn=villainDeferredSpawn; window.villainSnapOpen=villainSnapOpen; window.updateVillain=updateVillain; window.updateNinja=updateNinja; window.ninjaUnstick=ninjaUnstick; window.startNinjaEscape=startNinjaEscape;
   window.mechUpkeep=mechUpkeep; window.stepMech=stepMech; window.bossAreaDamage=bossAreaDamage;
   window.bossTaunt=bossTaunt; window.nearestMapEdge=nearestMapEdge;
-  window.villainCheckWinLose=villainCheckWinLose; window.bossOutcome=bossOutcome; window.bossDefeatChecks=bossDefeatChecks;
+  window.villainCheckWinLose=villainCheckWinLose; window.bossOutcome=bossOutcome; window.bossDefeatChecks=bossDefeatChecks; window.awardVillainKillXp=awardVillainKillXp;
+  window.beginBossExtract=beginBossExtract; window.finalizeBossExtract=finalizeBossExtract; window.bossExtractFrame=bossExtractFrame;
   window.villainIsCleared=villainIsCleared; window.markVillainCleared=markVillainCleared;
   window.villainNextLinear=villainNextLinear; window.villainGateBefore=villainGateBefore; window.lastEpisodeIndex=lastEpisodeIndex;
   window.finaleVillainIndex=finaleVillainIndex; window.hubNextDeployIndex=hubNextDeployIndex;

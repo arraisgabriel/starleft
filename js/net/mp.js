@@ -21,6 +21,7 @@
     NET.peerCtrl={}; NET.ctrlPeer={};
     S.role='solo'; S.code=null; S.started=false; S.peerId=null; S.joiner=null; S.host=null; S._gone=false;
     S.mpCampaignId=null; S._resumed=false; S._peerVer=null; S._awaitResume=false; S._pendingSaveMeta=null;
+    S._cueSeq=0; S._cueHold=false; S._lastHoldCue=null; NET._cueApplied=-1; NET._cueHold=false;   // presentation-cue state (transient)
   }
   window.mpResetToSolo = resetToSolo;
 
@@ -58,6 +59,10 @@
         NET.mpLog && NET.mpLog('ok','ally reconnected '+String(peerId).slice(0,6)+'… → p2 (resyncing)');
         MP.send('mphello', { profile:S.me, youCtrl:'p2', mode:S.mode, mapIndex:S.mapIndex, mpCampaignId:S.mpCampaignId, ver:(typeof SAVE_VERSION!=='undefined'?SAVE_VERSION:0) }, peerId);
         if(NET.sendFull) NET.sendFull(peerId);                  // resync the rejoined client to current state
+        // a rejoiner that kept its overlay must never be left frozen behind a cutscene that already ended:
+        // if no hold-cue is outstanding, send a resume (no-op if it wasn't frozen). A live hold is handled by
+        // the eventual cueResume — re-arming it here would double-play on a transient rejoin.
+        if(!S._cueHold){ const _rs=S._cueSeq=(S._cueSeq||0)+1; try{ MP.send('mpcue',{seq:_rs,type:'resume',data:{},hold:false},peerId);}catch(_){} }
         ui('Peers'); toast('Ally reconnected');
         return;
       }
@@ -100,8 +105,8 @@
       LOADER.beginMission(missionTags(S.mapIndex));
       gateMission(S.mapIndex, null, { passive:true });
     }
-    running = true;
     if(window.USE_ROLLBACK){
+      running = true;
       // symmetric rollback: build the session over Trystero, create the rollback room, broadcast 'rbstart' so
       // the joiner joins it (the library StateSyncs our authoritative G into the guest). No host clock / no snapshots.
       NET.mpLog && NET.mpLog('info','USE_ROLLBACK on — starting rollback co-op (host), map '+S.mapIndex);
@@ -114,23 +119,99 @@
       toast('Rollback co-op started — Quarter '+(S.mapIndex+1));
       return;
     }
-    if(typeof startHostClock==='function') startHostClock();   // keep the host simulating + broadcasting off-focus
-    // tell the joiner to build the same map, then ship the authoritative dynamic state
-    NET.mpLog && NET.mpLog('info','starting host-authoritative co-op — map '+S.mapIndex+', sending mpstart + full snapshot');
-    MP.send('mpstart', { mapIndex:S.mapIndex, mode:S.mode, duelSeed:S.duelSeed, mpCampaignId:S.mpCampaignId });
-    NET.tick = 0; NET._sAcc = 0; NET._kAcc = 0;
-    NET._baseline = new Map(); NET._lastEcoStr = null; NET._lastQuestStr = null; NET._sinceSend = 0;   // reset Phase 4 delta baseline / eco + quest signatures for the new map
-    NET.sendFull(S.peerId);
+    // A co-op campaign plays the opening crawl on BOTH peers before the sim starts. The joiner gets a
+    // `crawl` flag in mpstart so it shows the same crawl in parallel (see beginClientMatch).
+    const coopCrawl = (S.mode==='campaign' && MAPS[S.mapIndex] && MAPS[S.mapIndex].crawl && typeof showCrawl==='function');
+    // tell the joiner to build the same map (and, for a campaign, play the crawl)
+    MP.send('mpstart', { mapIndex:S.mapIndex, mode:S.mode, duelSeed:S.duelSeed, mpCampaignId:S.mpCampaignId, crawl:!!coopCrawl });
+    // Begin the authoritative sim + ship the first snapshot. DEFERRED behind the crawl for a campaign so
+    // neither base is attacked while the story plays (both peers stay running=false, no snapshots flow);
+    // when the host's crawl finishes/skips, the match goes live for both.
+    const startMatch = ()=>{
+      running = true;
+      if(typeof startHostClock==='function') startHostClock();   // keep the host simulating + broadcasting off-focus
+      NET.tick = 0; NET._sAcc = 0; NET._kAcc = 0;
+      NET._baseline = new Map(); NET._lastEcoStr = null; NET._lastQuestStr = null; NET._sinceSend = 0;   // reset Phase 4 delta baseline / eco + quest signatures for the new map
+      NET.mpLog && NET.mpLog('info','co-op sim live — map '+S.mapIndex+', shipping full snapshot');
+      NET.sendFull(S.peerId);
+      toast('Co-op match started — Quarter '+(S.mapIndex+1));
+    };
     ui('EnterGame');
-    toast('Co-op match started — Quarter '+(S.mapIndex+1));
+    if(coopCrawl){
+      running = false;                                  // freeze the host through the crawl (no sim, no snapshots yet)
+      // a crawl that throws in its DOM prologue must STILL start the match (else the host hard-locks at
+      // running=false and the waiting client never gets a snapshot). startMatch is the only path live.
+      try{ showCrawl(S.mapIndex, startMatch); }          // crawl → on finish/skip: sim live + first snapshot for both
+      catch(_){ startMatch(); }
+    } else {
+      startMatch();
+    }
   }
   window.mpHostCreate = mpHostCreate;
   window.mpHostStart = mpHostStart;
 
   window.mpHostSetPaused = function(paused){
     if(S.role!=='host' || !S.peerId) return false;
+    if(S._cueHold) return false;                       // a cutscene already owns the freeze — ignore the manual pause toggle
     try{ MP.send('mppause', { paused:!!paused }, S.peerId); }catch(_){}
     return true;
+  };
+
+  /* ---------------- presentation cues (host→client, one-shot, reliable) ----------------
+     A cutscene/overlay the host plays is mirrored to the client with a seq-stamped 'mpcue'. The
+     monotonic seq makes it EXACTLY-ONCE (a resend/reconnect never replays a one-shot screen). A
+     hold-cue freezes BOTH sides (running=false) until the host's matching 'resume' cue — the client
+     can never resume combat on its own. Nothing here is serialized; the next authoritative snapshot
+     re-syncs state regardless, so a missed/duplicated cue can never desync the sim. Modelled on the
+     mppause precedent (one MP.send on the host, one MP.on handler on the client). */
+  NET.cueSend = function(type, data, hold){
+    if(S.role!=='host' || !S.peerId) return false;
+    const seq = S._cueSeq = (S._cueSeq||0)+1;
+    if(hold){ S._cueHold = true; S._lastHoldCue = { type:type, data:data||{} }; }
+    try{ MP.send('mpcue', { seq:seq, type:type, data:data||{}, hold:!!hold }, S.peerId); }catch(_){}
+    return true;
+  };
+  // Host: end an outstanding hold-cue → tell the client to unfreeze. Idempotent.
+  NET.cueResume = function(){
+    if(S.role!=='host'){ S._cueHold=false; S._lastHoldCue=null; return; }
+    if(!S._cueHold) return;
+    S._cueHold=false; S._lastHoldCue=null;
+    if(!S.peerId) return;
+    const seq = S._cueSeq = (S._cueSeq||0)+1;
+    try{ MP.send('mpcue', { seq:seq, type:'resume', data:{}, hold:false }, S.peerId); }catch(_){}
+  };
+  // Client: dispatch a received cue. De-dupes by seq; applies a hold-freeze; routes to the local
+  // presentation fn. Entity-dependent cues null-guard G (a cue that races ahead of the map is dropped —
+  // the cutscene is cosmetic, and the authoritative snapshot re-syncs state anyway).
+  NET.playCue = function(cue){
+    if(!cue || cue.seq==null) return;
+    if(NET._cueApplied==null) NET._cueApplied = -1;
+    if(cue.seq <= NET._cueApplied) return;             // idempotent: duplicate / reconnect resend
+    NET._cueApplied = cue.seq;
+    const d = cue.data || {};
+    if(cue.hold){ NET._cueHold = true; running = false; if(typeof resetInputState==='function') resetInputState(); }
+    switch(cue.type){
+      case 'mapcut':
+      case 'flash': {
+        const lines = (d.linesKey && typeof window!=='undefined' && window[d.linesKey]) || null;
+        if(lines && lines.length && typeof startFlashCutscene==='function' && G && G.entities){
+          let sp = d.speaker ? G.entities.find(x=>x.heroId===d.speaker && !x.dead && !x.storedIn) : null;
+          if(!sp) sp = G.entities.find(x=>x.villain && !x.dead && !x.storedIn);
+          if(sp) startFlashCutscene(G, sp, lines);     // updateFlashCutscene (main.js, outside the sim guard) advances it even while frozen
+        }
+        break;
+      }
+      case 'finale': {
+        if(typeof beginCoopFinale==='function') beginCoopFinale(G);   // Phase 2: arm the nuke finale on the client clock
+        break;
+      }
+      case 'resume': {
+        NET._cueHold = false;
+        if(G && !G.over){ running = true; if(NET.resetWatchdog) NET.resetWatchdog(); }
+        if(typeof syncPauseBtn==='function') syncPauseBtn();
+        break;
+      }
+    }
   };
 
   /* ---------------- JOIN ---------------- */
@@ -154,6 +235,7 @@
     MP.on('rbstart', (msg)=> beginClientRollback(msg));   // rollback co-op join
     MP.on('mphub', (msg)=> beginClientHub(msg));
     MP.on('mppause', (msg)=> applyHostPause(!!(msg && msg.paused)));
+    MP.on('mpcue', (cue)=> NET.playCue(cue));         // host→client cutscene/overlay cue (seq-deduped)
     // ── co-op save distribution (host→client). SINGLE-SERIALIZER: clients PERSIST the host's exact bytes;
     //    they never serialize their own G. mpsave = mid-match mirror copy; mpresume = full resume blob (also
     //    deserialized into G when resuming — see beginClientMatch's resume branch). ──
@@ -179,8 +261,13 @@
     NET.onReconnected = ()=>{ NET.mpLog && NET.mpLog('ok','reconnected to host'); ui('Reconnected'); };
     NET.onFullApplied = ()=>{
       clearTimer('_syncTimer');
+      if(NET._cueHold) return;     // a held cutscene/finale owns the freeze — a reconnect resync must NOT un-freeze it (the host's resume cue does)
       if(running) return;          // one-shot: only the FIRST full "drops you in" — never re-centre/re-toast later
       running = true;
+      // a co-op campaign opening crawl may still be on screen — close it cleanly (stops narration + timers)
+      const _csk=(typeof document!=='undefined')?document.getElementById('crawl-skip'):null;
+      const _scr=(typeof document!=='undefined')?document.getElementById('crawlScreen'):null;
+      if(_scr && _scr.style.display && _scr.style.display!=='none' && _csk){ try{ _csk.click(); }catch(_){} }
       if(G && G.hub){
         if(typeof clampCam==='function') clampCam(G);
         if(typeof refreshUI==='function') refreshUI();
@@ -267,6 +354,7 @@
     netRole='client'; pendingPlayers=2; mapIndex=idx;
     G = newMap(idx);                                 // regenerate identical terrain + pads (deterministic)
     if(S.mode==='duel') G._pvp=true;
+    NET._cueHold=false;                               // a fresh Quarter clears any stale finale/cutscene hold
     running = false;                                  // hold until the host's full snapshot lands
     NET._lastAppliedTick = -1;                        // fresh out-of-order baseline for the new match
     if(NET.resetWatchdog) NET.resetWatchdog();        // start the host-liveness clock fresh for this match
@@ -281,6 +369,13 @@
       LOADER.beginMission(missionTags(idx));
       gateMission(idx, null, { passive:true, until:()=>running });
     }
+    // co-op campaign: play the same opening crawl the host is playing (it overlays the gate). Both peers
+    // stay frozen (running=false) until the host finishes its crawl and ships the first snapshot, which
+    // dismisses this crawl and drops us in (NET.onFullApplied). `done` is a no-op — the host drives the
+    // transition. Guard on !running so a snapshot that already raced in (flushPendingFull) wins.
+    if(msg && msg.crawl && !running && typeof showCrawl==='function' && MAPS[idx] && MAPS[idx].crawl){
+      try{ showCrawl(idx, function(){}); }catch(_){}
+    }
   }
   function beginClientHub(msg){
     S.started=true; S.mode=(msg&&msg.mode)||S.mode; S.mapIndex=(msg&&msg.mapIndex)|0;
@@ -288,6 +383,10 @@
     if(msg && msg.mpCampaignId) S.mpCampaignId=msg.mpCampaignId;
     if(msg && msg.campaign && typeof deserializeHubCampaign==='function') deserializeHubCampaign(msg.campaign);
     G = newHubMap();
+    // the client may still carry the Ep VII finale's full-screen classes (it played the cinematic but never
+    // ran the host-only enterHubFlashAftermath that clears them) — strip them so the H.U.B. HUD is visible.
+    if(typeof document!=='undefined'){ document.body.classList.remove('scene-flash'); document.body.classList.remove('scene-hubload'); }
+    NET._cueHold=false;   // arriving at the hub IS the end of any finale hold → let onFullApplied finalize the drop-in normally (a transient reconnect never routes here, so it stays frozen)
     running = false;
     NET._lastAppliedTick = -1;
     if(NET.resetWatchdog) NET.resetWatchdog();

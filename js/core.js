@@ -137,6 +137,15 @@ function update(state, dt){
   for(const e of state.entities){
     if(e.dead) continue;
     if(e.hp<=0 && e.type!=='goldmine'){
+      // EX-TERMINATOR FLEE: a villain flagged fleeExtract does NOT die when beaten — an A&O bomber airlifts
+      // him out (escape cinematic, "I'll be back"). beginBossExtract keeps him alive + pays the win XP + plays
+      // the cutscene; its close marks him escaped → a (fled) WIN. Skip the normal death/removal path entirely.
+      if(e.villain && e.owner==='enemy' && !e._extracting && typeof VILLAINS!=='undefined' && VILLAINS[e.villainId] && VILLAINS[e.villainId].fleeExtract && typeof beginBossExtract==='function'){
+        beginBossExtract(state, e); changed=true; continue;
+      }
+      // VILLAIN DOWN: the tick a boss reaches 0 HP (a real KILL — a fled ninja set e.dead with hp>0 and was
+      // skipped at the top of this loop), award the squad-wide bonus XP to every surviving career unit BEFORE removal.
+      if(e.villain && e.owner==='enemy' && typeof awardVillainKillXp==='function') awardVillainKillXp(state, e);
       // Biba can't die: a downed hero medic falls back to the nearest HQ for end-of-mission extraction
       // instead of dying — so this runs BEFORE the obituary/fallen side-effects below.
       if(e.kind==='unit' && e.owner==='player' && typeof isHealerVet==='function' && isHealerVet(e)){ downHeroToHq(state,e); changed=true; continue; }
@@ -257,6 +266,15 @@ function checkWinLose(state){
   if(state._sandboxNoEnd) return;   // sandbox test tool: freeze win/loss while staging a battle (localhost only; flag set only by js/sandbox.js)
   if(state.hub) return;
   if(state.extractReady) return;
+  // ---- BOSS DEATH CUTSCENE (EX-TERMINATOR): the instant the boss is gone, play his death lines (ending
+  // "I'll be back") BEFORE any victory path (quest OR villain) declares the win. The sim freezes on the
+  // cutscene (main.js), and the natural re-check after it closes declares victory normally. One-shot via
+  // _bossDeathCsDone; solo only. Must precede the quests branch below (which returns and would skip this).
+  if(state.cfg && state.cfg.villain && state._villainSpawned && !state._bossDeathCsDone
+     && typeof tryBossDeathCutscene==='function'
+     && !state.entities.some(e=>e.villain && !e.dead && !e.escaped)){
+    if(tryBossDeathCutscene(state)) return;
+  }
   // ---- QUEST MAPS: cfg.quests declares the objectives; victory = all required quests done
   // (or a winsAlone quest). Defeat = a required quest failed (escort VIP dead / protected
   // building razed) or the standard no-HQ/no-force checks. Maps WITHOUT cfg.quests fall
@@ -302,8 +320,8 @@ function checkWinLose(state){
   if(!enemyBuildings){
     if(state._skirmish){ state.over=true; state._outcome='win'; if(!window.USE_ROLLBACK) onVictory(); return; }   // T3-2: skirmish ends here, no extraction/hub
     if(netRole==='solo' && typeof beginExtractionPhase==='function'){ beginExtractionPhase(state); return; }
-    if(netRole==='host' && typeof window!=='undefined' && window.MP_SESSION && MP_SESSION.mode==='campaign' && typeof enterHubFromCombat==='function'){
-      enterHubFromCombat(state); return;
+    if(netRole==='host' && typeof window!=='undefined' && window.MP_SESSION && MP_SESSION.mode==='campaign' && typeof coopCampaignWin==='function'){
+      coopCampaignWin(state); return;   // Ep VII → shared nuke finale; every other Quarter → H.U.B. (both published via mphub)
     }
     state.over=true; state._outcome='win'; if(!window.USE_ROLLBACK) onVictory(); return;   // rollback: `over`/`_outcome` are serialized predicate; the loop fires the screen on the confirmed tick
   }
@@ -342,8 +360,8 @@ function winTargetPx(wc){
 function altWinTriggered(state){
   if(state._skirmish){ state.over=true; state._outcome='win'; if(!window.USE_ROLLBACK) onVictory(); return; }   // T3-2
   if(netRole==='solo' && typeof beginExtractionPhase==='function'){ beginExtractionPhase(state); return; }
-  if(netRole==='host' && typeof window!=='undefined' && window.MP_SESSION && MP_SESSION.mode==='campaign' && typeof enterHubFromCombat==='function'){
-    enterHubFromCombat(state); return;
+  if(netRole==='host' && typeof window!=='undefined' && window.MP_SESSION && MP_SESSION.mode==='campaign' && typeof coopCampaignWin==='function'){
+    coopCampaignWin(state); return;   // Ep VII → shared nuke finale; every other Quarter → H.U.B. (both published via mphub)
   }
   state.over=true; state._outcome='win'; if(!window.USE_ROLLBACK) onVictory();
 }
