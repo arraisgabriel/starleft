@@ -1,0 +1,284 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>STARLEFT · Level-Up Arrow Preview</title>
+<style>
+  :root{ --gold:#ffd23f; }
+  *{ box-sizing:border-box; }
+  html,body{ margin:0; height:100%; }
+  body{
+    background:
+      radial-gradient(120% 90% at 50% 0%, #1a0e16 0%, #0c0710 45%, #060409 100%);
+    color:#cdd6e6; font:14px/1.5 ui-sans-serif,system-ui,Segoe UI,Roboto,Arial,sans-serif;
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    min-height:100%; padding:24px; gap:16px;
+  }
+  h1{ font-size:15px; letter-spacing:.14em; text-transform:uppercase; margin:0;
+      color:#e7c987; text-shadow:0 0 18px #ffd23f33; font-weight:700; }
+  .sub{ font-size:12px; color:#7d8597; margin-top:-10px; }
+  .stage{
+    position:relative; border:1px solid #2a1d2e; border-radius:14px; overflow:hidden;
+    box-shadow:0 24px 80px #000a, inset 0 0 0 1px #ffffff08;
+    background:
+      radial-gradient(80% 60% at 50% 38%, #241522 0%, #140b16 55%, #0a060d 100%);
+  }
+  canvas{ display:block; }
+  #cv{ width:760px; height:520px; max-width:92vw; aspect-ratio:760/520; }
+  .hud{ position:absolute; left:14px; top:12px; font-size:12px; color:#9aa3b5;
+        text-shadow:0 1px 2px #000; pointer-events:none; }
+  .hud b{ color:var(--gold); font-variant-numeric:tabular-nums; }
+  .bar{ display:flex; gap:10px; align-items:center; flex-wrap:wrap; justify-content:center; }
+  button{
+    appearance:none; cursor:pointer; background:#1b1322; color:#ffe6a6;
+    border:1px solid #4a3a18; border-radius:9px; padding:9px 14px; font-weight:600;
+    letter-spacing:.02em; transition:background .12s,border-color .12s,box-shadow .12s;
+  }
+  button:hover{ background:#251a10; border-color:#7a5e22; box-shadow:0 0 0 1px #ffd23f33 inset; }
+  label.toggle{ display:flex; align-items:center; gap:7px; color:#9aa3b5; user-select:none; cursor:pointer; }
+  .err{ color:#ff8a8a; max-width:560px; text-align:center; }
+  code{ color:#e7c987; }
+</style>
+</head>
+<body>
+  <h1>Level-Up Arrow · Lobbyist</h1>
+  <div class="sub">Live preview of the in-game promotion arrow — pops from time to time, just like a real level-up.</div>
+
+  <div class="stage">
+    <canvas id="cv" width="760" height="520"></canvas>
+    <div class="hud">LOBBYIST · level <b id="lvl">1</b></div>
+  </div>
+
+  <div class="bar">
+    <button id="pop">★ Trigger level-up now</button>
+    <label class="toggle"><input type="checkbox" id="auto" checked> auto-pop every <span id="ivl">6</span>s</label>
+    <label class="toggle"><input type="checkbox" id="zoom"> zoom 2.6× (true in-game size)</label>
+  </div>
+
+  <div id="err" class="err"></div>
+
+<script>
+/* ============================================================================
+   Preview of the in-game promotion arrow over the real lobbyist sprite.
+
+   The arrow logic lives in js/render.js. This page works two ways:
+     • served over http  → it fetches js/render.js and runs the LIVE code
+       (spawnLevelArrow + drawLevelArrows), so it's byte-identical to the game.
+     • opened as a file:// → fetch is blocked, so it uses the EMBEDDED COPY
+       below (kept in sync with js/render.js — see the FX_EMBEDDED block).
+   Either way the sprite + bars + arrow always render.
+   ============================================================================ */
+
+const CAREER_COLORS = ['#ffd23f','#ff8c1a','#ff3b30','#3cd05a','#3b86ff','#b05bff']; // js/career.js
+const cv  = document.getElementById('cv');
+const ctx = cv.getContext('2d');
+const dpr = window.devicePixelRatio || 1;
+
+// ---- scene framing (world units; SCENE magnifies everything incl. the arrow) ----
+let SCENE = 2.6;                 // overall magnification so the small arrow reads clearly
+let VW = 0, VH = 0;              // visible area in world units (canvas / SCENE)
+function sizeCanvas(){
+  // read the CSS display size (pinned in CSS, so it never depends on the backing-store size →
+  // no runaway growth). Only resize the backing store when it actually changes.
+  const r = cv.getBoundingClientRect();
+  const cssW = Math.round(r.width) || 760, cssH = Math.round(r.height) || 520;
+  const bw = Math.round(cssW * dpr), bh = Math.round(cssH * dpr);
+  if(cv.width !== bw)  cv.width  = bw;
+  if(cv.height !== bh) cv.height = bh;
+  VW = cssW / SCENE; VH = cssH / SCENE;
+}
+
+const reducedMotion = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+// ---- the one unit we promote (a lobbyist), in WORLD units ----
+const unit = {
+  id: 1, type:'lobbyist', owner:'player', air:false,
+  x: 0, y: 0, hp: 119, maxHp: 140, stars: 1, _vh: 120,
+};
+const state = { hub:false, zoom:1, camX:0, camY:0, entities:[unit] };
+
+// ---- load the real lobbyist sprite sheet (10-frame horizontal strip) ----
+const SHEET_FRAMES = 10;        // UNIT_FRAMES (js/assets.js)
+const sheet = new Image();
+let sheetReady = false, fw = 0, fh = 0;
+sheet.onload = () => { fw = sheet.naturalWidth / SHEET_FRAMES; fh = sheet.naturalHeight; sheetReady = true; };
+sheet.onerror = () => { sheetReady = false; };
+sheet.src = 'assets/units/lobbyist/walk.webp';
+
+/* ---- EMBEDDED COPY of js/render.js's levelArrows block (file:// fallback).
+   Keep in sync with js/render.js. Bound to this page's ctx/VW/VH/_vh/reducedMotion. ---- */
+const FX_EMBEDDED = (() => {
+  let levelArrows = [];
+  const LVLARROW_CAP = 12, LVLARROW_LIFE = 5, TILE = 32;
+  let _lvlArrowLast = 0;   // wall-clock of previous draw → real delta-time (refresh-rate independent)
+  function spawnLevelArrow(state, tgt){
+    if(!state || state.hub || !tgt) return;
+    const z=state.zoom||1, m=TILE*2;
+    if(tgt.x<state.camX-m || tgt.x>state.camX+VW/z+m ||
+       tgt.y<state.camY-m || tgt.y>state.camY+VH/z+m) return;
+    for(const a of levelArrows){ if(a.tid===tgt.id){ a.t=0; return; } }
+    if(levelArrows.length>=LVLARROW_CAP) levelArrows.shift();
+    levelArrows.push({tid:tgt.id, t:0});
+  }
+  function drawLevelArrows(state, ox, oy){
+    if(!levelArrows.length) return;
+    const z=state.zoom||1, s=Math.min(1.6, 1/z);
+    const rm=reducedMotion();
+    const _now=(typeof performance!=='undefined'?performance.now():0);
+    let _dt=_lvlArrowLast?(_now-_lvlArrowLast)/1000:1/60; _lvlArrowLast=_now;
+    if(!(_dt>0)||_dt>0.25) _dt=1/60;   // real time → 5s life & 1.6s bob hold on any refresh rate
+    for(const a of levelArrows){
+      a.t+=_dt;
+      if(a.t>=LVLARROW_LIFE) continue;
+      const u=state.entities.find(e=>e.id===a.tid && !e.dead);
+      if(!u || u.hp<=0 || u.storedIn || u.captive){ a.t=LVLARROW_LIFE; continue; }
+      const vh=u._vh, alt=u.air?16:0;
+      const ax=u.x+ox+Math.max(vh*0.3,16)+6;
+      const baseY=u.y+oy-alt-vh*0.72-8;
+      const p=a.t/LVLARROW_LIFE;
+      const fade = p<0.06 ? p/0.06 : (p>0.8 ? (1-p)/0.2 : 1);
+      const hop=rm?0:(0.5-0.5*Math.cos(a.t*3.93))*13*s;   // slow, floaty up/down bob (~1.6s per cycle)
+      ctx.save();
+      ctx.translate(ax, baseY-hop); ctx.scale(s,s);
+      ctx.globalAlpha=Math.max(0,Math.min(1,fade));
+      ctx.beginPath();
+      ctx.moveTo(0,-9); ctx.lineTo(7,-1); ctx.lineTo(3,-1); ctx.lineTo(3,6);
+      ctx.lineTo(-3,6); ctx.lineTo(-3,-1); ctx.lineTo(-7,-1); ctx.closePath();
+      if(!rm){ ctx.shadowColor='#ffd23f'; ctx.shadowBlur=8; }
+      ctx.fillStyle='#ffd23f'; ctx.fill(); ctx.shadowBlur=0;
+      ctx.lineWidth=1.6; ctx.strokeStyle='#1a1206'; ctx.stroke();
+      ctx.restore();
+    }
+    ctx.globalAlpha=1;
+    levelArrows=levelArrows.filter(a=>a.t<LVLARROW_LIFE);
+  }
+  return { spawnLevelArrow, drawLevelArrows };
+})();
+
+let FX = FX_EMBEDDED;             // default; upgraded to live js/render.js code if fetch works
+
+async function loadLiveArrowCode(){
+  const txt = await (await fetch('js/render.js', { cache:'no-store' })).text();
+  const a = txt.indexOf('let levelArrows=[];');
+  const b = txt.indexOf('function spawnRing');
+  if (a < 0 || b < 0 || b < a) throw new Error('levelArrows block not found in js/render.js');
+  const body = txt.slice(a, b);
+  // params supply every free identifier the block reads (ctx, TILE, viewW, viewH, unitDrawH, megaReducedMotion)
+  const make = new Function(
+    'ctx','TILE','viewW','viewH','unitDrawH','megaReducedMotion',
+    body + '\n;return { spawnLevelArrow, drawLevelArrows };'
+  );
+  return make(ctx, 32, () => VW, () => VH, (u) => u._vh, reducedMotion);
+}
+
+// ---- HP bar + rank pips, mirroring js/render.js:1840 / js/career.js:183 exactly ----
+function barAt(x,y,w,h,frac,color){
+  frac = Math.max(0, Math.min(1, frac));
+  ctx.fillStyle='rgba(0,0,0,.6)'; ctx.fillRect(x-1,y-1,w+2,h+2);
+  ctx.fillStyle='#1a2533';        ctx.fillRect(x,y,w,h);
+  ctx.fillStyle=color;            ctx.fillRect(x,y,w*frac,h);
+}
+function hpColor(f){ return f>0.6 ? '#5fd37a' : f>0.3 ? '#ffc24b' : '#ff5b52'; }
+function drawStars(px, topY, lvl){
+  if(!lvl) return;
+  const band = Math.min(5, Math.floor((lvl-1)/5));
+  const filled = ((lvl-1)%5)+1;
+  const col = CAREER_COLORS[band];
+  const sp=7, slots=5, w=(slots-1)*sp, x0=px-w/2, R=2.6;
+  for(let i=0;i<slots;i++){
+    const on=i<filled, x=x0+i*sp;
+    ctx.beginPath();
+    for(let k=0;k<4;k++){ const a=k/4*6.283-1.5708, r=k%2? R*0.45:R;
+      const fx=x+Math.cos(a)*r, fy=topY+Math.sin(a)*r; k?ctx.lineTo(fx,fy):ctx.moveTo(fx,fy); }
+    ctx.closePath();
+    ctx.fillStyle = on?col:'rgba(120,110,90,.35)';
+    if(on){ ctx.shadowColor=col; ctx.shadowBlur=4; }
+    ctx.fill(); ctx.shadowBlur=0;
+  }
+}
+
+// ---- the level-up event: bump the unit's rank + fire the arrow spawner ----
+function levelUp(){
+  unit.stars = Math.min(30, unit.stars + 1);
+  document.getElementById('lvl').textContent = unit.stars;
+  FX.spawnLevelArrow(state, unit);
+}
+
+// ---- render loop ----
+let frame = 0;
+function draw(){
+  frame++;
+  const t = frame / 60;
+  sizeCanvas();
+
+  // place the unit a little below centre so the arrow has headroom (world units)
+  unit.x = VW * 0.5;
+  unit.y = VH * 0.66 + Math.sin(t * 1.6) * 2.5;   // gentle idle bob; arrow tracks it
+  unit.hp = unit.maxHp * (0.74 + 0.06 * Math.sin(t * 0.7));
+
+  // clear (device px) then enter world space: dpr * SCENE
+  ctx.setTransform(1,0,0,1,0,0);
+  ctx.clearRect(0,0,cv.width,cv.height);
+  ctx.setTransform(dpr*SCENE, 0, 0, dpr*SCENE, 0, 0);
+
+  const vh = unit._vh, alt = 0;
+
+  // ground shadow
+  ctx.save();
+  ctx.fillStyle='rgba(0,0,0,.45)';
+  ctx.beginPath();
+  ctx.ellipse(unit.x, unit.y + vh*0.30, vh*0.30, vh*0.085, 0, 0, 6.283);
+  ctx.fill();
+  ctx.restore();
+
+  // the lobbyist sprite (frame 0 = standing; same draw anchor as blitFrame: -dw/2, -vh*0.7)
+  if(sheetReady){
+    const dw = vh * (fw / fh);
+    ctx.imageSmoothingEnabled = true;
+    ctx.drawImage(sheet, 0, 0, fw, fh, unit.x - dw/2, unit.y - vh*0.7, dw, vh);
+  } else {
+    ctx.fillStyle='#2a3346';
+    ctx.fillRect(unit.x - vh*0.18, unit.y - vh*0.62, vh*0.36, vh*0.62);
+  }
+
+  // HP bar + rank pips (exact in-game positions)
+  barAt(unit.x - vh*0.3, unit.y - alt - vh*0.72 - 6, vh*0.6, 4, unit.hp/unit.maxHp, hpColor(unit.hp/unit.maxHp));
+  drawStars(unit.x, unit.y - alt - vh*0.72 - 13, unit.stars);
+
+  // THE ARROW (js/render.js logic) — draws beside the bars, hops, fades
+  FX.drawLevelArrows(state, 0, 0);
+
+  requestAnimationFrame(draw);
+}
+
+// ---- wiring ----
+let autoTimer = 0;
+const POP_MS = 6000;
+function setAuto(on){
+  clearInterval(autoTimer); autoTimer = 0;
+  if(on) autoTimer = setInterval(levelUp, POP_MS);
+}
+document.getElementById('pop').onclick = levelUp;
+document.getElementById('auto').onchange = e => setAuto(e.target.checked);
+document.getElementById('zoom').onchange = e => { SCENE = e.target.checked ? 2.6 : 1.0; };
+
+// start everything immediately — never gated behind the fetch
+document.getElementById('lvl').textContent = unit.stars;
+requestAnimationFrame(draw);
+setTimeout(levelUp, 600);          // first pop shortly after load
+setAuto(true);
+
+// upgrade to the live js/render.js code when served over http; stay on the embedded copy otherwise
+loadLiveArrowCode()
+  .then(live => { FX = live; })
+  .catch(() => {
+    const el = document.getElementById('err');
+    el.style.color = '#7d8597';
+    el.innerHTML = 'Using the embedded copy of the arrow code. ' +
+      'To preview the live <code>js/render.js</code> instead, serve over http ' +
+      '(<code>python3 -m http.server 8000</code> → <code>http://localhost:8000/levelup-arrow-demo.html</code>).';
+  });
+</script>
+</body>
+</html>

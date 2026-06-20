@@ -342,7 +342,8 @@ const UNIT_ACTION = {
   // EX-TERMINATOR: three distinct attack strips, one per AOE ability kind (villains.js AOE_KINDS → u._actState)
   ex_terminator:{ attack_melee:walkPair('ex_terminator','attack_melee'),
                   attack_pistol:walkPair('ex_terminator','attack_pistol'),
-                  attack_minigun:walkPair('ex_terminator','attack_minigun') },
+                  attack_minigun:walkPair('ex_terminator','attack_minigun'),
+                  idle:walkPair('ex_terminator','idle') },   // arms-crossed pose shown during his bomber extraction
 };
 function actionAnim(type,action,owner,faction){ const t=UNIT_ACTION[type]; const a=t&&t[action]; if(!a) return null;
   const x=(faction && a[faction] && a[faction].ready) ? a[faction] : a[factionKey(owner)]; return (x&&x.ready)?x:null; }

@@ -2046,6 +2046,7 @@ function drawFloaters(state, ox, oy){
    arrow tracks the moving unit and self-cleans the instant it leaves G.entities (death/transport). ---- */
 let levelArrows=[];
 const LVLARROW_CAP=12, LVLARROW_LIFE=5;
+let _lvlArrowLast=0;   // wall-clock of the previous draw → real delta-time (refresh-rate independent)
 function spawnLevelArrow(state, tgt){
   if(!state || state.hub || !tgt) return;
   const z=state.zoom||1, m=TILE*2;
@@ -2059,8 +2060,11 @@ function drawLevelArrows(state, ox, oy){
   if(!levelArrows.length) return;
   const z=state.zoom||1, s=Math.min(1.6, 1/z);   // counter-scale: a constant comic-size pop (clamped at low zoom)
   const rm=(typeof megaReducedMotion==='function' && megaReducedMotion());
+  const _now=(typeof performance!=='undefined'?performance.now():0);
+  let _dt=_lvlArrowLast?(_now-_lvlArrowLast)/1000:1/60; _lvlArrowLast=_now;
+  if(!(_dt>0)||_dt>0.25) _dt=1/60;   // real time → 5s life & 1.6s bob hold on any refresh rate (60/120/144Hz); clamp tab-restore spikes
   for(const a of levelArrows){
-    a.t+=1/60;
+    a.t+=_dt;
     if(a.t>=LVLARROW_LIFE) continue;
     const u=state.entities.find(e=>e.id===a.tid && !e.dead);
     if(!u || u.hp<=0 || u.storedIn || u.captive){ a.t=LVLARROW_LIFE; continue; }   // drop on death/board/capture
@@ -2069,7 +2073,7 @@ function drawLevelArrows(state, ox, oy){
     const baseY=u.y+oy-alt-vh*0.72-8;               // bar/stars band; anchor in WORLD units (not counter-scaled)
     const p=a.t/LVLARROW_LIFE;
     const fade = p<0.06 ? p/0.06 : (p>0.8 ? (1-p)/0.2 : 1);   // ~0.3s in, hold, ~1s out
-    const hopP=(a.t/0.45)%1, hop=rm?0:(1-(2*hopP-1)*(2*hopP-1))*11*s;   // looping parabolic bounce (~0.45s/jump)
+    const hop=rm?0:(0.5-0.5*Math.cos(a.t*3.93))*13*s;   // slow, floaty up/down bob (eased; ~1.6s per cycle)
     ctx.save();
     ctx.translate(ax, baseY-hop); ctx.scale(s,s);
     ctx.globalAlpha=Math.max(0,Math.min(1,fade));

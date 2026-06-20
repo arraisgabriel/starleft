@@ -1043,17 +1043,23 @@ function finalizeBossExtract(state, boss){
 // boss's board-fade, all computed from the cutscene clock so the bomber and his vanish stay locked to the lines.
 function bossExtractFrame(state){
   const bx=state.bossExtract; if(!bx) return null;
-  const cs=state.flashCutscene, t=cs?(cs.t||0):0, TS=TILE, ex=bx.ex, ey=bx.ey;
-  const T_IN=2.6, T_BOARD=4.6, T_OUT=7.2;
-  const hoverX=ex, hoverY=ey-TS*2.3, face=bx.fromRight?-1:1;
-  const offIn = bx.fromRight ? ex+TS*15 : ex-TS*15;
-  const offOut= bx.fromRight ? ex-TS*17 : ex+TS*17;
+  const TS=TILE, ex=bx.ex, ey=bx.ey, face=bx.fromRight?-1:1;
+  const aprP=bx.aprP, boardT=bx.boardT||0;   // bx.aprP / bx.boardT advance in updateFlashCutscene (monotonic, line-paced)
+  // hidden until the FIRST line begins (aprP stays null through the opening hold)
+  if(aprP==null) return { bomberX:ex, bomberY:ey, bomberFace:face, bomberVisible:false, bossFade:0 };
+  const hoverX=ex, hoverY=ey-TS*2.3, highY=ey-TS*8, exitY=ey-TS*11;
+  const offIn = bx.fromRight ? ex+TS*16 : ex-TS*16;
+  const offOut= bx.fromRight ? ex-TS*18 : ex+TS*18;
   const ease=(p)=> p<=0?0 : p>=1?1 : p*p*(3-2*p);
-  let X,Y,vis=true,fade=0;
-  if(t<T_IN){ const p=ease(t/T_IN);          X=offIn+(hoverX-offIn)*p; Y=(ey-TS*8)+(hoverY-(ey-TS*8))*p; }       // swoop in
-  else if(t<T_BOARD){                         X=hoverX; Y=hoverY; fade=(t-T_IN)/(T_BOARD-T_IN); }                  // hover — he boards (fades)
-  else if(t<T_OUT){ const p=ease((t-T_BOARD)/(T_OUT-T_BOARD)); X=hoverX+(offOut-hoverX)*p; Y=hoverY+((ey-TS*10)-hoverY)*p; fade=1; }   // lift off + exit
-  else {                                       X=offOut; Y=ey-TS*10; fade=1; vis=false; }                          // gone
+  const e=ease(aprP);
+  // ONE bomber: a single continuous approach across the dialogue (offIn → hover), arriving by the last line.
+  let X=offIn+(hoverX-offIn)*e, Y=highY+(hoverY-highY)*e, vis=true, fade=0;
+  if(boardT>0){                                                 // arrived on the LAST line: he boards (fades), then the bomber lifts off + exits
+    X=hoverX; Y=hoverY;
+    fade=Math.min(1, boardT/1.4);
+    if(boardT>1.4){ const p=ease((boardT-1.4)/2.2); X=hoverX+(offOut-hoverX)*p; Y=hoverY+(exitY-hoverY)*p; fade=1; }
+    if(boardT>3.8) vis=false;
+  }
   return { bomberX:X, bomberY:Y, bomberFace:face, bomberVisible:vis, bossFade: fade<0?0:(fade>1?1:fade) };
 }
 

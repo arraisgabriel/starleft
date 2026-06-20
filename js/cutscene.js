@@ -119,6 +119,18 @@
   window.updateFlashCutscene=function(state, dt){
     const cs=state && state.flashCutscene; if(!cs) return;
     cs.t+=dt;
+    // EX-TERMINATOR escape rides the cutscene with its OWN monotonic progress — cs.t resets to 0 each line
+    // (showLine), so a clock-keyed bomber would restart per line. Pace it to LINE progress instead: ONE bomber
+    // smoothly approaches across the lines (target 0→1 over first→last line) and extracts on the LAST line.
+    const be=state.bossExtract;
+    if(be && cs.started){
+      const N=Math.max(1, cs.lines.length);
+      const target = N>1 ? Math.min(1, (cs.i+1)/N) : 1;                  // appears on the FIRST line (>0), arrives (1) by the LAST
+      be.aprP = (be.aprP==null?0:be.aprP) + (target-(be.aprP==null?0:be.aprP))*Math.min(1, dt*1.2);   // smooth MONOTONIC chase (never resets per line)
+      const onLast=(cs.i||0) >= N-1;
+      if(onLast && (be.aprP>=0.92 || (be.lastT||0)>3)) be.boardT=(be.boardT||0)+dt;   // he boards + the bomber lifts off — only once it has actually ARRIVED (or a 3s grace)
+      if(onLast) be.lastT=(be.lastT||0)+dt;
+    }
     // ABRUPT CUT (no easing): snap the camera to ZOOM_MAX framing the scene's characters. If every
     // participant fits at max zoom, frame them together (centered on their bounding box); if they're
     // too far apart to share the frame, cut to whoever is speaking THIS line (lineFocus). Re-evaluated
