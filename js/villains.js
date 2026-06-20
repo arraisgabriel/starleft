@@ -1020,6 +1020,7 @@ function beginBossExtract(state, boss){
   boss.hp=Math.max(1, boss.hp);                                   // stay alive (not <=0) so the cleanup loop won't re-kill him
   boss.autoTarget=null; boss.cmd=null; boss.vx=0; boss.vy=0; boss.path=null;
   boss._mechAct=null; boss._mechAirborne=false; boss._aoe=null;   // cancel any in-progress special
+  boss._actState='idle'; boss._actStamp=state.time;              // stand in the arms-crossed idle (not frozen mid-punch) while he's extracted
   if(typeof awardVillainKillXp==='function') awardVillainKillXp(state, boss);   // the player DEFEATED him → pay the win XP now (the normal kill path is skipped)
   state._bossDeathCsDone=true;                                    // the death-cutscene gate must not also fire
   const name = (boss.villainId==='ex_terminator_mk2') ? 'EXTERM_DEATH_2' : 'EXTERM_DEATH_1';
@@ -1029,6 +1030,7 @@ function beginBossExtract(state, boss){
     const fromRight = boss.x < state.W*TILE*0.5;                  // enter from whichever side crosses the framed boss
     state.bossExtract = { id:boss.id, ex:boss.x, ey:boss.y, fromRight };
     startFlashCutscene(state, boss, lines, ()=>finalizeBossExtract(state, boss));   // focus the LIVE boss; onEnd finalizes the escape
+    if(state.flashCutscene) state.flashCutscene._holdLast=true;                     // his final "I'll be back" stays on screen until the player clicks to skip
   } else {
     if(typeof toast==='function' && !window._rbReplaying) toast('🛩️ THE EX-TERMINATOR is airlifted out by an A&O bomber — "I\'ll be back."');
     finalizeBossExtract(state, boss);
@@ -1054,11 +1056,11 @@ function bossExtractFrame(state){
   const e=ease(aprP);
   // ONE bomber: a single continuous approach across the dialogue (offIn → hover), arriving by the last line.
   let X=offIn+(hoverX-offIn)*e, Y=highY+(hoverY-highY)*e, vis=true, fade=0;
-  if(boardT>0){                                                 // arrived on the LAST line: he boards (fades), then the bomber lifts off + exits
+  if(boardT>0){                                                 // bomber has ARRIVED over him on the last line:
     X=hoverX; Y=hoverY;
-    fade=Math.min(1, boardT/1.4);
-    if(boardT>1.4){ const p=ease((boardT-1.4)/2.2); X=hoverX+(offOut-hoverX)*p; Y=hoverY+(exitY-hoverY)*p; fade=1; }
-    if(boardT>3.8) vis=false;
+    fade=Math.min(1, boardT/0.6);                               //   he vanishes QUICKLY (boards) the moment it reaches him
+    if(boardT>1.6){ const p=ease((boardT-1.6)/2.2); X=hoverX+(offOut-hoverX)*p; Y=hoverY+(exitY-hoverY)*p; }   //   a beat later (he's aboard) the bomber lifts off + exits
+    if(boardT>4.0) vis=false;
   }
   return { bomberX:X, bomberY:Y, bomberFace:face, bomberVisible:vis, bossFade: fade<0?0:(fade>1?1:fade) };
 }

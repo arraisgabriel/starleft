@@ -21,7 +21,8 @@ function _ensureStyle(){
   if(_styled) return; _styled=true;
   const css=`
   #oh-interior-overlay{position:fixed;inset:0;z-index:90;background:#06080c;display:none;overflow:hidden;font-family:'Chakra Petch','Spline Sans',system-ui,sans-serif}
-  #oh-interior{position:absolute;inset:0;width:100%;height:100%;display:block;cursor:pointer}
+  #oh-interior{position:absolute;inset:0;width:100%;height:100%;display:block;cursor:grab;touch-action:none}
+  #oh-interior.ohi-dragging{cursor:grabbing}
   #oh-int-head{position:absolute;top:0;left:0;right:0;height:46px;display:flex;align-items:center;gap:12px;padding:0 16px;z-index:3;
     background:linear-gradient(180deg,rgba(6,8,12,.92),rgba(6,8,12,.3));border-bottom:1px solid #1c2533;pointer-events:none}
   #oh-int-title{font-weight:700;letter-spacing:.12em;color:#eef3f8;font-size:15px;text-transform:uppercase}
@@ -62,11 +63,60 @@ function _ensureStyle(){
   const s=document.createElement('style'); s.id='oh-int-style'; s.textContent=css; document.head.appendChild(s);
 }
 
-/* ---- coordinate transform (virtual room → CSS px) ---- */
+/* ---- the intimate virtual CAMERA: a fixed cutscene-close zoom you can't change, panned by drag and
+   glided to centre whoever you select. All cosmetic, local to the transient _int — no save/net impact. ---- */
+function _fitScale(cssW,cssH){ return Math.min(cssW/ROOM_W, cssH/ROOM_H)*0.97; }   // == the OLD fit-to-screen scale; our baseline
+const _CAM={ focusMul:1.9, ease:3.0, snapPos:0.6, margin:30, dragTh:5 };            // z = focusMul × fit (locked); the only zoom knob
+function _camSetZoom(){ const cv=$('oh-interior'); const cssW=cv.clientWidth||window.innerWidth, cssH=cv.clientHeight||window.innerHeight; if(_int&&_int.cam) _int.cam.z=_fitScale(cssW,cssH)*_CAM.focusMul; }
+// keep the visible window inside the room (+small overscroll); centre the axis if the room is smaller than the view
+function _clampCam(){
+  const cam=_int&&_int.cam; if(!cam||!cam.z) return; const cv=$('oh-interior');
+  const cssW=cv.clientWidth||window.innerWidth, cssH=cv.clientHeight||window.innerHeight;
+  const hx=cssW/(2*cam.z), hy=cssH/(2*cam.z), mg=_CAM.margin;
+  cam.tcx=(2*hx>=ROOM_W) ? ROOM_W/2 : Math.max(hx-mg, Math.min(ROOM_W-hx+mg, cam.tcx));
+  cam.tcy=(2*hy>=ROOM_H) ? ROOM_H/2 : Math.max(hy-mg, Math.min(ROOM_H-hy+mg, cam.tcy));
+}
+function _focusOcc(o){ if(!o||!_int||!_int.cam) return; _int.cam.tcx=o.x; _int.cam.tcy=o.y-SPR_H*0.40; _clampCam(); }   // bias up: head over feet
+function _focusMid(a,b){ if(!a||!b||!_int||!_int.cam) return; _int.cam.tcx=(a.x+b.x)/2; _int.cam.tcy=(a.y+b.y)/2-SPR_H*0.40; _clampCam(); }
+// per-frame glide toward the pan target (zoom is fixed). Re-targets the midpoint every frame while a speaker walks to its target.
+function _camStep(dt){
+  const cam=_int&&_int.cam; if(!cam) return;
+  // Only auto-follow during the walk-in ('busy'). In 'target' mode the player pans FREELY to find whom to
+  // talk to (the speaker was centred once on entering target mode); we must NOT yank the camera back each frame.
+  if(_int.mode==='busy' && _int.selected){
+    const tgt=(_int.pending&&_int.pending.target)||_int._followTarget;
+    if(tgt) _focusMid(_int.selected, tgt); else _focusOcc(_int.selected);
+  }
+  if(cam.snap){ cam.cx=cam.tcx; cam.cy=cam.tcy; cam.snap=false; return; }
+  const k=1-Math.exp(-_CAM.ease*dt);                                               // framerate-independent ease-out
+  cam.cx+=(cam.tcx-cam.cx)*k; cam.cy+=(cam.tcy-cam.cy)*k;
+  if(Math.abs(cam.tcx-cam.cx)<_CAM.snapPos) cam.cx=cam.tcx;
+  if(Math.abs(cam.tcy-cam.cy)<_CAM.snapPos) cam.cy=cam.tcy;
+}
+function _camSettled(){ const c=_int&&_int.cam; if(!c) return true; return Math.abs(c.tcx-c.cx)<_CAM.snapPos+0.01 && Math.abs(c.tcy-c.cy)<_CAM.snapPos+0.01; }
+// anchored DOM UI (pie fan / dialogue dial) is positioned ONCE in screen px → build it only after the glide settles, against a stationary transform
+function _pumpDeferredUI(){
+  if(!_int) return;
+  if(_int._pendingPie && _camSettled()){ const o=_int._pendingPie; _int._pendingPie=null; if(_int.mode==='pie' && _int.selected===o) _showPie(o); }
+  if(_int._pendingBeat && _camSettled()){ _int._pendingBeat=false; if(_int.mode==='scene') _renderBeat(); }
+}
+// transient occupant bubbles (tagged with data-anchor) track their unit each frame so they don't drift while the camera moves
+function _replaceAnchoredUI(m){
+  const ui=$('oh-int-ui'); if(!ui) return;
+  ui.querySelectorAll('.ohi-bubble[data-anchor]').forEach(function(el){
+    const o=_int.occ[el.dataset.anchor|0]; if(!o) return; const p=v2c(o.x,o.y,m);
+    el.style.left=p.x+'px'; el.style.top=(p.y - SPR_H*m.scale*0.95 - 10)+'px';
+  });
+}
+
+/* ---- coordinate transform (virtual room → CSS px) — now camera-aware ---- */
 function _metrics(){
   const cv=$('oh-interior'); const cssW=cv.clientWidth||window.innerWidth, cssH=cv.clientHeight||window.innerHeight;
-  const scale=Math.min(cssW/ROOM_W, cssH/ROOM_H)*0.97;
-  return { cssW, cssH, scale, offX:(cssW-ROOM_W*scale)/2, offY:(cssH-ROOM_H*scale)/2 };
+  const cam=_int&&_int.cam;
+  if(!cam||!cam.z){ const scale=_fitScale(cssW,cssH);                              // pre-camera / safety fallback == OLD behaviour
+    return { cssW, cssH, scale, offX:(cssW-ROOM_W*scale)/2, offY:(cssH-ROOM_H*scale)/2 }; }
+  const scale=cam.z;
+  return { cssW, cssH, scale, offX:cssW/2 - cam.cx*scale, offY:cssH/2 - cam.cy*scale };
 }
 function v2c(vx, vy, m){ m=m||_metrics(); return { x:m.offX+vx*m.scale, y:m.offY+vy*m.scale }; }
 
@@ -77,12 +127,18 @@ function openInterior(poi, who){
   const layout=OFFHOURS.interiors && OFFHOURS.interiors[kind];
   if(!layout){ if(typeof openVenueMenu==='function') return openVenueMenu(poi, who); return; }  // venues w/o an interior fall back to the old menu
   _ensureStyle();
-  _int={ poi, kind, layout, occ:[], selected:null, mode:'idle', pending:null, scene:null, target:null };
+  _int={ poi, kind, layout, occ:[], selected:null, mode:'idle', pending:null, scene:null, target:null,
+    cam:{ cx:ROOM_W/2, cy:ROOM_H/2, z:0, tcx:ROOM_W/2, tcy:ROOM_H/2, snap:true } };
   _populate();
   $('oh-int-title').textContent=(poi.hubPoi&&poi.hubPoi.name)||layout.name||'THE OFF-HOURS';
   _syncHead();
   const ov=$('oh-interior-overlay'); ov.style.display='block';
   _resizeCanvas();
+  _camSetZoom();
+  // open framed on the player's people (centroid of vets present), fallback room centre — snap, no opening glide
+  const _v=_int.occ.filter(o=>o.kind==='vet'); let _cx=ROOM_W/2, _cy=ROOM_H/2;
+  if(_v.length){ _cx=0; _cy=0; _v.forEach(o=>{ _cx+=o.x; _cy+=o.y; }); _cx/=_v.length; _cy/=_v.length; }
+  _int.cam.tcx=_cx; _int.cam.tcy=_cy-SPR_H*0.40; _clampCam(); _int.cam.snap=true;
   _bindInput();
   _renderRoster();
   _clearUI(); _setCloseLabel(false);
@@ -186,6 +242,7 @@ function _loop(now){
   _raf=requestAnimationFrame(_loop);
 }
 function _update(dt){
+  _camStep(dt);                                       // glide the camera first so this frame reacts to live positions
   const L=_int.layout;
   for(const o of _int.occ){
     if(o.fixed){ o.wob+=dt; continue; }
@@ -204,6 +261,8 @@ function _render(t){
   const cv=$('oh-interior'); if(!cv) return; const ctx=cv.getContext('2d'); const dpr=window.devicePixelRatio||1;
   ctx.setTransform(dpr,0,0,dpr,0,0);
   const m=_metrics(), L=_int.layout;
+  _pumpDeferredUI();                                   // lay out pie / dialogue dial only once the camera has settled
+  _replaceAnchoredUI(m);                               // keep transient occupant bubbles glued to their unit as the camera moves
   ctx.fillStyle=L.wall||'#0c0f15'; ctx.fillRect(0,0,m.cssW,m.cssH);
   _drawFloor(ctx,m,L); _drawFurniture(ctx,m,L,t);
   // occupants depth-sorted by y
@@ -309,18 +368,57 @@ function _blitSprite(ictx, u, px, py, anim, S, fi){
 function _esc(s){ return String(s==null?'':s).replace(/[&<>]/g,function(c){return c==='&'?'&amp;':c==='<'?'&lt;':'&gt;';}); }
 function _accent(){ return (_int && _int.layout && _int.layout.accent)||'#5fe0ff'; }
 
-/* ---- input: click the canvas → hit-test an occupant → pie-menu / target ---- */
+/* ---- input: DRAG to pan the room (zoom is locked), TAP an occupant → pie-menu / target ---- */
 function _bindInput(){
-  const cv=$('oh-interior'); if(cv && !cv._ohBound){ cv._ohBound=true; cv.addEventListener('click', _onCanvasClick); }
+  const cv=$('oh-interior');
+  if(cv && !cv._ohBound){ cv._ohBound=true;
+    let st=null;                                                  // the active pan gesture
+    cv.addEventListener('pointerdown', function(e){
+      if(!_int) return;
+      st={ id:e.pointerId, sx:e.clientX, sy:e.clientY, cx:_int.cam.cx, cy:_int.cam.cy, moved:false };
+      try{ cv.setPointerCapture(e.pointerId); }catch(_){}
+    });
+    cv.addEventListener('pointermove', function(e){
+      if(!_int||!st||e.pointerId!==st.id) return;
+      if(_int.mode==='busy'||_int.mode==='scene'||_int.mode==='ended') return;   // camera is auto-driven / locked here
+      const dsx=e.clientX-st.sx, dsy=e.clientY-st.sy;
+      if(!st.moved && Math.hypot(dsx,dsy)>_CAM.dragTh){ st.moved=true; cv.classList.add('ohi-dragging');
+        if(_int.mode==='pie'){ _clearUI(); _int.mode='idle'; _int.selected=null; _setCloseLabel(false); } }  // panning away dismisses the pie
+      if(st.moved){ const z=_int.cam.z||1;
+        _int.cam.tcx=st.cx - dsx/z; _int.cam.tcy=st.cy - dsy/z; _clampCam();      // recompute from the press anchor, then clamp…
+        _int.cam.cx=_int.cam.tcx; _int.cam.cy=_int.cam.tcy; }                     // …and snap current to target (drag is 1:1, no glide)
+    });
+    const _end=function(e){
+      if(!_int||!st||e.pointerId!==st.id) return; const moved=st.moved;
+      try{ cv.releasePointerCapture(e.pointerId); }catch(_){}
+      cv.classList.remove('ohi-dragging'); st=null;
+      if(!moved){ const r=cv.getBoundingClientRect(); _selectAt(e.clientX-r.left, e.clientY-r.top); }   // a tap (no drag) selects
+    };
+    cv.addEventListener('pointerup', _end);
+    cv.addEventListener('pointercancel', _end);
+    // LOCK the zoom: swallow wheel / trackpad-pinch over the overlay so nothing can change scale
+    cv.addEventListener('wheel', function(e){ e.preventDefault(); }, {passive:false});
+    cv.addEventListener('gesturestart', function(e){ e.preventDefault(); });
+    cv.addEventListener('gesturechange', function(e){ e.preventDefault(); });
+  }
   const cl=$('oh-int-close'); if(cl && !cl._ohBound){ cl._ohBound=true; cl.addEventListener('click', _onClose); }
   if(!window._ohEsc){ window._ohEsc=true; document.addEventListener('keydown', function(e){ if(_int && (e.key==='Escape'||e.key==='Esc')){ e.preventDefault(); _onClose(); } }); }
+  if(!window._ohResize){ window._ohResize=true; window.addEventListener('resize', function(){
+    if(!_int||!_int.cam) return; _resizeCanvas(); _camSetZoom();                  // re-fit zoom + backing store to the new viewport
+    if(_int._followTarget && _int.selected) _focusMid(_int.selected, _int._followTarget);
+    else if(_int.selected && (_int.mode==='pie'||_int.mode==='target')) _focusOcc(_int.selected);
+    else _clampCam();
+    _int.cam.snap=true;                                                          // a resize reframes instantly, never animates
+  }); }
 }
 // ✕ / Escape: first dismiss any open dialog (pie / scene / line-picker), then leave the venue.
 function _dismiss(){
   if(!_int) return false;
   const open=(_int.mode && _int.mode!=='idle') || !!_int.scene || !!document.querySelector('#oh-int-ui .ohi-pie, #oh-int-ui .ohi-choice');
   if(!open) return false;
-  _int.pending=null; _int.scene=null; _int.mode='idle'; _int.selected=null; _clearUI(); _setCloseLabel(false); _syncHead();
+  _int.pending=null; _int.scene=null; _int.mode='idle'; _int.selected=null;
+  _int._followTarget=null; _int._pendingPie=null; _int._pendingBeat=false;
+  _clearUI(); _setCloseLabel(false); _syncHead();
   return true;
 }
 function _onClose(){ if(_dismiss()) return; closeInterior(); }
@@ -332,18 +430,18 @@ function _pick(cx,cy){
     if(cx>=p.x-S*0.26 && cx<=p.x+S*0.26 && cy>=p.y-S*0.95 && cy<=p.y+S*0.12){ const d=Math.abs(cx-p.x)+Math.abs(cy-(p.y-S*0.4)); if(d<bd){ bd=d; best=o; } } }
   return best;
 }
-function _onCanvasClick(e){
-  if(!_int) return; const r=e.currentTarget.getBoundingClientRect(); const cx=e.clientX-r.left, cy=e.clientY-r.top;
+function _selectAt(cx,cy){   // a tap at canvas-local (cx,cy) → hit-test an occupant
+  if(!_int) return;
   const hit=_pick(cx,cy);
   if(_int.mode==='target'){
     if(hit && hit!==_int.selected){ _startInteraction(_int.selected, hit); } else { _setMode('idle'); }
     return;
   }
-  if(_int.mode==='scene' || _int.mode==='ended'){ return; }   // scene / finished-result are dismissed only via ✕ / Esc / Step away
+  if(_int.mode==='scene' || _int.mode==='ended' || _int.mode==='busy'){ return; }   // scene / result / mid-walk are dismissed only via ✕ / Esc / Step away
   _clearUI();
-  if(!hit){ _int.selected=null; _int.mode='idle'; _setCloseLabel(false); return; }
-  _int.selected=hit;
-  if(hit.kind==='vet'){ _int.mode='pie'; _showPie(hit); }
+  if(!hit){ _int.selected=null; _int.mode='idle'; _setCloseLabel(false); return; }   // tap empty → deselect, camera stays put
+  _int.selected=hit; _focusOcc(hit);                                                 // glide to centre whoever you picked
+  if(hit.kind==='vet'){ _int.mode='pie'; _int._pendingPie=hit; }                      // pie fans out once the camera settles (see _pumpDeferredUI)
   else { _showBubble(hit, hit.name+' — '+( (typeof buildNpcDossier==='function' && buildNpcDossier(hit.npcId)||{}).profession || 'regular' ), 'npc', 2600); _int.mode='idle'; }
 }
 
@@ -367,7 +465,8 @@ function _showPie(o){
 }
 function _pieAct(k, o){
   _clearUI();
-  if(k==='talk'||k==='gift'){ _int.mode='target'; _int.pendKind=k; _hint(k==='talk'?'Click who '+o.name+' should talk to':'Click who to give a gift to'); }
+  if(k==='talk'||k==='gift'){ _int.mode='target'; _int.pendKind=k; _int._followTarget=null; _focusOcc(o);   // hold the camera on the speaker while you choose whom
+    _hint(k==='talk'?'Click who '+o.name+' should talk to':'Click who to give a gift to'); }
   else if(k==='sit'){ const seat=_freeSeat(); if(seat){ o.tx=seat.x; o.ty=seat.y; } _int.mode='idle'; _int.selected=null; }
   else if(k==='watch'){ _int.mode='idle'; }   // just observe
   else if(k==='leave'){ o.tx=_int.layout.door.x; o.ty=_int.layout.door.y; o._leaving=true; _int.mode='idle'; _int.selected=null;
@@ -379,6 +478,7 @@ function _startInteraction(vet, target){
   // walk the vet next to the target, then resolve
   const ang=Math.atan2(vet.y-target.y, vet.x-target.x); const atx=target.x+Math.cos(ang)*46, aty=target.y+Math.sin(ang)*30;
   vet.tx=atx; vet.ty=aty; vet.face=(target.x<vet.x)?-1:1;
+  _int._followTarget=target; _focusMid(vet,target);                 // camera follows the speaker→target midpoint as the vet walks in
   _int.pending={ type:_int.pendKind||'talk', vet, target, atx, aty }; _int.mode='busy'; _clearUI(); _hint('…');
   setTimeout(()=>{ if(_int && _int.mode==='busy' && (!_int.pending)) ; }, 10);
 }
@@ -436,7 +536,7 @@ function _openScene(vet, target){
   _int.mode='scene';
   const openLine=(typeof ohSceneOpen==='function')?ohSceneOpen(pick.scene, ic.bond):pick.scene.open;   // entry-beat opener (variant-picked)
   _int.scene.lead = ohFill(openLine, ic.vu, ic.npcId);
-  _renderBeat();
+  _focusMid(vet, target); _int._pendingBeat=true;   // tighten on the pair, then lay out the dial once the camera settles
 }
 function _curBeat(sc){ const s=sc.pick.scene; return (s.beats && s.beats[sc.beatIdx]) ? s.beats[sc.beatIdx] : null; }
 // render the current beat: the counterpart's lead line at 12 o'clock + the veteran's gated choices on the dial
@@ -492,7 +592,7 @@ function _finalizeScene(payload){
   _resolveDial(C);
 }
 function _doGift(vet, target){
-  _hideHint(); const cx=_interactionContext(vet, target);
+  _hideHint(); _focusMid(vet, target); const cx=_interactionContext(vet, target);   // frame the pair for the gift result
   if((typeof CAMPAIGN!=='undefined') && (CAMPAIGN.m3|0) < (OFFHOURS.tune.giftCost|0)){ _flash('Not enough M3rit$ for a gift.'); _int.mode='idle'; return; }
   const payload={ vetKey:vet.key, npcId:cx.npcId, kind:cx.kind, gift:true };
   let res=(typeof netOffhoursCommit==='function')?netOffhoursCommit(G,payload):(typeof applyOffhoursCommit==='function'?applyOffhoursCommit(G,payload):null);
@@ -565,7 +665,7 @@ function _resolveDial(C){
     b.el.style.top =Math.max(minY+b.h/2, Math.min(maxY-b.h/2, c.y))+'px';
   }
 }
-function _setMode(mode){ _int.mode=mode; if(mode==='idle'){ _int.selected=null; _clearUI(); } }
+function _setMode(mode){ _int.mode=mode; if(mode==='idle'){ _int.selected=null; _int._followTarget=null; _int._pendingPie=null; _int._pendingBeat=false; _clearUI(); } }
 function _clearUI(){ const ui=$('oh-int-ui'); if(ui) ui.innerHTML=''; }
 
 /* ---- roster strip: call a vet in ---- */

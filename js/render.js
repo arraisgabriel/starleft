@@ -1622,8 +1622,9 @@ function _rebornScratch(w,h){
   if(!_rbScratch) _rbScratch=document.createElement('canvas');
   const c=_rbScratch; if(c.width<w) c.width=w; if(c.height<h) c.height=h; return c;
 }
-function drawRebornRim(u, anim, px, pyB, S, fi, t, c1, c2){
+function drawRebornRim(u, anim, px, pyB, S, fi, t, c1, c2, alphaMul){
   if(!anim || !anim.img || !anim.frames || !anim.fh) return;
+  const am=(alphaMul==null?1:alphaMul); if(am<=0) return;     // EX-TERMINATOR board-fade: rim fades WITH the body (no lingering green ghost)
   const n=anim.frames.length, fr=anim.frames[((fi%n)+n)%n];
   if(!fr) return;
   const dh=S, dw=S*(anim.fw/anim.fh), pad=6;
@@ -1645,11 +1646,11 @@ function drawRebornRim(u, anim, px, pyB, S, fi, t, c1, c2){
   ctx.save(); ctx.globalCompositeOperation='lighter';
   // PASS 1 — the steady silver rim (the main, dominant color), faint breath
   const sil=rm?0.5:(0.5+0.5*Math.sin(t*2.0+seed*1.3));
-  tint(c1||'#c4d2e6'); ctx.globalAlpha=0.20+0.05*sil; blit();
+  tint(c1||'#c4d2e6'); ctx.globalAlpha=(0.20+0.05*sil)*am; blit();
   // PASS 2 — an A&O toxic-green sheen that breathes CONTINUOUSLY over the silver (ebbs and flows). Slower,
   // out-of-phase sine so it reads as organic flow, not a strobe; capped so the silver stays dominant.
   const grn=rm?0.45:(0.5+0.5*Math.sin(t*1.25+seed*0.7));
-  tint(c2||'#32e060'); ctx.globalAlpha=0.03+0.15*grn; blit();
+  tint(c2||'#32e060'); ctx.globalAlpha=(0.03+0.15*grn)*am; blit();
   ctx.restore(); ctx.globalAlpha=1;
 }
 function drawRebornCore(u, anim, px, pyB, S, fi, t, key){
@@ -1714,7 +1715,10 @@ function drawUnit(state,u,ox,oy){
 
   ctx.save();
   if(u._ninjaHidden){ const _nN=(_vdef&&_vdef.ninja)||{}; ctx.globalAlpha*=(_nN.hideAlpha||0.16); }   // smoke-bomb vanish: dim the whole sprite (+ glow) within this save
-  if(state.bossExtract && u._extracting && typeof bossExtractFrame==='function'){ const _ef=bossExtractFrame(state); if(_ef) ctx.globalAlpha *= (1-_ef.bossFade); }   // EX-TERMINATOR fades out as he boards the bomber (in lockstep with the bomber's hover)
+  // EX-TERMINATOR board-fade: he dissolves as the bomber grabs him. Applied to the glow/rim here AND
+  // RE-APPLIED at the blit below, because drawRebornRim (the green rim) resets globalAlpha to 1.
+  let _exA = 1;
+  if(state.bossExtract && u._extracting && typeof bossExtractFrame==='function'){ const _ef=bossExtractFrame(state); if(_ef) _exA = Math.max(0, 1-(_ef.bossFade||0)); if(_exA<1) ctx.globalAlpha *= _exA; }
   // selection ring — a ground ellipse under the sprite's FEET, scaled to the sprite (no shadow)
   if(u.selected){
     const fy=py-alt+vh*0.3, rx=vh*0.34, ry=vh*0.14;
@@ -1809,7 +1813,8 @@ function drawUnit(state,u,ox,oy){
     // REBORN-CYBORG marker (render-only, body UNTOUCHED): a glowing red silhouette RIM drawn behind
     // the sprite — pixel-exact to the art, identical every frame (no swim), on any unit shape.
     if(u.reborn) drawRebornRim(u, useAnim, px, pyB, S*bScale, fi, state.time||0);
-    else if(u.villain && _vdef && _vdef.cyborgRim) drawRebornRim(u, useAnim, px, pyB, S*bScale, fi, state.time||0, '#3ad070', '#7dffa6');   // GREEN cyborg silhouette rim (EX-TERMINATOR) — render-only FX, body sprite untouched
+    else if(u.villain && _vdef && _vdef.cyborgRim) drawRebornRim(u, useAnim, px, pyB, S*bScale, fi, state.time||0, '#3ad070', '#7dffa6', _exA);   // GREEN cyborg silhouette rim (EX-TERMINATOR) — render-only FX, body sprite untouched; _exA fades the rim WITH the body during bomber-board
+    if(_exA<1) ctx.globalAlpha *= _exA;   // EX-TERMINATOR board-fade: re-apply — drawRebornRim above reset globalAlpha to 1
     const dh = blitFrame(u,px,pyB,useAnim,S*bScale,fi);
     // remember what was just blitted (screen px, valid this frame only) so the post-depth
     // pass can re-draw a faint ghost when a building sprite occludes this unit

@@ -152,6 +152,9 @@
     }
     // opening hold: keep the camera on the speaker for CUT_START_DELAY, THEN begin the first line (showLine resets cs.t)
     if(!cs.started){ if(cs.t>=CUT_START_DELAY){ cs.started=true; showLine(cs); } return; }
+    // a hold-last cutscene (e.g. the EX-TERMINATOR escape) parks on its FINAL line indefinitely — only the
+    // player's click (advanceFlashCutscene) closes it, so the last beat doesn't auto-dismiss with the action.
+    if(cs._holdLast && cs.i >= cs.lines.length-1) return;
     // advance when the clip has finished (and the floor has elapsed) or the hard cap is hit
     if((cs.clipDone && cs.t>=MIN_LINE) || cs.t>=MAX_LINE) advanceFlashCutscene();
   };
