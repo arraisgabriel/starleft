@@ -1986,6 +1986,16 @@ function drawFog(state,ox,oy,x0,y0,x1,y1){
   if(any){ ctx.fillStyle='rgba(5,8,14,.5)'; ctx.fill(); }
 }
 
+// Ground "visual base" of a building in TILE coords. The art renders ~2.5× the footprint and rises
+// upward (buildingDrawBox), so its base spans the full art WIDTH but only ~1 tile deep at the bottom.
+// Used ONLY for the placement crowding warning (cosmetic) — never for collision/placement legality.
+function visualBaseTiles(e){
+  const b=buildingDrawBox(e);
+  const x0=Math.floor(b.x/TILE), x1=Math.ceil((b.x+b.w)/TILE);
+  const y1=Math.ceil((b.y+b.h)/TILE), y0=Math.max(e.ty, y1-1);
+  return { x0, y0, x1, y1 };
+}
+
 function drawPlacement(state,ox,oy){
   const p=state.placing;
   const wx=mouse.wx, wy=mouse.wy;
@@ -1993,10 +2003,50 @@ function drawPlacement(state,ox,oy){
   const ty=Math.floor((wy)/TILE - (p.def.h-1)/2 +0.0001);
   const ok=canPlaceAt(state,p.type,tx,ty) && playerEco(state, LOCAL_CTRL).gold>=p.def.cost;
   const px=tx*TILE+ox, py=ty*TILE+oy, w=p.def.w*TILE, h=p.def.h*TILE;
-  ctx.fillStyle= ok? 'rgba(120,255,150,.3)':'rgba(255,90,90,.3)';
+
+  // Real visual extent. The placed building's SPRITE renders ~2.5× the tile footprint, bottom-anchored
+  // and rising upward — buildingDrawBox is the single source of truth shared with drawBuilding, so this
+  // ghost is pixel-identical to what will actually be drawn. Show a translucent ghost of the real art
+  // plus a dashed outline so the player can plan around existing structures instead of guessing from the
+  // tiny footprint. owner:'player' picks the same faction sprite the placed entity will use.
+  const stub={ tx, ty, w:p.def.w, h:p.def.h, type:p.type, owner:'player' };
+  const spr=buildingSprite(p.type,'player');
+  const box=buildingDrawBox(stub, spr);
+  const gx=box.x+ox, gy=box.y+oy;
+
+  // Amber = the building's visual BASE would overlap an existing building's base ("getting in the way").
+  // This is a WARNING only — placement legality (ok) is unchanged; canPlaceAt is never consulted here.
+  let crowded=false;
+  if(ok){
+    const vb=visualBaseTiles(stub);
+    for(const e of state.entities){
+      if(e.dead || e.kind!=='building') continue;
+      const eb=visualBaseTiles(e);
+      if(vb.x0<eb.x1 && vb.x1>eb.x0 && vb.y0<eb.y1 && vb.y1>eb.y0){ crowded=true; break; }
+    }
+  }
+
+  // footprint tint (the collision rect) — lower alpha than before so the art ghost reads over it
+  ctx.fillStyle= ok? 'rgba(120,255,150,.16)':'rgba(255,90,90,.22)';
   ctx.fillRect(px,py,w,h);
   ctx.strokeStyle= ok? '#8effb0':'#ff6b6b'; ctx.lineWidth=2; ctx.strokeRect(px,py,w,h);
-  state.placeCandidate={tx,ty,ok};
+
+  // translucent real-art ghost (frame 0 — no neon flicker; it's a placement aid). Skipped when the
+  // strip isn't loaded yet; the dashed outline below still shows the real bounds.
+  if(spr){
+    ctx.save(); ctx.globalAlpha= ok?0.40:0.30;
+    ctx.drawImage(spr.img, 0,0, spr.fw,spr.fh, gx,gy, box.w,box.h);
+    ctx.restore();
+  }
+  // dashed outline of the real art box — visible even before the PNG loads and when the art is SMALLER
+  // than the footprint (e.g. intel). Amber when crowding a neighbour, red when the spot is invalid.
+  ctx.save();
+  ctx.setLineDash([6,4]); ctx.lineWidth=1.5;
+  ctx.strokeStyle= !ok? 'rgba(255,107,107,.9)' : crowded? 'rgba(255,206,99,.95)' : 'rgba(142,255,176,.85)';
+  ctx.strokeRect(gx,gy, box.w,box.h);
+  ctx.restore();
+
+  state.placeCandidate={tx,ty,ok,crowded};
 }
 
 /* selection-ring fx (+ cyan-ninja smoke puffs/slashes, + REX mech missiles/explosions/shockwaves — all cosmetic) */

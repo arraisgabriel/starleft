@@ -4,7 +4,7 @@ function buildEnemyBase(state, base, idx){
   // (bottom-anchored, rising upward), so a compact side-by-side layout piles the sprites
   // into one blob on top of the muster. Spread the footprints wide and drop the flankers a
   // row so the tall sprites layer front-to-back into a readable skyline; muster sits clear
-  // below. Base spans ~ax-4..ax+9 × ay..ay+6 (clearArea clears radius 10 around it).
+  // below. Base spans ~ax-6..ax+10 × ay..ay+6 (clearArea clears radius 10 around it).
   const ax=base.x, ay=base.y;
   // `light:true` = a forward outpost, not a base: ONE weak structure + its few guards.
   // Used by Quarter I to give a new player a fast first fight (T0-1); skips vet scaling.
@@ -19,8 +19,8 @@ function buildEnemyBase(state, base, idx){
   }
   // Wide, vertically-staggered layout. Near a map edge, fall back to the old snug offsets so
   // nothing lands off-map (wideR / left-room guards mirror the original unconditional placement).
-  const turretX = (ax-4>=0)          ? ax-4 : ax-2;             // left wing (snug fallback)
-  const barrX   = (ax+9<=state.W-1)  ? ax+7 : ax+4;            // right wing (snug fallback)
+  const turretX = (ax-6>=0)          ? ax-6 : ax-2;             // left wing — wide enough to clear the HQ sprite (snug fallback near edge)
+  const barrX   = (ax+10<=state.W-1) ? ax+8 : ax+4;            // right wing — clears the HQ sprite, footprint stays inside the radius-10 pad (snug fallback near edge)
   const mY      = Math.min(ay+8, state.H-2);                    // muster row, clear below the base
   mkBuilding(state,'hq','enemy', ax, ay, true);                       // 4×3, back-centre anchor (tallest)
   mkBuilding(state,'barracks','enemy', barrX, ay+1, true);            // 3×3, right wing, dropped a row
@@ -292,6 +292,23 @@ function applyPaintLayer(state, cfg, targets){
   return true;
 }
 
+// Clear topography + force passable terrain under owned START-building footprints so every base
+// structure stands on clean, buildable ground. Touches tiles[]/feat[] only — the building's blocked
+// stamp stays, so a future demolish leaves land not water. Owned bases only (never neutral scenery /
+// the Dark Tower / abandoned outposts). Deterministic; safe to call more than once (idempotent).
+function clearStartBuildingGround(state){
+  const W=state.W, H=state.H;
+  for(const e of state.entities){
+    if(e.dead || e.kind!=='building' || e.scenery || e.abandoned) continue;
+    if(e.owner!=='player' && e.owner!=='enemy') continue;
+    for(let y=0;y<e.h;y++)for(let x=0;x<e.w;x++){ const cx=e.tx+x, cy=e.ty+y;
+      if(cx<0||cy<0||cx>=W||cy>=H) continue; const i=cy*W+cx;
+      if(state.feat) state.feat[i]=0;
+      if(!passableTerrain(state.tiles[i])) state.tiles[i]=T_GRASS;
+    }
+  }
+}
+
 function newMap(idx){
   const cfg = scaleCfg(MAPS[idx]);
   const bases = (cfg.enemies || (cfg.enemy ? [cfg.enemy] : [])).filter(Boolean);   // villain arenas have no bases → empty, never [undefined]
@@ -524,7 +541,7 @@ function newMap(idx){
   // BELOW the HQ footprint (in front, never occluded), in widening rows; push the optional
   // People Ops well to the left and down a row so the two big sprites don't pile.
   const phq = mkBuilding(state,'hq','player', cfg.player.x, cfg.player.y, true);
-  if(cfg.startBarracks) mkBuilding(state,'barracks','player', (cfg.player.x-6>=0?cfg.player.x-6:cfg.player.x-4), cfg.player.y+1, true); // People Ops: left wing, dropped a row
+  if(cfg.startBarracks) mkBuilding(state,'barracks','player', (cfg.player.x-8>=0?cfg.player.x-8:cfg.player.x-4), cfg.player.y+1, true); // People Ops: left wing, far enough that the HQ + barracks SPRITES (~2.5× footprint) don't pile
   const nW = cfg.startWorkers!=null ? cfg.startWorkers : 4;   // explicit 0 must stay 0 (Ep X starts economy-less)
   const nS = cfg.startSoldiers!=null ? cfg.startSoldiers : 2;
   let mrow = cfg.player.y+4;                                  // first muster row, clear below the 4×3 HQ
@@ -650,6 +667,14 @@ function newMap(idx){
     dropFeaturesAt(state, cells);
     markFundingNode(state, e);
   }
+
+  // ---- every start building stands on clean, buildable ground (runs LAST) ----
+  // clearArea clears terrain on the radius-10 pad, but decorative topography (feat) and the funding-node
+  // footprint stamps above can still clip a base footprint — especially the wide flanks at the pad edge.
+  // Clear feat + force passable terrain under each owned base footprint so no structure sits on a blocker.
+  // Touches tiles[]/feat[] only (NOT blocked[]): the building's collision stamp stays, and a future
+  // demolish leaves land, not water. Deterministic; owned bases only (never neutral scenery / the tower).
+  clearStartBuildingGround(state);
 
   recomputeSupply(state);
   return state;
@@ -791,7 +816,8 @@ function addCoopPlayer(state, slot){
   const prev=state._defaultCtrl; state._defaultCtrl=slot;       // tag everything spawned below as this slot
   mkBuilding(state,'hq','player', origin.x, origin.y, true);
   // mirror P1's layout: People Ops left-and-down, all units mustered BELOW the rising HQ sprite.
-  if(cfg.startBarracks) mkBuilding(state,'barracks','player', (origin.x-6>=0?origin.x-6:origin.x-4), origin.y+1, true);
+  if(cfg.startBarracks) mkBuilding(state,'barracks','player', (origin.x-8>=0?origin.x-8:origin.x-4), origin.y+1, true);
+  clearStartBuildingGround(state);                              // P2 base sits on clean buildable ground too (mirrors newMap)
   const nW = cfg.startWorkers!=null?cfg.startWorkers:4, nS = cfg.startSoldiers!=null?cfg.startSoldiers:2;
   let mrow = origin.y+4;
   for(let i=0;i<nW;i++) mkUnit(state,'worker','player', origin.x+(i%5), mrow+((i/5)|0));

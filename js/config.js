@@ -119,7 +119,7 @@ const DEF = {
               dmg:8, range:7.5, cd:1.6, flavor:'Stores Funding and onboards unpaid Interns. Fires the occasional warning shot from the rooftop.' },
   barracks: { name:'People Ops',   icon:'🎯', kind:'building', w:3,h:3, hp:900,  cost:150, build:20,  sight:5, supply:0,  color:'#5a6b8a',
               flavor:'"Recruiting" department. Turns Funding into Growth Cyborgs and Consultants.' },
-  turret:   { name:'Legal Team',   icon:'⚖️', kind:'building', w:2,h:2, hp:550,  cost:100, build:14,  sight:7, supply:0,  color:'#7a8aa8',
+  turret:   { name:'Legal Team',   icon:'⚖️', kind:'building', w:1,h:1, hp:550,  cost:100, build:14,  sight:7, supply:0,  color:'#7a8aa8',  // 1×1 footprint; sprite scaled up so the DRAWN turret is ~60% of the old size (BUILDING_TYPE_SCALE.turret, assets.js)
               dmg:14, range:8.625, cd:0.7,   // 15% beyond the longest base unit range (lobbyist 7.5); sieged Auditor (9) still out-ranges it
               flavor:'Fires cease-and-desist letters at anything that trespasses on your IP.' },
   intel:    { name:'Market Research', icon:'🕵️', kind:'building', w:1,h:1, hp:600, cost:1999, build:30, sight:7, supply:0, color:'#8a5aa8',

@@ -624,6 +624,7 @@
 <script src="js/tutorial.js"></script><!-- Quarter I guided tutorial (solo, purely local/cosmetic): coach panel + world focus + Rod voice; hooks in ui/core/render/madosis -->
 <script src="js/main.js"></script>
 <script src="js/sandbox.js"></script><!-- LOCALHOST-ONLY in-game battle test tool ("🧪 Sandbox" on the title menu): map loader + free unit/building placement, god-mode/reveal/freeze-end/funding, sim-speed scrub. Inert (and absent) on the deployed build. Sets the SANDBOX/_godmode/_sandboxReveal/_sandboxNoEnd flags read by main/units/render/core. -->
+<script src="js/placement_tests.js"></script><!-- building-placement + start-base-spacing test harness; OFF (zero cost) unless ?placement-tests=1 → PLACEMENT.runTests(). Loads after assets/map/units/render so their globals exist. -->
 <script src="js/net/determinism.js"></script><!-- rollback determinism experiment: NET.determinismTest() (Stage 0), NET.simHash() -->
 <script src="js/net/rollback-game.js"></script><!-- rollback Game adapter: NET.makeStarleftGame(), NET.rbRoundTripTest(), NET.rbLocalTest() -->
 <script src="js/net/rollback-input.js"></script><!-- rollback input model: codec + rbApplyInputs + predict-empty + NET.rbLocalCmdTest() -->

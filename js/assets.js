@@ -111,7 +111,7 @@ function waterSpriteFor(biome, slot, frame){
 const BUILDING_FRAMES = 9;
 const BUILDING_FPS = 0.9;               // slow ambient neon-flicker playback
 const BUILDING_DRAW_SCALE = 2.5;        // all building sprites drawn this much bigger (footprint unchanged)
-const BUILDING_TYPE_SCALE = { hq:0.65, intel:0.25, darktower:1.05 };   // per-type tweak on top of BUILDING_DRAW_SCALE (HQ reads too big at full 2.5×; intel is a needle-thin mast; darktower is the towering A&O landmark ~3× the HQ)
+const BUILDING_TYPE_SCALE = { hq:0.65, intel:0.25, darktower:1.05, turret:1.2 };   // per-type tweak on top of BUILDING_DRAW_SCALE (HQ reads too big at full 2.5×; intel is a needle-thin mast; darktower is the towering A&O landmark ~3× the HQ; turret 1.2 on its now-1×1 footprint → drawn ~60% of the old 2×2 size)
 // Per-type vertical stretch of the drawn sprite (footprint unchanged). darktower stays 1.0 — its 9:16 art already carries the height; stretching would distort it.
 const BUILDING_TALL = { hq:1.5625, darktower:1.0 };
 function buildingDrawScale(type){ return BUILDING_DRAW_SCALE*(BUILDING_TYPE_SCALE[type]||1); }
@@ -392,6 +392,20 @@ function buildingDrawBox(e, spr){
   const tall = BUILDING_TALL[e.type]||1;
   const dw=w*overhang*buildingDrawScale(e.type), dh=dw*(spr.fh/spr.fw)*tall;
   return { x:x0+(w-dw)/2, y:y0+h-dh+2, w:dw, h:dh };
+}
+// Per-type frame aspect (fh/fw) measured from the shipped 9-frame strips (= 9*stripH/stripW). The
+// DETERMINISTIC twin of buildingDrawBox: it reproduces the same drawn-art geometry but in TILE units
+// and WITHOUT reading the live sprite — so it returns the identical answer on every peer regardless of
+// whether the PNG has loaded yet (buildingDrawBox falls back to the bare footprint until load, which
+// would desync map generation / co-op). Width never needs a sprite; only height uses the baked aspect.
+// Used by start-base spacing logic and the placement test harness; render still uses buildingDrawBox.
+const BUILDING_ART_ASPECT = { hq:1.4075, barracks:0.9958, turret:1.1007, garage:0.9355, launchpad:1.0386, outpost:0.9283 };
+function buildingArtBoxTiles(type, tx, ty){
+  const fw=DEF[type].w, fh=DEF[type].h;
+  const overhang = type==='turret'?1.18:1.08;
+  const dw = fw*overhang*buildingDrawScale(type);
+  const dh = dw*(BUILDING_ART_ASPECT[type]||1)*(BUILDING_TALL[type]||1);
+  return { x: tx+(fw-dw)/2, y: ty+fh-dh+2/TILE, w: dw, h: dh };
 }
 // World point of a building's rooftop gun — normalized within the tile FOOTPRINT (no flip).
 function buildingMuzzle(b){
