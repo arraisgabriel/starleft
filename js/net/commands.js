@@ -64,6 +64,15 @@
     if(netRole!=='client') return (typeof applyOffhoursCommit==='function') ? applyOffhoursCommit(state, payload) : null;
     MP.send('mpcmd', { k:'offhours', from:LOCAL_CTRL, payload, seq:(NET._cmdSeq=(NET._cmdSeq||0)+1) });
   }
+  // Implant Clinic chrome transaction — host-authoritative (mirrors netOffhoursCommit). Returns the
+  // outcome on solo/host (for the local clinic UI). Install/upgrade/remove all route through here.
+  function netChromeCommit(state, payload){
+    if(hubClientBlocked(state)) return { ok:false };
+    if(window.USE_ROLLBACK){ NET.rbEnqueue({ k:'chrome', payload }); return { ok:false }; }
+    if(netRole!=='client') return (typeof applyChromeCommit==='function') ? applyChromeCommit(state, payload) : { ok:false };
+    MP.send('mpcmd', { k:'chrome', from:LOCAL_CTRL, payload, seq:(NET._cmdSeq=(NET._cmdSeq||0)+1) });
+    return { ok:false, pending:true };
+  }
   function netUpgrade(state, building, key){
     if(hubClientBlocked(state)) return;
     if(window.USE_ROLLBACK){ if(building && isMine(building)) NET.rbEnqueue({ k:'upg', bid:building.id, key }); return; }
@@ -136,6 +145,7 @@
   window.netUpgrade=netUpgrade; window.netDemolish=netDemolish; window.netScan=netScan;
   window.netAmove=netAmove; window.netStance=netStance; window.netAbility=netAbility; window.netHeroAbility=netHeroAbility;
   window.netOffhoursCommit=netOffhoursCommit;
+  window.netChromeCommit=netChromeCommit;
 
   /* ---------------- presentation cinematics (mirror a host cutscene to the client) ----------------
      Wrap a host-side cutscene/overlay so the SAME presentation plays on the client. SOLO: just play
@@ -196,6 +206,8 @@
       runScoped(ctrl, mine, ()=> stopSelection());
     } else if(cmd.k==='offhours'){
       if(typeof applyOffhoursCommit==='function') quiet(()=> applyOffhoursCommit(G, cmd.payload));
+    } else if(cmd.k==='chrome'){
+      if(typeof applyChromeCommit==='function') quiet(()=> applyChromeCommit(G, cmd.payload));
     } else if(cmd.k==='train'){
       const b=byId.get(cmd.bid); if(!b||b.owner!=='player'||(b.ctrl||'p1')!==ctrl) return;
       quiet(()=> tryTrain(G, b, cmd.type));

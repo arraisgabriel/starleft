@@ -1299,6 +1299,7 @@ function hubPlacePois(state){
   hubEnsureMapMegas(state);
 }
 function hubSpawnRoster(state){
+  if(typeof hubGrantIconics==='function') hubGrantIconics();   // CYBERWARE: ensure eligible heroes hold their iconic before units bake chrome
   const condos=Object.values(CAMPAIGN.condos), posByCondo={};
   if(!condos.length) return;
   const poiById=state.hubPois;
@@ -1320,12 +1321,211 @@ function hubSpawnRoster(state){
 function hubApplyUpgrades(u){
   const up=CAMPAIGN.upgrades[hubUnitKey(u)] || {};
   const condo=hubCondoForUnit(hubUnitKey(u));
-  const condoLvl=condo ? condo.level||0 : 0, implant=up.implantLevel||0;
-  u.hubHpMul = 1 + condoLvl*0.04 + implant*0.03;
-  u.hubDmgMul = 1 + implant*0.03;
+  const condoLvl=condo ? condo.level||0 : 0;
+  // legacy implantLevel bonus RETIRED — cyberware replaces it. The field is kept in saves (harmless,
+  // unread) so old games load unchanged; hubApplyChrome below now owns the per-unit HP/dmg implant axis.
+  u.hubHpMul = 1 + condoLvl*0.04;
+  u.hubDmgMul = 1;
   if(up.styleId) u.hubStyle=up.styleId;
+  hubApplyChrome(u);                 // layer cyberware on top of the condo baseline (adds to the muls + sets armor/pierce/…)
 }
 function hubCondoForUnit(key){ return Object.values(CAMPAIGN.condos).find(c=>(c.residents||[]).includes(key)); }
+
+/* ===== CYBERWARE (Implant Clinic) — catalog helpers + per-unit recompute ===================
+   Catalog: js/cyberware_data.js (CYBERWARE). Chrome is persistent campaign state, keyed by hubUnitKey:
+   CAMPAIGN.upgrades[key].chrome = { <slotId>: {id, tier} }. Effects bake into the SAME entity fields the
+   sim already reads at combat time → no new sim machinery, rollback-safe, save-safe (additive sub-object).
+   Install/upgrade/remove are host-authoritative HUB transactions; clients receive baked fields via snapshot. */
+function cyberImplant(id){
+  if(!id || typeof CYBERWARE==='undefined') return null;
+  return (CYBERWARE.implants||[]).find(x=>x.id===id) || (CYBERWARE.iconics||[]).find(x=>x.id===id) || null;
+}
+function cyberSlot(slotId){ return (typeof CYBERWARE!=='undefined' && (CYBERWARE.slots||[]).find(s=>s.id===slotId)) || null; }
+function _cyberTier(t){ return Math.max(1, Math.min(5, (t|0)||1)); }
+// resolve a slotted {id,tier} to a flat effect object — numeric axes scaled by tier/3 around the T3 ref
+function cyberEffect(slotted){
+  const imp=cyberImplant(slotted && slotted.id); if(!imp) return null;
+  const t=_cyberTier(slotted.tier), s=t/3, fx=imp.fx||{}, out={ tier:t, id:imp.id, imp };
+  for(const k of ['hp','dmg','armor','speed','sight','range','splash','splashR','madResist','regen','vsBuilding']){
+    if(fx[k]!=null) out[k]=fx[k]*s;
+  }
+  if(fx.pierce) out.pierce=true;
+  if(fx.revive) out.revive=true;
+  if(fx.active) out.active=Object.assign({tier:t}, fx.active);
+  return out;
+}
+function capCostOf(slotted){
+  const imp=cyberImplant(slotted && slotted.id); if(!imp) return 0;
+  const base=(CYBERWARE.tune.capCost[_cyberTier(slotted.tier)-1])||0;
+  return Math.round(base * (imp.capCostMul||1));
+}
+function m3CostOf(slotted){
+  const imp=cyberImplant(slotted && slotted.id); if(!imp) return 0;
+  const base=(CYBERWARE.tune.m3Cost[_cyberTier(slotted.tier)-1])||0;
+  return Math.round(base * (imp.capCostMul||1));
+}
+// per-unit chrome map — accepts a live unit, a roster snapshot (has .key), or a key string
+function chromeOf(uOrKey){
+  const key=(typeof uOrKey==='string') ? uOrKey : (uOrKey && (uOrKey.key || hubUnitKey(uOrKey)));
+  const up=key && CAMPAIGN.upgrades && CAMPAIGN.upgrades[key];
+  return (up && up.chrome) || {};
+}
+function _cyberStars(x){ return (x && (x.stars||0))||0; }
+function _cyberIsHero(x){ return !!(x && (x.hero || x.heroId)); }
+function chromeCapacity(uOrSnap){
+  const t=CYBERWARE.tune;
+  return t.capBase + t.capPerStar*_cyberStars(uOrSnap) + (_cyberIsHero(uOrSnap)?t.heroCapBonus:0);
+}
+function chromeCapUsed(uOrKey){
+  const chrome=chromeOf(uOrKey); let used=0;
+  for(const sid in chrome) used += capCostOf(chrome[sid]);
+  return used;
+}
+// overload strain multiplier (folded into madThreshold). Pure deterministic — consumes no sim RNG.
+function chromeStrainMulFromOver(over, reborn){
+  const t=CYBERWARE.tune;
+  return over>0 ? Math.max(t.strainFloor, 1 - over*t.overloadSanityPerPt*(reborn?t.rebornOverloadMul:1)) : 1;
+}
+// Effective overload strain for a unit/snapshot: the WORSE of its current over-capacity and the
+// permanent `overScar` (max overload ever committed — so the scar survives removing the chrome).
+function chromeStrainFor(x){
+  if(typeof CYBERWARE==='undefined' || !x) return 1;
+  const key=(typeof x==='string')?x:(x.key||hubUnitKey(x));
+  const up=key && CAMPAIGN.upgrades && CAMPAIGN.upgrades[key], ch=(up&&up.chrome)||{};
+  let used=0; for(const k in ch) used+=capCostOf(ch[k]);
+  const liveOver=Math.max(0, used-chromeCapacity(x));
+  return chromeStrainMulFromOver(Math.max(liveOver, (up&&up.overScar)||0), x.reborn);
+}
+// highest purchasable tier for a career level (stars), via the tierStars ladder; 0 = below minStars
+function cyberMaxTier(stars){ let n=0; for(const thr of CYBERWARE.tune.tierStars){ if((stars||0)>=thr) n++; } return n; }
+// Grant each eligible roster hero their bound iconic (tier 5, permanent). Idempotent + host/solo only;
+// granted into the slot's first FREE tile so a player-bought piece is never clobbered. Story-gated by
+// the hero's presence on the roster + the Level-3 lore gate. Append-only safe (resolves by id).
+function hubGrantIconics(){
+  if(typeof CYBERWARE==='undefined' || !(CYBERWARE.iconics||[]).length) return;
+  if(typeof hubCanAct==='function' && !hubCanAct()) return;
+  const heroes=(CAMPAIGN.roster||[]).filter(r=>r && (r.hero||r.heroId) && (r.stars||0)>=CYBERWARE.tune.minStars);
+  for(const ic of CYBERWARE.iconics){
+    const owner=heroes.find(h=>h.heroId===ic.hero); if(!owner) continue;
+    const key='hero:'+owner.heroId, up=CAMPAIGN.upgrades[key]||(CAMPAIGN.upgrades[key]={});
+    up.chrome=up.chrome||{};
+    let has=false; for(const k in up.chrome){ if(up.chrome[k] && up.chrome[k].id===ic.id){ has=true; break; } }
+    if(has) continue;
+    const slot=cyberSlot(ic.slot), n=(slot&&slot.tiles)||1; let tk=null;
+    for(let i=0;i<n;i++){ if(!up.chrome[ic.slot+'#'+i]){ tk=ic.slot+'#'+i; break; } }
+    if(!tk) continue;                                  // no free tile — player filled it; never clobber
+    up.chrome[tk]={ id:ic.id, tier:5, iconic:true };
+  }
+}
+// catalog rows for a slot the unit's rank unlocks (each shown at its highest purchasable tier)
+function cyberCatalogFor(slotId, stars){
+  if(cyberMaxTier(stars)<1) return [];
+  return (CYBERWARE.implants||[]).filter(i=>i.slot===slotId).map(i=>({ imp:i, maxTier:cyberMaxTier(stars) }));
+}
+
+// Recompute chrome onto a live unit's entity fields. Called at the END of hubApplyUpgrades, so it runs
+// at every spawn / mission-carryover / rebake site; it ADDS to the hubHpMul/hubDmgMul the caller set and
+// the caller's applyVetHp() re-bakes maxHp afterward. Idempotent — chrome fields are reset each call.
+function hubApplyChrome(u){
+  if(!u) return;
+  u.chromeArmor=0; u.chromeSpeedMul=1; u.chromeSightMul=1; u.chromeRangeMul=1; u.chromeRegenMul=1;
+  u.chromeMadResist=0; u.chromeVsBuilding=1; u.chromeSplash=0; u.chromeSplashR=0;
+  u.chromePierce=false; u.chromeRevive=false; u.chromeStrainMul=1; u.chromeActive=null;
+  if(typeof CYBERWARE==='undefined') return;
+  const chrome=chromeOf(u); if(!chrome || !Object.keys(chrome).length) return;
+  let hp=u.hubHpMul||1, dmg=u.hubDmgMul||1, armor=0, regen=0, madResist=0, splash=0, splashR=0, vsB=0, used=0;
+  for(const slotId in chrome){
+    const slotted=chrome[slotId]; if(!slotted || !slotted.id) continue;
+    const eff=cyberEffect(slotted); if(!eff) continue;            // unknown id (append-only safety) → skip
+    used += capCostOf(slotted);
+    if(eff.hp) hp += eff.hp;
+    if(eff.dmg) dmg += eff.dmg;
+    if(eff.armor) armor += eff.armor;
+    if(eff.regen) regen += eff.regen;
+    if(eff.madResist) madResist += eff.madResist;
+    if(eff.speed) u.chromeSpeedMul *= (1+eff.speed);
+    if(eff.sight) u.chromeSightMul *= (1+eff.sight);
+    if(eff.range) u.chromeRangeMul *= (1+eff.range);
+    if(eff.splash){ splash=Math.max(splash, eff.splash); splashR=Math.max(splashR, eff.splashR||1.3); }
+    if(eff.vsBuilding) vsB=Math.max(vsB, eff.vsBuilding);
+    if(eff.pierce) u.chromePierce=true;
+    if(eff.revive) u.chromeRevive=true;
+    if(eff.active) u.chromeActive=Object.assign({ id:eff.id }, eff.active);
+  }
+  u.hubHpMul=hp; u.hubDmgMul=dmg;
+  u.chromeArmor=Math.min(0.85, armor);     // clamp — chrome armor alone can't make a unit invulnerable
+  u.chromeRegenMul=1+regen; u.chromeMadResist=madResist; u.chromeVsBuilding=1+vsB;
+  if(splash>0){ u.chromeSplash=splash; u.chromeSplashR=splashR; }
+  // optics/mobility ride the per-entity stat fields the sim reads directly (baked from DEF base × chrome
+  // mul; idempotent — only chromed units reach here, so non-chromed units keep their mkUnit values).
+  const _d=DEF[u.type]||{};
+  if(_d.sight!=null) u.sight=_d.sight*u.chromeSightMul;
+  if(_d.range!=null) u.range=_d.range*u.chromeRangeMul;
+  if(_d.speed!=null) u.speed=_d.speed*u.chromeSpeedMul;
+  // OVERLOAD (Edgerunner analogue): capacity over the ceiling permanently strains sanity. Applied here
+  // as a stored multiplier folded into madThreshold, NOT in-sim → determinism-safe. Reborn pay steeper.
+  u.chromeStrainMul = chromeStrainFor(u);
+}
+
+// HOST-AUTHORITATIVE chrome transaction (entered via netChromeCommit). payload:
+//   { op:'install'|'remove', key, tileKey, slot, id, tier, overload }
+// Cost is derived HERE from the live tile state (never trusted from the client). Returns {ok,msg,...}
+// for the local clinic UI; co-op clients receive the baked effect via the next snapshot. Re-bakes the
+// live entity (if spawned) exactly like hubRebakeResidents; otherwise the chrome persists for next spawn.
+function applyChromeCommit(state, payload){
+  if(!payload || !payload.key) return { ok:false };
+  if(typeof hubCanAct==='function' && !hubCanAct()){ toast('Only the host can operate the clinic.'); return { ok:false }; }
+  if(typeof CYBERWARE==='undefined') return { ok:false };
+  const key=payload.key, tk=payload.tileKey || payload.slot;
+  const up=CAMPAIGN.upgrades[key] || (CAMPAIGN.upgrades[key]={});
+  up.chrome=up.chrome || {};
+  const tune=CYBERWARE.tune;
+  const snap=(CAMPAIGN.roster||[]).find(r=>r.key===key) || null;
+  const live=(state && state.entities||[]).find(e=>e&&!e.dead&&e.kind==='unit'&&e.owner==='player'&&hubUnitKey(e)===key) || null;
+  const stars=(snap&&snap.stars)||(live&&live.stars)||0;
+  const isHero=!!((snap&&(snap.hero||snap.heroId))||(live&&(live.hero||live.heroId)));
+  const rebake=()=>{ up.capUsed=chromeCapUsed(key); if(live){ hubApplyUpgrades(live); if(typeof applyVetHp==='function') applyVetHp(live,true); } };
+
+  if(payload.op==='remove'){
+    const cur=up.chrome[tk]; if(!cur) return { ok:false };
+    if(cur.iconic){ toast('Iconic chrome is bound to the hero — it can’t be removed.'); return { ok:false }; }
+    const refund=Math.round(m3CostOf(cur)*(tune.refundMul||0));
+    delete up.chrome[tk];
+    if(refund>0){ CAMPAIGN.m3+=refund; }
+    rebake();
+    return { ok:true, msg:'Implant removed'+(refund?(' · +M3$ '+refund):''), refund };
+  }
+
+  // install / upgrade / replace
+  const imp=cyberImplant(payload.id); if(!imp) return { ok:false };
+  if(stars < tune.minStars){ toast('Junior units can’t take chrome — needs Level '+tune.minStars); return { ok:false }; }
+  const maxT=cyberMaxTier(stars);
+  const tier=Math.max(1, Math.min(maxT, (payload.tier|0)||1));
+  if(tier<1){ toast('Rank too low for this tier'); return { ok:false }; }
+  const cur=up.chrome[tk];
+  if(cur && cur.iconic){ toast('Iconic chrome is bound to the hero — it can’t be replaced.'); return { ok:false }; }
+  // capacity with this tile's NEW implant in place (exclude the tile's current occupant)
+  let used=0; for(const k in up.chrome){ if(k===tk) continue; used+=capCostOf(up.chrome[k]); }
+  const newCost=capCostOf({ id:imp.id, tier });
+  const cap=tune.capBase + tune.capPerStar*stars + (isHero?tune.heroCapBonus:0);
+  const over=(used+newCost)-cap;
+  if(over>0){
+    const overloadOk=payload.overload && (CAMPAIGN.nextMapIndex>=tune.overloadAppearIdx) && over<=tune.overloadMax;
+    if(!overloadOk){ toast(over>tune.overloadMax ? 'Exceeds overload limit (+'+over+')' : 'Not enough Capacity (needs +'+over+')'); return { ok:false }; }
+  }
+  // M3$ cost: upgrade of the same implant pays the delta; a different piece refunds the old first.
+  let refund=0;
+  if(cur && cur.id===imp.id && tier>cur.tier){
+    if(!hubSpend(Math.max(0, m3CostOf({id:imp.id,tier}) - m3CostOf(cur)))) return { ok:false };
+  } else {
+    if(cur){ refund=Math.round(m3CostOf(cur)*(tune.refundMul||0)); if(refund>0) CAMPAIGN.m3+=refund; }
+    if(!hubSpend(m3CostOf({id:imp.id,tier}))){ if(refund>0) CAMPAIGN.m3-=refund; return { ok:false }; }   // roll back the refund if unaffordable
+  }
+  up.chrome[tk]={ id:imp.id, tier };
+  if(over>0) up.overScar=Math.max(up.overScar||0, over);   // permanent overload scar (survives removal) → steeper for reborn via chromeStrainFor
+  rebake();
+  return { ok:true, msg:imp.name+' · Tier '+tier, over:Math.max(0,over), name:imp.name };
+}
 
 function updateHub(state, dt){
   hubRevealAll(state);

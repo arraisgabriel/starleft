@@ -146,6 +146,14 @@ function update(state, dt){
       // VILLAIN DOWN: the tick a boss reaches 0 HP (a real KILL — a fled ninja set e.dead with hp>0 and was
       // skipped at the top of this loop), award the squad-wide bonus XP to every surviving career unit BEFORE removal.
       if(e.villain && e.owner==='enemy' && typeof awardVillainKillXp==='function') awardVillainKillXp(state, e);
+      // CYBERWARE: Second Heart — a one-shot per-mission auto-revive. Fires BEFORE any death bookkeeping
+      // (no obituary, no unitsLost) so the unit just stays in the fight; spent for the rest of the drop.
+      // _chromeRevived is unset at mkUnit spawn (→ per-mission) and round-trips save/rollback (deterministic).
+      if(e.kind==='unit' && e.owner==='player' && e.chromeRevive && !e._chromeRevived){
+        e._chromeRevived=true; e.hp=e.maxHp; changed=true;
+        if(!window._rbReplaying && typeof spawnRing==='function') spawnRing(e.x, e.y, '#7fd6ff');   // cosmetic pulse; skipped under rollback re-sim
+        continue;
+      }
       // Biba can't die: a downed hero medic falls back to the nearest HQ for end-of-mission extraction
       // instead of dying — so this runs BEFORE the obituary/fallen side-effects below.
       if(e.kind==='unit' && e.owner==='player' && typeof isHealerVet==='function' && isHealerVet(e)){ downHeroToHq(state,e); changed=true; continue; }

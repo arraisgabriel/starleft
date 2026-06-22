@@ -176,6 +176,7 @@ function vetRegen(u, state, dt){
   if(state.time - (u._lastHit||-1e9) < CAREER.healCombatGap) return;   // still in/near combat
   let rate = CAREER.healPctBase * Math.pow(2, Math.floor((lvl-CAREER.healStart)/CAREER.healDoubleEvery));
   if(typeof vetBuff==='function') rate *= vetBuff(u,state).regenMul;   // life-event temp buff/debuff
+  if(u.chromeRegenMul!=null) rate *= u.chromeRegenMul;                  // CYBERWARE: Blood Pump (+) / Pain Editor (−) out-of-combat regen
   if(u.reborn) rate *= REBORN.regenMul;                                // reborn cyborgs have dead nerves — no self-heal
   u.hp = Math.min(u.maxHp, u.hp + u.maxHp*rate*dt);
 }

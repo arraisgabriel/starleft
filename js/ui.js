@@ -517,7 +517,8 @@ function buildHubCommands(sel){
   const poi=sel.find(e=>e.hubPoi);
   const unit=owned.find(e=>e.kind==='unit');
   // Each HUB facility opens its full-screen menu in the reusable shell (openHubMenu).
-  if(poi && poi.hubPoi.kind==='condo')    addCmd('🏙️','CONDO',null,()=>openCondoMenu(poi));
+  if(poi && poi.hubPoi.kind==='condo'){   addCmd('🏙️','CONDO',null,()=>openCondoMenu(poi));
+                                          addCmd('🩺','IMPLANT CLINIC',null,()=>openCondoClinic(poi)); }
   if(poi && poi.hubPoi.kind==='mdc')      addCmd('🛰️','M.D.C.',null,()=>openMdcMenu(poi));
   if(poi && poi.hubPoi.kind==='ultra')    addCmd('◆','ULTRA',null,()=>openUltraMenu());
   if(poi && poi.hubPoi.kind==='training') addCmd('🎯','TRAINING GROUNDS',null,()=>openTrainingMenu());
@@ -527,8 +528,8 @@ function buildHubCommands(sel){
     addCmd('🍸', 'ENTER · '+(poi.hubPoi.name||'THE OFF-HOURS'), null, ()=>{ const vets=owned.filter(e=>e.kind==='unit'); if(typeof openInterior==='function') openInterior(poi, vets); else openVenueMenu(poi, vets); });
   if(!poi && !unit) addCmd('🕯','VETERANS & MEMORIAL',null,()=>showRoster());   // top-level in the HUB (T1-7)
   if(unit){
-    const key=hubUnitKey(unit), up=(CAMPAIGN.upgrades[key]||{}), il=up.implantLevel||0;
-    addCmd('🧬','Implant',HUB.implantCosts[il]==null?null:HUB.implantCosts[il],()=>hubUpgradeSelectedUnit('implant'));
+    // legacy "🧬 Implant" button retired — cyberware is installed per-unit at the condo's Implant Clinic.
+    const key=hubUnitKey(unit), up=(CAMPAIGN.upgrades[key]||{});
     addCmd('🧥','Style',up.styleId?null:HUB.styleCost,()=>hubUpgradeSelectedUnit('style'));
     addCmd('🎓','Academy',up.academyVisit===CAMPAIGN.visit?null:HUB.academyCost,()=>hubUpgradeSelectedUnit('academy'));
   }
@@ -704,14 +705,37 @@ function dossierCardHTML(u){
   const type=(def.icon?def.icon+' ':'')+def.name;   // role only — the level rides on its own .dcard-rank row below
   const rank=(typeof careerLevelHTML==='function')?careerLevelHTML(lvl,true):'';
   return `<div class="dcard">`
-    + `<canvas class="dcard-spr" width="220" height="220" data-type="${u.type}" data-sprite="${u.spriteType||''}"></canvas>`
+    + `<div class="dcard-sprwrap">`
+    +   `<canvas class="dcard-spr" width="220" height="220" data-type="${u.type}" data-sprite="${u.spriteType||''}"></canvas>`
+    +   `<canvas class="dcard-cyber-map" width="220" height="220"></canvas>`
+    + `</div>`
     + `<div class="dcard-name">${name}</div>`
     + `<div class="dcard-type">${type}</div>`
     + (rank?`<div class="dcard-rank">${rank}</div>`:``)
     + `<div class="dcard-bars">`
     +   `<div class="dcard-bar dcard-hp"><i></i><span class="dcard-bar-cap">HP</span><span class="dcard-bar-val"></span></div>`
     +   `<div class="dcard-bar dcard-mad"><i></i><span class="dcard-bar-cap">Madosis</span><span class="dcard-bar-val"></span></div>`
-    + `</div></div>`;
+    + `</div>`
+    + cyberDossierHTML(u)
+    + `</div>`;
+}
+// the dossier "Cyberware" readout — installed implants (slot-ordered) + capacity; a muted hint for
+// chrome-eligible units with none. The live body-map markers ride the portrait via dossierTick.
+function cyberDossierHTML(u){
+  if(typeof chromeOf!=='function' || typeof CYBERWARE==='undefined') return '';
+  const chrome=chromeOf(u), keys=Object.keys(chrome);
+  if(keys.length){
+    const bySlot={}; for(const k of keys){ const sid=k.split('#')[0]; (bySlot[sid]=bySlot[sid]||[]).push(chrome[k]); }
+    let rows='';
+    for(const slot of CYBERWARE.slots){ const arr=bySlot[slot.id]; if(!arr) continue;
+      for(const it of arr){ const imp=cyberImplant(it.id); if(!imp) continue;
+        rows+=`<li><span class="dcl-glyph">${imp.glyph}</span><span class="dcl-name">${imp.name}</span><span class="dcl-tier">T${it.tier}</span></li>`; } }
+    const used=chromeCapUsed(u), cap=chromeCapacity(u);
+    return `<div class="dcard-cyber"><div class="dk">Cyberware <span class="dcl-cap${used>cap?' over':''}">⛓ ${used}/${cap}</span></div><ul class="dcard-cyber-list">${rows}</ul></div>`;
+  }
+  if((u.stars||0) >= CYBERWARE.tune.minStars)
+    return `<div class="dcard-cyber"><div class="dk">Cyberware</div><div class="dcl-none">No implants — visit the Implant Clinic.</div></div>`;
+  return '';
 }
 // per-frame refresh of the live card; self-terminates when the dossier is hidden.
 function dossierTick(){
@@ -732,6 +756,9 @@ function dossierTick(){
   if(body){
     const cv=body.querySelector('canvas.dcard-spr');
     if(cv) drawTrainCanvas(cv, cv.dataset.type, cv.dataset.sprite||'', performance.now()/1000);
+    // live cyberware body-map markers ride ON the portrait (overlay canvas, drawn after the sprite)
+    const cvc=body.querySelector('canvas.dcard-cyber-map');
+    if(cvc && typeof drawCyberwareBodyMap==='function') drawCyberwareBodyMap(cvc, u, performance.now()/1000, {overlayOnly:true, markers:true});
     // HP — same fraction + hpColor thresholds the world-view bar uses; 0 once dead.
     const maxHp=u.maxHp||1, hp=u.dead?0:Math.max(0,u.hp||0), hpFrac=Math.max(0,Math.min(1,hp/maxHp));
     const hpI=body.querySelector('.dcard-hp>i'); if(hpI){ hpI.style.width=(hpFrac*100)+'%'; hpI.style.background=hpColor(hpFrac); }
@@ -843,8 +870,13 @@ function hubUnitMaxHp(u){
   let mul=1;
   if(typeof hubCondoForUnit==='function' && typeof CAMPAIGN!=='undefined' && CAMPAIGN.condos && u.key){
     const c=hubCondoForUnit(u.key), cl=c?(c.level||0):0;
-    const up=(CAMPAIGN.upgrades && CAMPAIGN.upgrades[u.key])||{};
-    mul=1 + cl*0.04 + (up.implantLevel||0)*0.03;
+    // condo HP + cyberware HP (legacy implantLevel retired — mirrors hubApplyUpgrades/hubApplyChrome)
+    let chromeHp=0;
+    if(typeof chromeOf==='function' && typeof cyberEffect==='function'){
+      const chrome=chromeOf(u.key);
+      for(const sid in chrome){ const e=cyberEffect(chrome[sid]); if(e&&e.hp) chromeHp+=e.hp; }
+    }
+    mul=1 + cl*0.04 + chromeHp;
   }
   return Math.round(def.hp * (1 + hpPerStar*(u.stars||0)) * mul) || (u.maxHp||0);
 }
@@ -1982,6 +2014,300 @@ function openCondoMenu(poiOrId){
       body.appendChild(foot);
     }
   });
+}
+
+/* =====================================================================
+   IMPLANT CLINIC (cyberware) — each condo's own ripperdoc. Reached from the
+   "🩺 IMPLANT CLINIC" bottom-bar button beside CONDO (buildHubCommands). A thin
+   left rail lists the condo's residents; picking one drives the ripperdoc panel
+   on the right (stat strip · flanked slot groups · live sprite on a plinth).
+   Operates on roster SNAPSHOTS (chrome is persistent campaign state keyed by
+   hubUnitKey) — host-authoritative installs route through netChromeCommit.
+   ===================================================================== */
+let _clinic = { condoId:null, key:null, cat:null };   // active condo · active resident key · open catalog {slot,tileKey}|null
+
+function _clinicResidents(condoId){
+  const c=(CAMPAIGN.condos && CAMPAIGN.condos[condoId]) || {residents:[]};
+  return (c.residents||[]).map(k=>(CAMPAIGN.roster||[]).find(x=>x.key===k)).filter(Boolean);
+}
+function _clinicActiveSnap(){
+  if(!_clinic.key) return null;
+  return _clinicResidents(_clinic.condoId).find(s=>s.key===_clinic.key) || null;
+}
+function _clinicName(snap){
+  try{ if(snap.lore && typeof buildDossier==='function'){ const d=buildDossier(snap); if(d&&d.full) return d.full; } }catch(_){}
+  return snap.heroId || (DEF[snap.type]&&DEF[snap.type].name) || snap.type;
+}
+function openCondoClinic(poiOrId){
+  const id=(typeof poiOrId==='string')?poiOrId:((poiOrId&&poiOrId.hubPoi)?poiOrId.hubPoi.id:null);
+  if(!id || typeof CYBERWARE==='undefined') return;
+  const cfg=(typeof hubPoiConfig==='function')?hubPoiConfig(id):null;
+  const nm=(cfg&&cfg.name)||'Unit Condo';
+  _clinic={ condoId:id, key:null, cat:null };
+  const res=_clinicResidents(id); if(res.length) _clinic.key=res[0].key;
+  openHubMenu({
+    id:'clinic', icon:'🩺', title:'IMPLANT CLINIC',
+    subtitle:'Back-alley ripperdoc · '+nm+' — chrome up your residents (Level '+CYBERWARE.tune.minStars+'+)',
+    signature:function(){
+      const r=_clinicResidents(id).map(s=>s.key).join(',');
+      const k=_clinic.key, ch=k?JSON.stringify(chromeOf(k)):'';
+      return 'clinic:'+id+'|k:'+(k||'')+'|c:'+ch+'|cap:'+(k?chromeCapUsed(k):0)+'|m3:'+(CAMPAIGN.m3|0)+'|cat:'+(_clinic.cat?_clinic.cat.tileKey:'')+'|r:'+r;
+    },
+    build:function(body){ buildClinicBody(body, id); },
+    tick:function(body){ const cv=body.querySelector('canvas.rip-figure'); if(cv){ const s=_clinicActiveSnap(); drawCyberwareBodyMap(cv, s, performance.now()/1000, {ring:true}); } },   // no slot→body cables — they never landed on the right body part; just the figure on its plinth + targeting ring
+  });
+}
+function buildClinicBody(body, condoId){
+  const grid=document.createElement('div'); grid.className='clinic-grid';
+  // left rail — residents
+  const rail=document.createElement('div'); rail.className='clinic-roster';
+  const h=document.createElement('div'); h.className='train-h'; h.textContent='Residents'; rail.appendChild(h);
+  const res=_clinicResidents(condoId);
+  if(!res.length){ const m=document.createElement('div'); m.className='clinic-empty'; m.textContent='No residents yet — veterans move in as they join your roster.'; rail.appendChild(m); }
+  else res.forEach(s=>rail.appendChild(clinicRailCard(s)));
+  grid.appendChild(rail);
+  // right panel — the ripperdoc screen for the active resident
+  const panel=document.createElement('div'); panel.className='rip-panel';
+  const snap=_clinicActiveSnap();
+  if(!snap){ const p=document.createElement('div'); p.className='rip-pick'; p.textContent='Select a resident to begin'; panel.appendChild(p); }
+  else buildRipperdocBody(panel, snap);
+  grid.appendChild(panel);
+  body.appendChild(grid);
+}
+function clinicRailCard(snap){
+  const card=document.createElement('button'); card.className='clinic-rail-card'+(_clinic.key===snap.key?' sel':'');
+  const cv=document.createElement('canvas'); cv.width=cv.height=80; cv.className='clinic-rail-spr train-spr';
+  cv.dataset.type=snap.type; cv.dataset.sprite=snap.spriteType||''; card.appendChild(cv);
+  const tx=document.createElement('div'); tx.className='clinic-rail-tx';
+  const nslots=Object.keys(chromeOf(snap.key)).length;
+  tx.innerHTML='<b>'+_clinicName(snap)+'</b><span class="crc-sub">Lv '+(snap.stars||0)+(nslots?' · <span class="crc-chrome">'+nslots+' chrome</span>':'')+'</span>';
+  card.appendChild(tx);
+  card.onclick=()=>{ _clinic.key=snap.key; _clinic.cat=null; buildHubMenuBody(); };
+  return card;
+}
+function buildRipperdocBody(host, snap){
+  host.appendChild(ripStatStrip(snap));
+  const grid=document.createElement('div'); grid.className='rip-grid';
+  const left=document.createElement('div'); left.className='rip-col left';
+  const right=document.createElement('div'); right.className='rip-col right';
+  for(const slot of CYBERWARE.slots){ (slot.side==='right'?right:left).appendChild(ripSlotGroup(snap, slot)); }
+  const fig=document.createElement('div'); fig.className='rip-figwrap';
+  const cv=document.createElement('canvas'); cv.className='rip-figure'; cv.width=300; cv.height=340; fig.appendChild(cv);
+  grid.appendChild(left); grid.appendChild(fig); grid.appendChild(right);
+  host.appendChild(grid);
+  if(_clinic.cat) host.appendChild(buildRipCatalog(snap, _clinic.cat.slot, _clinic.cat.tileKey));
+}
+function ripStatStrip(snap){
+  const strip=document.createElement('div'); strip.className='rip-stats';
+  const used=chromeCapUsed(snap.key), cap=chromeCapacity(snap), frac=cap>0?Math.min(1,used/cap):0, over=used>cap;
+  const rank=(typeof careerLevelHTML==='function')?careerLevelHTML(snap.stars||0,true):('Lv '+(snap.stars||0));
+  const ep=(CAMPAIGN.nextMapIndex|0)+1;
+  strip.innerHTML=
+    '<div class="rip-stat"><span class="rip-stat-k">Rank</span><span class="rip-stat-v">'+rank+'</span></div>'+
+    '<div class="rip-stat clear"><span class="rip-stat-k">Clearance</span><span class="rip-stat-v">EP '+ep+'</span></div>'+
+    '<div class="rip-cap'+(over?' over':'')+'"><div class="rip-cap-k"><span class="rip-lock">⛓ Capacity</span><b>'+used+' / '+cap+'</b></div>'+
+      '<div class="rip-cap-track"><div class="rip-cap-fill" style="width:'+(frac*100).toFixed(1)+'%"></div></div></div>'+
+    '<div class="rip-stat m3"><span class="rip-stat-k">Treasury</span><span class="rip-stat-v">M3$ '+(CAMPAIGN.m3|0)+'</span></div>';
+  return strip;
+}
+function ripSlotGroup(snap, slot){
+  const grp=document.createElement('div'); grp.className='rip-group';
+  const head=document.createElement('div'); head.className='train-h';
+  const avail=slot.locked?0:cyberCatalogFor(slot.id, snap.stars||0).length;
+  head.innerHTML='<span>'+slot.glyph+' '+slot.name+'</span>'+
+    (slot.locked?'<span class="rip-grp-count none">🔒 soon</span>'
+      :'<span class="rip-grp-count'+(avail?'':' none')+'">'+(slot.exclusive?'one only':(avail+' avail'))+'</span>');
+  grp.appendChild(head);
+  const tiles=document.createElement('div'); tiles.className='rip-tiles';
+  for(let i=0;i<(slot.tiles||1);i++) tiles.appendChild(ripSlotTile(snap, slot, i));
+  grp.appendChild(tiles);
+  return grp;
+}
+function _canUpgrade(snap, cur){ return cur && cur.tier < cyberMaxTier(snap.stars||0); }
+function ripSlotTile(snap, slot, i){
+  const tileKey=slot.id+'#'+i;
+  const tile=document.createElement('button'); tile.className='rip-slot'; tile.dataset.tk=tileKey;
+  if(slot.locked){ tile.className+=' locked'; tile.innerHTML='<span class="rip-glyph">🔒</span>'; tile.title='Unlocks in a later update'; return tile; }
+  const cur=chromeOf(snap.key)[tileKey];
+  const gated=(snap.stars||0) < CYBERWARE.tune.minStars;
+  if(cur){
+    const imp=cyberImplant(cur.id);
+    tile.className+=' filled'+(cur.iconic?' iconic':'')+((_canUpgrade(snap,cur)&&!cur.iconic)?' upgrade':'');
+    tile.innerHTML='<span class="rip-glyph">'+((imp&&imp.glyph)||'◆')+'</span><span class="rip-tier">'+(cur.iconic?'★':cur.tier)+'</span>';
+    tile.title=(imp?imp.name:cur.id)+(cur.iconic?' · Iconic':' · Tier '+cur.tier);
+    tile.onclick=()=>{ _clinic.cat={ slot:slot.id, tileKey }; buildHubMenuBody(); };
+  } else {
+    tile.className+=' empty'; tile.innerHTML='<span class="rip-glyph">+</span>';
+    if(gated){ tile.className+=' blocked'; tile.title='Junior units can’t take chrome — needs Level '+CYBERWARE.tune.minStars; }
+    else tile.onclick=()=>{ _clinic.cat={ slot:slot.id, tileKey }; buildHubMenuBody(); };
+  }
+  return tile;
+}
+function _chromeCapUsedExcl(key, tileKey){ const ch=chromeOf(key); let u=0; for(const k in ch){ if(k===tileKey) continue; u+=capCostOf(ch[k]); } return u; }
+function _effDeltaText(eff){
+  if(!eff) return '';
+  const p=[];
+  if(eff.hp) p.push('+'+Math.round(eff.hp*100)+'% HP');
+  if(eff.dmg) p.push('+'+Math.round(eff.dmg*100)+'% dmg');
+  if(eff.armor) p.push('+'+Math.round(eff.armor*100)+'% armor');
+  if(eff.vsBuilding) p.push('+'+Math.round(eff.vsBuilding*100)+'% vs bldg');
+  if(eff.regen) p.push((eff.regen>0?'+':'')+Math.round(eff.regen*100)+'% regen');
+  if(eff.sight) p.push('+'+Math.round(eff.sight*100)+'% sight');
+  if(eff.range) p.push('+'+Math.round(eff.range*100)+'% range');
+  if(eff.madResist) p.push('−'+Math.round(eff.madResist*100)+'% madosis');
+  if(eff.splash) p.push('splash');
+  if(eff.pierce) p.push('armor-piercing');
+  if(eff.revive) p.push('revive once');
+  if(eff.active){ const a=eff.active; p.push('active +'+Math.round((a.dmgMul||0)*100)+'% dmg'+(a.trigger==='hit'?' on-hit':(a.dur?' ('+a.dur+'s/'+(a.cd||0)+'s)':''))+(a.dmgResist?', −'+Math.round(a.dmgResist*100)+'% dmg taken':'')); }
+  return p.join(' · ');
+}
+function buildRipCatalog(snap, slotId, tileKey){
+  const fly=document.createElement('div'); fly.className='rip-cat';
+  const slot=cyberSlot(slotId);
+  const head=document.createElement('div'); head.className='rip-cat-head';
+  const h=document.createElement('div'); h.className='train-h'; h.textContent=(slot?slot.name:'')+' — Catalog';
+  const x=document.createElement('button'); x.className='rip-cat-x'; x.textContent='✕'; x.onclick=()=>{ _clinic.cat=null; buildHubMenuBody(); };
+  head.appendChild(h); head.appendChild(x); fly.appendChild(head);
+  if(_clinic.cat && _clinic.cat.overload){ fly.appendChild(_ripOverloadConfirm(snap, _clinic.cat.overload)); return fly; }
+  const cur=chromeOf(snap.key)[tileKey];
+  if(cur){
+    const imp=cyberImplant(cur.id);
+    const info=document.createElement('div'); info.className='rcr-flavor'; info.textContent=(imp?imp.flavor:''); fly.appendChild(info);
+    if(cur.iconic){ const note=document.createElement('div'); note.className='rcr-name'; note.style.color='#ffd86b';
+      note.textContent='★ Iconic — bound to '+((imp&&imp.hero)||'this hero')+'. Permanent.'; fly.appendChild(note); return fly; }
+    if(_canUpgrade(snap,cur)) fly.appendChild(ripCatRow(snap, slotId, tileKey, imp, cur.tier+1, '▲ Upgrade to Tier '+(cur.tier+1)));
+    const rmCost=Math.round(m3CostOf(cur)*CYBERWARE.tune.refundMul);
+    fly.appendChild(hubMenuActionBtn('✕ Remove'+(rmCost?(' · refund M3$ '+rmCost):''), null, true, ()=>clinicCommit({op:'remove', key:snap.key, tileKey})));
+    const swap=cyberCatalogFor(slotId, snap.stars||0).filter(r=>r.imp.id!==cur.id);
+    if(swap.length){ const sh=document.createElement('div'); sh.className='train-h'; sh.textContent='Swap to'; fly.appendChild(sh);
+      for(const r of swap) fly.appendChild(ripCatRow(snap, slotId, tileKey, r.imp, Math.min(r.maxTier,1))); }
+    return fly;
+  }
+  const rows=cyberCatalogFor(slotId, snap.stars||0);
+  if(!rows.length){ const m=document.createElement('div'); m.className='clinic-empty'; m.textContent=((snap.stars||0)<CYBERWARE.tune.minStars?('Needs Level '+CYBERWARE.tune.minStars+' — junior units can’t take chrome.'):'No implants available at this rank.'); fly.appendChild(m); return fly; }
+  for(const r of rows) fly.appendChild(ripCatRow(snap, slotId, tileKey, r.imp, r.maxTier));
+  return fly;
+}
+function ripCatRow(snap, slotId, tileKey, imp, tier, labelOverride){
+  const row=document.createElement('button'); row.className='rip-cat-row';
+  const eff=cyberEffect({id:imp.id, tier});
+  const cap=capCostOf({id:imp.id, tier}), m3=m3CostOf({id:imp.id, tier});
+  const free=chromeCapacity(snap)-_chromeCapUsedExcl(snap.key, tileKey), over=cap-free;
+  const afford=(CAMPAIGN.m3|0)>=m3;
+  if(over>0 || !afford) row.className+=' dim'+(over>0?' over':'');
+  row.innerHTML='<div class="rcr-top"><span class="rcr-name">'+(labelOverride||imp.name)+'</span><span class="rcr-tier">T'+tier+'</span></div>'+
+    '<div class="rcr-flavor">'+imp.flavor+'</div>'+
+    '<div class="rcr-stats"><span class="rcr-eff">'+_effDeltaText(eff)+'</span><span class="rcr-cap">⛓ '+cap+(over>0?(' (+'+over+')'):'')+'</span><span class="rcr-cost">M3$ '+m3+'</span></div>';
+  row.onclick=()=>{
+    if(over>0) clinicTryOverload(snap, slotId, tileKey, imp, tier, over);
+    else clinicCommit({op:'install', key:snap.key, tileKey, slot:slotId, id:imp.id, tier});
+  };
+  return row;
+}
+// Overload (P3): exceeding capacity costs permanent sanity. Gated by campaign progress; refused otherwise.
+// Available → arm a hold-to-confirm in the flyout (never a silent penalty).
+function clinicTryOverload(snap, slotId, tileKey, imp, tier, over){
+  const t=CYBERWARE.tune;
+  if((CAMPAIGN.nextMapIndex|0) < t.overloadAppearIdx){ toast('Not enough Capacity (needs +'+over+')'); return; }
+  if(over>t.overloadMax){ toast('Exceeds overload limit (+'+over+')'); return; }
+  if(_clinic.cat){ _clinic.cat.overload={ slot:slotId, tileKey, id:imp.id, tier, over }; buildHubMenuBody(); }
+}
+function _ripOverloadConfirm(snap, ov){
+  const t=CYBERWARE.tune, imp=cyberImplant(ov.id), reborn=!!snap.reborn;
+  const pct=Math.round(ov.over*t.overloadSanityPerPt*(reborn?t.rebornOverloadMul:1)*100);
+  const wrap=document.createElement('div'); wrap.className='rip-detail';
+  const h=document.createElement('div'); h.className='rcr-name'; h.style.color='#ff8a8a'; h.textContent='⚠ OVERLOAD';
+  const f=document.createElement('div'); f.className='rcr-flavor';
+  f.innerHTML='Forcing <b>'+(imp?imp.name:'this chrome')+'</b> past capacity (+'+ov.over+'). <span style="color:#ff8a8a">Permanent: −'+pct+'% sanity threshold'+(reborn?' · reborn frame, steeper':'')+'.</span> They break into a feral malfunction sooner under field stress.';
+  wrap.appendChild(h); wrap.appendChild(f);
+  wrap.appendChild(_ripHoldBtn('⛓ HOLD TO OVERLOAD', ()=>clinicCommit({op:'install', key:snap.key, tileKey:ov.tileKey, slot:ov.slot, id:ov.id, tier:ov.tier, overload:true})));
+  wrap.appendChild(hubMenuActionBtn('Cancel', null, true, ()=>{ if(_clinic.cat) _clinic.cat.overload=null; buildHubMenuBody(); }));
+  return wrap;
+}
+// hold-pointer-to-confirm button — the fill sweeps over .9s; release early cancels. Pointer events cover touch + mouse.
+function _ripHoldBtn(label, onConfirm){
+  const b=document.createElement('button'); b.className='sc-btn hub-action rip-overload';
+  const fill=document.createElement('span'); fill.className='rip-ol-fill'; b.appendChild(fill);
+  const tx=document.createElement('span'); tx.textContent=label; b.appendChild(tx);
+  let tmr=0;
+  const start=(e)=>{ if(e&&e.preventDefault) e.preventDefault(); fill.style.transition='width .9s linear'; requestAnimationFrame(()=>{ fill.style.width='100%'; }); tmr=setTimeout(()=>{ tmr=0; onConfirm(); }, 900); };
+  const cancel=()=>{ if(tmr){ clearTimeout(tmr); tmr=0; } fill.style.transition='width .12s'; fill.style.width='0%'; };
+  b.addEventListener('pointerdown', start); b.addEventListener('pointerup', cancel);
+  b.addEventListener('pointerleave', cancel); b.addEventListener('pointercancel', cancel);
+  return b;
+}
+function clinicCommit(payload){
+  const res=(typeof netChromeCommit==='function')?netChromeCommit(G, payload):null;
+  if(res && res.ok){ _clinic.cat=null; buildHubMenuBody(); if(typeof toast==='function' && res.msg) toast(res.msg); _clinicPulse(payload.tileKey); }
+  else if(res && res.pending){ toast('Request sent to host.'); }
+  // on failure the host applier already toasted the reason — keep the flyout open
+}
+function _clinicPulse(tileKey){
+  setTimeout(()=>{ const b=document.getElementById('hubMenuBody'); if(!b) return;
+    const t=b.querySelector('.rip-slot[data-tk="'+tileKey+'"]'); if(t){ t.classList.add('pulse'); setTimeout(()=>t.classList.remove('pulse'),760); } }, 24);
+}
+/* Shared cyberware figure/body-map renderer — used by the clinic center figure (cables+ring) and the
+   dossier section (markers). Replicates drawTrainCanvas's sprite blit, then routes glow cables from each
+   occupied slot to a frame-normalized body anchor. Deterministic on tnow (rollback/replay-safe). */
+const RIP_ANCHORS = { optics:[0.50,0.13], os:[0.50,0.24], circ:[0.50,0.42], frame:[0.50,0.63], arms:[0.66,0.47], legs:[0.50,0.85] };
+function _ripCable(c, x0, y0, x1, y1, tnow, dot){
+  c.save(); c.globalCompositeOperation='lighter'; c.lineCap='round';
+  const layers=[[3.2,'rgba(90,180,255,.12)'],[1.8,'rgba(110,200,255,.26)'],[1.0,'rgba(210,240,255,.5)']];
+  for(const [w,col] of layers){ c.strokeStyle=col; c.lineWidth=w; c.beginPath(); c.moveTo(x0,y0); c.lineTo(x1,y1); c.stroke(); }
+  if(dot!==false){ const p=(tnow*0.6)%1, px=x0+(x1-x0)*p, py=y0+(y1-y0)*p;   // a pulse travelling toward the body
+    c.fillStyle='rgba(220,245,255,.9)'; c.beginPath(); c.arc(px,py,1.8,0,Math.PI*2); c.fill(); }
+  c.restore();
+}
+function drawCyberwareBodyMap(cv, snap, tnow, opts){
+  opts=opts||{};
+  const c=cv.getContext('2d'), W=cv.width, H=cv.height; c.clearRect(0,0,W,H);
+  if(!snap) return;
+  // overlayOnly: draw ONLY cables/markers (the sprite already lives on a layer below — e.g. the dossier
+  // .dcard-spr). Then match drawTrainCanvas's framing (0.9 fit, centered, no plinth shift) so markers align.
+  const overlay=!!opts.overlayOnly;
+  if(!overlay && opts.ring!==false){
+    // a clean targeting ring ON THE FLOOR under the feet — never crosses the body. The "rotation" is the
+    // dash pattern travelling around a fixed ground ellipse (animating the shape itself would tilt it).
+    c.save();
+    const cx=W/2, cy=H*0.88;
+    c.strokeStyle='rgba(110,200,255,.20)'; c.lineWidth=1.4; c.beginPath(); c.ellipse(cx,cy,W*0.32,H*0.05,0,0,Math.PI*2); c.stroke();   // plinth
+    c.strokeStyle='rgba(110,200,255,.16)'; c.lineWidth=1.1; c.setLineDash([5,11]); c.lineDashOffset=-(tnow*12)%16;                       // dashes drift around it
+    c.beginPath(); c.ellipse(cx,cy,W*0.27,H*0.042,0,0,Math.PI*2); c.stroke();
+    c.restore();
+  }
+  // sprite blit (replicates drawTrainCanvas; full mode foot-anchored a touch high to sit on the plinth)
+  const fit=opts.fit||(overlay?0.9:0.78), shiftY=overlay?0:-H*0.05;
+  const sType=snap.spriteType||snap.type;
+  const anim=(typeof unitWalk==='function' && sType)?unitWalk(sType,'player'):null;
+  let box;
+  if(anim && anim.ready && anim.frames){
+    const n=anim.frames.length, fi=((tnow*4)|0)%n, fr=anim.frames[fi], fw=fr[2], fh=fr[3];
+    const s=Math.min(W/fw, H/fh)*fit, dw=fw*s, dh=fh*s, ox=(W-dw)/2, oy=(H-dh)/2 + shiftY;
+    if(!overlay) c.drawImage(anim.img, fr[0],fr[1],fw,fh, ox,oy,dw,dh); box={ox,oy,dw,dh};
+  } else {
+    if(!overlay){ c.font='64px '+GAME_FONT; c.textAlign='center'; c.textBaseline='middle'; c.fillStyle='#bfe6ff';
+      c.fillText((DEF[snap.type]&&DEF[snap.type].icon)||'•', W/2, H*0.46); }
+    box={ox:W*0.2,oy:H*0.12,dw:W*0.6,dh:H*0.7};
+  }
+  // cables / markers from occupied slots to body anchors
+  const chrome=chromeOf(snap.key||snap), occ={};
+  for(const k in chrome){ occ[k.split('#')[0]]=chrome[k]; }
+  for(const sid in occ){
+    const a=RIP_ANCHORS[sid]; if(!a) continue;
+    const ax=box.ox+box.dw*a[0], ay=box.oy+box.dh*a[1];
+    const right=(cyberSlot(sid)||{}).side==='right';
+    if(opts.cables){ _ripCable(c, right?W*0.97:W*0.03, ay, ax, ay, tnow, true); }
+    if(opts.markers){
+      const ex=right?Math.min(W-8,ax+W*0.16):Math.max(8,ax-W*0.16);
+      _ripCable(c, ex, ay, ax, ay, tnow, false);
+      const imp=cyberImplant(occ[sid].id);
+      c.save(); c.fillStyle='rgba(8,16,22,.92)'; c.strokeStyle='rgba(110,200,255,.7)'; c.lineWidth=1;
+      c.beginPath(); c.arc(ax,ay,3.2,0,Math.PI*2); c.fill(); c.stroke();
+      c.font='12px '+GAME_FONT; c.textBaseline='middle'; c.textAlign=right?'left':'right'; c.fillStyle='#cfe9ff';
+      c.fillText(((imp&&imp.glyph)||'◆')+' '+(occ[sid].tier||''), right?ex+3:ex-3, ay);
+      c.restore();
+    }
+  }
 }
 
 /* ---- ULTRA Headquarters menu ---- */

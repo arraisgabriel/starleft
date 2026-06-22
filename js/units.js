@@ -923,6 +923,7 @@ function updateUnit(state,u,dt){
     // effective stats (Auditor gains range/dmg/splash while sieged). u.splash overrides def.splash so a
     // villain (base type has none) can splash its BASIC attack too — THE EX-TERMINATOR's every swing is AOE.
     let aRange=u.range, aDmg=u.dmg, aSplash=(u.splash!=null?u.splash:(def.splash||0)), aSplashR=(u.splashR!=null?u.splashR:(def.splashR||1.3));
+    if(u.chromeSplash>0){ aSplash += u.chromeSplash; aSplashR=Math.max(aSplashR, u.chromeSplashR||1.3); }   // CYBERWARE: Projectile Launch System gives a basic-attack burst
     if(def.siege && u.sieged){ const sg=def.siege; aRange=sg.range; aDmg=sg.dmg; aSplash=Math.round(sg.dmg*0.6); aSplashR=sg.splashR; }
     const _m = vetDmgMul(u)*(u.hubDmgMul||1)*(typeof vetBuff==='function'?vetBuff(u,state).dmgMul:1)*(typeof madDmgMul==='function'?madDmgMul(u):1)*(u.bossDmgMul||1); aDmg = Math.round(aDmg*_m); aSplash = Math.round(aSplash*_m);  // career-rank + HUB implant + life-event + madosis + boss-phase damage mods
     const reach = aRange*TILE + entRadius(atk);
@@ -930,10 +931,12 @@ function updateUnit(state,u,dt){
     if(d<=reach){
       // in range — stop & attack
       u.path=null;
+      if(u.chromeActive && u.chromeActive.trigger!=='hit') chromeActiveProc(state, u);   // CYBERWARE: Sandevistan/Berserk surge on engaging
       faceTo(u,atk);
       u._actState='attack'; u._face = atk.x<u.x?-1:1;
       if(u.cd<=0){
         if(u._focusShot){ aDmg*=2; u._focusShot=false; }   // T2-2 Focus Shot: the buffered double-damage round
+        if(u.chromeVsBuilding>1 && atk.kind==='building') aDmg=Math.round(aDmg*u.chromeVsBuilding);   // CYBERWARE: Gorilla Arms wreck structures
         applyHit(state,u,atk,aDmg,aSplash,aSplashR);
         gainXp(u, atk.hp<=0, state);   // career points for the shot / killing blow
         u.cd = u._bossCd || def.cd;   // villains fire at their tuned (phase-aware) cooldown
@@ -1278,6 +1281,20 @@ function callToArms(state, foe, side, from){
   }
 }
 
+// CYBERWARE OS actives (one-of slot): an auto-proc combat surge. Sandevistan/Berserk fire when the unit
+// engages; Kerenzikov fires when the unit is hit. Sets the timed u.buff the damage chain already reads via
+// vetBuff (units.js ~:928). Deterministic (state.time only, no RNG; no cosmetic FX) → rollback/co-op safe.
+function chromeActiveProc(state, u){
+  const a=u.chromeActive; if(!a || !state) return;
+  const now=state.time;
+  if((u._chromeActCd||0) > now) return;                       // on cooldown
+  if(u.buff && u.buff.until>now && !u.buff._chrome) return;    // never stomp an active life-event buff
+  const dur=a.dur||3, cd=a.cd||20;
+  u.buff={ dmgMul:1+(a.dmgMul||0), regenMul:(u.buff?u.buff.regenMul:1)||1, until:now+dur, _chrome:true };
+  u._chromeActCd=now+cd;
+  if(a.dmgResist){ u._chromeResist=a.dmgResist; u._chromeResistUntil=now+dur; }   // Berserk damage-resistance window
+}
+
 function damage(state, t, amt, src){
   if(state.hub) return;   // the H.U.B. is a safe zone — no entity (building, vet, NPC) ever loses HP there
 
@@ -1289,8 +1306,12 @@ function damage(state, t, amt, src){
   // attacker PIERCES. Pure deterministic math — identical on host/solo/rollback. The per-entity
   // dmgReduce below (ninja/bosses, with the expose window) is a separate hand-tuned layer.
   const _tdef=DEF[t.type];
-  if(_tdef && _tdef.armor>0 && !(src && DEF[src.type] && DEF[src.type].pierce)) amt *= (1 - _tdef.armor);
+  // armor = DEF base + CYBERWARE subdermal plating (t.chromeArmor); pierce = DEF pierce OR chrome mantis-blades (src.chromePierce)
+  const _armor=((_tdef&&_tdef.armor)||0)+(t.chromeArmor||0);
+  if(_armor>0 && !(src && ((DEF[src.type]&&DEF[src.type].pierce) || src.chromePierce))) amt *= (1 - _armor);
   if(t.dmgReduce>0){ const red = t._exposed ? t.dmgReduce*(t._exposeMul||0.4) : t.dmgReduce; amt *= (1 - red); }   // armored units shrug off a flat %; an EXPOSED ninja (mid-strike wind-up) takes the punish-window bonus
+  if(t._chromeResist && t._chromeResistUntil>state.time) amt *= (1 - t._chromeResist);                              // CYBERWARE: Berserk damage-resistance window
+  if(t.chromeActive && t.chromeActive.trigger==='hit' && typeof chromeActiveProc==='function') chromeActiveProc(state, t);  // CYBERWARE: Kerenzikov reflex spike on taking a hit
   // MADOSIS rescuer survivability: a healer mid-rescue takes a fraction of incoming damage, with a one-time shield pool absorbing the rest first. Keyed off the rescue cmd so it self-clears (inert once the cmd is gone, even if _rescueShield lingers).
   if(t.cmd && t.cmd.type==='rescue' && typeof MADOSIS!=='undefined'){
     if(MADOSIS.rescuerDmgTakenMul!=null) amt *= MADOSIS.rescuerDmgTakenMul;

@@ -30,10 +30,15 @@ function madEpisodeNo(){
   return (typeof mapIndex==='number' ? mapIndex : 0) + 1;
 }
 
-// effective break threshold — a scarred (previously-broken) unit snaps sooner.
+// effective break threshold — a scarred (previously-broken) unit snaps sooner, and a chrome-OVERLOADED
+// unit snaps sooner still (cyberware strain folded in via chromeStrainFor — the cyberpsychosis cost).
+// Deterministic (no sim RNG): the L2 mint of u.sanityThreshold is untouched; strain is a stored multiplier.
 function madThreshold(u){
   const base = u.sanityThreshold || 0;
-  return u.scarred ? base * MADOSIS.scarThresholdMul : base;
+  const scar = u.scarred ? MADOSIS.scarThresholdMul : 1;
+  const strain = (u.chromeStrainMul!=null) ? u.chromeStrainMul
+               : (typeof chromeStrainFor==='function' ? chromeStrainFor(u) : 1);
+  return base * scar * strain;
 }
 
 // TEMPORARY field relief (Mindfulness Facilitator unit): the CURRENT suppression points on a unit. While
@@ -92,6 +97,7 @@ function mintSanityThreshold(u){
 function addMadosis(u, amount, reason){
   if(!u || u.dead || u.owner!=='player' || !(amount>0)) return false;
   if(typeof G!=='undefined' && G && G._madosisMul) amount *= G._madosisMul;   // T3-4 'Sanity Collapse' mutator (skirmish-only; serialized state)
+  if(u.chromeMadResist>0) amount *= (1 - u.chromeMadResist);   // CYBERWARE: Cataresist Filter scrubs chrome-stress → slower accrual
   if(u.hero) amount *= MADOSIS.heroAccrualMul;   // heroes are steadier — trauma weighs on them less
   const before = u.madosis||0;
   u.madosis = before + amount;

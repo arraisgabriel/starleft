@@ -715,3 +715,152 @@ body.hub-menu-open #bottom{ display:none; }              /* syncHud() then drops
 .dcard.npc .npc-port{ width:clamp(140px,40vw,190px); height:clamp(140px,40vw,190px); }
 .dcard-status{ font-size:12px; color:#7fd6ff; text-align:center; min-height:15px; }
 .dcard.npc .hub-action, .dcard.npc .npc-vetlink{ width:100%; margin-top:4px; }
+
+/* dossier cyberware section — body-map markers overlay the live portrait; a slot-ordered implant list below */
+.dcard-sprwrap{ position:relative; width:clamp(140px,40vw,190px); height:clamp(140px,40vw,190px); }
+.dcard-sprwrap .dcard-spr{ position:absolute; inset:0; width:100%; height:100%; }
+.dcard-cyber-map{ position:absolute; inset:0; width:100%; height:100%; pointer-events:none; }
+.dcard-cyber{ width:100%; margin-top:8px; }
+.dcard-cyber .dk{ display:flex; align-items:baseline; justify-content:space-between; }
+.dcl-cap{ color:#7fd6ff; font-size:11px; letter-spacing:.5px; font-variant-numeric:tabular-nums; }
+.dcl-cap.over{ color:#ff5a5a; }
+.dcard-cyber-list{ list-style:none; margin:6px 0 0; padding:0; display:flex; flex-direction:column; gap:4px; }
+.dcard-cyber-list li{ display:flex; align-items:center; gap:8px; background:rgba(20,30,40,.45);
+  border:1px solid #2a4a5e; border-radius:6px; padding:5px 9px; }
+.dcl-glyph{ font-size:15px; line-height:1; }
+.dcl-name{ flex:1; color:#dfeefb; font-size:12px; }
+.dcl-tier{ color:#7fd6ff; font-size:11px; font-variant-numeric:tabular-nums; }
+.dcl-none{ color:#8c6570; font-size:12px; font-style:italic; margin-top:4px; }
+
+/* =====================================================================
+   IMPLANT CLINIC (cyberware) — per-condo ripperdoc panel. Mirrors the CP2077
+   ripperdoc screen (refs/cb_2007_ripperdoc_menu.webp): a THIN LEFT RAIL of the
+   condo's residents + a WIDE RIGHT ripperdoc panel (stat strip · flanked slot
+   groups · live unit sprite on a plinth). Reuses the house palette — near-black
+   maroon panels, crimson labels, cyan chrome accents, gold M3$. Built into the
+   existing #hubMenuView shell (openCondoClinic, js/ui.js).
+   ===================================================================== */
+.clinic-grid{ display:grid; grid-template-columns:minmax(150px,210px) 1fr; gap:16px; flex:1; min-height:0; position:relative; }
+/* --- left rail: pick a resident --- */
+.clinic-roster{ display:flex; flex-direction:column; gap:8px; overflow:auto; padding-right:4px;
+  border-right:1px solid #4a2630; }
+.clinic-rail-card{ display:flex; align-items:center; gap:9px; width:100%; text-align:left; cursor:pointer;
+  background:rgba(40,20,28,.6); border:1px solid #5a2f3a; border-radius:8px; padding:6px 8px; min-height:48px;
+  color:#f0d6da; font:inherit; transition:.12s; }
+.clinic-rail-card:hover{ background:rgba(60,28,40,.85); }
+.clinic-rail-card.sel{ border-color:#7fd6ff; box-shadow:0 0 0 1px #7fd6ff inset, 0 0 12px rgba(120,200,255,.28);
+  background:rgba(20,40,56,.55); }
+.clinic-rail-spr{ width:40px; height:40px; flex:0 0 auto; border-radius:6px;
+  background:radial-gradient(ellipse at 50% 80%, rgba(120,200,255,.14), rgba(0,0,0,0) 66%); }
+.clinic-rail-tx{ min-width:0; line-height:1.25; }
+.clinic-rail-tx b{ display:block; color:#fff; font-size:12px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.clinic-rail-tx .crc-sub{ font-size:10px; color:#a88a92; letter-spacing:.3px; }
+.clinic-rail-tx .crc-chrome{ color:#7fd6ff; }
+.clinic-empty{ color:#a88a92; font-size:13px; padding:8px; }
+/* --- right ripperdoc panel --- */
+.rip-panel{ display:flex; flex-direction:column; gap:12px; min-width:0; min-height:0; position:relative; overflow:hidden; }
+.rip-pick{ flex:1; display:flex; align-items:center; justify-content:center; color:#8c6570; font-size:15px;
+  letter-spacing:1px; text-transform:uppercase; }
+/* top stat strip — CP2077: LEVEL · STREET CRED · CAPACITY (red) · €$ (gold) */
+.rip-stats{ display:flex; align-items:center; gap:14px 18px; flex-wrap:wrap;
+  background:linear-gradient(120deg, rgba(30,10,15,.85), rgba(10,5,8,.8));
+  border:1px solid #5a2f3a; border-radius:9px; padding:9px 14px; }
+.rip-stat{ display:flex; flex-direction:column; gap:1px; font-size:11px; letter-spacing:1px; text-transform:uppercase; }
+.rip-stat .rip-stat-k{ color:#ff9aa2; font-size:9px; }
+.rip-stat .rip-stat-v{ color:#fff; font-size:14px; letter-spacing:.4px; }
+.rip-stat.m3 .rip-stat-v{ color:#ffd86b; }
+.rip-stat.clear .rip-stat-v{ color:#cfe9ff; }
+.rip-cap{ flex:1 1 200px; min-width:160px; }
+.rip-cap-k{ display:flex; justify-content:space-between; color:#ff9aa2; font-size:9px; letter-spacing:1px;
+  text-transform:uppercase; margin-bottom:3px; }
+.rip-cap-k b{ color:#ff8a8a; font-variant-numeric:tabular-nums; letter-spacing:.5px; }
+.rip-cap-track{ position:relative; height:10px; border-radius:5px; overflow:hidden;
+  background:rgba(0,0,0,.55); border:1px solid #5a2f3a; }
+.rip-cap-fill{ height:100%; width:0; transition:width .25s cubic-bezier(.2,.8,.2,1);
+  background:linear-gradient(90deg,#ff5a5a,#ff9a6a); box-shadow:0 0 10px rgba(255,80,80,.4); }
+.rip-cap.over .rip-cap-fill{ background:linear-gradient(90deg,#ff3bd0,#ff5a5a); animation:dcardPulse 1s ease-in-out infinite; }
+.rip-lock{ color:#7fd6ff; font-size:9px; }                 /* the ⛓ glyph */
+/* 3-zone grid: left groups · figure · right groups */
+.rip-grid{ display:grid; grid-template-columns:1fr minmax(180px,1.1fr) 1fr; gap:14px; flex:1; min-height:0; align-items:start; }
+.rip-col{ display:flex; flex-direction:column; gap:14px; min-width:0; }
+.rip-col.right .rip-group{ text-align:right; }
+.rip-group .train-h{ display:flex; align-items:baseline; gap:8px; justify-content:flex-start; }
+.rip-col.right .rip-group .train-h{ justify-content:flex-end; }
+.rip-group .rip-grp-count{ color:#7fd6ff; font-size:9px; letter-spacing:1px; }
+.rip-grp-count.none{ color:#6b4750; }
+.rip-tiles{ display:flex; gap:8px; margin-top:7px; }
+.rip-col.right .rip-tiles{ justify-content:flex-end; }
+/* slot tile — beveled chrome socket with a corner-notch tier badge */
+.rip-slot{ position:relative; width:clamp(48px,6vw,62px); height:clamp(48px,6vw,62px); flex:0 0 auto; cursor:pointer;
+  display:flex; align-items:center; justify-content:center; font:inherit; color:#cfe9ff;
+  background:linear-gradient(150deg, rgba(28,40,52,.55), rgba(8,12,18,.7));
+  border:1px solid #3c5566; border-radius:8px; transition:.12s;
+  clip-path:polygon(0 0, calc(100% - 9px) 0, 100% 9px, 100% 100%, 9px 100%, 0 calc(100% - 9px)); }
+.rip-slot:hover{ border-color:#7fd6ff; box-shadow:0 0 0 1px #7fd6ff inset, 0 0 12px rgba(120,200,255,.25); }
+.rip-slot .rip-glyph{ font-size:clamp(20px,2.6vw,26px); line-height:1; filter:drop-shadow(0 0 6px rgba(120,200,255,.35)); }
+.rip-slot.empty{ color:#5b7a8c; background:linear-gradient(150deg, rgba(18,24,30,.5), rgba(6,8,12,.6));
+  border-style:dashed; }
+.rip-slot.empty .rip-glyph{ font-size:24px; color:#5b7a8c; filter:none; }
+.rip-slot.filled{ border-color:#5a86a0; box-shadow:inset 0 0 14px rgba(120,200,255,.12); }
+.rip-slot .rip-tier{ position:absolute; top:2px; right:4px; font-size:10px; font-weight:700; color:#cfe9ff;
+  text-shadow:0 0 5px rgba(120,200,255,.8), 0 1px 1px #000; font-variant-numeric:tabular-nums; }
+.rip-slot.upgrade::after{ content:'▲'; position:absolute; bottom:1px; right:3px; font-size:9px; color:#ffd86b;
+  text-shadow:0 0 6px rgba(255,200,80,.8); animation:dcardPulse 1.4s ease-in-out infinite; }
+.rip-slot.locked{ cursor:default; color:#6b4750; border-color:#3a232c; opacity:.55;
+  background:repeating-linear-gradient(135deg, rgba(20,12,16,.6) 0 6px, rgba(10,6,9,.6) 6px 12px); }
+.rip-slot.locked:hover{ border-color:#3a232c; box-shadow:none; }
+.rip-slot.blocked{ opacity:.5; border-color:#6f3644; }
+.rip-slot.blocked .rip-glyph{ filter:grayscale(.6); }
+.rip-slot.sel{ border-color:#8effb0; box-shadow:0 0 0 1px #8effb0 inset, 0 0 14px rgba(142,255,176,.3); }
+.rip-slot.iconic{ border-color:#ffd86b; box-shadow:inset 0 0 16px rgba(255,200,80,.22), 0 0 12px rgba(255,200,80,.3); cursor:pointer; }
+.rip-slot.iconic .rip-glyph{ filter:drop-shadow(0 0 8px rgba(255,200,80,.7)); }
+.rip-slot.iconic .rip-tier{ color:#ffd86b; text-shadow:0 0 6px rgba(255,200,80,.9); }
+@keyframes ripInstall{ 0%{ box-shadow:0 0 0 0 rgba(120,220,255,.0); } 30%{ box-shadow:0 0 0 3px rgba(120,220,255,.55), 0 0 22px rgba(120,220,255,.7) inset; } 100%{ box-shadow:0 0 0 0 rgba(120,220,255,0); } }
+.rip-slot.pulse{ animation:ripInstall .7s ease-out; }
+.rip-need{ font-size:9px; color:#ff8a8a; margin-top:3px; letter-spacing:.5px; }
+/* center figure — live idle sprite on a plinth (canvas draws ring + cables) */
+.rip-figwrap{ position:relative; display:flex; align-items:center; justify-content:center; min-height:0; }
+.rip-figure{ width:100%; height:auto; aspect-ratio:1/1; max-height:46vh;
+  background:radial-gradient(ellipse at 50% 84%, rgba(120,200,255,.10), rgba(0,0,0,0) 60%); }
+/* catalog flyout — slides over the panel from the right */
+.rip-cat{ position:absolute; top:0; right:0; bottom:0; width:min(360px,82%); z-index:3;
+  display:flex; flex-direction:column; gap:8px; padding:14px;
+  background:linear-gradient(150deg, rgba(34,12,18,.97), rgba(10,5,8,.97));
+  border-left:2px solid #7fd6ff; box-shadow:-18px 0 50px rgba(0,0,0,.6);
+  animation:ripCatIn .22s cubic-bezier(.2,.8,.2,1); overflow:auto; }
+@keyframes ripCatIn{ from{ transform:translateX(20px); opacity:0; } to{ transform:translateX(0); opacity:1; } }
+.rip-cat-head{ display:flex; align-items:center; justify-content:space-between; gap:10px; }
+.rip-cat-head .train-h{ border:0; margin:0; padding:0; flex:1; }
+.rip-cat-x{ cursor:pointer; color:#cfe9ff; background:rgba(28,40,52,.6); border:1px solid #3c5566;
+  border-radius:6px; width:30px; height:30px; font:inherit; font-size:14px; }
+.rip-cat-x:hover{ background:rgba(40,60,82,.85); color:#fff; }
+.rip-cat-row{ display:flex; flex-direction:column; gap:3px; width:100%; text-align:left; cursor:pointer; font:inherit;
+  background:rgba(28,16,22,.7); border:1px solid #5a2f3a; border-radius:8px; padding:9px 11px; color:#f0d6da; transition:.12s; }
+.rip-cat-row:hover{ background:rgba(44,24,34,.92); border-color:#7fd6ff; }
+.rip-cat-row.dim{ opacity:.45; }
+.rip-cat-row .rcr-top{ display:flex; align-items:center; gap:8px; }
+.rip-cat-row .rcr-name{ color:#fff; font-size:13px; flex:1; }
+.rip-cat-row .rcr-tier{ color:#cfe9ff; font-size:10px; letter-spacing:1px; }
+.rip-cat-row .rcr-flavor{ font-size:11px; color:#b89aa2; line-height:1.3; }
+.rip-cat-row .rcr-stats{ display:flex; gap:10px; flex-wrap:wrap; font-size:10px; letter-spacing:.4px; margin-top:1px; }
+.rip-cat-row .rcr-eff{ color:#8effb0; }
+.rip-cat-row .rcr-cap{ color:#ff9aa2; }
+.rip-cat-row .rcr-cost{ color:#ffd86b; margin-left:auto; }
+.rip-cat-row.over .rcr-cap{ color:#ff5a5a; }
+.rip-detail{ display:flex; flex-direction:column; gap:8px; }
+.rip-detail .rd-row{ display:flex; gap:8px; }
+/* OVERLOAD hold-to-confirm button (P3) */
+.rip-overload{ position:relative; overflow:hidden; border-color:#ff5a5a !important; color:#ff8a8a !important; }
+.rip-overload .rip-ol-fill{ position:absolute; left:0; top:0; bottom:0; width:0; background:rgba(255,60,60,.28); z-index:0; }
+.rip-overload>*{ position:relative; z-index:1; }
+/* responsive: stack rail on top, figure-on-top + groups below */
+@media (max-width:860px){
+  .clinic-grid{ grid-template-columns:1fr; }
+  .clinic-roster{ flex-direction:row; overflow-x:auto; border-right:0; border-bottom:1px solid #4a2630; padding-bottom:8px; }
+  .clinic-rail-card{ flex:0 0 auto; min-width:150px; }
+  .rip-grid{ grid-template-columns:1fr; }
+  .rip-figwrap{ order:-1; }
+  .rip-col.right .rip-group, .rip-col.right .rip-group .train-h, .rip-col.right .rip-tiles{ text-align:left; justify-content:flex-start; }
+  .rip-slot{ width:54px; height:54px; }       /* >=44px tap targets */
+  .rip-cat{ width:100%; }
+}

@@ -141,6 +141,14 @@ window.NET = window.NET || {};
       if(e.calmStage) o.cs=e.calmStage;
       if(e._rescue) o.rsc=1;
       if(e.madEpisode) o.ep = e.madEpisode.phase==='feral'?3 : e.madEpisode.phase==='defiance'?2 : 1;
+      // CYBERWARE: combat-relevant chrome (effects are host-authoritative; packed for client prediction/parity)
+      if(e.chromeArmor) o.car=Math.round(e.chromeArmor*100)/100;
+      if(e.chromePierce) o.cpi=1;
+      if(e.chromeSplash){ o.csp=e.chromeSplash; o.cspr=Math.round((e.chromeSplashR||1.3)*100)/100; }
+      // CYBERWARE optics/mobility muls → so a co-op client's local fog reveal + movement match the host (Kiroshi sight/range, speed chrome)
+      if(e.chromeSightMul && e.chromeSightMul!==1) o.csi=Math.round(e.chromeSightMul*100)/100;
+      if(e.chromeRangeMul && e.chromeRangeMul!==1) o.crn=Math.round(e.chromeRangeMul*100)/100;
+      if(e.chromeSpeedMul && e.chromeSpeedMul!==1) o.csm=Math.round(e.chromeSpeedMul*100)/100;
       // VILLAIN (boss): client renders the giant size, glow and boss HP bar purely from these — it
       // never simulates the boss. villainId keys the static VILLAINS table (present on every client),
       // so colors/abilities/phases derive locally; only these few fields cross the wire.
@@ -196,7 +204,8 @@ window.NET = window.NET || {};
         e._sx=o.x; e._sy=o.y;
       } else if(e.x==null){ e.x=e.y=e._sx=e._sy=e._sx0=e._sy0=0; }
       // static stats come from DEF — the client never simulates, it only renders/picks
-      e.r=d.r; e.sight=d.sight; e.air=!!o.air; e.speed=d.speed; e.range=d.range; e.dmg=d.dmg;
+      // static stats from DEF, then apply any CYBERWARE optics/mobility muls (o.csi/crn/csm; absent → ×1, self-correcting if chrome is removed)
+      e.r=d.r; e.sight=d.sight*(o.csi||1); e.air=!!o.air; e.speed=d.speed*(o.csm||1); e.range=d.range*(o.crn||1); e.dmg=d.dmg;
       e.state=o.s||'idle'; e._actState=o.as||null; e._face=o.f||e._face||1; e.dir=o.d||0;
       e._netMoving=!!o.mv;                               // host-authoritative locomotion flag (see render moving-check)
       // _actStamp is the HOST's state.time at the strike; rebase it into the client's OWN clock so the
@@ -214,6 +223,7 @@ window.NET = window.NET || {};
       if(o.sf) e.shootFx = (e.shootFx && e.shootFx.t>0) ? e.shootFx : { x:(o.sfx!=null?o.sfx:e.x), y:(o.sfy!=null?o.sfy:e.y), t:SHOOTFX_LIFE };
       // MADOSIS (render-only on the client)
       e.madosis=o.mad||0; e.sanityThreshold=o.sth||0; e.scarred=!!o.scr; e.reborn=!!o.rb;   // reborn: render-only grey skin (drawUnit fac), no client sim
+      e.chromeArmor=o.car||0; e.chromePierce=!!o.cpi; e.chromeSplash=o.csp||0; e.chromeSplashR=o.cspr||0;   // CYBERWARE combat fields (parity)
       e.madRelief=o.mrl||0; e.madReliefT=null;   // host already decayed o.mrl → madReliefActive carries it straight; madReliefT===null tells madGlobalTick to skip (no client sim)
       e.madDog=!!o.md; e.subdued=!!o.sub; e.calmStage=o.cs||0; e._rescue=!!o.rsc;
       e.madEpisode = o.ep ? { phase:(o.ep===3?'feral':o.ep===2?'defiance':'tremor'), t:0 } : null;
