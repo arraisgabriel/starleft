@@ -163,6 +163,7 @@ function grungeTex(){
 function _mulberry32(seed){ let s=seed>>>0; return function(){ s=(s+0x6D2B79F5)|0; let t=Math.imul(s^(s>>>15),1|s); t=(t+Math.imul(t^(t>>>7),61|t))^t; return ((t^(t>>>14))>>>0)/4294967296; }; }
 // per-biome decal ink: base = dark shape colour (rgba prefix, alpha appended); accent = faint crack-core glow
 // (ember/cyan/violet) or null; dens = placement probability per grid cell (sparse).
+const DECAL_FREQ = 0.5;   // global decal-frequency dial: scales the per-biome `dens` below (lower = fewer terrain decals; owner-tuned)
 const DECAL = {
   [B_GRASS]:    { base:'rgba(8,13,8,',   accent:null,               dens:0.34 },
   [B_MOUNTAIN]: { base:'rgba(13,14,17,', accent:'rgba(150,120,185,',dens:0.36 },  // violet ore fleck
@@ -205,7 +206,7 @@ function bakeDecals(g, state, tx0, ty0){
     const i=ty*W+tx; if(!state.explored[i]) continue;
     const t=state.tiles[i]; if(t!==T_GRASS && t!==T_DIRT) continue;     // GROUND only (skip water/rock/tree)
     const b=state.biome[i], pal=DECAL[b]||DECAL[B_GRASS];
-    if(rnd()>pal.dens) continue;                                        // sparse
+    if(rnd()>pal.dens*DECAL_FREQ) continue;                             // sparse (DECAL_FREQ dials overall density)
     const lx=wx-wx0, ly=wy-wy0;
     // P7.3: painted decal stamp (if the atlas loaded) — richer ground detail; else procedural. Both baked,
     // value-suppressed. Hash-picked variant + rotation + size; deterministic (mulberry from chunk coords).
@@ -1320,11 +1321,7 @@ function drawFeature(state, f, ox, oy, dim){
     for(let ry=0;ry<bf && !under;ry++){ const ty=f.ty+ry; if(ty<0) continue;
       for(let rx=0;rx<fw;rx++){ if(_unitTileSet.has(ty*state.W+(f.tx+rx))){ under=true; break; } } }
   }
-  // P3.2 fake height: a soft contact shadow under the feature's base so rocks/trees sit on the ground & "pop".
-  if(!dim && typeof shadowSprite==='function' && (state.zoom||1)>=SPRITE_LOD_ZOOM*0.7){
-    const sr=baseW*0.40*rscale, gy=(f.ty+fh)*TILE+oy-2, sx=px+baseW/2;
-    ctx.save(); ctx.globalAlpha*=0.5; ctx.drawImage(shadowSprite(), sx-sr, gy-sr*0.32, sr*2, sr*0.64); ctx.restore();
-  }
+  // (P3.2 feature contact-shadow removed — it read as the rock/tree FLOATING above the ground, not grounded.)
   ctx.save();
   if(under) ctx.globalAlpha*=0.42;                       // canopy ghost (unit walks under)
   else if(dim) ctx.globalAlpha*=0.5;                     // explored-but-not-visible
