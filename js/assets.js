@@ -61,6 +61,26 @@ function spriteFor(biome, slot){
   const s = SPRITES[biome]; return s ? (s[slot]||null) : null;
 }
 
+/* ---- Optional FLOOR-VARIANT atlas (floors.webp): N seamless floor variations per biome, hash-picked
+   per tile by the renderer (P1.1/P1.2 — kills the single-stamp checkerboard). 7 biome ROWS in biome-id
+   order (grass=0 … volcanic=6, so row IS the biome id) × FLOOR_VAR_N variant COLS of FLOOR_VAR_CELL px.
+   Optional: if absent, the renderer falls back to the single tileset floor cell, then procedural — same
+   resilience contract as the other atlases. Built by _dev/gen/gen_floor_variants.mjs (Gemini 3 Pro Image)
+   + _dev/gen/slice_floor_variants.py. Tagged atlas:* so a late load re-bakes the terrain chunk cache. ---- */
+const ATLAS_FLOORS = ASSET_BASE + 'atlas/floors.webp';
+const FLOOR_VAR_IMG = new Image();
+let FLOOR_VAR_READY = false;
+FLOOR_VAR_IMG.onload = ()=>{ FLOOR_VAR_READY = true; };
+FLOOR_VAR_IMG.onerror = ()=>{ FLOOR_VAR_READY = false; };
+LOADER.register(FLOOR_VAR_IMG, ATLAS_FLOORS, { tag:'atlas:floors', tier:LOADER.T_GAMEPLAY, weight:1, optional:true });
+const FLOOR_VAR_CELL = 128, FLOOR_VAR_N = 4;
+function floorVarRect(biome, idx){
+  if(!FLOOR_VAR_READY) return null;
+  if(biome<0 || biome>6) return null;                       // 7 rows, biome-id order
+  const c = ((idx%FLOOR_VAR_N)+FLOOR_VAR_N)%FLOOR_VAR_N;
+  return [c*FLOOR_VAR_CELL, biome*FLOOR_VAR_CELL, FLOOR_VAR_CELL, FLOOR_VAR_CELL];
+}
+
 /* ---- Topography FEATURE atlas (transparent cut-out rock/tree for the 3x3 walk-under
    features, cut from the originals by _dev/gen/slice_features.py). 2 cols (rock,tree) ×
    7 biome rows (ATLAS_BIOMES order) of FEAT_CELL px. Optional: drawFeatureSprite falls

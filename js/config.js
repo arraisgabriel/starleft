@@ -75,6 +75,19 @@ const BIOME_PAL = {
 };
 // flat colors for the minimap floor, indexed by biome (dark, matches the atlas)
 const BIOME_MINI = ['#1c2a1e','#24262b','#0c2230','#14181f','#3f3526','#2c3742','#16110e'];
+// Per-biome color grade (P2 post-stack — see docs/terrain-render-revamp.md §5C/§6). `mult`=[r,g,b,alpha]:
+// a full-screen MULTIPLY tint that cools/desaturates the frame toward this biome's mood. Multiply can only
+// DARKEN/tint (all channels <255) — it never brightens. Alpha kept small so units stay legible (the §11
+// readability ceiling). Render-only; no save/net effect.
+const BIOME_GRADE = {
+  [B_GRASS]:    { mult:[120,140,118,0.12] },   // cool green-grey
+  [B_MOUNTAIN]: { mult:[120,124,140,0.14] },   // cold charcoal, faint violet
+  [B_WATER]:    { mult:[ 78,120,140,0.16] },   // near-black teal
+  [B_TECH]:     { mult:[ 92,112,140,0.16] },   // very-dark metal, cyan cast
+  [B_DESERT]:   { mult:[150,128, 92,0.12] },   // grimy ochre
+  [B_ICE]:      { mult:[120,140,162,0.14] },   // dirty blue-grey (NOT white)
+  [B_VOLCANIC]: { mult:[150, 92, 70,0.14] },   // near-black basalt, ember cast
+};
 
 /* ---- Procedural terrain parameters (Whittaker-style: elevation + climate) ----
    newMap() builds three coherent noise fields — ELEVATION (land/sea/mountain),

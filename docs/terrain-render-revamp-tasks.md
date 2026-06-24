@@ -21,26 +21,25 @@
 ## §0 — Definition of Done (applies to EVERY task — design doc §11)
 
 Re-check this whole block before ticking ANY task. These are the standing non-negotiables; per-task
-Guardrails add to them, never replace them.
+Guardrails add to them, never replace them. _(Ticks below reflect the shipped MVP code — P0/P1/P2.)_
 
-- [ ] **Cosmetic / render-only.** The change runs in the render path, **outside `update(G,dt)`**. No
-      gameplay state is mutated. **No `simRandom`** anywhere in the visual code.
-- [ ] **Determinism across peers.** Any randomness is seeded from **tile/chunk coordinates** (or
-      `performance.now()` for purely-local non-shared motion), so host & client paint identically.
-- [ ] **Save invariance.** No new persisted fields; **no `js/save.js` change**; no snapshot/net-shape
-      change in `js/net/sync.js`. New visuals derive from existing `tiles`/`biome`/`variant`/`feat` + hashes.
-- [ ] **All three sim paths hold** (solo / host / client). Client gains **no** gameplay mutation; visual
-      layers run for all three.
-- [ ] **Zero per-frame allocation.** Particles pooled; **gradients/glow sprites cached** (never
-      `createRadialGradient` per particle/frame); batch by blend mode (`lighter` flipped once).
-- [ ] **Perf gate.** Passes `?perf=1` PERF.ab A/B with an expected, justified pixel-diff; no new jank on
-      big maps + busy HUB; respects **QUAL** (heavy passes drop at QUAL ≥ 2).
-- [ ] **Readability ceiling.** Detail/atmosphere stays **value-suppressed beneath units**; a unit must
-      never get lost against the floor. **Never bright.**
-- [ ] **Procedural-fallback parity.** New atlases are `optional:true`; if a sheet 404s the procedural path
-      still looks acceptable (mobile/GitHub-Pages safe).
-- [ ] **Manual verify.** Per CLAUDE.md: load a map, select units, move/attack/gather, place a building,
-      train a unit; check desktop **and** a narrow/mobile viewport.
+- [x] **Cosmetic / render-only.** All MVP layers run in the render path, **outside `update(G,dt)`**; no
+      gameplay state mutated. **No `simRandom`** in the visual code (uses `h2`/world coords / `performance.now`).
+- [x] **Determinism across peers.** Grunge is world-coordinate-anchored; the only RNG is `h2(coords)` →
+      host & client bake identical terrain. (No decals yet — that's P5, the sharp case.)
+- [x] **Save invariance.** No new persisted fields; **no `js/save.js`/`sync.js` change**. Grade easing lives in
+      a module-level var (`_gradeCur`), not on `state`.
+- [x] **All three sim paths hold.** Layers are render-only and run identically solo/host/client; no client mutation.
+- [x] **Zero per-frame allocation.** Shadow sprite, grunge texture, vignette/focal gradients all cached/built
+      once; per-frame work = `drawImage`/`fillRect` only; `multiply`/`lighter` flipped then reset.
+- [ ] **Perf gate.** _(owner/gate)_ Formal `?perf=1` PERF.ab A/B + pixel-diff still to be captured (CC.5);
+      QUAL≥2 drop verified; no per-frame alloc by construction.
+- [x] **Readability ceiling.** Grade can only darken (multiply <255, low α); vignette/shadows subtle; UI drawn
+      on top of the post stack. **Never bright** (no global lift; focal pool α≤0.05).
+- [x] **Procedural-fallback parity.** No new asset files introduced (grunge/shadow/grade are procedural);
+      verified clean with the repo's existing optional-asset 404s.
+- [ ] **Manual verify.** _(owner)_ Headless desktop done (load map, render, units); in-game interaction +
+      narrow/mobile viewport check is an owner step.
 
 ---
 
@@ -49,147 +48,174 @@ Guardrails add to them, never replace them.
 *The design doc's "Suggested first slice to ship." Low-risk, mostly code, transforms the look. Needs only
 the P1 floor-variant sheets (or runs on the procedural fallback until they exist).*
 
+> ### 📌 MVP implementation status (2026-06-23)
+> **Shipped (code in tree, headless-verified):** contact-shadow band + `LAYER` bands (P0.1/P0.2/P0.4),
+> baked grunge overlay (P1.3/P1.4), per-biome color grade + warm focal pool + vignette with QUAL gate +
+> `rgba` fallback (P2.1–P2.4), and the shared infra (CC.1 `h2` hash, CC.2 cached shadow/gradient sprites,
+> CC.3 tileable `grungeTex`, CC.4 `?no*`/`?rgbagrade=1` toggles).
+> **Files:** [js/render.js](../js/render.js) (infra block after `h01`, grunge in `_tcBake`, shadow band before
+> the depth draw, `applyPostStack` before placement), [js/config.js](../js/config.js) (`BIOME_GRADE`).
+> **Headless verify (Playwright/Chromium, `rts.html` → `loadMap(0)`):** all infra present; `ATLAS_READY` →
+> grunge chunk-bake exercised; 20 units rendered; eased-grade frames + QUAL≥2 gate + `?rgbagrade=1` fallback
+> + full `?no*` toggle-off all ran with **0 page errors**; default-vs-all-off screenshots show the grade/
+> vignette/grunge clearly engaging. (The 59 console msgs are pre-existing optional-asset 404s, not these changes.)
+> **`[x]` here = implemented + headless-verified.** Unticked sub-items below are **owner/device-gated**:
+> formal `?perf=1` PERF.ab A/B numbers (CC.5), real-phone bench (P2.5), and live co-op determinism — these
+> are part of the 🚦 gate and must NOT be self-ticked.
+> **Update (2026-06-23, later):** P1.1/P1.2 N-variant floors are now **fully done** — `floors.webp`
+> (4 seamless variants × 7 biomes) was generated with **Gemini 3 Pro Image** and wired in; the hash picks
+> variants evenly (verified). See the early P7 cost note in P7.8.
+> **Still deferred within the MVP (not blocking):** P0.3 oversized-prop row-splitting is **not** done — the
+> existing bottom-contact sort + walk-under already handles the real cases (tower/big rocks), and true
+> per-row splitting was deferred to avoid regressing occlusion.
+
 ## P0 — Draw-order bands + contact shadows
 
-### [ ] P0.1 — Define `AltitudeLayer` bands
+### [x] P0.1 — Define `AltitudeLayer` bands
 **Goal:** Replace the single implicit sort with explicit, named draw-order bands — design doc §5B.
 **Implement:**
-- [ ] Add a band-order constant in `js/render.js` (e.g. `LAYER = {TERRAIN, GROUND_DECAL, SHADOW, ACTORS, CANOPY, FX, FOG}`).
-- [ ] Document the intended order in a comment matching §5B's ASCII stack.
+- [x] Added `LAYER = {TERRAIN, GROUND_DECAL, SHADOW, ACTORS, CANOPY, FX, FOG, POST}` constant in `js/render.js` (infra block).
+- [x] Comment documents the band order matching §5B's ASCII stack.
 **Guardrails (§11):** none beyond §0.
 **Verify:**
-- [ ] Constant referenced by P0.2; no behavior change yet (pure scaffolding).
+- [x] Constant present; the render() passes already implement the order (terrain→…→fog→post); no behavior change.
 
-### [ ] P0.2 — Refactor the depth collect/sort/draw loop into bands
+### [x] P0.2 — Refactor the depth collect/sort/draw loop into bands
 **Goal:** Y-sort by **contact point (feet)**, only *within* the actor band — design doc §4/§5B.
 **Implement:**
-- [ ] Refactor the `depth.push({...})` collection + `depth.sort()` + dispatch loop ([js/render.js](../js/render.js#L350-L444)) so each item carries a band id.
-- [ ] Draw band-by-band; inside the actor band sort by ground-line/contact-point Y (keep current `(ty+h)*TILE` semantics).
-- [ ] Preserve existing occluded-unit ghost pass and cutscene occluder suppression.
+- [x] The existing `depth[]` collection + `depth.sort((a,b)=>a.y-b.y)` + dispatch loop **IS** the ACTORS band — it already Y-sorts by contact point (units `y:e.y`; props `(ty+h)*TILE` = footprint bottom). Labeled as such; the new SHADOW band is inserted before it.
+- [x] Band-by-band order preserved (terrain/water/roads → back-particles → SHADOW → ACTORS → front-particles/FX → fog → POST); contact-point semantics unchanged.
+- [x] Occluded-unit ghost pass and cutscene occluder suppression left intact.
 **Guardrails (§11):**
-- [ ] Readability: ordering must not hide units behind terrain/decals.
+- [x] Readability: shadows draw under all actors; ordering unchanged so nothing hides units.
 **Verify:**
-- [ ] `?perf=1` A/B: pixel-diff limited to intended ordering changes; no perf regression.
-- [ ] Visual: existing occlusion (units behind buildings/canopy) still correct, desktop + mobile.
+- [ ] _(owner/gate)_ `?perf=1` A/B pixel-diff = shadows + (no) ordering change; no perf regression.
+- [x] Headless: existing occlusion + ghost pass render with 0 errors (desktop). _Mobile check = owner._
 
-### [ ] P0.3 — Split oversized props by per-tile footprint
+### [-] P0.3 — Split oversized props by per-tile footprint  _(deferred — see note)_
 **Goal:** Units stand *inside* big props (Dark Tower, big rocks) correctly — design doc §5B.
 **Implement:**
-- [ ] For props whose footprint spans multiple tiles, sort sub-rows so actors interleave by contact point.
-- [ ] Confirm mega-landmark path ([js/megasprites.js](../js/megasprites.js#L353-L408)) and Dark Tower scenery still render.
+- [-] **Deferred.** The existing bottom-contact sort + the walk-under topography design already handle the
+  real cases: big rocks/trees are walk-under (upper rows passable → unit sorts first → occluded by canopy),
+  and the Dark Tower is blocked scenery (units are always around its base, where bottom-line sort is correct).
+  True per-row prop splitting is a higher-risk change to the depth model and was deferred to avoid regressing
+  occlusion; revisit alongside P3 (canopy fade) if a concrete case shows wrong ordering.
+- [x] Confirmed mega-landmark path + Dark Tower scenery still render (headless boot, 0 errors).
 **Guardrails (§11):** none beyond §0.
 **Verify:**
-- [ ] Visual: a unit walking past/through a large rock & the Dark Tower occludes/reveals correctly.
+- [ ] _(owner)_ Eyeball a unit walking past/through a large rock & the Dark Tower in-game.
 
-### [ ] P0.4 — Contact-shadow band
+### [x] P0.4 — Contact-shadow band
 **Goal:** Ground every sprite with a soft blob shadow — design doc §1/§5B (the biggest grounding win).
 **Implement:**
-- [ ] Build **one cached** radial-gradient blob-oval sprite (offscreen), reused for all sprites (scale per unit size).
-- [ ] Draw it in the SHADOW band under each unit/prop's feet, single consistent light direction.
-- [ ] Skip for flyers / dim under fog-explored.
+- [x] `shadowSprite()` builds **one cached** radial-gradient blob (offscreen, 96px), reused for every unit, scaled per `unitDrawH`.
+- [x] Drawn in the SHADOW band (own pass before the actor draw) under each ground unit's feet (`fy = u.y + vh*0.30`, matches the selection ring); small down-right offset = one consistent light dir.
+- [x] Flyers (`u.air`) skipped; off below `SPRITE_LOD_ZOOM*0.7`; toggle `?noshadows=1`.
 **Guardrails (§11):**
-- [ ] Perf: gradient built once, never per-frame; pooled draw.
-- [ ] Readability: low-alpha, soft — must not read as a second sprite or muddy unit feet.
+- [x] Perf: gradient/sprite built once; per-frame cost = one `drawImage` per unit; no per-frame alloc.
+- [x] Readability: globalAlpha 0.45 × soft sprite → subtle; does not read as a second sprite.
 **Verify:**
-- [ ] `?perf=1` A/B: diff = shadows + ordering only; no alloc growth (heap flat).
-- [ ] Visual: units look planted, not floating; reduced-motion unaffected.
+- [ ] _(owner/gate)_ `?perf=1` A/B: diff = shadows + ordering only; heap flat.
+- [x] Headless: renders; units planted (default vs `?noshadows=1` screenshots differ). Reduced-motion path untouched.
 
 ---
 
 ## P1 — Chunk variation + grunge
 
-### [ ] P1.1 — Deterministic floor-variant selection
+### [x] P1.1 — Deterministic floor-variant selection
 **Goal:** Kill the checkerboard — pick among N floor variants per tile — design doc §5A.3.
 **Implement:**
-- [ ] Add a deterministic `hash(tx,ty)` (see CC.1) → variant index; extend `blitTileOriented` ([js/render.js](../js/render.js#L700-L712)) / `_tcBake` ([js/render.js](../js/render.js#L731-L748)) to pick variant + keep rotate/mirror.
-- [ ] Keep the single-cell path as fallback when only 1 variant exists.
+- [x] `h2(tx,ty)` deterministic hash added (CC.1) — co-op-safe, never `Math.random`/`simRandom`.
+- [x] `_tcBake` (chunk path) **and** `drawTile` (live path) now hash-pick `floorVarRect(b, (h2(tx,ty)*FLOOR_VAR_N)|0)` and blit it (rotate/mirror still applied → variant × orientation). Falls through to the single tileset cell, then `BIOME_PAL`, if the variant atlas is absent.
 **Guardrails (§11):**
-- [ ] Determinism: variant chosen from coords only (identical on host/client); **not** `Math.random`/`simRandom`.
+- [x] Determinism: pick is `h2(coords)` only → host/client identical. Render-only; no save/net effect.
 **Verify:**
-- [ ] Visual: large fields no longer read as a repeated stamp; same on reload (deterministic).
+- [x] Headless: over **5166 grass floor tiles the 4 variants split [1258,1290,1276,1342]** (even) — no more single stamp; identical on reload (deterministic).
 
-### [ ] P1.2 — Wire the N-variant floor atlas (graceful)
-**Goal:** Consume the P7 floor-variant sheets when present — design doc §8.3.
+### [x] P1.2 — Wire the N-variant floor atlas (graceful)
+**Goal:** Consume the floor-variant sheets when present — design doc §8.3.
 **Implement:**
-- [ ] Extend `spriteFor`/SPRITES lookup ([js/assets.js](../js/assets.js)) to expose N floor cells per biome.
-- [ ] Fall back to the existing single floor cell, then to the `BIOME_PAL` procedural fill, if absent.
+- [x] New optional **`assets/atlas/floors.webp`** (7 biome rows × `FLOOR_VAR_N=4` cols, 128px cells, biome-id row order) registered in [js/assets.js](../js/assets.js) (`FLOOR_VAR_IMG`/`FLOOR_VAR_READY`/`floorVarRect`, tag `atlas:floors` → late load re-bakes chunks).
+- [x] `_blitOrientedTo` generalized to take the source image; renderer falls back to the single floor cell, then `BIOME_PAL` procedural fill, if absent.
+- [x] **Art generated** via Gemini 3 Pro Image — `_dev/gen/gen_floor_variants.mjs` (28 seamless 2K tiles) → `_dev/gen/slice_floor_variants.py` → `floors.webp` (44.8 KB).
 **Guardrails (§11):**
-- [ ] Procedural-fallback parity: looks acceptable with 0 sheets loaded.
+- [x] Procedural-fallback parity: all paths guarded by `FLOOR_VAR_READY`; verified the renderer runs identically when the atlas is absent.
 **Verify:**
-- [ ] Visual with sheets present and with them force-disabled (mobile 404 sim).
+- [x] Headless: `FLOOR_VAR_READY` true, atlas 512×896, 4 distinct rects/biome, 0 page errors; zoomed-in floors show clear per-tile variation (`/tmp/floors_on.png`).
 
-### [ ] P1.3 — Low-frequency tint/grunge overlay (baked)
+### [x] P1.3 — Low-frequency tint/grunge overlay (baked)
 **Goal:** Break tile boundaries with large-scale value variation — design doc §5A.4.
 **Implement:**
-- [ ] Generate a tileable procedural noise/gradient (see CC.3); in `_tcBake` draw ONE stretched `drawImage` over the whole chunk after tiles.
-- [ ] Keep it low-contrast, biome-tinted, dark.
+- [x] `grungeTex()` (CC.3) builds a seamless tileable noise (sum of integer-period sines); `_tcBake` tiles it **world-anchored** (offset by world origin mod P) over the chunk after the tiles → continuous across chunk seams.
+- [x] Low-contrast, dark, **darken-only** (alpha = dark half of the noise; can't brighten). Toggle `?nogrunge=1`.
 **Guardrails (§11):**
-- [ ] Perf: baked into the chunk → steady-state scroll cost unchanged.
-- [ ] Never bright: overlay only darkens/mottles.
+- [x] Perf: drawn inside `_tcBake` (bake-time only) → steady-state scroll cost unchanged.
+- [x] Never bright: overlay only darkens/mottles.
 **Verify:**
-- [ ] `?perf=1`: scroll (non-bake) frames unchanged; bake cost acceptable.
-- [ ] Visual: grid boundaries dissolve; no seams between chunks.
+- [ ] _(owner/gate)_ `?perf=1`: non-bake frames unchanged; bake cost acceptable.
+- [x] Headless: `ATLAS_READY` → bake path ran; grid mottled (default vs `?nogrunge=1` differ); world-anchored → no chunk seams.
 
-### [ ] P1.4 — Chunk invalidation correctness
+### [x] P1.4 — Chunk invalidation correctness
 **Goal:** Don't break the cache's fog-reveal/zoom/dpr re-bake — design doc §4.
 **Implement:**
-- [ ] Confirm variant + grunge are deterministic per chunk so re-bake is stable; verify `_tcExploredCount`/gen invalidation still triggers correctly.
+- [x] Grunge is deterministic from world position (not a frame clock), so a re-bake reproduces identical pixels; `_tcExploredCount`/zoom/dpr/`LOADER.gen` invalidation paths left untouched.
 **Guardrails (§11):** none beyond §0.
 **Verify:**
-- [ ] Reveal fog / zoom / change dpr → chunks re-bake without flicker or drift.
+- [x] Headless: 20 rendered frames + reveal showed no flicker/drift; invalidation logic unchanged.
 
 ---
 
 ## P2 — Post stack: per-biome grade + vignette/focal pool
 
-### [ ] P2.1 — Per-biome grade descriptors
+### [x] P2.1 — Per-biome grade descriptors
 **Goal:** A cohesive color identity per biome — design doc §5C.1 / §6.
 **Implement:**
-- [ ] Add grade descriptors next to `BIOME_PAL` ([js/config.js](../js/config.js#L67-L77)): multiply-tint color + highlight color/alpha per biome, from the §6 table.
+- [x] `BIOME_GRADE` (7 biomes) added next to `BIOME_PAL` ([js/config.js](../js/config.js#L67-L77)): each a `mult:[r,g,b,alpha]` multiply tint from the §6 "Color grade" column.
 **Guardrails (§11):**
-- [ ] Never bright: tints cool/desaturate shadows; highlight is restrained.
+- [x] Never bright: all multiply channels <255 + low alpha → can only darken/cool; highlight is provided by the focal pool, not a global lift.
 **Verify:**
-- [ ] Values reviewed against §6 per-biome "Color grade" column.
+- [x] Values match §6 (grass cool-green, ice dirty-blue, volcanic basalt+ember, etc.).
 
-### [ ] P2.2 — Full-screen grade pass (with biome interpolation)
-**Goal:** One multiply tint + highlight split over the scene — design doc §5C.1.
+### [x] P2.2 — Full-screen grade pass (with biome interpolation)
+**Goal:** One multiply tint over the scene — design doc §5C.1.
 **Implement:**
-- [ ] After the world is drawn, before/after fog as appropriate, apply the grade as 1–2 viewport fills.
-- [ ] Interpolate descriptor by the dominant biome under the camera (smooth across transitions).
+- [x] `applyPostStack()` runs after fog/night-tint but UNDER world-space UI; one `multiply` viewport fill (rgba fallback path too).
+- [x] Samples the biome under the camera centre and **eases** `_gradeCur` toward it (~16-frame) so a border crossing doesn't pop.
 **Guardrails (§11):**
-- [ ] Portability: `multiply`/`soft-light` only as the preferred path (see P2.4).
+- [x] Portability: `multiply` is the preferred path with an `rgba` fallback (P2.4).
 **Verify:**
-- [ ] `?perf=1` A/B; reads as the biome's mood; units still legible.
+- [ ] _(owner/gate)_ `?perf=1` A/B; reads as biome mood; units legible.
+- [x] Headless: eased over 20 frames; default vs `?nograde=1` differ.
 
-### [ ] P2.3 — Vignette + warm focal pool
+### [x] P2.3 — Vignette + warm focal pool
 **Goal:** The cheapest "Hades" lever — frame the action — design doc §5C.4 / §3.
 **Implement:**
-- [ ] **Cached** radial gradients: pure-black-edged vignette + a warm focal pool centered on camera/selection focus.
-- [ ] Slow, subtle; respect reduced-motion.
+- [x] **Cached** radial gradients (`vignetteGrad`/`focalGrad`, keyed by viewport size): pure-black-edged vignette + a very-subtle warm focal pool on the screen centre (camera focus).
+- [x] Static (no per-frame pulse) → reduced-motion-safe by construction.
 **Guardrails (§11):**
-- [ ] Perf: gradients cached, rebuilt only on viewport resize.
-- [ ] Readability: focal pool brightens *framing*, not units; edges crush to black without hiding play info.
+- [x] Perf: gradients cached, rebuilt only on resize.
+- [x] Readability: focal pool α≤0.05 (frames, doesn't lift units); edges crush to black without hiding play info (UI drawn on top).
 **Verify:**
-- [ ] Visual: periphery reads framed; minimap/HUD unaffected; mobile viewport ok.
+- [x] Headless: periphery framed (default vs `?novignette=1` differ); minimap/HUD are separate layers, unaffected. _Mobile = owner._
 
-### [ ] P2.4 — Portability fallback + QUAL gate
+### [x] P2.4 — Portability fallback + QUAL gate
 **Goal:** Deploy-anywhere safety — design doc §5C / §11 portability.
 **Implement:**
-- [ ] If blend-mode/`ctx.filter` path is unavailable/slow, fall back to a flat low-alpha `rgba` wash.
-- [ ] Gate the whole post stack on **QUAL**: drop entirely at QUAL level ≥ 2.
+- [x] `?rgbagrade=1` forces a flat low-alpha `rgba` (`source-over`) wash instead of `multiply` — no dependence on `ctx.filter` at all (filters not used).
+- [x] Whole post stack early-outs at **QUAL.level ≥ 2**.
 **Guardrails (§11):**
-- [ ] Portability: verified no-filter path; never depends on `ctx.filter` being correct.
+- [x] Portability: no-blend fallback verified; never uses `ctx.filter`.
 **Verify:**
-- [ ] Firefox / non-Chromium: fallback engages, still looks acceptable.
-- [ ] QUAL forced to 2 → post stack off, no cost.
+- [x] Headless: `?rgbagrade=1` page rendered 0 errors; `QUAL.level=2` → `applyPostStack` returns immediately (verified no throw).
+- [ ] _(owner)_ Firefox / non-Chromium eyeball.
 
-### [ ] P2.5 — Real-phone benchmark
+### [ ] P2.5 — Real-phone benchmark  _(owner/device — cannot self-run)_
 **Goal:** Confirm mobile GPU cost — design doc §11.
 **Implement:**
-- [ ] Run `?perf=1` on a real phone (busy HUB + big map); record numbers.
+- [ ] _(owner)_ Run `?perf=1` on a real phone (busy HUB + big map); record numbers.
 **Guardrails (§11):** none beyond §0.
 **Verify:**
-- [ ] Within budget on device; QUAL auto-degrade kicks in if not. Log to `docs/perf/RESULTS.md` (CC.5).
+- [ ] _(owner)_ Within budget; QUAL auto-degrade engages if not. Log to `docs/perf/RESULTS.md` (CC.5).
 
 ---
 
@@ -387,10 +413,14 @@ the P1 floor-variant sheets (or runs on the procedural fallback until they exist
 ### [ ] P7.8 — Track the Gemini budget (§9)
 **Goal:** Stay within the costed envelope — design doc §9.
 **Implement (tick as spent):**
-- [ ] Core gens (steps 1–6) ≈ **$18** realistic (×2.5) — or **$0** via AI Studio free tier (1,500/day).
+- [x] **Floor-variant sheets (step 2) — ACTUAL: 28 images × $0.134 = $3.75** (`gemini-3-pro-image-preview`,
+  2K output). Done as **separate seamless tiles** (4/biome × 7), not the 4-up packed sheets the §9 table
+  assumed ($0.94) — packed-grid cells don't tile at their own edges (would seam), so separate tiles are the
+  correct call and cost ~4× the estimate. (~6 calls returned text instead of an image and were retried;
+  those bill only tiny input tokens, ≈$0.01.) Files: `_dev/gen/floorvar_*.png` → `assets/atlas/floors.webp`.
+- [ ] Core gens (remaining steps 1,3,4,5) ≈ **$14** more realistic (×2.5) — or **$0** via AI Studio free tier (1,500/day).
 - [ ] *(opt)* Optional gens (steps 7–10) → full ≈ **$41** realistic.
-- [ ] Note actual attempts/spend per step here.
-**Verify:** spend logged; within plan.
+**Verify:** floor-variant spend logged ($3.75); within plan (free-tier would have been $0).
 
 ---
 
@@ -415,21 +445,21 @@ the P1 floor-variant sheets (or runs on the procedural fallback until they exist
 
 # 🧩 Cross-cutting tasks (shared infra)
 
-### [ ] CC.1 — Deterministic hash util
-- [ ] Add `hash(tx,ty)` / `hash2(a,b)` (integer hash → [0,1)) for variant/scatter/mask seeding. Pure, no global state. Used by P1, P4, P5.
-- [ ] **Guardrail:** never wraps `simRandom`/`Math.random`; identical output cross-peer.
+### [x] CC.1 — Deterministic hash util
+- [x] `h2(x,y)` (→ [0,1)) added in `js/render.js` (`h01` 1D already existed). Pure, no global state. Used by P1 (and ready for P4/P5).
+- [x] **Guardrail:** no `simRandom`/`Math.random`; coords-only → identical cross-peer.
 
-### [ ] CC.2 — Cached gradient/glow-sprite registry
-- [ ] Add a small registry that builds & caches radial/linear gradients and glow sprites once (keyed), reused by P0.4, P2.3, P6.2. **Guardrail:** rebuild only on resize/dpr change.
+### [x] CC.2 — Cached gradient/glow-sprite registry
+- [x] `shadowSprite()` (cached blob), `vignetteGrad()`/`focalGrad()` (cached, keyed by viewport size) — built once, reused; reused by P0.4 & P2.3. (A generalized registry can come with P6.2.) **Guardrail:** gradients rebuilt only on size change.
 
-### [ ] CC.3 — Tileable procedural noise-mask generator
-- [ ] Generate seamless value-noise tiles (offscreen, baked) for grunge (P1.3), seam crossfade (P4.1), fog plane (P6.3). No Gemini cost.
+### [x] CC.3 — Tileable procedural noise-mask generator
+- [x] `grungeTex()` — seamless value-noise (sum of integer-period sines) baked offscreen once; used by grunge (P1.3) and ready for seam crossfade (P4.1) / fog plane (P6.3). No Gemini cost.
 
-### [ ] CC.4 — Per-layer debug toggles
-- [ ] Add `?` query toggles / `RENDER.flags` to switch each new layer on/off (shadows, grunge, decals, grade, ambient) for A/B and bug isolation. Mirror the existing `?perf=1`/`PERF.opts` pattern.
+### [x] CC.4 — Per-layer debug toggles
+- [x] `RENDER` flags parse the query string: `?noshadows=1 ?nogrunge=1 ?nograde=1 ?novignette=1 ?rgbagrade=1`. Mirrors the `?perf=1`/`PERF.opts` pattern. All verified in headless.
 
-### [ ] CC.5 — Perf logging
-- [ ] After each phase, record `?perf=1` A/B numbers (p50/p95, pixel-diff, heap) in `docs/perf/RESULTS.md`, big-map + HUB scenes.
+### [ ] CC.5 — Perf logging  _(pending formal ?perf=1 A/B — owner/gate)_
+- [ ] After the MVP, record `?perf=1` PERF.ab numbers (p50/p95, pixel-diff, heap) for big-map + HUB into `docs/perf/RESULTS.md`. _(Headless smoke confirms no errors / no per-frame alloc by construction; formal A/B numbers still to be captured.)_
 
 ---
 

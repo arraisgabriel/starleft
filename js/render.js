@@ -75,6 +75,92 @@ const IDLE = {              // Balanced tier (tuned down)
 // deterministic per-unit [0,1) hash → varied-but-stable timing, NO per-unit state,
 // NO reset-on-move bookkeeping, and identical across co-op clients.
 function h01(n){ const s=Math.sin(n*12.9898)*43758.5453; return s - Math.floor(s); }
+
+/* ===== Terrain/world-render revamp — MVP P0–P2 shared infra (see docs/terrain-render-revamp{,-tasks}.md) =====
+   ALL of this is cosmetic, render-only, runs OUTSIDE update(G,dt), and is deterministic from coordinates
+   (never simRandom/Math.random) → host & client paint identically; nothing is serialized (§11 / §0).
+   Per-layer debug toggles (mirror ?perf=1): ?noshadows=1 ?nogrunge=1 ?nograde=1 ?novignette=1
+   ?rgbagrade=1 (force the no-blend-mode fallback). */
+const RENDER = (function(){
+  const qs=(typeof location!=='undefined' && location.search) || '';
+  const off=k=>new RegExp('[?&]no'+k+'=1\\b').test(qs);
+  return { shadows:!off('shadows'), grunge:!off('grunge'), grade:!off('grade'),
+           vignette:!off('vignette'), forceRgbaGrade:/[?&]rgbagrade=1\b/.test(qs) };
+})();
+// CC.1 — deterministic 2D hash → [0,1). Pure; identical cross-peer; NEVER simRandom/Math.random. (h01 above = 1D.)
+function h2(x,y){ const s=Math.sin(x*12.9898 + y*78.233)*43758.5453; return s - Math.floor(s); }
+// P0.1 — explicit draw-order bands (RimWorld AltitudeLayer model). The passes in render() ARE these bands,
+// top→bottom; the depth[] pass is the ACTORS band (Y-sorted by contact point / feet). Documentation of intent.
+const LAYER = Object.freeze({ TERRAIN:0, GROUND_DECAL:1, SHADOW:2, ACTORS:3, CANOPY:4, FX:5, FOG:6, POST:7 });
+
+// CC.2 — cached soft contact-shadow sprite (built ONCE, reused for every unit, scaled per size → zero per-frame alloc).
+let _shadowSprite=null;
+function shadowSprite(){
+  if(_shadowSprite) return _shadowSprite;
+  const R=48, c=document.createElement('canvas'); c.width=c.height=R*2;
+  const g=c.getContext('2d'), grad=g.createRadialGradient(R,R,1,R,R,R);
+  grad.addColorStop(0,'rgba(0,0,0,0.55)'); grad.addColorStop(0.55,'rgba(0,0,0,0.26)'); grad.addColorStop(1,'rgba(0,0,0,0)');
+  g.fillStyle=grad; g.fillRect(0,0,R*2,R*2);
+  _shadowSprite=c; return c;
+}
+// CC.3 — tileable procedural grunge: sum of INTEGER-period sine waves → perfectly seamless over P px, baked once.
+// Only the dark half is kept (as alpha) so it can only DARKEN/mottle, never brighten (art direction). No Gemini cost.
+let _grungeTex=null;
+function grungeTex(){
+  if(_grungeTex) return _grungeTex;
+  const P=512, c=document.createElement('canvas'); c.width=c.height=P;
+  const g=c.getContext('2d'), img=g.createImageData(P,P), d=img.data, K=6.2831853/P;
+  const T=[[3,1,0.0],[1,4,1.3],[5,2,2.1],[2,6,0.7],[7,3,3.4],[4,5,5.0]];   // integer wave vectors → tile seamlessly
+  for(let y=0;y<P;y++) for(let x=0;x<P;x++){
+    let v=0; for(let k=0;k<T.length;k++) v+=Math.sin((T[k][0]*x+T[k][1]*y)*K + T[k][2]);
+    v/=T.length;                                   // ~[-1,1]
+    const a=Math.max(0,-v)*46;                      // dark half only → 0..~46 alpha
+    const i=(y*P+x)*4; d[i]=4; d[i+1]=5; d[i+2]=8; d[i+3]=a|0;
+  }
+  g.putImageData(img,0,0); _grungeTex=c; return c;
+}
+
+// P2 — full-screen post stack: per-biome multiply grade + warm focal pool + vignette. Screen-space, QUAL-gated,
+// drawn UNDER the world-space gameplay UI (rings/floaters/beacons) so those stay crisp. The grade is eased toward
+// the biome under the camera so crossing a border doesn't pop. All gradients cached (rebuilt only on resize).
+let _gradeCur=[18,22,30,0], _vigGrad=null, _vigKey='', _focGrad=null, _focKey='';
+function _biomeGrade(b){ return (typeof BIOME_GRADE!=='undefined') ? (BIOME_GRADE[b]||BIOME_GRADE[B_GRASS]) : null; }
+function vignetteGrad(W,H){ const k=W+'x'+H; if(_vigKey===k && _vigGrad) return _vigGrad;
+  const cx=W/2, cy=H/2, R=Math.hypot(W,H)/2;
+  const gr=ctx.createRadialGradient(cx,cy,R*0.52,cx,cy,R*1.02);
+  gr.addColorStop(0,'rgba(3,5,11,0)'); gr.addColorStop(1,'rgba(3,5,11,0.5)');
+  _vigGrad=gr; _vigKey=k; return gr; }
+function focalGrad(W,H){ const k=W+'x'+H; if(_focKey===k && _focGrad) return _focGrad;
+  const fx=W/2, fy=H/2, R=Math.hypot(W,H)*0.42;
+  const gr=ctx.createRadialGradient(fx,fy,1,fx,fy,R);
+  gr.addColorStop(0,'rgba(255,196,128,0.05)'); gr.addColorStop(0.5,'rgba(255,170,110,0.02)'); gr.addColorStop(1,'rgba(255,160,100,0)');
+  _focGrad=gr; _focKey=k; return gr; }
+function applyPostStack(state, z, vx, vy){
+  if(typeof QUAL!=='undefined' && QUAL.level>=2) return;          // P2.4 — drop the whole stack under sustained load
+  if(!(RENDER.grade||RENDER.vignette)) return;
+  const W=viewW(), H=cv.height/dpr;
+  // dominant biome under camera center → target multiply grade (eased toward, so a border crossing doesn't pop)
+  let tg=[18,22,30,0];
+  if(RENDER.grade && state.biome){
+    const wx=vx+(W/z)/2, wy=vy+(H/z)/2;
+    const tx=Math.max(0,Math.min(state.W-1,(wx/TILE)|0)), ty=Math.max(0,Math.min(state.H-1,(wy/TILE)|0));
+    const G=_biomeGrade(state.biome[ty*state.W+tx]); if(G) tg=[G.mult[0],G.mult[1],G.mult[2],G.mult[3]*255];
+  }
+  for(let i=0;i<4;i++) _gradeCur[i] += (tg[i]-_gradeCur[i])*0.06;  // ~16-frame ease
+  ctx.save(); ctx.setTransform(dpr,0,0,dpr,0,0);
+  // 1) per-biome multiply tint (darkens/cools — never brightens). rgba fallback = a flat dark wash (?rgbagrade=1).
+  if(RENDER.grade && _gradeCur[3]>1.5){
+    const a=Math.min(0.5,_gradeCur[3]/255);
+    if(RENDER.forceRgbaGrade){ ctx.globalAlpha=a*0.7; ctx.fillStyle='rgb('+((_gradeCur[0]*0.4)|0)+','+((_gradeCur[1]*0.4)|0)+','+((_gradeCur[2]*0.4)|0)+')'; ctx.fillRect(0,0,W,H); ctx.globalAlpha=1; }
+    else { ctx.globalCompositeOperation='multiply'; ctx.globalAlpha=a; ctx.fillStyle='rgb('+(_gradeCur[0]|0)+','+(_gradeCur[1]|0)+','+(_gradeCur[2]|0)+')'; ctx.fillRect(0,0,W,H); ctx.globalCompositeOperation='source-over'; ctx.globalAlpha=1; }
+  }
+  // 2) warm focal pool (very subtle additive lift on the action) + 3) vignette (pure-black-edged frame).
+  if(RENDER.vignette){
+    ctx.globalCompositeOperation='lighter'; ctx.fillStyle=focalGrad(W,H); ctx.fillRect(0,0,W,H);
+    ctx.globalCompositeOperation='source-over'; ctx.fillStyle=vignetteGrad(W,H); ctx.fillRect(0,0,W,H);
+  }
+  ctx.restore();
+}
 // the single action key for a sprite type ('mine' | 'heal' | 'attack'), or null
 function fidgetAction(sType){ const t=UNIT_ACTION[sType]; return t ? Object.keys(t)[0] : null; }
 
@@ -432,6 +518,18 @@ function render(state){
     }
   }
   if(PERF.on){ PERF.lap('depthSort'); PERF.mark('depthDraw'); }
+  // ---- P0.4 contact-shadow band (LAYER.SHADOW): a soft cached blob under each GROUND unit's feet, drawn
+  //      UNDER all actors (own band, before the depth draw) so shadows never sit on top of a nearer sprite.
+  //      One light dir (slight down-right offset); flyers skipped; cosmetic/local/deterministic. ?noshadows=1. ----
+  if(RENDER.shadows && z>=SPRITE_LOD_ZOOM*0.7){
+    const sp=shadowSprite(); ctx.globalAlpha=0.45;
+    for(const d of depth){ const u=d.u; if(!u || u.air) continue;
+      const vh=unitDrawH(u), fx=u.x+ox, fy=u.y+oy+vh*0.30;        // foot line — matches the selection ring (py + vh*0.3)
+      const rx=vh*0.34, ry=vh*0.13;
+      ctx.drawImage(sp, fx-rx+vh*0.04, fy-ry+vh*0.02, rx*2, ry*2); // tiny offset = consistent light from upper-left
+    }
+    ctx.globalAlpha=1;
+  }
   for(const d of depth){
     if(d._csHide) continue;                            // cutscene: this sprite would cover a participant → hide it
     if(d.b) drawBuilding(state, d.b, ox,oy, d.dim);
@@ -550,6 +648,11 @@ function render(state){
       ctx.fillRect(vx, vy, viewW()/z, viewH()/z);
     }
   }
+
+  // ---- P2 post stack (per-biome grade + warm focal pool + vignette): screen-space, over terrain/actors/fog/
+  //      night-tint but UNDER the world-space gameplay UI below (rings, floaters, beacons, dialogs) so those
+  //      stay crisp & legible. QUAL-gated (off at level ≥2); cached gradients; toggles ?nograde=1 ?novignette=1. ----
+  applyPostStack(state, z, vx, vy);
 
   // ---- placement ghost ----
   if(state.placing){ drawPlacement(state,ox,oy); }
@@ -697,19 +800,19 @@ function drawPausedOverlay(){
 // feature (rock/tree) only mirrors horizontally so it keeps its "up".
 // Oriented atlas-tile blit into an ARBITRARY context g (the main ctx for live drawing, or a chunk's ctx
 // for the terrain cache bake). Identical geometry either way, so the cache reproduces the live output.
-function _blitOrientedTo(g, r, px, py, v, full){
+function _blitOrientedTo(g, img, r, px, py, v, full){
   const S = TILE+1;
   if(!full){                                  // feature: optional horizontal mirror only
-    if(v<0.5){ g.drawImage(ATLAS_IMG, r[0],r[1],r[2],r[3], px,py, S,S); return; }
+    if(v<0.5){ g.drawImage(img, r[0],r[1],r[2],r[3], px,py, S,S); return; }
     g.save(); g.translate(px+S/2, py+S/2); g.scale(-1,1);
-    g.drawImage(ATLAS_IMG, r[0],r[1],r[2],r[3], -S/2,-S/2, S,S); g.restore(); return;
+    g.drawImage(img, r[0],r[1],r[2],r[3], -S/2,-S/2, S,S); g.restore(); return;
   }
   const o=(v*4)|0;                            // 0..3 quarter-turns
   g.save(); g.translate(px+TILE/2, py+TILE/2); g.rotate(o*1.5708);
   if(((v*8)|0)&1) g.scale(-1,1);              // half also mirror → 8 orientations
-  g.drawImage(ATLAS_IMG, r[0],r[1],r[2],r[3], -S/2,-S/2, S,S); g.restore();
+  g.drawImage(img, r[0],r[1],r[2],r[3], -S/2,-S/2, S,S); g.restore();
 }
-function blitTileOriented(r, px, py, v, full){ _blitOrientedTo(ctx, r, px, py, v, full); }
+function blitTileOriented(r, px, py, v, full){ _blitOrientedTo(ctx, ATLAS_IMG, r, px, py, v, full); }
 
 /* ===== terrain chunk cache (PERF.opts.terrainChunks) ============================================
    Bakes the STATIC atlas terrain (floor/rock/tree) of a TC_SIZE×TC_SIZE-tile chunk into an offscreen
@@ -741,9 +844,21 @@ function _tcBake(state, ccx, ccy, z, cnt){
     if(t===T_WATER){ live.push([tx,ty]); continue; }        // animated water → live overlay
     const b=state.biome[i], v=state.variant[i];
     const slot=t===T_ROCK?'rock':t===T_TREE?'tree':'floor';
-    const r=spriteFor(b,slot);
+    let img=ATLAS_IMG, r=null;
+    if(slot==='floor' && typeof FLOOR_VAR_READY!=='undefined' && FLOOR_VAR_READY){   // P1.1/P1.2: hash-pick a floor variant (coords-only → co-op safe)
+      const fr=floorVarRect(b, (h2(tx,ty)*FLOOR_VAR_N)|0); if(fr){ img=FLOOR_VAR_IMG; r=fr; }
+    }
+    if(!r) r=spriteFor(b,slot);
     if(!r){ live.push([tx,ty]); continue; }                 // procedural fallback (atlas missing / volcanic anim) → live
-    _blitOrientedTo(g, r, (tx-tx0)*TILE, (ty-ty0)*TILE, v, slot==='floor');
+    _blitOrientedTo(g, img, r, (tx-tx0)*TILE, (ty-ty0)*TILE, v, slot==='floor');
+  }
+  // ---- P1.3 grunge overlay (baked): one world-anchored, seamless dark mottle over the whole chunk to break
+  //      the tile grid. Tileable (period P) + offset by world origin → continuous across chunk seams. Darken-only
+  //      (never bright). Baked into the chunk → zero scroll cost. Toggle: ?nogrunge=1. ----
+  if(RENDER.grunge){
+    const gt=grungeTex(), P=512, ww=TC_SIZE*TILE;
+    const ax=(((tx0*TILE)%P)+P)%P, ay=(((ty0*TILE)%P)+P)%P;
+    for(let yy=-ay; yy<ww; yy+=P) for(let xx=-ax; xx<ww; xx+=P) g.drawImage(gt, xx, yy);
   }
   return { cnv, live, cnt };
 }
@@ -783,6 +898,10 @@ function drawTile(state,tx,ty,px,py){
   //      floor tile per biome is rotated/flipped per-tile (by `variant`) so a
   //      large field doesn't read as a repeated stamp; rock/tree just mirror. ----
   const slot = t===T_ROCK?'rock' : t===T_TREE?'tree' : 'floor';
+  if(slot==='floor' && typeof FLOOR_VAR_READY!=='undefined' && FLOOR_VAR_READY){   // P1.1/P1.2: hash-pick a floor variant
+    const fr=floorVarRect(b, (h2(tx,ty)*FLOOR_VAR_N)|0);
+    if(fr){ _blitOrientedTo(ctx, FLOOR_VAR_IMG, fr, px, py, v, true); return; }
+  }
   const r = spriteFor(b, slot);
   if(r){ blitTileOriented(r, px, py, v, slot==='floor'); return; }
 
