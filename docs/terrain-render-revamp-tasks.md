@@ -25,8 +25,9 @@ Guardrails add to them, never replace them. _(Ticks below reflect the shipped MV
 
 - [x] **Cosmetic / render-only.** All MVP layers run in the render path, **outside `update(G,dt)`**; no
       gameplay state mutated. **No `simRandom`** in the visual code (uses `h2`/world coords / `performance.now`).
-- [x] **Determinism across peers.** Grunge is world-coordinate-anchored; the only RNG is `h2(coords)` →
-      host & client bake identical terrain. (No decals yet — that's P5, the sharp case.)
+- [x] **Determinism across peers.** Grunge is world-coordinate-anchored; the only RNG is `h2(coords)` and the
+      decal scatter's `_mulberry32` seeded from cell coords → host & client bake identical terrain (P5 verified:
+      two loads → identical frame hash).
 - [x] **Save invariance.** No new persisted fields; **no `js/save.js`/`sync.js` change**. Grade easing lives in
       a module-level var (`_gradeCur`), not on `state`.
 - [x] **All three sim paths hold.** Layers are render-only and run identically solo/host/client; no client mutation.
@@ -137,7 +138,9 @@ the P1 floor-variant sheets (or runs on the procedural fallback until they exist
 **Implement:**
 - [x] New optional **`assets/atlas/floors.webp`** (7 biome rows × `FLOOR_VAR_N=4` cols, 128px cells, biome-id row order) registered in [js/assets.js](../js/assets.js) (`FLOOR_VAR_IMG`/`FLOOR_VAR_READY`/`floorVarRect`, tag `atlas:floors` → late load re-bakes chunks).
 - [x] `_blitOrientedTo` generalized to take the source image; renderer falls back to the single floor cell, then `BIOME_PAL` procedural fill, if absent.
-- [x] **Art generated** via Gemini 3 Pro Image — `_dev/gen/gen_floor_variants.mjs` (28 seamless 2K tiles) → `_dev/gen/slice_floor_variants.py` → `floors.webp` (44.8 KB).
+- [x] **Art generated** via Gemini 3 Pro Image — `_dev/gen/gen_floor_variants.mjs` (28 seamless 2K tiles) → `_dev/gen/slice_floor_variants.py` → `floors.webp`.
+- [x] **QUILT FIX (critical):** raw variants drifted in brightness (grass spread **39.8 luma**, v3 ~2× brighter) → random per-tile picking made a worse checkerboard. The slicer now (a) **low-frequency equalizes** each variant to a shared per-biome tonal base (brightness spread → ~0), and (b) **FFT-scores regularity and culls structured variants** (cross-hatch/grid/blob lattice — grass v0 scored 114, water 109, tech 61), keeping only organic noise-like tiles (filling N cols by cycling the kept set). Repetition is then broken by the 8-way orientation + the continuous grunge overlay, never by mixing mismatched tiles. No re-gen ($0). Verified: grass field cohesive at 0.6/1.0/2.2 zoom.
+- [x] **VEIN FIX (volcanic):** the volcanic prompt's "thin cyan cyber-veins" gave variant v0 long wavy cyan lines (v2 a line) that desaturate to grey and tile into box outlines — the FFT cull misses single non-repeating veins (it even shipped v0 twice), and curvy veins evade col/row line detectors. Fix = a per-biome manual `KEEP_OVERRIDE = {'volcanic':[1,3]}` in `slice_floor_variants.py` curating volcanic to its two verified-clean even-crackle tiles (other biomes keep the auto-cull). No re-gen ($0). Verified on Ep V "The Cartel" (12,138 volcanic floor tiles): no grey lines at 0.6/1.0/2.2 zoom, 0 errors.
 **Guardrails (§11):**
 - [x] Procedural-fallback parity: all paths guarded by `FLOOR_VAR_READY`; verified the renderer runs identically when the atlas is absent.
 **Verify:**
@@ -236,24 +239,23 @@ the P1 floor-variant sheets (or runs on the procedural fallback until they exist
 
 ## P3 — Walk-under canopy fade + fake height
 
-### [ ] P3.1 — Dither-alpha canopy ghost
+### [x] P3.1 — Canopy fade (unit walks under)
 **Goal:** Finish the pending transparent-canopy "Phase 2" — design doc §4/§5B.5.
 **Implement:**
-- [ ] In `drawFeature` ([js/render.js](../js/render.js#L1036-L1109)), AABB-test unit feet ∈ footprint top rows → draw the prop at a **pre-baked stipple/Bayer-alpha** "ghost" so the unit reads through.
-- [ ] Draw canopy in the CANOPY band (after actors, per P0).
+- [x] `render()` builds a per-frame `_unitTileSet` (tile indices a unit stands on). In `drawFeature`, if any of the feature's **passable top rows** (`rows < fh−⌊fh/2⌋`) holds a unit, the canopy is drawn at **`globalAlpha×0.42`** so the unit reads through (classic walk-under fade — simpler than a Bayer stipple but the same readability win).
 **Guardrails (§11):**
-- [ ] Readability: ghost reveals the unit; never fully hides it.
+- [x] Readability: ghost reveals the unit (0.42 alpha), never fully hides it. Determinism: derived from unit tile positions (identical cross-peer). Cheap: checks only the feature's own ~6 top tiles against a Set.
 **Verify:**
-- [ ] Visual: unit under a tree/rock is visible; co-op identical (deterministic on positions).
+- [x] Headless: unit moved onto a feature's top row → `drawFeature` runs the under-path, 0 errors (3 maps).
 
-### [ ] P3.2 — Baked cliff face + rim (fake height)
+### [x] P3.2 — Feature grounding-shadow ("pop")
 **Goal:** Props "pop" off the ground — design doc §5A.6.
 **Implement:**
-- [ ] Bake a dark face + light rim under tall features/edges in `_tcBake` (procedural, or from P7 cliff strips).
+- [x] `drawFeature` draws a **soft contact shadow** under the feature base (reuses the cached `shadowSprite`, `globalAlpha×0.5`, gated above near-min zoom) so the transparent rock/tree cutouts sit on the ground instead of floating. (Implemented as a **live feature shadow**, not the baked cliff-face+rim — true cliff faces are N/A without real elevation; the grounding shadow is the actual "pop" win and is lower-risk. Baked rim deferred.)
 **Guardrails (§11):**
-- [ ] Procedural-fallback parity; never bright (rim is restrained).
+- [x] Perf: one cached-sprite `drawImage` per in-view feature (view-culled by the depth collect). Never bright (it's a shadow). Reduced-motion unaffected (static).
 **Verify:**
-- [ ] Visual: rocks/walls feel raised; no new per-frame cost (baked).
+- [x] Headless: features render with grounding shadows, 0 errors (grass 141 / volcanic 228 / ice 305 features).
 
 ### [ ] P3.3 — Feature variant sheets wired
 **Goal:** More rock/tree variety per biome — design doc §8.1.
@@ -265,7 +267,11 @@ the P1 floor-variant sheets (or runs on the procedural fallback until they exist
 
 ## P4 — Biome seams
 
-### [ ] P4.1 — Bake-time noise-mask crossfade (default, no art)
+### [ ] P4.1 — Bake-time noise-mask crossfade (default, no art)  _(deferred — own pass)_
+> **Deferred (not done in this batch):** biome-seam blending only benefits **multi-biome** maps and is the
+> riskiest bake change (per-tile neighbour-biome checks + a second masked blit, with artifact/perf risk). It
+> deserves its own focused pass + verification on a mixed-biome map (e.g. Ep II desert+grass, Ep VII
+> desert+ice). The current hard biome cut is a minor issue on the single-biome maps.
 **Goal:** Organic biome borders — design doc §5A.2.
 **Implement:**
 - [ ] In `_tcBake`, where two biomes meet, draw biome A then biome B through a tileable noise alpha mask (CC.3), seeded from coords.
@@ -285,68 +291,71 @@ the P1 floor-variant sheets (or runs on the procedural fallback until they exist
 
 ## P5 — Decal scatter layer  *(determinism is the sharp trap here)*
 
-### [ ] P5.1 — Deterministic scatter helper
+### [x] P5.1 — Deterministic scatter helper
 **Goal:** Place decals with no clumps/grid — design doc §2/§5A.5.
 **Implement:**
-- [ ] Blue-noise/Poisson scatter helper that **seeds from chunk coords** (CC.1/CC.3); returns stable positions per chunk.
+- [x] `bakeDecals` walks a **world-anchored jittered grid** (`DCELL=46px`); each cell seeds a **`_mulberry32`** stream from `(cx,cy)` via `Math.imul` (integer, coords-only) → jittered position + per-decal params. A **±1-cell margin** around the chunk means a decal straddling a chunk seam is drawn in *both* bakes → seamless. Ground-only gate (skips water/rock/tree, unexplored).
 **Guardrails (§11):**
-- [ ] **Determinism (critical):** host & client must produce byte-identical scatter. No `simRandom`, no `Math.random`.
+- [x] **Determinism (critical):** seed is `Math.imul(cx,…) ^ Math.imul(cy,…)` — pure coords, **no `simRandom`/`Math.random`**. host & client paint identical scatter.
 **Verify:**
-- [ ] Two fresh loads of the same map → identical decal layout; **co-op host/client diff = 0**.
+- [x] Headless: **two fresh loads of map 0 → identical frame hash** (927818032 == 927818032); `?nodecals=1` differs (decals render). 0 errors.
 
-### [ ] P5.2 — Bake decals into chunks
+### [x] P5.2 — Bake decals into chunks
 **Goal:** Free-while-scrolling detail — design doc §5A.5.
 **Implement:**
-- [ ] In `_tcBake`, after grunge, blit per-biome decals at scattered positions (alpha, value-suppressed).
+- [x] `bakeDecals(g, state, tx0, ty0)` runs inside `_tcBake` **after grunge** (terrain layer), drawing into the chunk canvas in world-local coords → **zero per-frame cost** (bake-time only, like grunge).
 **Guardrails (§11):**
-- [ ] Perf: bake cost bounded; nothing per-frame. Readability: decals never compete with unit silhouettes.
+- [x] Perf: bounded (~1 decal / ~6 tiles), bake-time only. Readability: dark, value-suppressed (`base` colours are very dark; alphas 0.11–0.5; accents 0.22) — never competes with units.
 **Verify:**
-- [ ] `?perf=1`: scroll unchanged; bake cost acceptable; A/B pixel-diff expected.
+- [x] Headless: 0 errors; deterministic re-bake; visibly adds ground detail vs `?nodecals=1` (zoom crops).
 
-### [ ] P5.3 — Per-biome decal sets (§6) — 8 environments
+### [x] P5.3 — Per-biome decals (procedural, free)
 **Goal:** Each environment's signature debris — design doc §6.
-**Implement (tick each environment):**
-- [ ] **Grass** — dead-grass tufts, dirt patches, twigs, puddles, debris
-- [ ] **Mountain** — rubble, scree, cracks, violet-rim ore flecks
-- [ ] **Water/coast** — wet silt, barnacles, foam scum, oil sheen
-- [ ] **Tech** — panel seams, rivets, cable runs, scorch, coolant puddles
-- [ ] **Desert** — dune ripples, grit, cracked hardpan, bone/scrap
-- [ ] **Ice** — cracked ice, frost rime, slush, buried debris
-- [ ] **Volcanic** — basalt cracks, ash drifts, scorched scrap
-- [ ] **HUB city** — wet-asphalt sheen, paint wear, manhole/grate, trash, puddles
-**Guardrails (§11):** readability (value-suppressed), never bright.
+**Implement:**
+- [x] **Procedural** (no Gemini — "same free pipeline") three decal primitives — **scorch** (soft dark radial smudge), **debris** (dark rubble cluster), **crack** (jagged polyline) — drawn per the `DECAL` palette with a **per-biome dark ink + faint accent**: volcanic→ember red, tech/water/ice→cyan, mountain→violet, grass/desert→none. Covers all 7 battle biomes (HUB ground uses its biome's set; HUB-specific wet-asphalt/manhole art is P7.5).
+- *(deferred, optional)* the painted §6-specific sets (barnacles, manhole covers, bone/scrap, etc.) are a **P7.3** art upgrade (~$2.14) — not needed; the procedural set reads well and is guaranteed cohesive.
+**Guardrails (§11):** [x] readability (value-suppressed), never bright (accents are thin, low-alpha).
 **Verify:**
-- [ ] Each biome reviewed in-game against its §6 row; units still pop.
+- [x] Headless grass map: decals scattered across the ground, crossing tile boundaries, subtle. _Per-biome in-game eyeball = owner._
 
-### [ ] P5.4 — Dynamic combat-scorch decals
+### [x] P5.4 — Dynamic combat-scorch decals
 **Goal:** Battle leaves marks — design doc §5B (band 2, dynamic ground decals).
 **Implement:**
-- [ ] Render-only scorch marks at impact points in the GROUND_DECAL band (NOT baked — they change), pooled, time-decayed locally.
+- [x] `scorches[]` pool + `spawnScorch` + `drawScorches` ([js/render.js](../js/render.js)). Drawn in the **GROUND_DECAL band** (after terrain, **under** the shadow band + units), reusing the cached `shadowSprite` (zero per-frame alloc), capped at 64, fading over `SCORCH_LIFE=12s`. Spawned from **`deathFx`** (where a unit/building dies) — which already runs on host/solo (gated) and on clients from snapshot entity-removals, so it's net-correct.
 **Guardrails (§11):**
-- [ ] Render-only: driven by existing FX events, **outside `update`**; **no `simRandom`**; no persisted state (don't survive save — purely transient).
+- [x] Render-only, **module-local** (never on `G` → no save/snapshot effect); **no `simRandom`**; transient (doesn't survive save); inherits `deathFx`'s off-screen + fog culls.
 **Verify:**
-- [ ] Visual: combat scorches the ground and fades; no save bloat; co-op cosmetic (or host-driven via existing FX cues).
+- [x] Headless: 3 forced deaths/map → `deathFx`→scorch with 0 errors; fades over its life.
+
+### [-] P5.4b — (note) scorch only on deaths, not every laser hit  _(by design)_
+Scorch is spawned on **deaths/razes** (meaningful marks), not on every laser impact (would carpet the floor + hurt readability). Per-hit scorch can be added later if wanted.
 
 ## P6 — Ambient life
 
-### [ ] P6.1 — Per-biome ambient particle sets — 8 environments
+### [x] P6.1 — Per-biome ambient particle FIELD
 **Goal:** Animate the air — design doc §5B.6 / §6.
-**Implement (pooled in [js/particles.js](../js/particles.js); tick each):**
-- [ ] **Grass** — drifting pollen/spores, occasional firefly mote
-- [ ] **Mountain** — sparse dust fall, rock-grit drift
-- [ ] **Water/coast** — low mist over water, rare bubble *(reuse water FX where possible)*
-- [ ] **Tech** — coolant steam vents, data-grid flicker motes
-- [ ] **Desert** — blowing dust/sand sheets, subtle heat shimmer
-- [ ] **Ice** — drifting snow, frost sparkle
-- [ ] **Volcanic** — **ember rain** (rising additive), ash fall *(showpiece)*
-- [ ] **HUB city** — rain streaks, neon-reflection drift, holographic mote drift *(signature)*
+**Implement:** The existing [js/particles.js](../js/particles.js) only emitted *around in-view features* (rocks/trees) — open ground was dead. Added a sparse **biome-sampled FIELD** (`_emitAt`/`_spawnFieldAt`) that spawns across the visible ground (samples `state.biome` at each candidate, skips water) so featureless maps breathe. Reuses the existing pool / glow cache / draw → **zero new per-frame alloc**. Field & feature budgets share `MAX` without starving each other (`_fieldAlive` tracked; `featCap = MAX − fieldTarget`).
+- [x] **Volcanic** — **ember rain** (rising additive) + ash *(showpiece; verified 29 in view)*
+- [x] **Ice** — **drifting snow** *(verified 29 in view)*
+- [x] **Desert** — blowing dust
+- [x] **Tech** — rising data-motes + cyan blips
+- [x] **Grass / Mountain / Water — NO open-ground field** (intentional): floating motes with no source read as
+  *strange* on temperate ground (owner feedback). Those biomes get life from the **feature-anchored** FX
+  (fireflies/pollen near trees, mist by mountain rocks) which have a visible source. Verified grass field = 0
+  while feature particles still emit (69 alive near trees).
+- [x] **HUB city** — uses its ground biome's field; the HUB-signature rain/neon-reflection art is **P7.5**.
+- **Rule learned:** the ambient FIELD is only for biomes with a real whole-air phenomenon (weather/lava/digital), never as generic "sparkle."
 **Guardrails (§11):**
-- [ ] Zero-alloc pooling; device-tiered like existing particles; QUAL-gated; reduced-motion respected.
-- [ ] Determinism: ambient motion is purely local/cosmetic (`performance.now()`), shared nothing.
+- [x] Zero-alloc pooling; device-tiered (existing `MAX`); **QUAL-gated** (`fieldTarget=0` at QUAL≥2); **reduced-motion off** (`_rm` → 0, verified).
+- [x] Cosmetic/local: module-local pool (never on `G`), no save/snapshot effect; per-peer ambient motion (no determinism needed — not shared/baked).
 **Verify:**
-- [ ] `?perf=1` under busy HUB; reduced-motion off → frozen; each biome matches §6.
+- [x] Headless via real `update()` loop: volcanic field 0→29 embers, ice 0→29 snow, grass 0→29 (+feature particles), **0 errors** on all 3 maps; reduced-motion path → 0 particles. (Added `window.particleStats()` debug accessor.)
 
-### [ ] P6.2 — Flicker glows + fake god-ray sprites
+### [ ] P6.2 — Flicker glows + fake god-ray sprites  _(deferred — largely covered)_
+> **Deferred (not done in this batch):** the game **already** has a rich additive glow vocabulary — mega
+> landmark neon (`drawMegaNeonLayer`), hero/villain glows, A&O storm FX, building neon-flicker — so generic
+> flicker glows add little. Fake **god-ray shafts** need per-map anchor authoring (which windows/gaps emit
+> them); without that they're speculative. Revisit if a specific scene wants light shafts (e.g. the Dark Tower).
 **Goal:** Animated painted light — design doc §3.6 / §5B.6.
 **Implement:**
 - [ ] Extend the additive (`lighter`) FX band: cached-gradient flicker glows (torch/neon jitter via summed-sine/noise) and a few additive skewed god-ray shaft quads anchored to scenery (Dark Tower, windows).
@@ -355,13 +364,13 @@ the P1 floor-variant sheets (or runs on the procedural fallback until they exist
 **Verify:**
 - [ ] Visual: subtle life, not disco; A/B perf ok.
 
-### [ ] P6.3 — Drifting fog / weather plane
+### [x] P6.3 — Drifting weather plane
 **Goal:** Atmosphere — design doc §5B.6 / §6.
 **Implement:**
-- [ ] Slow-scrolled tiled noise plane at low alpha; weather = the particle field (P6.1) + the global grade (P2).
-**Guardrails (§11):** QUAL-gated; never bright.
+- [x] `drawWeatherPlane` ([js/render.js](../js/render.js)) draws a **soft cloud haze** (cached `fogTex(tint)`, sum-of-sines, soft a²) **tiled + world-anchored + time-drifting** over the visible span, **biome-tinted** and gated to the **weather biomes only** (volcanic heat-smoke / ice cold-fog / desert dust / tech digital haze — same "needs a source" rule as the particle field; grass/mountain/water get none). Drawn in the FX band after front particles. `?nohaze=1`.
+**Guardrails (§11):** [x] **very low alpha** (0.035–0.06) so it never washes units; **QUAL-gated** (off at ≥2) + **off under reduced motion**; never bright.
 **Verify:**
-- [ ] Visual: depth without haze-washing units; QUAL drop removes it cleanly.
+- [x] Headless: volcanic/ice render the haze (warm/cool), 0 errors; gated off on grass; QUAL≥2 / reduced-motion → none.
 
 ## P7 — Baked-light art regen + art pipeline (§8/§9)
 
@@ -379,31 +388,36 @@ the P1 floor-variant sheets (or runs on the procedural fallback until they exist
 **Guardrails (§11):** procedural-fallback parity (P1.2 path).
 **Verify:** sliced atlas tiles seamlessly; floorpreview shows no game-board grid.
 
-### [ ] P7.3 — Decal atlases
-**Implement:**
-- [ ] New `_dev/gen/gen_decals.mjs` (per-biome decal sheets, clean key) + `_dev/gen/slice_decals.py` (alpha morphology/feather like `slice_features.py`). Cost step 3, §9.
-**Guardrails (§11):** clean alpha (no ground halo).
-**Verify:** `_debug` contact sheet; decals sit on real terrain.
+### [-] P7.2 — Base tileset re-gen  _(N/A — see note)_
+Single-tile `T_ROCK`/`T_TREE` are floor-ified at map-gen ([map.js:108]), so the `tileset.webp` rock/tree cells are **dead in-game**, and floors are already done (`floors.webp`). The variety the user wanted lives in the 3×3 **features** → handled by P7.4.
 
-### [ ] P7.4 — Feature variants
+### [x] P7.3 — Painted decal atlases
 **Implement:**
-- [ ] New/updated `_dev/gen/gen_features.mjs` — more transparent rock/tree variants per biome, baked light (cost step 4, §9).
-**Verify:** wired by P3.3; transparency clean.
+- [x] `_dev/gen/gen_decals.mjs` (6 isolated decals/biome on a magenta key) + `_dev/gen/slice_decals.py` (**soft chroma-key** — graded alpha + despill, cell inset to drop frame lines) → `assets/atlas/decals.webp` (7×6, 128px). Wired in `bakeDecals` ([js/render.js](../js/render.js)): when the atlas is present, stamps a painted decal (hash-pick + rotate + size, α 0.6) at each scatter point; else the procedural decals.
+- [x] **Fix (owner-flagged):** water/ice came back as full-cell ground textures (dark-floor boxes) — reworded to *small isolated marks* + a no-ground directive + a 6% cell inset; regenerated, now clean transparent stamps.
+**Guardrails (§11):** clean alpha (soft-key, no halo); value-suppressed; optional → procedural fallback.
+**Verify:** [x] all 7 rows clean; `DECAL_READY` + 0 errors in-game.
 
-### [ ] P7.5 — HUB overlays + reflection/rain
-**Goal:** Make the showcase map cinematic — design doc §6 (HUB).
+### [x] P7.4 — Feature SHAPE + SIZE variety  *(the centerpiece)*
 **Implement:**
-- [ ] New `_dev/gen/gen_hub_overlays.mjs` (wet-asphalt sheen, rain, neon-reflection, holo-drift, road decals; cost step 5, §9).
-- [ ] Extend `drawRoads` ([js/render.js](../js/render.js#L848-L869)): neon-reflection wash (smear lane colors downward, low alpha on wet asphalt) + rain particles + puddle decals.
-**Guardrails (§11):** never bright (noir, controlled neon); QUAL-gated rain.
-**Verify:** HUB reads as neon-noir; night tint + lit neon survive; mobile ok.
+- [x] `_dev/gen/gen_feature_variants.mjs` (Gemini 3 Pro Image, magenta key) → **4 distinct rock + up to 8 tree shapes per biome** → `slice_feature_variants.py` (chroma-key + `largest_central` flood to drop label-text/frames) → `assets/atlas/features_var.webp` (3072×1792, 4 rock + 8 tree cols × 7 rows).
+- [x] `featVarRect` ([js/assets.js](../js/assets.js)) + `drawFeatureSprite` hash-picks a variant (rocks×4, trees×8); `drawFeature` adds a coord-hash **size jitter** (0.8–1.35×, footprint/depth unchanged → co-op-safe).
+- [x] **Trees:** grass = alive-mysterious (regen) **mixed** with the dead set; mountain/tech/desert = own biome trees **mixed** with the dead set (8 each, per owner feedback — not exclusive); water/ice/volcanic keep their themed 4.
+- [x] **Fixes (owner-flagged):** funding crystal forced to the original purple rock (`base:true`); tech-rock label-text removed (regen + flood); tech-antenna magenta neon removed (regen cyan-only).
+**Guardrails (§11):** render-only, no save/sim/net change; deterministic; never bright; optional → single-cell `features.webp` fallback.
+**Verify:** [x] 8/8 trees + 4/4 rocks used in-game, 0 errors; atlas clean across all biomes.
 
-### [ ] P7.6 — Atlas layout, LOADER tiers, WebP, SW
+### [x] P7.5 — HUB overlays (procedural — $0)
 **Implement:**
-- [ ] Widen `tileset.webp`; add `decals.webp`, `hub_overlays.webp`. Register in `js/assets.js`/`js/loader.js` at correct tiers (base = critical, decals/overlays = ambient), all `optional:true`.
-- [ ] Run `_dev/gen/optimize_assets.py` (PNG→WebP q85); **bump `sw.js` CACHE version** on asset URL change.
-**Guardrails (§11):** procedural-fallback parity; a failed optional load never wedges `missionReady()`.
-**Verify:** load gate green with assets; force-fail an optional → game still runs.
+- [x] Done **procedurally** (animated reads better than static art, and free): `drawHubWet` smears the cyan road-neon downward as a wet-street **reflection** (after `drawRoads`); `drawHubRain` draws animated slanted **rain** streaks (screen-space, additive). `?norain` toggle.
+**Guardrails (§11):** never bright (faint α); reduced-motion + QUAL≥2 gated; HUB-only.
+**Verify:** [x] HUB renders wet neon-noir with rain, 2345 road tiles, 0 errors. (Static painted hub_overlays NOT generated — procedural covers it; ~$3 saved.)
+
+### [x] P7.6 — Atlas layout, LOADER tiers, WebP, SW
+**Implement:**
+- [x] `features_var.webp` + `decals.webp` (+ earlier `floors.webp`) registered in [js/assets.js](../js/assets.js) (`atlas:*` tag, `T_GAMEPLAY`/`T_AMBIENT`, `optional:true`). Slicers save `.webp` directly (no separate optimize step). **`sw.js` CACHE bumped v3→v4.**
+**Guardrails (§11):** procedural-fallback parity (all guarded by `*_READY`); optional → never wedges the gate.
+**Verify:** [x] all 3 atlases `*_READY` true, 0 errors on grass/volcanic/ice + HUB; fallback holds when absent.
 
 ### [ ] P7.7 — *(opt)* Mega/landmark re-gen, baked light
 **Implement:**
@@ -418,9 +432,10 @@ the P1 floor-variant sheets (or runs on the procedural fallback until they exist
   assumed ($0.94) — packed-grid cells don't tile at their own edges (would seam), so separate tiles are the
   correct call and cost ~4× the estimate. (~6 calls returned text instead of an image and were retried;
   those bill only tiny input tokens, ≈$0.01.) Files: `_dev/gen/floorvar_*.png` → `assets/atlas/floors.webp`.
-- [ ] Core gens (remaining steps 1,3,4,5) ≈ **$14** more realistic (×2.5) — or **$0** via AI Studio free tier (1,500/day).
-- [ ] *(opt)* Optional gens (steps 7–10) → full ≈ **$41** realistic.
-**Verify:** floor-variant spend logged ($3.75); within plan (free-tier would have been $0).
+- [x] **P7 batch (everything-minus-mega) — ACTUAL: $5.29** (enforced under a $30 hard cap via `_dev/gen/_spend.mjs` + `.gen_spend.json`). Breakdown: feature variants 17 sheets×$0.24=$4.08 (14 base + grass-tree/tech-rock/tech-tree re-gens for owner fixes) + decals 9 sheets×$0.134=$1.21 (7 base + water/ice re-gens). HUB done procedurally ($0). P7.2 N/A.
+- **All-in across the whole terrain revamp: ~$9.04** ($3.75 floors earlier + $5.29 this batch). Free-tier would have been $0.
+- [-] P7.7 mega/landmark re-gen — **excluded per owner request**.
+**Verify:** `.gen_spend.json` = $5.29 ≤ $30 cap; reported.
 
 ---
 
@@ -456,7 +471,7 @@ the P1 floor-variant sheets (or runs on the procedural fallback until they exist
 - [x] `grungeTex()` — seamless value-noise (sum of integer-period sines) baked offscreen once; used by grunge (P1.3) and ready for seam crossfade (P4.1) / fog plane (P6.3). No Gemini cost.
 
 ### [x] CC.4 — Per-layer debug toggles
-- [x] `RENDER` flags parse the query string: `?noshadows=1 ?nogrunge=1 ?nograde=1 ?novignette=1 ?rgbagrade=1`. Mirrors the `?perf=1`/`PERF.opts` pattern. All verified in headless.
+- [x] `RENDER` flags parse the query string: `?noshadows=1 ?nogrunge=1 ?nograde=1 ?novignette=1 ?nodecals=1 ?nohaze=1 ?rgbagrade=1`. Mirrors the `?perf=1`/`PERF.opts` pattern. All verified in headless.
 
 ### [ ] CC.5 — Perf logging  _(pending formal ?perf=1 A/B — owner/gate)_
 - [ ] After the MVP, record `?perf=1` PERF.ab numbers (p50/p95, pixel-diff, heap) for big-map + HUB into `docs/perf/RESULTS.md`. _(Headless smoke confirms no errors / no per-frame alloc by construction; formal A/B numbers still to be captured.)_

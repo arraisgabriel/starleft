@@ -84,8 +84,8 @@ function h01(n){ const s=Math.sin(n*12.9898)*43758.5453; return s - Math.floor(s
 const RENDER = (function(){
   const qs=(typeof location!=='undefined' && location.search) || '';
   const off=k=>new RegExp('[?&]no'+k+'=1\\b').test(qs);
-  return { shadows:!off('shadows'), grunge:!off('grunge'), grade:!off('grade'),
-           vignette:!off('vignette'), forceRgbaGrade:/[?&]rgbagrade=1\b/.test(qs) };
+  return { shadows:!off('shadows'), grunge:!off('grunge'), grade:!off('grade'), decals:!off('decals'),
+           vignette:!off('vignette'), haze:!off('haze'), rain:!off('rain'), forceRgbaGrade:/[?&]rgbagrade=1\b/.test(qs) };
 })();
 // CC.1 — deterministic 2D hash → [0,1). Pure; identical cross-peer; NEVER simRandom/Math.random. (h01 above = 1D.)
 function h2(x,y){ const s=Math.sin(x*12.9898 + y*78.233)*43758.5453; return s - Math.floor(s); }
@@ -93,6 +93,41 @@ function h2(x,y){ const s=Math.sin(x*12.9898 + y*78.233)*43758.5453; return s - 
 // top→bottom; the depth[] pass is the ACTORS band (Y-sorted by contact point / feet). Documentation of intent.
 const LAYER = Object.freeze({ TERRAIN:0, GROUND_DECAL:1, SHADOW:2, ACTORS:3, CANOPY:4, FX:5, FOG:6, POST:7 });
 
+/* P7.5 — HUB weather (procedural, free): a wet neon-noir home base. (a) drawHubWet smears the cyan road-neon
+   DOWNWARD on the wet carriageway as a reflection (the "wet street" look) — world space, drawn just after the
+   roads; (b) drawHubRain draws animated slanted rain streaks over the whole view — screen space, additive,
+   gated on reduced-motion / QUAL / ?norain. Both HUB-only, cosmetic, cheap. */
+function drawHubWet(state, x0,y0,x1,y1){
+  if(!state.hub || !state.roadTiles) return;
+  const W=state.W, R=state.roadTiles, AX=state.roadAxis;
+  ctx.save(); ctx.globalCompositeOperation='lighter';
+  for(let ty=y0;ty<y1;ty++) for(let tx=x0;tx<x1;tx++){
+    const i=ty*W+tx; if(R[i]!==1) continue;                       // carriageway (asphalt) only
+    if(AX && AX[i]){                                              // a lit centre-line runs here → wet reflection below it
+      const px=tx*TILE, py=ty*TILE;
+      const g=ctx.createLinearGradient(px,py,px,py+TILE*1.7);
+      g.addColorStop(0,'rgba(90,210,255,0.085)'); g.addColorStop(0.5,'rgba(90,210,255,0.03)'); g.addColorStop(1,'rgba(90,210,255,0)');
+      ctx.fillStyle=g; ctx.fillRect(px-1,py,TILE+2,TILE*1.7);
+    }
+  }
+  ctx.restore();
+}
+function drawHubRain(state){
+  if(!RENDER.rain || !state.hub) return;
+  if(typeof megaReducedMotion==='function' && megaReducedMotion()) return;
+  if(typeof QUAL!=='undefined' && QUAL && QUAL.level>=2) return;
+  const W=viewW(), H=cv.height/dpr, t=state.time||0, N=160, SP=560, SL=0.32;   // count, fall px/s, slant
+  ctx.save(); ctx.setTransform(dpr,0,0,dpr,0,0);
+  ctx.globalCompositeOperation='lighter'; ctx.strokeStyle='rgba(150,180,215,0.09)'; ctx.lineWidth=1; ctx.beginPath();
+  for(let i=0;i<N;i++){
+    const a=h2(i*1.3+0.5, 7.1), c=h2(i*2.7+1.1, 3.3);
+    const fall=(((t*SP*(0.75+c*0.5) + a*2000) % (H+80)) + H+80) % (H+80) - 40;
+    const x=a*(W+160)-80 + fall*SL, len=13+c*13;
+    ctx.moveTo(x, fall); ctx.lineTo(x - len*SL, fall - len);
+  }
+  ctx.stroke(); ctx.restore();
+}
+const _unitTileSet=new Set();   // P3.1: per-frame set of tile indices a unit stands on (rebuilt each render)
 // CC.2 — cached soft contact-shadow sprite (built ONCE, reused for every unit, scaled per size → zero per-frame alloc).
 let _shadowSprite=null;
 function shadowSprite(){
@@ -118,6 +153,73 @@ function grungeTex(){
     const i=(y*P+x)*4; d[i]=4; d[i+1]=5; d[i+2]=8; d[i+3]=a|0;
   }
   g.putImageData(img,0,0); _grungeTex=c; return c;
+}
+
+/* P5 — DECAL SCATTER (baked, procedural, free): debris / cracks / scorch scattered across the GROUND in
+   world space so they cross tile boundaries (a crack spans two tiles), breaking the grid further and adding
+   "alive" detail. Placed on a world-anchored jittered grid seeded by CELL COORDS (mulberry32 → identical on
+   host & client; never simRandom), drawn into the chunk bake → zero scroll cost. Ground-only, dark &
+   value-suppressed (§11 readability), darken-dominant with a faint biome accent on crack cores. ?nodecals=1. */
+function _mulberry32(seed){ let s=seed>>>0; return function(){ s=(s+0x6D2B79F5)|0; let t=Math.imul(s^(s>>>15),1|s); t=(t+Math.imul(t^(t>>>7),61|t))^t; return ((t^(t>>>14))>>>0)/4294967296; }; }
+// per-biome decal ink: base = dark shape colour (rgba prefix, alpha appended); accent = faint crack-core glow
+// (ember/cyan/violet) or null; dens = placement probability per grid cell (sparse).
+const DECAL = {
+  [B_GRASS]:    { base:'rgba(8,13,8,',   accent:null,               dens:0.34 },
+  [B_MOUNTAIN]: { base:'rgba(13,14,17,', accent:'rgba(150,120,185,',dens:0.36 },  // violet ore fleck
+  [B_WATER]:    { base:'rgba(6,15,21,',  accent:'rgba(40,150,170,', dens:0.24 },
+  [B_TECH]:     { base:'rgba(7,9,13,',   accent:'rgba(60,200,225,', dens:0.40 },  // cyan
+  [B_DESERT]:   { base:'rgba(28,22,12,', accent:null,               dens:0.36 },
+  [B_ICE]:      { base:'rgba(16,22,28,', accent:'rgba(120,190,210,',dens:0.30 },
+  [B_VOLCANIC]: { base:'rgba(9,5,3,',    accent:'rgba(255,90,30,',  dens:0.34 },  // ember
+};
+function _decalScorch(g,x,y,sz,base){
+  const r=sz*1.45, gr=g.createRadialGradient(x,y,1,x,y,r);
+  gr.addColorStop(0,base+'0.26)'); gr.addColorStop(0.6,base+'0.11)'); gr.addColorStop(1,base+'0)');
+  g.fillStyle=gr; g.beginPath(); g.ellipse(x,y,r,r*0.84,0,0,6.2832); g.fill();
+}
+function _decalDebris(g,x,y,sz,rnd,base){
+  const n=3+(rnd()*3|0);
+  for(let i=0;i<n;i++){ const a=rnd()*6.2832, d=rnd()*sz, ex=x+Math.cos(a)*d, ey=y+Math.sin(a)*d;
+    const w=1+rnd()*sz*0.42, h=1+rnd()*sz*0.28;
+    g.fillStyle=base+(0.28+rnd()*0.26).toFixed(2)+')';
+    g.save(); g.translate(ex,ey); g.rotate(rnd()*6.2832); g.beginPath(); g.ellipse(0,0,w,h,0,0,6.2832); g.fill(); g.restore(); }
+}
+function _decalCrack(g,x,y,sz,rot,rnd,base,accent){
+  const seg=3+(rnd()*2|0); let ang=rot, px=x-Math.cos(rot)*sz, py=y-Math.sin(rot)*sz; const pts=[[px,py]];
+  for(let i=0;i<seg;i++){ ang+=(rnd()-0.5)*0.95; const len=sz*(0.5+rnd()*0.7); px+=Math.cos(ang)*len; py+=Math.sin(ang)*len; pts.push([px,py]); }
+  g.save(); g.lineCap='round'; g.lineJoin='round';
+  g.strokeStyle=base+'0.5)'; g.lineWidth=1.3; g.beginPath(); g.moveTo(pts[0][0],pts[0][1]); for(let i=1;i<pts.length;i++) g.lineTo(pts[i][0],pts[i][1]); g.stroke();
+  if(accent){ g.strokeStyle=accent+'0.22)'; g.lineWidth=0.6; g.beginPath(); g.moveTo(pts[0][0],pts[0][1]); for(let i=1;i<pts.length;i++) g.lineTo(pts[i][0],pts[i][1]); g.stroke(); }
+  g.restore();
+}
+const DCELL = 46;   // world px between decal candidate cells (~1 decal per ~6 tiles after the density gate)
+function bakeDecals(g, state, tx0, ty0){
+  if(!RENDER.decals) return;
+  const W=state.W, H=state.H, ww=TC_SIZE*TILE, wx0=tx0*TILE, wy0=ty0*TILE;
+  const c0x=Math.floor(wx0/DCELL)-1, c1x=Math.floor((wx0+ww)/DCELL)+1;   // ±1 cell margin → decals straddling a chunk seam draw in BOTH bakes (seamless)
+  const c0y=Math.floor(wy0/DCELL)-1, c1y=Math.floor((wy0+ww)/DCELL)+1;
+  for(let cy=c0y;cy<=c1y;cy++) for(let cx=c0x;cx<=c1x;cx++){
+    const rnd=_mulberry32((Math.imul(cx,374761393) ^ Math.imul(cy,668265263))>>>0);
+    const wx=cx*DCELL+rnd()*DCELL, wy=cy*DCELL+rnd()*DCELL;             // jittered world position
+    const tx=(wx/TILE)|0, ty=(wy/TILE)|0; if(tx<0||ty<0||tx>=W||ty>=H) continue;
+    const i=ty*W+tx; if(!state.explored[i]) continue;
+    const t=state.tiles[i]; if(t!==T_GRASS && t!==T_DIRT) continue;     // GROUND only (skip water/rock/tree)
+    const b=state.biome[i], pal=DECAL[b]||DECAL[B_GRASS];
+    if(rnd()>pal.dens) continue;                                        // sparse
+    const lx=wx-wx0, ly=wy-wy0;
+    // P7.3: painted decal stamp (if the atlas loaded) — richer ground detail; else procedural. Both baked,
+    // value-suppressed. Hash-picked variant + rotation + size; deterministic (mulberry from chunk coords).
+    if(typeof DECAL_READY!=='undefined' && DECAL_READY && typeof decalRect==='function'){
+      const dr=decalRect(b, (rnd()*DECAL_N)|0);
+      if(dr){ const ds=TILE*(0.6+rnd()*0.85);
+        g.save(); g.globalAlpha=0.6; g.translate(lx,ly); g.rotate(rnd()*6.2832);
+        g.drawImage(DECAL_IMG, dr[0],dr[1],dr[2],dr[3], -ds/2,-ds/2, ds, ds); g.restore(); continue; }
+    }
+    const sz=4.5+rnd()*7, k=rnd();
+    if(k<0.30) _decalScorch(g, lx, ly, sz, pal.base);
+    else if(k<0.66) _decalDebris(g, lx, ly, sz, rnd, pal.base);
+    else _decalCrack(g, lx, ly, sz, rnd()*6.2832, rnd, pal.base, pal.accent);
+  }
 }
 
 // P2 — full-screen post stack: per-biome multiply grade + warm focal pool + vignette. Screen-space, QUAL-gated,
@@ -416,6 +518,7 @@ function render(state){
   if(state.roadTiles){
     if(PERF.on) PERF.mark('roads');
     drawRoads(state, x0,y0,x1,y1);
+    if(typeof drawHubWet==='function') drawHubWet(state, x0,y0,x1,y1);   // P7.5 wet neon-reflection on the carriageway
     if(PERF.on) PERF.lap('roads');
   }
 
@@ -429,6 +532,10 @@ function render(state){
   if(PERF.on) PERF.mark('partBack');
   if(typeof drawParticles==='function') drawParticles(state, x0,y0,x1,y1, 'back');
   if(PERF.on) PERF.lap('partBack');
+
+  // ---- P5.4 combat-scorch decals (GROUND_DECAL band): transient dark marks where things died — on the
+  //      ground, UNDER the shadow band + units. Render-only, pooled, fades out. ----
+  drawScorches(state, ox, oy);
 
   // ---- buildings + mega sprites + units: ALL depth-sorted by ground-line Y so a unit
   //      BEHIND a tall building/landmark is occluded by it (drawn first) and a unit in
@@ -530,6 +637,9 @@ function render(state){
     }
     ctx.globalAlpha=1;
   }
+  // P3.1: tiles a unit stands on this frame → drawFeature fades a canopy when a unit walks UNDER it.
+  _unitTileSet.clear();
+  for(const d of depth){ const u=d.u; if(!u) continue; _unitTileSet.add(((u.y/TILE)|0)*state.W + ((u.x/TILE)|0)); }
   for(const d of depth){
     if(d._csHide) continue;                            // cutscene: this sprite would cover a participant → hide it
     if(d.b) drawBuilding(state, d.b, ox,oy, d.dim);
@@ -587,6 +697,9 @@ function render(state){
   // ---- ambient particles: FRONT pass (fireflies/embers/snow/dust/motes) — over the sprites ----
   if(PERF.on) PERF.mark('partFront');
   if(typeof drawParticles==='function') drawParticles(state, x0,y0,x1,y1, 'front');
+  // ---- P6.3 drifting weather haze (weather biomes only; very subtle, QUAL/reduced-motion gated) ----
+  if(typeof drawWeatherPlane==='function') drawWeatherPlane(state, x0,y0,x1,y1);
+  if(typeof drawHubRain==='function') drawHubRain(state);                       // P7.5 HUB rain (screen-space, over the scene)
 
   // ---- HUB decorative drones: a dedicated pass AFTER the depth sort so they fly on top of
   //      every building (even the tallest HQ), drawn small + high. Cosmetic, module-local. ----
@@ -860,7 +973,48 @@ function _tcBake(state, ccx, ccy, z, cnt){
     const ax=(((tx0*TILE)%P)+P)%P, ay=(((ty0*TILE)%P)+P)%P;
     for(let yy=-ay; yy<ww; yy+=P) for(let xx=-ax; xx<ww; xx+=P) g.drawImage(gt, xx, yy);
   }
+  // ---- P5 decal scatter (baked): debris/cracks/scorch on the ground, world-anchored + deterministic so they
+  //      cross tile/chunk seams seamlessly. Drawn after grunge, under the live water/feature overlays. ----
+  bakeDecals(g, state, tx0, ty0);
   return { cnv, live, cnt };
+}
+
+/* P6.3 — DRIFTING WEATHER PLANE (live, free): a slow-scrolling soft cloud haze over the WEATHER biomes only
+   (volcanic heat-smoke, ice cold-fog, desert dust, tech digital haze) — adds atmospheric depth that pairs
+   with the P6.1 particle field. Very low alpha so it never washes units (§11), world-anchored + time-drift,
+   biome-tinted, QUAL-gated, off under reduced motion. Temperate grass/mountain/water get NONE (same rule as
+   the particle field — no source = looks strange). ?nohaze=1. */
+const _fogCache={};
+function fogTex(tint){
+  if(_fogCache[tint]) return _fogCache[tint];
+  const rgb=tint.split(',').map(Number), P=256, c=document.createElement('canvas'); c.width=c.height=P;
+  const g=c.getContext('2d'), img=g.createImageData(P,P), d=img.data, K=6.2831853/P;
+  const T=[[1,0,0.0],[0,1,1.1],[2,1,2.3],[1,2,0.6],[2,2,4.0]];   // low-freq integer waves → soft, seamless clouds
+  for(let y=0;y<P;y++) for(let x=0;x<P;x++){
+    let v=0; for(let k=0;k<T.length;k++) v+=Math.sin((T[k][0]*x+T[k][1]*y)*K+T[k][2]); v/=T.length;  // ~[-1,1]
+    const a=Math.max(0,v); const i=(y*P+x)*4; d[i]=rgb[0]; d[i+1]=rgb[1]; d[i+2]=rgb[2]; d[i+3]=(a*a*255)|0;  // soft (a²) light-half clouds
+  }
+  g.putImageData(img,0,0); _fogCache[tint]=c; return c;
+}
+const WEATHER = {
+  [B_VOLCANIC]: { tint:'255,150,95',  a:0.05,  sp:7 },   // heat smoke
+  [B_ICE]:      { tint:'200,225,242', a:0.06,  sp:5 },   // cold fog
+  [B_DESERT]:   { tint:'212,186,128', a:0.05,  sp:10 },  // dust haze
+  [B_TECH]:     { tint:'120,205,228', a:0.035, sp:4 },   // digital haze
+};
+function drawWeatherPlane(state, x0,y0,x1,y1){
+  if(!RENDER.haze) return;
+  if(typeof megaReducedMotion==='function' && megaReducedMotion()) return;
+  if(typeof QUAL!=='undefined' && QUAL && QUAL.level>=2) return;
+  const z=state.zoom||1, cwx=state.camX+(viewW()/z)/2, cwy=state.camY+(viewH()/z)/2;
+  const ctx2=Math.max(0,Math.min(state.W-1,(cwx/TILE)|0)), cty=Math.max(0,Math.min(state.H-1,(cwy/TILE)|0));
+  const w=WEATHER[state.biome[cty*state.W+ctx2]]; if(!w) return;   // weather biomes only
+  const tex=fogTex(w.tint), P=256, t=state.time||0;
+  const wx0=x0*TILE, wy0=y0*TILE, ww=(x1-x0)*TILE, wh=(y1-y0)*TILE, dx=t*w.sp, dy=t*w.sp*0.55;
+  const ax=(((wx0-dx)%P)+P)%P, ay=(((wy0-dy)%P)+P)%P;
+  ctx.save(); ctx.globalAlpha=w.a;
+  for(let yy=wy0-ay; yy<wy0+wh; yy+=P) for(let xx=wx0-ax; xx<wx0+ww; xx+=P) ctx.drawImage(tex, xx, yy);
+  ctx.restore();
 }
 let _tcGen = -1;   // LOADER.gen snapshot: a LATE-arriving atlas (mobile retry) re-bakes every chunk
 function renderTerrainChunks(state, z, x0,y0,x1,y1){
@@ -1156,10 +1310,24 @@ function drawFeature(state, f, ox, oy, dim){
   const fw=Math.max(1,(f.w||FEAT_SIZE)|0), fh=Math.max(1,(f.h||FEAT_SIZE)|0);
   const px=f.tx*TILE+ox, baseW=fw*TILE, baseH=fh*TILE;
   const overhang=f.overhang||1.08;                       // slight upward growth, like buildings/megas
-  const dw=baseW*overhang, dh=baseH*overhang*(f.heightScale||1);
+  const rscale = f.base ? 1 : (0.8 + h2(f.tx*1.3+7, f.ty*1.7+3)*0.55);  // P7.4 per-feature SIZE variety (cosmetic — footprint/blocked mask/depth ground-line unchanged; coord-hash → co-op-safe). f.base (funding crystal) → fixed size.
+  const dw=baseW*overhang*rscale, dh=baseH*overhang*(f.heightScale||1)*rscale;
   const dx=px+(baseW-dw)/2, dy=(f.ty+fh)*TILE+oy - dh + 2; // centered, bottom-anchored on the ground line
+  // P3.1 walk-under: is a unit standing in this feature's PASSABLE top rows (rows [0, fh-floor(fh/2))? → fade
+  // the canopy so the unit reads through it (finishes the pending transparent-canopy "Phase 2"). ?nocanopy via toggle n/a.
+  let under=false;
+  if(_unitTileSet.size){ const bf=fh-(fh>>1);            // rows >= bf are the blocked base; rows < bf are walk-under
+    for(let ry=0;ry<bf && !under;ry++){ const ty=f.ty+ry; if(ty<0) continue;
+      for(let rx=0;rx<fw;rx++){ if(_unitTileSet.has(ty*state.W+(f.tx+rx))){ under=true; break; } } }
+  }
+  // P3.2 fake height: a soft contact shadow under the feature's base so rocks/trees sit on the ground & "pop".
+  if(!dim && typeof shadowSprite==='function' && (state.zoom||1)>=SPRITE_LOD_ZOOM*0.7){
+    const sr=baseW*0.40*rscale, gy=(f.ty+fh)*TILE+oy-2, sx=px+baseW/2;
+    ctx.save(); ctx.globalAlpha*=0.5; ctx.drawImage(shadowSprite(), sx-sr, gy-sr*0.32, sr*2, sr*0.64); ctx.restore();
+  }
   ctx.save();
-  if(dim) ctx.globalAlpha*=0.5;                          // explored-but-not-visible
+  if(under) ctx.globalAlpha*=0.42;                       // canopy ghost (unit walks under)
+  else if(dim) ctx.globalAlpha*=0.5;                     // explored-but-not-visible
   drawFeatureSprite(f, dx, dy, dw, dh);
   if(state.hub && f.slot==='rock' && typeof hubInWasteland==='function' && hubInWasteland(f.tx+fw/2,f.ty+fh/2)){
     drawWastelandRockFog(state,f,dx,dy,dw,dh);
@@ -1214,6 +1382,12 @@ function drawWastelandRockFog(state,f,dx,dy,dw,dh){
 function drawFeatureSprite(f, dx, dy, dw, dh){
   ctx.save();
   if(f.v>=0.5){ ctx.translate(dx+dw/2, dy+dh/2); ctx.scale(-1,1); ctx.translate(-(dx+dw/2), -(dy+dh/2)); }
+  // 0) P7.4 VARIANT atlas (features_var.webp): one of FEAT_VAR_N distinct shapes per biome+slot, hash-picked
+  //    from the feature's coords (deterministic → co-op-safe). The big "lifeless one-rock-per-biome" fix.
+  if(!f.base && typeof FEAT_VAR_READY!=='undefined' && FEAT_VAR_READY && typeof featVarRect==='function'){
+    const vr = featVarRect(f.biome, f.slot, (h2(f.tx,f.ty)*featVarN(f.slot))|0);   // rocks: 4 variants, trees: 8 (own + dead mix)
+    if(vr){ ctx.drawImage(FEAT_VAR_IMG, vr[0],vr[1],vr[2],vr[3], dx,dy,dw,dh); ctx.restore(); return; }
+  }
   // 1) transparent high-res cut-out (features.png) — only the rock/tree pixels, so terrain shows
   //    through and units behind the canopy are occluded only by the silhouette (true walk-under).
   const fr = (typeof featSpriteFor==='function') ? featSpriteFor(f.biome, f.slot) : null;
@@ -1253,7 +1427,9 @@ function drawGoldmine(state,e,ox,oy,dim){
 
   // base topography mountain ROCK from features.png (mountain biome) — drawn as a normal
   // walk-under feature. Stable per-node mirror from e.id (never flips between frames).
-  drawFeature(state, {tx:ftx, ty:fty, biome:B_MOUNTAIN, slot:'rock', v:((e.id||0)&1)?0.72:0.18}, ox, oy, false);
+  // base:true → the funding crystal ALWAYS uses the ORIGINAL features.webp mountain rock (the purple crystal)
+  // at a fixed size — it must never pick a new shape variant or jitter size (it's a gameplay landmark).
+  drawFeature(state, {tx:ftx, ty:fty, biome:B_MOUNTAIN, slot:'rock', v:((e.id||0)&1)?0.72:0.18, base:true}, ox, oy, false);
 
   // additive PURPLE emission over the rock body so it reads as glowing purple (pulses)
   ctx.save(); ctx.globalCompositeOperation='lighter';
@@ -2298,6 +2474,28 @@ function drawLevelArrows(state, ox, oy){
   levelArrows=levelArrows.filter(a=>a.t<LVLARROW_LIFE);
 }
 function spawnRing(wx,wy,color){ rings.push({x:wx,y:wy,r:6,max:26,color,t:1}); }
+/* P5.4 — dynamic combat-scorch decals: a transient dark mark left on the GROUND where a unit/building dies.
+   Render-only + module-local (never on G → save/net untouched), drawn in the GROUND_DECAL band UNDER units &
+   their shadows. Pooled + capped; fades over SCORCH_LIFE. Reuses the cached shadow blob (zero per-frame alloc).
+   Spawned from deathFx (host/solo gated; client fires it from snapshot entity-removals — same path as the bursts). */
+let scorches=[]; const SCORCH_CAP=64, SCORCH_LIFE=12; let _scorchLast=0;
+function spawnScorch(wx,wy,scale){ if(scorches.length>=SCORCH_CAP) scorches.shift(); scorches.push({x:wx,y:wy,r:9+(scale||1)*7,t:0}); }
+function drawScorches(state, ox, oy){
+  if(!scorches.length) return;
+  const now=(typeof performance!=='undefined'?performance.now():0);
+  let dt=_scorchLast?(now-_scorchLast)/1000:1/60; _scorchLast=now; if(!(dt>0)||dt>0.25) dt=1/60;
+  const sp=(typeof shadowSprite==='function')?shadowSprite():null;
+  ctx.save();
+  for(const s of scorches){
+    s.t+=dt; if(s.t>=SCORCH_LIFE) continue;
+    const p=s.t/SCORCH_LIFE, a=(p<0.05?p/0.05:(1-p))*0.5; if(a<=0.015) continue;
+    const x=s.x+ox, y=s.y+oy, r=s.r; ctx.globalAlpha=a;
+    if(sp) ctx.drawImage(sp, x-r, y-r*0.66, r*2, r*1.32);
+    else { ctx.fillStyle='rgba(6,4,3,'+a.toFixed(3)+')'; ctx.beginPath(); ctx.ellipse(x,y,r,r*0.66,0,0,6.2832); ctx.fill(); }
+  }
+  ctx.globalAlpha=1; ctx.restore();
+  scorches=scorches.filter(s=>s.t<SCORCH_LIFE);
+}
 // ninja smoke-bomb vanish: a DENSE, glowing cyan→blue cloud — layered soft puffs that billow out, rise and
 // fade. Deterministic (golden-angle spread, no RNG). Each puff is drawn as a soft radial gradient in drawRings.
 const SMOKE_PAL=[[200,250,255],[120,234,255],[64,200,250],[40,168,242]];   // white-cyan core → mid cyan → blue
@@ -2362,6 +2560,8 @@ function deathFx(state, e){
      e.y < state.camY-m || e.y > state.camY+viewH()/z+m) return;
   // fog cull: an enemy dying in the dark stays unseen
   if(e.owner==='enemy' && !isVisiblePix(state,e.x,e.y)) return;
+  // P5.4: leave a lingering ground scorch where it died (under the burst FX below)
+  if(typeof spawnScorch==='function') spawnScorch(e.x, e.y, e.kind==='building' ? 2.4 : ((typeof unitDrawH==='function'?unitDrawH(e):32)/56));
   const reduced=(typeof megaReducedMotion==='function'&&megaReducedMotion());
   if(smokes.length>240) return;   // hard particle cap on mass deaths
   const rgb=deathFxColor(state,e);

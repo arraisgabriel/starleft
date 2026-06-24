@@ -21,7 +21,7 @@
    Registered from js/loader.js — http(s) only, and skipped on localhost
    so dev servers and the sandbox never fight a stale cache. | STARLEFT */
 
-const CACHE = 'starleft-assets-v3';   // v3: punk NPC part sheets p10-p19 (assets/units/npc_parts/)
+const CACHE = 'starleft-assets-v4';   // v4: terrain revamp atlases — floors.webp, features_var.webp, decals.webp
 
 self.addEventListener('install', ()=>{ self.skipWaiting(); });
 

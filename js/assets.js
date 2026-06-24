@@ -101,6 +101,44 @@ function featSpriteFor(biome, slot){
   return [c*FEAT_CELL, r*FEAT_CELL, FEAT_CELL, FEAT_CELL];
 }
 
+/* ---- Optional FEATURE-VARIANT atlas (features_var.webp): FEAT_VAR_N distinct rock + tree SHAPES per biome,
+   hash-picked per feature so a biome isn't one cloned rock (P7.4 — the "lifeless" fix). 7 biome ROWS
+   (biome-id order) × (FEAT_VAR_N rock + FEAT_VAR_N tree) COLS of FEAT_VAR_CELL px. Optional: drawFeatureSprite
+   falls back to the single features.webp cell, then procedural, if absent. Built by
+   _dev/gen/gen_feature_variants.mjs (Gemini 3 Pro Image) + slice_feature_variants.py. ---- */
+const ATLAS_FEAT_VAR = ASSET_BASE + 'atlas/features_var.webp';
+const FEAT_VAR_IMG = new Image();
+let FEAT_VAR_READY = false;
+FEAT_VAR_IMG.onload = ()=>{ FEAT_VAR_READY = true; };
+FEAT_VAR_IMG.onerror = ()=>{ FEAT_VAR_READY = false; };
+LOADER.register(FEAT_VAR_IMG, ATLAS_FEAT_VAR, { tag:'atlas:feature-variant', tier:LOADER.T_GAMEPLAY, weight:2, optional:true });
+const FEAT_VAR_CELL = 256, FEAT_VAR_ROCK_N = 4, FEAT_VAR_TREE_N = 8;   // cols: [0..3] rocks, [4..11] trees
+function featVarN(slot){ return slot==='tree' ? FEAT_VAR_TREE_N : FEAT_VAR_ROCK_N; }
+function featVarRect(biome, slot, idx){
+  if(!FEAT_VAR_READY) return null;
+  const r = FEAT_ROW[biome]; if(r==null) return null;
+  const n = featVarN(slot), base = slot==='tree' ? FEAT_VAR_ROCK_N : 0;
+  const c = base + (((idx%n)+n)%n);
+  return [c*FEAT_VAR_CELL, r*FEAT_VAR_CELL, FEAT_VAR_CELL, FEAT_VAR_CELL];
+}
+
+/* ---- Optional painted DECAL atlas (decals.webp, P7.3): DECAL_N ground decals per biome (debris/cracks/
+   scorch/biome-detail), baked at scatter points by render.js bakeDecals() when present, else the procedural
+   decals. 7 biome ROWS (biome-id order) × DECAL_N COLS of DECAL_CELL px. Built by gen_decals.mjs + slice_decals.py. ---- */
+const ATLAS_DECALS = ASSET_BASE + 'atlas/decals.webp';
+const DECAL_IMG = new Image();
+let DECAL_READY = false;
+DECAL_IMG.onload = ()=>{ DECAL_READY = true; };
+DECAL_IMG.onerror = ()=>{ DECAL_READY = false; };
+LOADER.register(DECAL_IMG, ATLAS_DECALS, { tag:'atlas:decals', tier:LOADER.T_AMBIENT, weight:1, optional:true });
+const DECAL_CELL = 128, DECAL_N = 12;   // 2 sets of 6 painted decals per biome
+function decalRect(biome, idx){
+  if(!DECAL_READY) return null;
+  const r = FEAT_ROW[biome]; if(r==null) return null;
+  const c = ((idx%DECAL_N)+DECAL_N)%DECAL_N;
+  return [c*DECAL_CELL, r*DECAL_CELL, DECAL_CELL, DECAL_CELL];
+}
+
 /* ---- Optional WATER / MAGMA atlas (seamless tiles, dark Hades palette) — a DROP-IN upgrade
    over the procedural water.js renderer. If assets/atlas/water.png is absent, WATER_READY stays
    false and water.js renders procedurally (same resilience contract as the tileset/features atlas).
