@@ -1486,6 +1486,21 @@ function applyChromeCommit(state, payload){
   const isHero=!!((snap&&(snap.hero||snap.heroId))||(live&&(live.hero||live.heroId)));
   const rebake=()=>{ up.capUsed=chromeCapUsed(key); if(live){ hubApplyUpgrades(live); if(typeof applyVetHp==='function') applyVetHp(live,true); } };
 
+  // HERO SIGNATURE ability purchase/upgrade (player-activated; no capacity, M3$ only; bought one tier at a
+  // time and stored in up.sig 0–3). Read at cast time by castSigAbility — nothing to bake into stats.
+  if(payload.op==='sig'){
+    const heroId = payload.heroId || (snap&&snap.heroId) || (live&&live.heroId);
+    const spec = (typeof heroSigSpec==='function') ? heroSigSpec(heroId) : null;
+    if(!spec){ return { ok:false }; }
+    const want = Math.max(1, Math.min(heroSigMaxTier(), (payload.tier|0)||((up.sig|0)+1)));
+    const have = up.sig|0;
+    if(want <= have){ toast('Already at '+spec.name+' Tier '+have); return { ok:false }; }
+    if(want !== have+1){ toast('Upgrade one tier at a time'); return { ok:false }; }
+    if(!hubSpend(heroSigM3(heroId, want))) return { ok:false };   // host-gated + affordability (toasts on fail)
+    up.sig = want;
+    return { ok:true, msg: spec.name+' · Tier '+want, sig:want };
+  }
+
   if(payload.op==='remove'){
     const cur=up.chrome[tk]; if(!cur) return { ok:false };
     if(cur.iconic){ toast('Iconic chrome is bound to the hero — it can’t be removed.'); return { ok:false }; }

@@ -484,7 +484,7 @@ function buildCommands(sel){
       for(const t of abTypes){
         const spec=ABILITIES[t];
         addCmd(spec.icon, spec.name, null, ()=>{ (typeof netAbility==='function'?netAbility:(g)=>castAbility(g,g.selection))(G); }, 'abil-btn', 'ability-'+t);
-        const btn=elCmd.lastChild; if(btn){ btn._abilType=t; btn.title=spec.hint||''; }
+        const btn=elCmd.lastChild; if(btn){ btn._abilType=t; btn.title=spec.hint||''; const cd=document.createElement('span'); cd.className='cmd-cd'; btn.appendChild(cd); }
       }
     }
     // Arc-3 hero SECOND ability (e.g. Rust RECALL): a bespoke button shown only when a hero carrying a
@@ -494,7 +494,17 @@ function buildCommands(sel){
       for(const sp of hSprites){
         const spec=HERO_ABILITY[sp];
         addCmd(spec.icon, spec.name, null, ()=>{ (typeof netHeroAbility==='function'?netHeroAbility:(g)=>castHeroAbility(g,g.selection))(G); }, 'abil-btn', 'heroability-'+sp);
-        const btn=elCmd.lastChild; if(btn){ btn._heroAbilSprite=sp; btn.title=spec.hint||''; }
+        const btn=elCmd.lastChild; if(btn){ btn._heroAbilSprite=sp; btn.title=spec.hint||''; const cd=document.createElement('span'); cd.className='cmd-cd'; btn.appendChild(cd); }
+      }
+    }
+    // Hero SIGNATURE ability (clinic-bought cyberware): a third button, shown only when the selected hero
+    // has bought their signature (sig>=1). Routes through netSigAbility; cooldown via u.sigCd.
+    if(typeof heroSigTier==='function' && typeof CYBERWARE!=='undefined' && CYBERWARE.heroSig){
+      const sigHeroes=[...new Set(combat.filter(u=>u.hero && u.heroId && CYBERWARE.heroSig[u.heroId] && heroSigTier(u)>=1).map(u=>u.heroId))].slice(0,2);
+      for(const hid of sigHeroes){
+        const spec=CYBERWARE.heroSig[hid];
+        addCmd(spec.icon, spec.name, null, ()=>{ (typeof netSigAbility==='function'?netSigAbility:(g)=>castSigAbility(g,g.selection))(G); }, 'abil-btn sig-btn', 'sigability-'+hid);
+        const btn=elCmd.lastChild; if(btn){ btn._sigHero=hid; btn.title=spec.hint||''; const cd=document.createElement('span'); cd.className='cmd-cd'; btn.appendChild(cd); }
       }
     }
   }
@@ -553,6 +563,16 @@ function syncCmdLine(){
   updateStopBtn();
   if(typeof syncHud==='function'){ syncHud(); if(G && typeof clampCam==='function') clampCam(G); }
 }
+// Dim an ability button while every matching selected unit is on cooldown, and show a live numeric
+// countdown (seconds-to-ready) on its .cmd-cd badge — the visible cooldown timer every ability carries.
+function _abilBtnState(b, units, cdKey){
+  let ready=false, minCd=Infinity;
+  for(const u of units){ const cd=u[cdKey]||0; if(cd<=0){ ready=true; } else if(cd<minCd) minCd=cd; }
+  if(!units.length){ ready=false; minCd=Infinity; }
+  b.classList.toggle('disabled', !ready);
+  const badge=b.querySelector('.cmd-cd');
+  if(badge) badge.textContent = (!ready && minCd!==Infinity) ? (Math.ceil(minCd)+'s') : '';
+}
 // Keep the affordability dimming fresh without destroying (and re-creating) buttons.
 function updateAffordability(){
   const kids=elCmd.children; if(!kids) return;
@@ -561,13 +581,15 @@ function updateAffordability(){
     if(b._cost!=null) b.classList.toggle('disabled', _g < b._cost);
     // T2-2: ability buttons dim while every selected unit of that type is still on cooldown
     if(b._abilType){
-      const ready=G.selection.some(u=>!u.dead && u.type===b._abilType && (u.abilCd||0)<=0);
-      b.classList.toggle('disabled', !ready);
+      _abilBtnState(b, G.selection.filter(u=>!u.dead && u.type===b._abilType), 'abilCd');
     }
     // Arc-3: hero second-ability button dims while every selected hero of that skin is on cooldown
     if(b._heroAbilSprite){
-      const ready=G.selection.some(u=>!u.dead && u.hero && u.spriteType===b._heroAbilSprite && (u.heroAbilCd||0)<=0);
-      b.classList.toggle('disabled', !ready);
+      _abilBtnState(b, G.selection.filter(u=>!u.dead && u.hero && u.spriteType===b._heroAbilSprite), 'heroAbilCd');
+    }
+    // hero SIGNATURE ability button — same dim + a live numeric cooldown countdown
+    if(b._sigHero){
+      _abilBtnState(b, G.selection.filter(u=>!u.dead && u.hero && u.heroId===b._sigHero), 'sigCd');
     }
   }
 }
@@ -2051,7 +2073,8 @@ function openCondoClinic(poiOrId){
     signature:function(){
       const r=_clinicResidents(id).map(s=>s.key).join(',');
       const k=_clinic.key, ch=k?JSON.stringify(chromeOf(k)):'';
-      return 'clinic:'+id+'|k:'+(k||'')+'|c:'+ch+'|cap:'+(k?chromeCapUsed(k):0)+'|m3:'+(CAMPAIGN.m3|0)+'|cat:'+(_clinic.cat?_clinic.cat.tileKey:'')+'|r:'+r;
+      const sig=(k && CAMPAIGN.upgrades && CAMPAIGN.upgrades[k] && CAMPAIGN.upgrades[k].sig)||0;
+      return 'clinic:'+id+'|k:'+(k||'')+'|c:'+ch+'|sig:'+sig+'|cap:'+(k?chromeCapUsed(k):0)+'|m3:'+(CAMPAIGN.m3|0)+'|cat:'+(_clinic.cat?_clinic.cat.tileKey:'')+'|r:'+r;
     },
     build:function(body){ buildClinicBody(body, id); },
     tick:function(body){ const cv=body.querySelector('canvas.rip-figure'); if(cv){ const s=_clinicActiveSnap(); drawCyberwareBodyMap(cv, s, performance.now()/1000, {ring:true}); } },   // no slot→body cables — they never landed on the right body part; just the figure on its plinth + targeting ring
@@ -2095,7 +2118,33 @@ function buildRipperdocBody(host, snap){
   const cv=document.createElement('canvas'); cv.className='rip-figure'; cv.width=300; cv.height=340; fig.appendChild(cv);
   grid.appendChild(left); grid.appendChild(fig); grid.appendChild(right);
   host.appendChild(grid);
+  const sig=ripSigSection(snap); if(sig) host.appendChild(sig);
   if(_clinic.cat) host.appendChild(buildRipCatalog(snap, _clinic.cat.slot, _clinic.cat.tileKey));
+}
+// HERO SIGNATURE — a hero-only band selling the player-activated, 3-tier signature ability (separate from
+// the capacity-bound chrome above). Buy/upgrade routes through clinicCommit({op:'sig',…}) → applyChromeCommit.
+function ripSigSection(snap){
+  const heroId = snap && snap.heroId;
+  const spec = (typeof heroSigSpec==='function') ? heroSigSpec(heroId) : null;
+  if(!spec) return null;
+  const up = (CAMPAIGN.upgrades && CAMPAIGN.upgrades[snap.key]) || {};
+  const tier = up.sig|0, maxT = heroSigMaxTier();
+  const wrap=document.createElement('div'); wrap.className='rip-sig';
+  const h=document.createElement('div'); h.className='train-h';
+  h.innerHTML='<span>'+spec.icon+' SIGNATURE · '+spec.name+'</span>'+
+    '<span class="rip-grp-count'+(tier?'':' none')+'">'+(tier?('★'.repeat(tier)+'·'.repeat(maxT-tier)):'not installed')+'</span>';
+  wrap.appendChild(h);
+  const hint=document.createElement('div'); hint.className='rcr-flavor'; hint.textContent=spec.hint; wrap.appendChild(hint);
+  const cur=document.createElement('div'); cur.className='rip-sig-cur';
+  cur.textContent = tier ? ('Active — Tier '+tier+': '+spec.effTxt(tier-1)+'. Fire it from '+_clinicName(snap)+'’s command bar.')
+                         : 'Player-activated — once installed, fire it from this hero’s command bar (on cooldown).';
+  wrap.appendChild(cur);
+  if(tier < maxT){
+    const nt=tier+1, cost=heroSigM3(heroId, nt);
+    wrap.appendChild(hubMenuActionBtn((tier?'▲ Upgrade to Tier '+nt:'Install')+' · '+spec.effTxt(nt-1), cost, true,
+      ()=>clinicCommit({op:'sig', key:snap.key, heroId, tier:nt})));
+  } else { const m=document.createElement('div'); m.className='rcr-flavor'; m.textContent='Fully upgraded.'; wrap.appendChild(m); }
+  return wrap;
 }
 function ripStatStrip(snap){
   const strip=document.createElement('div'); strip.className='rip-stats';

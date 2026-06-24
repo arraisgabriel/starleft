@@ -32,6 +32,7 @@
     on:false,
     speed:1,              // 0 paused · 1 · 2 · 4  (sub-steps per rAF frame)
     placeType:null,       // armed DEF key placed on the next canvas click (null = normal play)
+    placeHero:null,       // armed HERO descriptor (HERO_ROSTER entry) — when set, the placed unit is staged as that hero
     owner:'player',       // side for newly placed entities: 'player' | 'enemy' | 'neutral'
     reborn:false,         // placement modifier: stage placed UNITS as Wake Reborn cyborgs (grey skin + FX, scarred, +15% HP, dead-nerve no-heal)
     god:false, reveal:true, noEnd:true, funding:false,
@@ -45,6 +46,33 @@
   function placeable(kind){
     return Object.keys(DEF).filter(k=>{ const d=DEF[k]; return d && d.kind===kind && d.name; });
   }
+
+  /* ---- named campaign heroes: the dev-tool roster ------------------------ */
+  // Heroes are NOT DEF keys — each is a regular unit (`type`) stamped with hero=true, a heroId
+  // (drives signature abilities + cyberware iconics), a recolored spriteType, and veteran stars.
+  // This mirrors career.js _placeHero / spawnHeroes; declared explicitly here because the canonical
+  // roster lives across two MAPS declaration styles (heroes[] for Nino/Rust, a captive enemies[]
+  // entry for Biba) plus a sprite-less hero (Zeca). `heroId` casing matches CYBERWARE.heroSig keys.
+  const HERO_ROSTER = [
+    { heroId:'Nino', name:'Nino', icon:'🎩', type:'lobbyist',  sprite:'nino', level:11 },
+    { heroId:'Biba', name:'Biba', icon:'⚕️', type:'recruiter', sprite:'biba', level:12 },
+    { heroId:'Rust', name:'Rust', icon:'⚒️', type:'founder',   sprite:'rust', level:6  },
+    // Zeca has no runtime sprite (intern art only) — sprite:null renders him as a 15%-bigger Intern;
+    // hero=true + heroId:'Zeca' still wire his Mass-Fabrication signature + cyberware iconics.
+    { heroId:'Zeca', name:'Zeca', icon:'🔧', type:'worker',    sprite:null,   level:3  },
+  ];
+  function heroById(id){ return HERO_ROSTER.find(h=>h.heroId===id) || null; }
+
+  // Heroes placed in sandbox come with their player-activated SIGNATURE implant (Nino cloak / Biba
+  // mind-control / Rust stomp / Zeca fab) pre-installed and upgraded to this tier — the clinic-bought
+  // axis, persisted in CAMPAIGN.upgrades['hero:'+id].sig (0–3) and read live by heroSigTier (units.js).
+  const SANDBOX_HERO_SIG_TIER = 2;
+  function ensureHeroSig(heroId){
+    if(typeof CAMPAIGN==='undefined' || !CAMPAIGN || !CAMPAIGN.upgrades) return;
+    const key='hero:'+heroId, up=CAMPAIGN.upgrades[key]||(CAMPAIGN.upgrades[key]={});
+    up.sig=Math.max(up.sig|0, SANDBOX_HERO_SIG_TIER);   // never downgrade a higher tier already present
+  }
+  function installHeroSigs(){ HERO_ROSTER.forEach(h=>ensureHeroSig(h.heroId)); }
 
   /* ====================================================================== */
   /*  STYLES                                                                 */
@@ -71,6 +99,9 @@
     display:flex;align-items:center;gap:5px;transition:background .1s,border-color .1s;}
   .sbx-btn:hover{background:#1d2540;border-color:#3d4d78;}
   .sbx-btn.on{background:#103a44;border-color:#22c3e6;color:#aef3ff;box-shadow:0 0 0 1px #22c3e655 inset;}
+  .sbx-pal-hero{border-color:#5a4a22;}
+  .sbx-pal-hero .ic{filter:drop-shadow(0 0 3px #ffcf6688);}
+  .sbx-pal-hero.on{background:#3a2c10;border-color:#e6b422;color:#ffe9a8;box-shadow:0 0 0 1px #e6b42255 inset;}
   .sbx-btn.danger:hover{background:#3a1320;border-color:#e0445f;color:#ffd0d8;}
   .sbx-btn .ic{font-size:14px;line-height:1;width:16px;text-align:center;flex:0 0 auto;}
   .sbx-btn .tx{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
@@ -129,6 +160,7 @@
 
     const unitBtns=placeable('unit').map(k=>paletteBtn(k)).join('');
     const bldBtns =placeable('building').map(k=>paletteBtn(k)).join('');
+    const heroBtns=HERO_ROSTER.map(h=>heroPaletteBtn(h)).join('');
 
     panel.innerHTML=`
       <div class="sbx-hd">
@@ -180,6 +212,11 @@
         </div>
 
         <div class="sbx-sec">
+          <div class="sbx-lbl">Heroes <span class="sbx-note">(at ★ level · tier-2 signature pre-installed)</span></div>
+          <div class="sbx-grid" id="sbx-heroes">${heroBtns}</div>
+        </div>
+
+        <div class="sbx-sec">
           <div class="sbx-lbl">Buildings <span class="sbx-note">(placed instantly built)</span></div>
           <div class="sbx-grid" id="sbx-buildings">${bldBtns}</div>
         </div>
@@ -228,8 +265,9 @@
     bindToggle('#sbx-funding','funding','Infinite funding');
     bindToggle('#sbx-reborn','reborn','Reborn cyborg');   // placement modifier (applied per-unit in place(), not enforced globally)
 
-    // palette
+    // palette — units/buildings (data-type) and heroes (data-hero)
     panel.querySelectorAll('.sbx-pal').forEach(b=>b.onclick=()=>arm(b.dataset.type));
+    panel.querySelectorAll('.sbx-pal-hero').forEach(b=>b.onclick=()=>{ const h=heroById(b.dataset.hero); if(h) arm(h.type, h); });
 
     // actions
     panel.querySelector('#sbx-kill-enemy').onclick=()=>killSide('enemy');
@@ -238,6 +276,10 @@
   function paletteBtn(k){
     const d=DEF[k];
     return `<button class="sbx-btn sbx-pal" data-type="${k}" title="${d.name}"><span class="ic">${d.icon||'▪'}</span><span class="tx">${d.name}</span></button>`;
+  }
+  function heroPaletteBtn(h){
+    const base=DEF[h.type]; const sub=(base&&base.name)||h.type;
+    return `<button class="sbx-btn sbx-pal-hero" data-hero="${h.heroId}" title="${h.name} — hero ${sub} · ★${h.level}"><span class="ic">${h.icon||'★'}</span><span class="tx">${h.name}</span></button>`;
   }
   function bindToggle(sel,key,label){
     const b=panel.querySelector(sel);
@@ -249,11 +291,20 @@
   /* ====================================================================== */
   /*  ARM / PLACE                                                            */
   /* ====================================================================== */
-  function arm(type){
-    SB.placeType = (SB.placeType===type) ? null : type;   // click again to disarm
-    if(panel) panel.querySelectorAll('.sbx-pal').forEach(b=>b.classList.toggle('on', b.dataset.type===SB.placeType));
+  function arm(type, hero){
+    hero = hero || null;
+    // click the same tool again to disarm (a hero and a plain unit of the same base type are distinct)
+    const same = SB.placeType===type && (SB.placeHero&&SB.placeHero.heroId)===(hero&&hero.heroId);
+    SB.placeType = same ? null : type;
+    SB.placeHero = same ? null : hero;
+    if(panel){
+      // a plain-unit button lights only when its type is armed AND no hero is armed (so hero Nino
+      // doesn't also light the plain Lobbyist button); hero buttons light by heroId.
+      panel.querySelectorAll('.sbx-pal').forEach(b=>b.classList.toggle('on', !SB.placeHero && b.dataset.type===SB.placeType));
+      panel.querySelectorAll('.sbx-pal-hero').forEach(b=>b.classList.toggle('on', SB.placeHero && b.dataset.hero===SB.placeHero.heroId));
+    }
     const g=els.ghost;
-    if(SB.placeType){ g.textContent=DEF[type].icon||'▪'; status('Armed: '+DEF[type].name+' — click the map'); }
+    if(SB.placeType){ g.textContent=DEF[type].icon||'▪'; status('Armed: '+(hero?hero.name+' (hero)':DEF[type].name)+' — click the map'); }
     else { g.style.display='none'; status('Disarmed'); }
   }
 
@@ -273,6 +324,17 @@
     let e;
     if(d.kind==='building') e=mkBuilding(G, type, SB.owner, tx, ty, true);   // instant=true → fully built
     else                    e=mkUnit(G, type, SB.owner, tx, ty);
+    if(d.kind!=='building' && SB.placeHero && e){   // stage a named hero on this unit (mirrors career.js _placeHero)
+      const h=SB.placeHero, maxS=(typeof CAREER!=='undefined'&&CAREER.maxStars)||10;
+      e.hero=true; e.heroId=h.heroId;
+      e.stars=Math.max(0, Math.min(maxS, h.level||0));
+      e.xp=(typeof CAREER!=='undefined'&&CAREER.xpFor)?CAREER.xpFor(e.stars):0;
+      if(h.sprite) e.spriteType=h.sprite;                         // bespoke recolor (Nino/Biba/Rust); Zeca has none → renders as Intern
+      e.lore={ seed:(e.id||0)+1, events:[], fixed:{ name:h.name } };
+      ensureHeroSig(h.heroId);                                        // guarantee the tier-2 signature implant is installed for this hero
+      if(typeof hubApplyUpgrades==='function') hubApplyUpgrades(e);   // apply any HUB roster upgrades/iconics
+      if(typeof applyVetHp==='function') applyVetHp(e, true);          // re-bake maxHp for the veteran stars
+    }
     if(d.kind!=='building' && SB.reborn && e){   // stage a Wake Reborn cyborg: drained-grey skin + FX (render reads e.reborn), scarred mind, +15% HP, dead-nerve no-heal
       e.reborn=true; e.scarred=true;
       if(typeof applyVetHp==='function') applyVetHp(e, true);   // re-bake maxHp with REBORN.hpMul (regen auto-gated on e.reborn in career.js)
@@ -363,6 +425,7 @@
     if(typeof setCarryover==='function') setCarryover([]);
     if(typeof resetHeroes==='function') resetHeroes();
     if(typeof resetHubCampaign==='function') resetHubCampaign();
+    installHeroSigs();   // pre-install every hero's tier-2 signature implant onto the fresh campaign state
     hideMenus();
     panel.style.display='flex';
     loadInto(mapIdx==null?0:mapIdx);

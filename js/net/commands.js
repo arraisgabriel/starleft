@@ -140,10 +140,20 @@
     if(netRole!=='client') return castHeroAbility(state, state.selection);
     MP.send('mpcmd', { k:'heroability', from:LOCAL_CTRL, ids, seq:(NET._cmdSeq=(NET._cmdSeq||0)+1) });
   }
+  // Hero SIGNATURE ability (clinic-bought cyberware: Nino cloak / Biba mind-control / Rust stomp / Zeca fab):
+  // same host-authoritative plumbing as netHeroAbility, separate dispatch key.
+  function netSigAbility(state){
+    if(hubClientBlocked(state)) return;
+    const ids = state.selection.filter(e=>!e.dead && !e.storedIn && e.kind==='unit' && e.hero && isMine(e)).map(e=>e.id);
+    if(!ids.length) return;
+    if(window.USE_ROLLBACK){ NET.rbEnqueue({ k:'sigability', ids }); return; }
+    if(netRole!=='client') return castSigAbility(state, state.selection);
+    MP.send('mpcmd', { k:'sigability', from:LOCAL_CTRL, ids, seq:(NET._cmdSeq=(NET._cmdSeq||0)+1) });
+  }
   window.netCommand=netCommand; window.netPlace=netPlace; window.netStop=netStop;
   window.netTrain=netTrain; window.netCancelTrain=netCancelTrain; window.netReleaseStored=netReleaseStored;
   window.netUpgrade=netUpgrade; window.netDemolish=netDemolish; window.netScan=netScan;
-  window.netAmove=netAmove; window.netStance=netStance; window.netAbility=netAbility; window.netHeroAbility=netHeroAbility;
+  window.netAmove=netAmove; window.netStance=netStance; window.netAbility=netAbility; window.netHeroAbility=netHeroAbility; window.netSigAbility=netSigAbility;
   window.netOffhoursCommit=netOffhoursCommit;
   window.netChromeCommit=netChromeCommit;
 
@@ -244,6 +254,10 @@
       const mine=(cmd.ids||[]).map(id=>byId.get(id)).filter(e=>e&&!e.dead&&!e.storedIn&&e.owner==='player'&&e.hero&&(e.ctrl||'p1')===ctrl);
       if(!mine.length) return;
       quiet(()=> castHeroAbility(G, mine));
+    } else if(cmd.k==='sigability'){
+      const mine=(cmd.ids||[]).map(id=>byId.get(id)).filter(e=>e&&!e.dead&&!e.storedIn&&e.owner==='player'&&e.hero&&(e.ctrl||'p1')===ctrl);
+      if(!mine.length) return;
+      quiet(()=> castSigAbility(G, mine));
     }
   };
 

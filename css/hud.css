@@ -239,6 +239,12 @@ html,body{ overscroll-behavior:none; -webkit-touch-callout:none; }
 /* T2-2: ability buttons get a gold accent so the kit reads apart from production */
 .cmd-btn.abil-btn{ border-left-color:#ffd86b; }
 .cmd-btn.abil-btn.disabled{ opacity:.45; }
+/* hero SIGNATURE ability button — purple accent to read apart from the gold type/hero abilities */
+.cmd-btn.sig-btn{ border-left-color:#c08aff; }
+.cmd-btn.sig-btn.disabled{ opacity:.5; }
+/* live cooldown countdown badge (every ability button); empty when ready so it takes no space */
+.cmd-btn .cmd-cd{ font-size:10px; font-weight:700; color:#ff9a9a; letter-spacing:.3px; line-height:1; min-height:0; }
+.cmd-btn .cmd-cd:empty{ display:none; }
 .cmd-btn .cost { font-size:10px; color:#ffd86b; }
 .cmd-btn .emoji { font-size:20px; }
 .mdc-panel{

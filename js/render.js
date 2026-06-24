@@ -1653,6 +1653,33 @@ function drawRebornRim(u, anim, px, pyB, S, fi, t, c1, c2, alphaMul){
   tint(c2||'#32e060'); ctx.globalAlpha=(0.03+0.15*grn)*am; blit();
   ctx.restore(); ctx.globalAlpha=1;
 }
+// NINO cloak rim — a TRUE purple OUTLINE (not a filled silhouette): dilate the sprite shape, punch out
+// its interior, tint purple, composite additively. The hollow interior lets the 25% body show through,
+// so you still read Nino's art at 25% opacity with only a purple edge — never a grey/solid-purple blob.
+let _cloakScratch=null;
+function drawCloakRim(u, anim, px, pyB, S, fi, t){
+  if(!anim || !anim.img || !anim.frames || !anim.fh) return;
+  const n=anim.frames.length, fr=anim.frames[((fi%n)+n)%n]; if(!fr) return;
+  const dh=S, dw=S*(anim.fw/anim.fh), pad=8;
+  const cw=Math.max(1,Math.ceil(dw+pad*2)), ch=Math.max(1,Math.ceil(dh+pad*2));
+  if(!_cloakScratch) _cloakScratch=document.createElement('canvas');
+  const sc=_cloakScratch; if(sc.width<cw) sc.width=cw; if(sc.height<ch) sc.height=ch;
+  const sx=sc.getContext('2d');
+  sx.save(); sx.setTransform(1,0,0,1,0,0); sx.globalCompositeOperation='source-over'; sx.clearRect(0,0,sc.width,sc.height);
+  sx.translate(cw/2,pad);
+  const facesLeft=!!(DEF[u.type]&&DEF[u.type].facesLeft);
+  if(((u._face||1)<0)!==facesLeft) sx.scale(-1,1);
+  const R=Math.max(1.4, S*0.045);                                   // outline thickness
+  for(let i=0;i<8;i++){ const a=i/8*6.2832; sx.drawImage(anim.img, fr[0],fr[1],anim.fw,anim.fh, -dw/2+Math.cos(a)*R, Math.sin(a)*R, dw, dh); }   // dilated silhouette
+  sx.globalCompositeOperation='destination-out';
+  sx.drawImage(anim.img, fr[0],fr[1],anim.fw,anim.fh, -dw/2, 0, dw, dh);   // punch out the body → leaves the ring only
+  sx.restore();
+  sx.save(); sx.setTransform(1,0,0,1,0,0); sx.globalCompositeOperation='source-in'; sx.fillStyle='#b14dff'; sx.fillRect(0,0,cw,ch); sx.restore();   // tint the ring purple
+  const breath=0.62+0.38*Math.sin((t||0)*2.2+((u.id||0)*1.3));
+  ctx.save(); ctx.globalCompositeOperation='lighter'; ctx.globalAlpha=0.5+0.4*breath;
+  ctx.drawImage(sc, 0,0,cw,ch, px-cw/2, pyB-dh*0.7-pad, cw,ch);
+  ctx.globalAlpha=1; ctx.restore();
+}
 function drawRebornCore(u, anim, px, pyB, S, fi, t, key){
   const rm=(typeof megaReducedMotion==='function' && megaReducedMotion()), seed=(u.id||0);
   ctx.save(); ctx.globalCompositeOperation='lighter';
@@ -1715,6 +1742,8 @@ function drawUnit(state,u,ox,oy){
 
   ctx.save();
   if(u._ninjaHidden){ const _nN=(_vdef&&_vdef.ninja)||{}; ctx.globalAlpha*=(_nN.hideAlpha||0.16); }   // smoke-bomb vanish: dim the whole sprite (+ glow) within this save
+  if(u._cloaked) ctx.globalAlpha*=0.25;   // NINO cloak: dim the whole sprite (the purple rim below stays full as the cloak tell)
+  if(u._convFlashT>0) u._convFlashT=Math.max(0, u._convFlashT-1/60);   // BIBA conversion red-flash decay (render-only; sim/clients both tick it down here)
   // EX-TERMINATOR board-fade: he dissolves as the bomber grabs him. Applied to the glow/rim here AND
   // RE-APPLIED at the blit below, because drawRebornRim (the green rim) resets globalAlpha to 1.
   let _exA = 1;
@@ -1814,7 +1843,10 @@ function drawUnit(state,u,ox,oy){
     // the sprite — pixel-exact to the art, identical every frame (no swim), on any unit shape.
     if(u.reborn) drawRebornRim(u, useAnim, px, pyB, S*bScale, fi, state.time||0);
     else if(u.villain && _vdef && _vdef.cyborgRim) drawRebornRim(u, useAnim, px, pyB, S*bScale, fi, state.time||0, '#3ad070', '#7dffa6', _exA);   // GREEN cyborg silhouette rim (EX-TERMINATOR) — render-only FX, body sprite untouched; _exA fades the rim WITH the body during bomber-board
+    else if(u._convFlashT>0) drawRebornRim(u, useAnim, px, pyB, S*bScale, fi, state.time||0, '#ff6055', '#ffb060', u._convFlashT);   // BIBA mind-control: red conversion flash, fades with _convFlashT
     if(_exA<1) ctx.globalAlpha *= _exA;   // EX-TERMINATOR board-fade: re-apply — drawRebornRim above reset globalAlpha to 1
+    // NINO cloak: the body stays a CLEAN 25%-opacity ghost — it was dimmed once at the ctx.save() above and
+    // composites straight over the world (NO silhouette drawn behind it, which is what greyed it before).
     const dh = blitFrame(u,px,pyB,useAnim,S*bScale,fi);
     // remember what was just blitted (screen px, valid this frame only) so the post-depth
     // pass can re-draw a faint ghost when a building sprite occludes this unit
@@ -1823,6 +1855,9 @@ function drawUnit(state,u,ox,oy){
     else if(u.villain) drawVillainGlow(state, u, useAnim, px, pyB, S*bScale, 'core');
     // REBORN-CYBORG: a red OPTIC (machine eye) at the head + a slow chest-core heartbeat, on top.
     if(u.reborn) drawRebornCore(u, useAnim, px, pyB, S*bScale, fi, state.time||0, useKey);
+    // NINO cloak: a TRUE purple outline drawn LAST — the body stayed a clean 25% ghost (you still read
+    // Nino's art through it), and only the edge is purple. Never grey, never a solid-purple blob.
+    if(u._cloaked) drawCloakRim(u, useAnim, px, pyB, S*bScale, fi, state.time||0);
     if(u.type==='worker' && u.carrying>0){ ctx.fillStyle='#ffd86b'; ctx.beginPath(); ctx.arc(px,py-alt-dh*0.7-4,3,0,6.28); ctx.fill(); }
   } else if(u.villain){
     // defensive fallback — a villain whose bespoke sheet is missing still reads as a giant glowing mass

@@ -176,6 +176,129 @@ function castHeroAbility(state, units){
   return any;
 }
 
+/* ===== HERO SIGNATURE abilities (Arc-3 cyberware) — PLAYER-ACTIVATED, bought at the Implant Clinic, 3
+   tiers. A THIRD ability channel beside castAbility (u.abilCd) and castHeroAbility (u.heroAbilCd). Keyed by
+   heroId; bought tier = CAMPAIGN.upgrades['hero:'+id].sig; per-tier params via heroSigTierParams(). Always
+   reached through netSigAbility (host/solo/rollback agree). Deterministic (state.time + deterministic
+   sorts; no Math.random in sim state); cosmetic FX gated by !window._rbReplaying. ===== */
+function heroSigTier(u){
+  if(!u || !u.hero || !u.heroId || typeof CAMPAIGN==='undefined' || !CAMPAIGN.upgrades) return 0;
+  const up=CAMPAIGN.upgrades['hero:'+u.heroId];
+  return (up && (up.sig|0)) || 0;
+}
+function castSigAbility(state, units){
+  let any=false;
+  for(const u of (units||[])){
+    if(!u || u.dead || u.storedIn || u.kind!=='unit' || u.owner!=='player' || !u.hero) continue;
+    const tier=heroSigTier(u); if(tier<1) continue;
+    if((u.sigCd||0)>0 || u._sigStomp) continue;
+    const p=(typeof heroSigTierParams==='function') ? heroSigTierParams(u.heroId, tier) : null;
+    if(!p) continue;
+    let fired=false;
+    switch(u.heroId){
+      case 'Nino': fired=sigCloak(state,u,p); break;
+      case 'Biba': fired=sigMindControl(state,u,p); break;
+      case 'Rust': fired=sigStompStart(state,u,p); break;
+      case 'Zeca': fired=sigMassFab(state,u,p); break;
+      default: continue;
+    }
+    if(!fired) continue;
+    u.sigCd=p.cd||30; u._sigCastT=state.time;
+    any=true;
+  }
+  if(any && !window._rbReplaying){ if(typeof refreshUI==='function') refreshUI(); }
+  return any;
+}
+// NINO — Cloak: untargetable + render-invisible for a window (cleared in updateUnit when _cloakUntil passes).
+function sigCloak(state,u,p){
+  u._cloakUntil=state.time+(p.dur||60); u._cloaked=true; u._untargetable=true;
+  if(!window._rbReplaying && typeof spawnRing==='function') spawnRing(u.x,u.y,'#9d4edd');
+  return true;
+}
+// BIBA — Mind Control: permanently flip the nearest hostiles in a wide radius to the player (deterministic
+// nearest-N). Mirrors triggerCaptiveFreeing's owner-flip; aoSide/owner auto-reskins them to player sprites.
+function sigMindControl(state,u,p){
+  const R=(p.radius||10)*TILE, n=p.count||5, cand=[];
+  for(const o of state.entities){
+    if(o===u || o.dead || o.storedIn || o.kind!=='unit') continue;
+    if(o.hero || o.villain) continue;                 // never steal heroes/bosses
+    if(typeof isHostile==='function' ? !isHostile(u,o) : o.owner!=='enemy') continue;
+    const dd=dist(o,u); if(dd<=R) cand.push({o,dd});
+  }
+  if(!cand.length) return false;
+  cand.sort((a,b)=> (a.dd-b.dd) || ((a.o.id||0)-(b.o.id||0)));   // deterministic → host/rollback agree
+  for(const {o} of cand.slice(0,n)){
+    o.owner='player'; o.ctrl=(u.ctrl||'p1'); o.stance='aggr';
+    o.autoTarget=null; o.cmd=null; o.path=null; o.pathIdx=0; o.dest=null; o.vx=0; o.vy=0;
+    o._engagedId=null; o._reTarget=null; o._convFlashT=1.0;       // render: red blink/fade
+    if(!window._rbReplaying && typeof spawnRing==='function') spawnRing(o.x,o.y,'#ff6055');
+  }
+  if(typeof recomputeSupply==='function') recomputeSupply(state);
+  if(typeof computeFog==='function') computeFog(state);
+  return true;
+}
+// RUST — Thruster Stomp: rocket-leap to the densest enemy cluster, %maxHP AOE on landing. State machine
+// runs in updateUnit via stepSigStomp (crouch → arc → land+blast → recover). Reuses the REX-leap idiom.
+function sigStompStart(state,u,p){
+  // target the densest HOSTILE pack (densestCluster targets PLAYER units — it's the boss helper — so we
+  // roll our own enemy-centroid: the foe with the most foe-neighbours within CR). Deterministic (tie by id).
+  const SR=16*TILE, CR=2.5*TILE, foes=[];
+  for(const o of state.entities){ if(o.dead||o.storedIn||o.air||o.kind!=='unit') continue;
+    if(typeof isHostile==='function'?!isHostile(u,o):o.owner!=='enemy') continue;
+    if(dist(o,u)<=SR) foes.push(o); }
+  if(!foes.length) return false;
+  let best=foes[0], bestN=-1;
+  for(const a of foes){ let n=0; for(const c of foes){ if(dist(a,c)<=CR) n++; }
+    if(n>bestN || (n===bestN && (a.id||0)<(best.id||0))){ bestN=n; best=a; } }
+  const tgt={ x:best.x, y:best.y };
+  if(typeof resetMotion==='function') resetMotion(u);
+  u._sigStomp={ phase:0, t:0, sx:u.x, sy:u.y, lx:tgt.x, ly:tgt.y, dmgPct:(p.dmgPct||0.3), R:(p.radius||3)*TILE };
+  u._sigStompAir=false; u._jumpZ=0; u._actState='attack';
+  if(!window._rbReplaying && typeof spawnThruster==='function') spawnThruster(u.x,u.y,0,1);
+  return true;
+}
+function stepSigStomp(state,u,dt){
+  const s=u._sigStomp; if(!s) return; s.t+=dt;
+  const CROUCH=0.35, FLY=0.55;
+  if(s.phase===0){ u._actState='attack';
+    if(!window._rbReplaying && typeof spawnThruster==='function') spawnThruster(u.x,u.y,0,1);
+    if(s.t>=CROUCH){ s.phase=1; s.t=0; u._sigStompAir=true; } }
+  else if(s.phase===1){ const pr=Math.min(1, s.t/FLY);
+    u.x=s.sx+(s.lx-s.sx)*pr; u.y=s.sy+(s.ly-s.sy)*pr;
+    u._jumpZ=Math.sin(pr*Math.PI)*((u.r||16)*4.5); u._actState='attack';
+    if(pr>=1){ s.phase=2; s.t=0; u._jumpZ=0; u._sigStompAir=false; sigStompLand(state,u,s); } }
+  else { if(s.t>=0.25){ u._sigStomp=null; u._actState=null; } }
+}
+function sigStompLand(state,u,s){
+  for(const o of state.entities){
+    if(o===u || o.dead || o.storedIn || o.air) continue;
+    if(typeof isHostile==='function'?!isHostile(u,o):o.owner!=='enemy') continue;
+    const dd=dist(o,u); if(dd>s.R) continue;
+    const fall=1-0.5*(dd/s.R);
+    damage(state,o, Math.max(1, Math.round((o.maxHp||o.hp||1)*s.dmgPct*fall)), u);
+  }
+  if(!window._rbReplaying){
+    if(typeof spawnShockwave==='function') spawnShockwave(u.x,u.y, s.R*1.1);
+    if(typeof spawnDust==='function') spawnDust(u.x,u.y);
+    if(typeof spawnExplosion==='function') spawnExplosion(u.x,u.y);
+    if(typeof spawnRing==='function') spawnRing(u.x,u.y,'#ff8c3c');
+    state._shake=Math.max(state._shake||0, 7);
+  }
+}
+// ZECA — Mass Fabrication: instantly finish every player site, then open a free+instant build window
+// consumed by placeBuilding (state._fabFree). Fires even with nothing building (the window is the payoff).
+function sigMassFab(state,u,p){
+  for(const e of state.entities){
+    if(e.dead || e.kind!=='building' || e.owner!=='player' || !e.constructing) continue;
+    e.buildProg=e.buildTime; e.constructing=false; e.hp=e.maxHp;
+    if(!window._rbReplaying){ if(typeof spawnRing==='function') spawnRing(e.x,e.y,'#ffd86b'); if(typeof spawnExplosion==='function') spawnExplosion(e.x,e.y); }
+  }
+  state._fabFree={ until: state.time+(p.window||15), n:(p.free||2), ctrl:(u.ctrl||'p1') };
+  if(typeof recomputeSupply==='function') recomputeSupply(state);
+  if(!window._rbReplaying && typeof spawnRing==='function') spawnRing(u.x,u.y,'#ffd86b');
+  return true;
+}
+
 // T2-3: attack-move the current selection to (wx,wy) — units advance and engage anything en route.
 // The amove handler + auto-acquire respect already exist; this just issues the order with formation.
 function commandAttackMove(state, wx, wy){
@@ -630,14 +753,24 @@ function assignBuild(state, u, b){
 function placeBuilding(state, type, tx, ty, builder){
   const d=DEF[type];
   const ctrl = (builder && builder.ctrl) || state._defaultCtrl || 'p1';
-  playerEco(state, ctrl).gold -= d.cost;          // charge the building player's pool
-  const b = mkBuilding(state,type,'player',tx,ty,false);
+  // ZECA Mass Fabrication window: the next few buildings are FREE + INSTANT for the activating player.
+  const ff=state._fabFree;
+  const fab = !!(ff && ff.n>0 && state.time<ff.until && (ff.ctrl||'p1')===ctrl);
+  if(!fab) playerEco(state, ctrl).gold -= d.cost;          // normal: charge the building player's pool (waived in the fab window)
+  const b = mkBuilding(state,type,'player',tx,ty, fab);     // instant=true during the window → fully built
   b.ctrl = ctrl;                                  // the new building belongs to its placer
-  b.paidCost = d.cost;                            // remembered for the demolish salvage refund
-  b.hp=1;
-  assignBuild(state, builder, b);     // robust approach + re-pathing
-  recomputeSupply(state);
-  toast('Construction started');
+  b.paidCost = fab ? 0 : d.cost;                  // remembered for the demolish salvage refund
+  if(fab){
+    ff.n--;
+    recomputeSupply(state);
+    if(!window._rbReplaying){ if(typeof spawnRing==='function') spawnRing(b.x,b.y,'#ffd86b'); if(typeof spawnExplosion==='function') spawnExplosion(b.x,b.y); }
+    toast('⚡ Fabricated instantly');
+  } else {
+    b.hp=1;
+    assignBuild(state, builder, b);     // robust approach + re-pathing
+    recomputeSupply(state);
+    toast('Construction started');
+  }
 }
 
 /* =====================================================================
@@ -728,6 +861,10 @@ function updateUnit(state,u,dt){
   if(u.captive){ u._actState=null; u.vx=0; u.vy=0; u.path=null; return; }   // imprisoned: stands inert until freed
   if(u.abilCd>0) u.abilCd=Math.max(0, u.abilCd-dt);     // T2-2: manual-ability cooldown (sim state; legacy saves → undefined = ready)
   if(u.heroAbilCd>0) u.heroAbilCd=Math.max(0, u.heroAbilCd-dt);   // Arc-3: hero second-ability cooldown (Rust RECALL); legacy/undefined = ready
+  if(u.sigCd>0) u.sigCd=Math.max(0, u.sigCd-dt);        // hero SIGNATURE ability cooldown (cyberware); legacy/undefined = ready
+  if(u._sigStomp){ stepSigStomp(state,u,dt); return; }  // Rust thruster-stomp owns these ticks (no walk/fire while leaping)
+  if(u._cloakUntil && state.time>=u._cloakUntil){ u._cloakUntil=0; u._cloaked=false; u._untargetable=false;   // Nino cloak expired → visible + targetable again
+    if(!window._rbReplaying && typeof spawnRing==='function') spawnRing(u.x,u.y,'#9d4edd'); }
   if(u._dashT>0) u._dashT=Math.max(0, u._dashT-dt);     // Caffeine Dash burst window
   // NINJA-AI villains (THE SEVERANCIER et al.): movement+combat are fully owned by updateNinja (runs later this tick). Yield here so
   // normal auto-acquire/melee-camp never touches it. Flee (low HP) drops back to the standard move handler.

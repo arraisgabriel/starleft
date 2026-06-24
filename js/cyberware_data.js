@@ -97,7 +97,45 @@ const CYBERWARE = {
       flavor:"A&O wired the intern cheap and fast. The scared kid's nerves fire before he can think — and that keeps him breathing.",
       fx:{ active:{ kind:'reflexarc', trigger:'hit', dmgMul:0.4, dur:3, cd:6 } } },
   ],
+
+  // ---- HERO SIGNATURE abilities (PLAYER-ACTIVATED, 3-tier, bought at the clinic) — a separate channel from
+  //      the passive iconics above. Keyed by heroId (MAPS h.id||h.name). Bought tier persists in
+  //      CAMPAIGN.upgrades['hero:'+id].sig (0–3); NO cyberware-capacity cost (M3$ only). Cast from the hero
+  //      command bar (castSigAbility) on u.sigCd cooldown. Per-tier params are bespoke per ability.
+  //      `effTxt(tier)` returns the catalog blurb for tier index 0–2. ----
+  heroSig: {
+    Nino: { id:'nino_cloak', name:'Cloak', icon:'🥷', slot:'sig',
+      hint:'Vanish — untargetable + near-invisible for a window, then recharge.',
+      m3:[700, 1100, 1600],
+      // dur = invisible seconds; cd = recharge seconds (tiers ↑dur ↓cd)
+      tiers:[ {dur:60, cd:300}, {dur:90, cd:210}, {dur:120, cd:150} ],
+      effTxt:(i)=>{ const t=[{dur:60,cd:300},{dur:90,cd:210},{dur:120,cd:150}][i]; return 'Invisible '+t.dur+'s · '+Math.round(t.cd/60*10)/10+'m cooldown'; } },
+    Biba: { id:'biba_mindctrl', name:'Mind Control', icon:'🧠', slot:'sig',
+      hint:'Permanently turn the nearest enemies in a wide radius to your side.',
+      m3:[900, 1500, 2400],
+      // count = enemies converted; radius in tiles; cd seconds
+      tiers:[ {count:5, radius:10, cd:300}, {count:10, radius:12, cd:255}, {count:30, radius:15, cd:210} ],
+      effTxt:(i)=>{ const t=[5,10,30][i]; return 'Convert up to '+t+' enemies (permanent)'; } },
+    Rust: { id:'rust_thruster', name:'Thruster Stomp', icon:'🚀', slot:'sig',
+      hint:'Rocket-leap into the densest enemy pack and crater it for a share of their max HP.',
+      m3:[800, 1300, 1900],
+      // dmgPct = fraction of each target's maxHp dealt as AOE; radius tiles; cd seconds
+      tiers:[ {dmgPct:0.30, radius:3, cd:36}, {dmgPct:0.40, radius:3.4, cd:30}, {dmgPct:0.60, radius:4, cd:24} ],
+      effTxt:(i)=>{ const t=[30,40,60][i]; return Math.round(t)+'% max-HP AOE stomp'; } },
+    Zeca: { id:'zeca_massfab', name:'Mass Fabrication', icon:'🏗️', slot:'sig',
+      hint:'Snap every site to completion, then a window where the next builds are instant + free.',
+      m3:[1000, 1700, 2600],
+      // window = free/instant seconds; free = how many free+instant buildings; cd seconds
+      tiers:[ {window:15, free:2, cd:240}, {window:20, free:3, cd:210}, {window:30, free:5, cd:180} ],
+      effTxt:(i)=>{ const t=[{w:15,f:2},{w:20,f:3},{w:30,f:5}][i]; return 'Finish all + '+t.f+' free instant builds / '+t.w+'s'; } },
+  },
 };
+
+// ---- hero-signature helpers (global; read by hub/units/ui) ----
+function heroSigSpec(heroId){ return (typeof CYBERWARE!=='undefined' && CYBERWARE.heroSig && CYBERWARE.heroSig[heroId]) || null; }
+function heroSigTierParams(heroId, tier){ const s=heroSigSpec(heroId); return (s && tier>=1 && s.tiers[tier-1]) || null; }
+function heroSigM3(heroId, tier){ const s=heroSigSpec(heroId); return (s && tier>=1 && s.m3[tier-1]) || 0; }
+function heroSigMaxTier(){ return 3; }
 
 // OS/Arms "core" implants cost ~1.5x capacity — derive capCostMul from the slot's exclusivity so the
 // catalog stays declarative (no per-implant duplication of the rule).

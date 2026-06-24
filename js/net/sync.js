@@ -149,6 +149,9 @@ window.NET = window.NET || {};
       if(e.chromeSightMul && e.chromeSightMul!==1) o.csi=Math.round(e.chromeSightMul*100)/100;
       if(e.chromeRangeMul && e.chromeRangeMul!==1) o.crn=Math.round(e.chromeRangeMul*100)/100;
       if(e.chromeSpeedMul && e.chromeSpeedMul!==1) o.csm=Math.round(e.chromeSpeedMul*100)/100;
+      // HERO SIGNATURE render flags (Nino cloak dim/rim; Rust thruster-leap arc) — render-only on clients
+      if(e._cloaked) o.clk=1;
+      if(e._jumpZ) o.jz=Math.round(e._jumpZ);
       // VILLAIN (boss): client renders the giant size, glow and boss HP bar purely from these — it
       // never simulates the boss. villainId keys the static VILLAINS table (present on every client),
       // so colors/abilities/phases derive locally; only these few fields cross the wire.
@@ -190,8 +193,11 @@ window.NET = window.NET || {};
       else if(dHp >= 1 && o.k==='unit' && (o.st||0) <= _oldStars) spawnFloater(G, e, dHp, 'heal');
     }
     const d=DEF[o.t]||{};
+    const _prevOwner=e.owner;
     e.type=o.t; e.owner=o.o; e.kind=o.k; e.ctrl=o.c; e.hp=o.hp; e.maxHp=o.mh; e.dead=false;
     if(o.k==='unit'){
+      e._cloaked=!!o.clk;                                            // NINO cloak (render dim+rim)
+      if(_prevOwner==='enemy' && e.owner==='player') e._convFlashT=1.0;   // BIBA mind-control: client fires the red flash on the enemy→player flip
       // Store the snapshot position as a SMOOTHING TARGET (_sx/_sy); clientTick eases the rendered
       // e.x/e.y toward it so units glide at render rate instead of teleporting at the 15 Hz snap rate.
       // Robustness: reject a corrupt position (NaN/Inf) so a bad packet can't warp the unit off-map; keep
