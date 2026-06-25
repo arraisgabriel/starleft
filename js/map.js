@@ -132,6 +132,76 @@ function buildTopoFeatures(state, rng){
   }
 }
 
+// ---- Topography variant CLUSTERING (cosmetic). Assign each non-base feature a variant index `f.var`
+// (+ a shared size band `f.vscale`) from low-frequency seeded NOISE FIELDS keyed on the footprint centre,
+// so spatially-adjacent same-slot features resolve to the SAME shape → cohesive groves instead of "8
+// different species jammed side by side". A coarse field caps the palette to ~FEAT_CLU_PALETTE distinct
+// variants per locale; a faster field clumps which palette member shows where. Render reads `f.var`
+// (else falls back to the per-tile h2 hash — atlas-absent path & legacy saves unaffected).
+// Derives ONLY from makeNoise2D(seed)+coords — never Math.random/simRandom — so it's identical on
+// host/client/reload; `features` is dropped from the wire so nothing networked reads it. Tunable knobs: */
+const FEAT_CLU_PALETTE     = 3;      // distinct variants visible per locale (the "2-3 per cluster" dial)
+const FEAT_CLU_REGION_FREQ = 0.04;   // palette-zone size (lower = larger single-palette areas)
+const FEAT_CLU_FIELD_FREQ  = 0.11;   // within-palette clump size (higher = variant changes faster across space)
+const FEAT_CLU_SCALE_FREQ  = 0.07;   // size-cohesion field
+const FEAT_CLU_SCALE       = true;   // also cluster sprite SIZE into a shared band (owner: yes)
+const FEAT_CLU_TREE_OWN    = true;   // keep a tree clump all-alive (idx 0-7) OR all-dead (8-15), never mixed
+// Per-biome DEAD-grove cutoff (groveN.fbm > thr → a DEAD grove; higher = more ALIVE). Default 0.55; grass
+// leans heavily alive (~90%, owner choice). Only consulted for FEAT_VAR_DEAD_BIOMES (assets.js).
+const FEAT_CLU_DEAD_THRESH = { [B_GRASS]: 0.88 };
+// DOMINANT "loud" variants that must NEVER cluster (per slot): excluded from grove palettes, then placed
+// only as rare gap-guarded lone accents. 13 = the big splayed dead stump (shared dead pool, grass_tree_dead2 TR).
+const FEAT_CLU_SOLO        = { tree: [13] };
+const FEAT_CLU_SOLO_RATE   = 0.035;  // ~fraction of dead-biome trees eligible to become a lone accent
+const FEAT_CLU_SOLO_GAP    = 8;      // min tile gap between two lone accents → guarantees "never in multiples"
+function clusterTopoFeatures(state, seed){
+  if(!state.features || !state.features.length || typeof featVarN!=='function' || typeof makeNoise2D!=='function') return;
+  const regionN = makeNoise2D((seed ^ 0x9E37)>>>0);   // palette base index (which ~3 variants this zone uses)
+  const fieldN  = makeNoise2D((seed ^ 0x5117)>>>0);   // within-palette pick (clumps adjacent features together)
+  const scaleN  = makeNoise2D((seed ^ 0x2545)>>>0);   // shared grove size band
+  const groveN  = makeNoise2D((seed ^ 0x1B87)>>>0);   // tree alive/dead grove type (independent of palette base)
+  const h = FEAT_SIZE>>1;
+  const deadBiome = b => (typeof FEAT_VAR_DEAD_BIOMES!=='undefined') ? FEAT_VAR_DEAD_BIOMES.indexOf(b)>=0 : (b===0||b===1||b===3||b===4);
+  for(const f of state.features){
+    if(f.base) continue;                              // funding crystal → always the original rock (render skips it)
+    const n = featVarN(f.slot)|0; if(n<=0) continue;  // 8 rock / 16 tree
+    const cx = f.tx + h, cy = f.ty + h;               // sample the footprint CENTRE so a clump shares one value
+    const isDead = f.slot==='tree' && deadBiome(f.biome);
+    let lo=0, hi=n;
+    if(f.slot==='tree' && FEAT_CLU_TREE_OWN && n>=16){ // own (0..own-1) vs shared-dead (own..n-1): one per region, never mix
+      const own = (typeof FEAT_VAR_TREE_OWN==='number') ? FEAT_VAR_TREE_OWN : (n>>1);
+      const thr = (isDead && FEAT_CLU_DEAD_THRESH[f.biome]!=null) ? FEAT_CLU_DEAD_THRESH[f.biome] : 0.55;
+      if(groveN.fbm(cx*FEAT_CLU_REGION_FREQ, cy*FEAT_CLU_REGION_FREQ, 2) > thr){ lo=own; hi=n; } else { lo=0; hi=own; }
+    }
+    // grove eligible list: a DEAD grove (lo>0) in a dead biome EXCLUDES soloist variants → they never cluster;
+    // everything else uses the plain contiguous [lo,hi) range.
+    let pool=null;
+    if(isDead && lo>0 && FEAT_CLU_SOLO.tree && FEAT_CLU_SOLO.tree.length){
+      pool=[]; for(let k=lo;k<hi;k++) if(FEAT_CLU_SOLO.tree.indexOf(k)<0) pool.push(k);
+      if(!pool.length) pool=null;                     // safety: never empty the palette
+    }
+    const span = pool ? pool.length : (hi-lo), P = Math.min(FEAT_CLU_PALETTE, span);
+    const rBase = Math.min(span-1, Math.floor(regionN.fbm(cx*FEAT_CLU_REGION_FREQ, cy*FEAT_CLU_REGION_FREQ, 3)*span));
+    const off   = Math.min(P-1,    Math.floor(fieldN.fbm(cx*FEAT_CLU_FIELD_FREQ,  cy*FEAT_CLU_FIELD_FREQ,  2)*P));
+    const si = (rBase+off)%span;
+    f.var = pool ? pool[si] : (lo + si);              // → a locale shows ~P consecutive variants, clumped
+    if(FEAT_CLU_SCALE) f.vscale = 0.85 + scaleN.fbm(cx*FEAT_CLU_SCALE_FREQ, cy*FEAT_CLU_SCALE_FREQ, 2)*0.45;  // ~0.85-1.30
+  }
+  // RARE lone-accent pass: place the "soloist" dominant variants (e.g. the big dead stump) as SPARSE,
+  // gap-guarded SINGLES — dramatic landmarks that never appear in multiples. Deterministic (seeded hash +
+  // stable iteration); only in dead-pool biomes, where those indices are actually the loud prop.
+  if(FEAT_CLU_SOLO_RATE>0 && FEAT_CLU_SOLO.tree && FEAT_CLU_SOLO.tree.length){
+    const soloN=makeNoise2D((seed ^ 0x6F3A)>>>0), placed=[], set=FEAT_CLU_SOLO.tree;
+    for(const f of state.features){
+      if(f.base || f.slot!=='tree' || !deadBiome(f.biome)) continue;
+      if(soloN.hash(f.tx, f.ty) >= FEAT_CLU_SOLO_RATE) continue;                 // deterministic candidacy
+      let ok=true; for(const p of placed){ if(Math.abs(p.tx-f.tx)<FEAT_CLU_SOLO_GAP && Math.abs(p.ty-f.ty)<FEAT_CLU_SOLO_GAP){ ok=false; break; } }
+      if(!ok) continue;                                                          // gap guard → never two together
+      f.var = set[(soloN.hash(f.tx+7, f.ty+3)*set.length)|0]; placed.push({tx:f.tx, ty:f.ty});
+    }
+  }
+}
+
 // Remove the features owning any of `cells` (a Set of cell indices): clear their feat mask,
 // re-derive blocked for their footprints, and drop them from features[]. Deterministic
 // (iterates features[] in order). Used by the bridge-carver + trail repair.
@@ -677,6 +747,11 @@ function newMap(idx){
   clearStartBuildingGround(state);
 
   recomputeSupply(state);
+
+  // cosmetic LAST pass: cluster topography variants/sizes so groves read cohesively (after every
+  // feature add/remove above — buildTopoFeatures/placeThickets/paint/bridge/funding). Render-only;
+  // seeded off the same family as the feature rng → deterministic on host/client/reload.
+  clusterTopoFeatures(state, (cfg.seed*1000+909) >>> 0);
   return state;
 }
 

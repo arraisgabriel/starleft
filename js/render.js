@@ -80,13 +80,18 @@ function h01(n){ const s=Math.sin(n*12.9898)*43758.5453; return s - Math.floor(s
    ALL of this is cosmetic, render-only, runs OUTSIDE update(G,dt), and is deterministic from coordinates
    (never simRandom/Math.random) → host & client paint identically; nothing is serialized (§11 / §0).
    Per-layer debug toggles (mirror ?perf=1): ?noshadows=1 ?nogrunge=1 ?nograde=1 ?novignette=1
-   ?rgbagrade=1 (force the no-blend-mode fallback). */
+   ?rgbagrade=1 (force the no-blend-mode fallback). Topography clustering A/B: ?nofeatclu=1 (ignore the
+   map-gen f.var grove pick → old uncorrelated per-tile hash) ?novscale=1 (ignore f.vscale size band). */
 const RENDER = (function(){
   const qs=(typeof location!=='undefined' && location.search) || '';
   const off=k=>new RegExp('[?&]no'+k+'=1\\b').test(qs);
   return { shadows:!off('shadows'), grunge:!off('grunge'), grade:!off('grade'), decals:!off('decals'),
-           vignette:!off('vignette'), haze:!off('haze'), rain:!off('rain'), forceRgbaGrade:/[?&]rgbagrade=1\b/.test(qs) };
+           vignette:!off('vignette'), haze:!off('haze'), rain:!off('rain'), forceRgbaGrade:/[?&]rgbagrade=1\b/.test(qs),
+           featclu:!off('featclu'), vscale:!off('vscale'), mtnchain:!off('mtnchain'), lightfx:!off('lightfx'),
+           bldgneon:!off('bldgneon') };
 })();
+const BUILDING_ANIM_SPEED = 0.217;  // in-game building frame-loop speed multiplier (calm, slow cross-fade)
+const NEON_LOD_ZOOM = 0.8;          // at/above → full cross-fade neon; below → cheap single-layer neon (still shown at every zoom)
 // CC.1 — deterministic 2D hash → [0,1). Pure; identical cross-peer; NEVER simRandom/Math.random. (h01 above = 1D.)
 function h2(x,y){ const s=Math.sin(x*12.9898 + y*78.233)*43758.5453; return s - Math.floor(s); }
 // P0.1 — explicit draw-order bands (RimWorld AltitudeLayer model). The passes in render() ARE these bands,
@@ -290,6 +295,16 @@ function syncHud(){
   if(bp) VIEW_BOT = Math.ceil(bp.getBoundingClientRect().height || bp.offsetHeight || 0);
   if(document.documentElement) document.documentElement.style.setProperty('--hud-top-h', HUD_TOP_VIS+'px');
   if(document.documentElement) document.documentElement.style.setProperty('--hud-bottom-h', VIEW_BOT+'px');
+  // Objectives-row top (viewport px): on phones the topbar wraps to rows and CSS lifts the floating
+  // 🕘 clock + 🗺 minimap toggle UP onto the objectives row (top-aligned with the chip) instead of
+  // stacking them in a third row below the bar. Measured (not a magic constant) so it stays exact
+  // across the topbar's responsive heights; #hub-clock / #btn-minimap fall back to a calc() when the
+  // chip is hidden (e.g. cutscene scenes) and desktop ignores the var entirely.
+  if(document.documentElement){
+    const oc=document.getElementById('obj-chip'), ocr=oc&&oc.getBoundingClientRect();
+    if(ocr && ocr.height>0) document.documentElement.style.setProperty('--obj-top', Math.round(ocr.top)+'px');
+    else document.documentElement.style.removeProperty('--obj-top');
+  }
   const news=document.getElementById('lns-ingame');   // live-news ticker reserves a band above the bottom HUD when shown
   if(news && news.offsetHeight) VIEW_BOT += news.offsetHeight;
   cssH = cv.getBoundingClientRect().height || innerHeight;
@@ -460,9 +475,11 @@ function csPropBox(state, d){
   }
   if(d.m){
     const m=d.m, spr=(typeof megaSprite==='function') && megaSprite(m.cat, m.variant); if(!spr) return null;
-    const w=m.w*TILE, h=m.h*TILE, dw=w*(m.overhang||1.3), dh=dw*(spr.fh/spr.fw)*(m.heightScale||1);
+    const ms=(typeof MEGA_SCALE==='number')?MEGA_SCALE:1;        // match drawOneMega's +25% so cutscene occlusion is correct
+    const w=m.w*TILE, h=m.h*TILE, dw=w*(m.overhang||1.3)*ms, dh=dw*(spr.fh/spr.fw)*(m.heightScale||1);
     return { x:m.tx*TILE+(w-dw)/2, y:m.ty*TILE+h-dh+2, w:dw, h:dh };
   }
+  if(d.chain){ const s=d.chain; return { x:s.bx-s.dw/2, y:s.by-s.dh, w:s.dw, h:s.dh }; }   // bottom-anchored chain sprite box
   return null;
 }
 function render(state){
@@ -543,11 +560,14 @@ function render(state){
   //      FRONT draws over it. Sprite transparency makes the occlusion pixel-correct. ----
   if(PERF.on) PERF.mark('depthBuild');
   const depth=[];
+  const mtnChains = (typeof getMountainChains==='function') ? getMountainChains(state) : null;   // cosmetic chain (cached); null → old per-rock render
+  const mtnSkip = mtnChains && mtnChains.skip;
   if(state.megaSprites) for(const m of state.megaSprites) depth.push({y:megaSortY(m), m});
   // FEAT_SIZE walk-under topography features: cull to view + gate on explored BEFORE the sort
   // (a crammed map can have hundreds). Ground line = footprint bottom edge (ty+N)*TILE, so a
   // unit in a passable TOP row (smaller y) sorts first and is occluded → walks under the canopy.
   if(state.features){ for(const f of state.features){ const fw=Math.max(1,(f.w||FEAT_SIZE)|0), fh=Math.max(1,(f.h||FEAT_SIZE)|0);
+    if(mtnSkip && mtnSkip.has(f)) continue;                            // mountain rock → drawn by the chain pass, not here
     if(f.tx+fw<=x0 || f.tx>=x1 || f.ty+fh<=y0 || f.ty>=y1) continue;   // AABB cull
     const sx=Math.max(0, Math.min(state.W-1, f.tx+(fw>>1))), sy=Math.max(0, Math.min(state.H-1, f.ty+fh-1));
     const si=sy*state.W + sx;                                          // one bottom-row sample cell (shared w/ minimap/fog)
@@ -555,6 +575,16 @@ function render(state){
     if(state.roadTiles && state.roadTiles[si]===1) continue;          // a road plowed through this grove → don't draw canopy over the asphalt
     depth.push({y:(f.ty+fh)*TILE, f, dim:state.visible[si]!==1});      // neutral scenery: dim when not visible
   } }
+  // cosmetic MOUNTAIN-CHAIN sprites: dense overlapping massif per mountain cluster (replaces the per-rock
+  // sprite skipped above). Cull by the sprite's box (crests poke up), gate on explored/road like features.
+  if(mtnChains) for(const s of mtnChains.sprites){
+    const sx0=s.bx-s.dw/2, sx1=s.bx+s.dw/2, sy0=s.by-s.dh, sy1=s.by;
+    if(sx1<x0*TILE || sx0>x1*TILE || sy1<y0*TILE || sy0>y1*TILE) continue;   // AABB cull (world px)
+    const si=s.tileY*state.W + s.tileX;
+    if(!state.explored[si]) continue;
+    if(state.roadTiles && state.roadTiles[si]===1) continue;
+    depth.push({y:s.by, tie:s.tie, chain:s, dim:state.visible[si]!==1});
+  }
   // funding nodes ("funding rock"): a 3x3 walk-under footprint like a topo feature —
   // depth-sorted on the footprint ground line so Interns mining at the base draw in
   // front while a unit in the passable upper rows is occluded (walks under the rock).
@@ -603,7 +633,7 @@ function render(state){
     ctx.globalAlpha=1;
   }
   if(PERF.on){ PERF.lap('depthBuild'); PERF.mark('depthSort'); }
-  depth.sort((a,b)=>a.y-b.y);
+  depth.sort((a,b)=> (a.y-b.y) || ((a.tie||0)-(b.tie||0)));   // tiebreak: deterministic (coord-derived) so overlapping chain sprites layer identically cross-peer
   // ---- cutscene occluder suppression: while a flash cutscene plays, hide any building / landmark /
   //      topography sprite that would draw OVER a participating character, so the scene's characters
   //      are always visible (e.g. the Dark Tower vanishes while Biba & Nino speak at its base). A prop
@@ -616,7 +646,7 @@ function render(state){
     if(ps && ps.length){
       const pts=ps.map(u=>{ const vh=unitDrawH(u); return { x:u.x, y:u.y-vh*0.35, sy:u.y }; });
       for(const d of depth){
-        if(!(d.b||d.f||d.m)) continue;
+        if(!(d.b||d.f||d.m||d.chain)) continue;
         const bx=csPropBox(state, d); if(!bx) continue;
         const gy=bx.y+bx.h;
         for(const p of pts){
@@ -638,6 +668,15 @@ function render(state){
     }
     ctx.globalAlpha=1;
   }
+  // mountain-chain base HAZE: a soft dark pool under each chain sprite's foot (cached gradient sprite, no
+  // per-frame alloc) so dense overlapping silhouettes read as one grounded massif. Drawn UNDER the sprites.
+  if(mtnChains && mtnChains.sprites.length){
+    const hz=mtnHazeSprite(); ctx.globalAlpha=0.4;
+    for(const s of mtnChains.sprites){ const fx=s.bx+ox, fy=s.by+oy, rw=s.dw*0.6, rh=s.dw*0.14;
+      if(fx+rw<0 || fx-rw>cv.width || fy+rh<0 || fy-rh>cv.height) continue;
+      ctx.drawImage(hz, fx-rw, fy-rh*1.2, rw*2, rh*2); }
+    ctx.globalAlpha=1;
+  }
   // P3.1: tiles a unit stands on this frame → drawFeature fades a canopy when a unit walks UNDER it.
   _unitTileSet.clear();
   for(const d of depth){ const u=d.u; if(!u) continue; _unitTileSet.add(((u.y/TILE)|0)*state.W + ((u.x/TILE)|0)); }
@@ -645,6 +684,7 @@ function render(state){
     if(d._csHide) continue;                            // cutscene: this sprite would cover a participant → hide it
     if(d.b) drawBuilding(state, d.b, ox,oy, d.dim);
     else if(d.m) drawOneMega(state, d.m, ox,oy, x0,y0,x1,y1);
+    else if(d.chain) drawMtnChainSprite(state, d.chain, ox,oy, d.dim);
     else if(d.f) drawFeature(state, d.f, ox,oy, d.dim);
     else if(d.g) drawGoldmine(state, d.g, ox,oy, d.dim);
     else if(d.echo) drawEcho(state, d.echo, ox,oy);
@@ -701,6 +741,10 @@ function render(state){
   // ---- P6.3 drifting weather haze (weather biomes only; very subtle, QUAL/reduced-motion gated) ----
   if(typeof drawWeatherPlane==='function') drawWeatherPlane(state, x0,y0,x1,y1);
   if(typeof drawHubRain==='function') drawHubRain(state);                       // P7.5 HUB rain (screen-space, over the scene)
+  // ---- P6.2 animated painted light: god-ray shafts off emissive landmarks + per-biome flicker glows ----
+  if(PERF.on) PERF.mark('lightfx');
+  if(typeof drawLightFX==='function') drawLightFX(state, ox,oy, x0,y0,x1,y1);
+  if(PERF.on) PERF.lap('lightfx');
 
   // ---- HUB decorative drones: a dedicated pass AFTER the depth sort so they fly on top of
   //      every building (even the tallest HQ), drawn small + high. Cosmetic, module-local. ----
@@ -997,6 +1041,79 @@ function fogTex(tint){
   }
   g.putImageData(img,0,0); _fogCache[tint]=c; return c;
 }
+
+/* ===== P6.2 animated painted light (cosmetic) — drawLightFX: a soft additive light BLOOM (halo) off
+   emissive landmarks + per-biome flicker glows on the §6 terrain signatures that are still STATIC. The game's
+   neon/lava/hero/Dark-Tower-storm already animate, so this ONLY adds the landmark bloom + mountain ore-vein /
+   tech data-seam / desert cactus-ember flicker. Render-only, additive, gated (?nolightfx / reduced-motion /
+   QUAL>=2), ZERO per-frame alloc (cached per-color sprites). Anchors derive from seed-stable megaSprites/
+   scenery/features; animation phase from state.time + coord-hash (no Math.random) → per-peer-safe. ===== */
+const LIGHTFX_COLORS = { ember:[255,120,40], cyan:[80,220,255], violet:[170,120,235], green:[74,238,96] };
+const LIGHTFX = { maxRayAnchors:4, bloomAlphaMin:0.05, bloomAlphaMax:0.16,
+                  maxGlows:120, glowAlpha:0.24 };   // bloom = soft landmark HALO (no shafts); glow = per-biome flicker. alpha=intensity (tune freely; size/caps = the fill-rate dial).
+const _bloomCache={};
+function lightBloomSprite(key){         // ONE soft radial bloom (no shafts). key = named color OR an [r,g,b] (mega's own neon)
+  const isArr=Array.isArray(key), ck=isArr?(key[0]+'_'+key[1]+'_'+key[2]):key;
+  if(_bloomCache[ck]) return _bloomCache[ck];
+  const rgb=isArr?key:(LIGHTFX_COLORS[key]||[255,255,255]), R=80, c=document.createElement('canvas'); c.width=c.height=R*2;
+  const g=c.getContext('2d'), gr=g.createRadialGradient(R,R,1,R,R,R), s=rgb[0]+','+rgb[1]+','+rgb[2];
+  gr.addColorStop(0,'rgba('+s+',0.62)'); gr.addColorStop(0.30,'rgba('+s+',0.26)');
+  gr.addColorStop(0.62,'rgba('+s+',0.08)'); gr.addColorStop(1,'rgba('+s+',0)');   // very soft, feathered to nothing
+  g.fillStyle=gr; g.fillRect(0,0,R*2,R*2); _bloomCache[ck]=c; return c;
+}
+const _gdotCache={};
+function glowDot(key){                 // small soft radial glow (cached per color)
+  if(_gdotCache[key]) return _gdotCache[key];
+  const rgb=LIGHTFX_COLORS[key]||[255,255,255], R=24, c=document.createElement('canvas'); c.width=c.height=R*2;
+  const g=c.getContext('2d'), gr=g.createRadialGradient(R,R,1,R,R,R), s=rgb[0]+','+rgb[1]+','+rgb[2];
+  gr.addColorStop(0,'rgba('+s+',0.9)'); gr.addColorStop(0.5,'rgba('+s+',0.34)'); gr.addColorStop(1,'rgba('+s+',0)');
+  g.fillStyle=gr; g.fillRect(0,0,R*2,R*2); _gdotCache[key]=c; return c;
+}
+const MTN_RAYCOL = { volcano:'ember', megabuilding:'cyan', mountain:'violet' };   // emissive mega categories
+function drawLightFX(state, ox,oy, x0,y0,x1,y1){
+  if(!RENDER.lightfx) return;
+  if(typeof megaReducedMotion==='function' && megaReducedMotion()) return;        // reduced-motion → no animated light
+  if(typeof QUAL!=='undefined' && QUAL && QUAL.level>=2) return;                  // drop the pass under sustained load
+  const t=state.time||0, W=state.W, Hh=state.H;
+  ctx.save(); ctx.globalCompositeOperation='lighter';
+  // (1) soft light BLOOM off emissive landmarks (nearest N on-screen) — a single feathered halo, no shafts
+  const anchors=[], camCx=((x0+x1)*0.5)*TILE, camCy=((y0+y1)*0.5)*TILE;
+  if(state.megaSprites) for(const m of state.megaSprites){
+    const col=((typeof megaNeonColor==='function') && megaNeonColor(m)) || MTN_RAYCOL[m.cat];   // bloom == the mega's OWN neon color
+    if(!col) continue;
+    if(m.tx+m.w<=x0 || m.tx>=x1 || m.ty+m.h<=y0 || m.ty>=y1) continue;            // AABB cull
+    const cx=(m.tx+m.w/2)*TILE, topY=(m.ty - m.h*0.3)*TILE;
+    anchors.push({cx, topY, col, size:m.w*TILE, seed:(m.seed||0), d:(cx-camCx)*(cx-camCx)+(topY-camCy)*(topY-camCy)}); }
+  if(state.entities) for(const e of state.entities){ if(e.dead || e.type!=='darktower') continue;   // Dark Tower (green A&O)
+    const tw=(e.w||6), th=(e.h||5), cx=e.x, topY=e.y-th*TILE*1.6;
+    if(cx<x0*TILE-300 || cx>x1*TILE+300 || topY>y1*TILE) continue;
+    anchors.push({cx, topY, col:'green', size:tw*TILE*1.4, seed:0.37, d:(cx-camCx)*(cx-camCx)+(topY-camCy)*(topY-camCy)}); }
+  anchors.sort((a,b)=>a.d-b.d);
+  const nA=Math.min(LIGHTFX.maxRayAnchors, anchors.length);
+  for(let ai=0; ai<nA; ai++){ const a=anchors[ai], spr=lightBloomSprite(a.col), br=megaBreath(t, a.seed);
+    ctx.globalAlpha=LIGHTFX.bloomAlphaMin + (LIGHTFX.bloomAlphaMax-LIGHTFX.bloomAlphaMin)*br;   // gentle breath
+    const bw=Math.max(80, a.size*1.7), bh=Math.max(100, a.size*2.1);     // taller-than-wide → light rises off the landmark
+    ctx.drawImage(spr, a.cx+ox-bw/2, a.topY+oy-bh*0.66, bw, bh);          // one soft halo over/above it — no shafts, no claw
+  }
+  ctx.globalAlpha=1;
+  // (2) per-biome FLICKER GLOWS on currently-static terrain signatures (mountain ore-vein / tech seam / desert ember)
+  let n=0;
+  if(state.features) for(const f of state.features){ if(n>=LIGHTFX.maxGlows) break;
+    if(f.base) continue;
+    let col=null; if(f.biome===B_MOUNTAIN && f.slot==='rock') col='violet';
+      else if(f.biome===B_TECH && f.slot==='rock') col='cyan';
+      else if(f.biome===B_DESERT && f.slot==='tree') col='ember'; else continue;
+    if(f.tx+FEAT_SIZE<=x0 || f.tx>=x1 || f.ty+FEAT_SIZE<=y0 || f.ty>=y1) continue;
+    const sx=Math.max(0,Math.min(W-1,f.tx+(FEAT_SIZE>>1))), sy=Math.max(0,Math.min(Hh-1,f.ty+FEAT_SIZE-1)), si=sy*W+sx;
+    if(!state.explored[si]) continue;
+    const ph=h2(f.tx,f.ty), a=LIGHTFX.glowAlpha*(0.55+0.45*megaBreath(t,ph))*megaNeonFlicker(t,ph*1.3,0.7)*(state.visible[si]!==1?0.5:1);
+    n++; if(a<0.012) continue;
+    const gx=(f.tx+FEAT_SIZE/2)*TILE+ox, gy=(f.ty+1.1)*TILE+oy, R=TILE*1.7;
+    ctx.globalAlpha=a; ctx.drawImage(glowDot(col), gx-R, gy-R, R*2, R*2);
+  }
+  ctx.globalAlpha=1; ctx.restore();
+}
+
 const WEATHER = {
   [B_VOLCANIC]: { tint:'255,150,95',  a:0.05,  sp:7 },   // heat smoke
   [B_ICE]:      { tint:'200,225,242', a:0.06,  sp:5 },   // cold fog
@@ -1302,6 +1419,99 @@ function drawTreeTile(b,v,px,py){
   else { ctx.fillStyle='rgba(255,255,255,.07)'; ctx.beginPath(); ctx.arc(px+13,py+11,3,0,6.28); ctx.fill(); }
 }
 
+/* ===== MOUNTAIN CHAIN render (cosmetic) — draw each mountain rock CLUSTER as the approved lab "chain":
+   overlapping, depth-sorted, crest spires (variants 0,6) rising over foothills (2,4,7), sized to the
+   cluster's OWN median draw size so the footprint stays put. REPLACES the per-rock sprite draw only —
+   gameplay blocked/feat mask, minimap & save stay on state.features. Cached per-state in MTN_CHAINS
+   (a WeakMap, NEVER on a state- or feature-field → never serialized). Deterministic: every categorical choice from an
+   integer coord-hash (makeNoise2D.hash) + the map seed (no Math.random, no cluster ordinal) → identical
+   host/client/reload. ?nomtnchain=1 → the old per-rock render. ===== */
+const MTN_CHAINS = new WeakMap();
+const MTN_ROLE_POOL = { crest:[0,6], mid:[3], base:[2,4,7] };   // owner-approved roles; 1,5 are OFF (never used)
+const MTNC = { mergeCheb:2, minSize:3, spacingTiles:1.4, maxPerCluster:40,
+               gradient:0.45, crestBoost:1.25, jitterPos:0.30, jitterSize:0.20, mirror:0.5, crestHeightCap:1.6 };
+function _isMtnRock(f){ return !f.base && f.slot==='rock' && f.biome===B_MOUNTAIN; }
+function _mtnSeed(state){ return state.hub
+  ? ((424242+(typeof CAMPAIGN!=='undefined'?(CAMPAIGN.visit||0):0)*17+909)>>>0)
+  : ((((state.cfg&&state.cfg.seed)||1)*1000+909)>>>0); }
+function buildMountainChains(state){
+  if(typeof FEAT_VAR_READY==='undefined' || !FEAT_VAR_READY || typeof MTN_TRIM==='undefined' || !MTN_TRIM) return null;
+  if(typeof makeNoise2D!=='function' || state.hub) return {sprites:[], skip:new Set()};   // hub deferred (wasteland fog)
+  const feats=[]; if(state.features) for(const f of state.features) if(_isMtnRock(f)) feats.push(f);
+  if(!feats.length) return {sprites:[], skip:new Set()};
+  // cluster: union-find by Chebyshev <= mergeCheb lattice steps (bridges the ~1/3 grass holes in ranges)
+  const N=feats.length, par=new Int32Array(N); for(let i=0;i<N;i++) par[i]=i;
+  const find=i=>{ while(par[i]!==i){ par[i]=par[par[i]]; i=par[i]; } return i; };
+  const tol=MTNC.mergeCheb*FEAT_SIZE;
+  for(let i=0;i<N;i++)for(let j=i+1;j<N;j++){ const a=feats[i],b=feats[j];
+    if(Math.abs(a.tx-b.tx)<=tol && Math.abs(a.ty-b.ty)<=tol){ const ra=find(i),rb=find(j); if(ra!==rb) par[ra]=rb; } }
+  const groups=new Map(); for(let i=0;i<N;i++){ const r=find(i); let g=groups.get(r); if(!g){g=[];groups.set(r,g);} g.push(feats[i]); }
+  const cnz=makeNoise2D((_mtnSeed(state)^0xC4A1)>>>0), sprites=[], skip=new Set();
+  const emit=(cx,by,drawW,role,hx,hy)=>{
+    const pool=MTN_ROLE_POOL[role]||MTN_ROLE_POOL.base, variant=pool[(cnz.hash(hx,hy)*pool.length)|0];
+    const tr=MTN_TRIM[variant]; if(!tr) return;
+    let dh=drawW*(tr.h/tr.w); if(role==='crest') dh=Math.min(dh, MTNC.crestHeightCap*drawW*(tr.h/tr.w)/MTNC.crestBoost);
+    sprites.push({ variant, bx:cx, by, dw:drawW, dh, mirror:(cnz.hash(hx+131,hy+17)<MTNC.mirror), src:tr,
+      tie:((cnz.hash(hx+9,hy+9)*65536)|0),
+      tileX:Math.max(0,Math.min(state.W-1,(cx/TILE)|0)), tileY:Math.max(0,Math.min(state.H-1,((by/TILE)|0)-1)) });
+  };
+  for(const grp of groups.values()){
+    for(const f of grp) skip.add(f);
+    let minTx=1e9,maxTx=-1e9,minTy=1e9,maxTy=-1e9; const sizes=[];
+    for(const f of grp){ if(f.tx<minTx)minTx=f.tx; if(f.tx+FEAT_SIZE>maxTx)maxTx=f.tx+FEAT_SIZE;
+      if(f.ty<minTy)minTy=f.ty; if(f.ty+FEAT_SIZE>maxTy)maxTy=f.ty+FEAT_SIZE;
+      const rs=(RENDER.vscale && f.vscale!=null)?f.vscale:1.0; sizes.push(FEAT_SIZE*TILE*(f.overhang||1.08)*rs); }
+    sizes.sort((a,b)=>a-b); const baseW=sizes[sizes.length>>1];                 // cluster MEDIAN → preserves mass
+    if(grp.length<MTNC.minSize){                                               // lone outcrop: ~as today, no crest
+      for(const f of grp){ const cx=(f.tx+FEAT_SIZE/2)*TILE, by=(f.ty+FEAT_SIZE)*TILE;
+        emit(cx,by,baseW, cnz.hash(f.tx+1,f.ty+5)<0.25?'mid':'base', f.tx, f.ty); }
+      continue;
+    }
+    const topY=minTy*TILE, botY=maxTy*TILE, leftX=minTx*TILE, rightX=maxTx*TILE;
+    let step=MTNC.spacingTiles*TILE;
+    const est=Math.max(1,(rightX-leftX)/step)*Math.max(1,(botY-topY)/(step*0.85));
+    if(est>MTNC.maxPerCluster) step*=Math.sqrt(est/MTNC.maxPerCluster);        // cap by DENSITY, not truncation
+    const colTop=new Map(), colBot=new Map();                                  // per-column real coverage
+    for(const f of grp){ const t=f.ty*TILE, b=(f.ty+FEAT_SIZE)*TILE;
+      for(let tx=f.tx; tx<f.tx+FEAT_SIZE; tx++){
+        if(colTop.get(tx)==null||t<colTop.get(tx)) colTop.set(tx,t);
+        if(colBot.get(tx)==null||b>colBot.get(tx)) colBot.set(tx,b); } }
+    for(let px=leftX; px<rightX; px+=step){
+      let cT=colTop.get((px/TILE)|0), cB=colBot.get((px/TILE)|0); if(cT==null){ cT=topY; cB=botY; }
+      const cspan=Math.max(1,cB-cT);
+      for(let py=cT; py<cB; py+=step*0.85){
+        const rowFrac=Math.max(0,Math.min(1,(py-cT)/cspan));
+        const role=rowFrac<0.34?'crest':(rowFrac<0.7?'mid':'base');
+        const sgx=(px/8)|0, sgy=(py/8)|0;
+        const jx=(cnz.hash(sgx+211,sgy+7)-0.5)*step*MTNC.jitterPos, jy=(cnz.hash(sgx+7,sgy+211)-0.5)*step*0.4;
+        let w=baseW*(1-MTNC.gradient*rowFrac); if(role==='crest') w*=MTNC.crestBoost;
+        w*=1+(cnz.hash(sgx+53,sgy+97)-0.5)*2*MTNC.jitterSize; if(w<6) continue;
+        let cx=px+jx; if(cx<leftX)cx=leftX; if(cx>rightX)cx=rightX;            // clamp center to footprint span
+        emit(cx, py+jy, w, role, sgx, sgy);
+      }
+    }
+  }
+  return {sprites, skip};
+}
+function getMountainChains(state){
+  if(!RENDER.mtnchain) return null;
+  let c=MTN_CHAINS.get(state);
+  if(c===undefined){ c=buildMountainChains(state); if(c) MTN_CHAINS.set(state,c); }   // build once atlas ready, then cache
+  return c||null;
+}
+function drawMtnChainSprite(state, s, ox, oy, dim){
+  const dx=s.bx+ox-s.dw/2, dy=s.by+oy-s.dh;
+  ctx.save();
+  if(dim) ctx.globalAlpha*=0.5;
+  if(s.mirror){ const a=s.bx+ox; ctx.translate(a,0); ctx.scale(-1,1); ctx.translate(-a,0); }
+  ctx.drawImage(FEAT_VAR_IMG, s.src.x,s.src.y,s.src.w,s.src.h, dx,dy,s.dw,s.dh);
+  ctx.restore();
+}
+let _mtnHaze=null;
+function mtnHazeSprite(){ if(_mtnHaze) return _mtnHaze; const sz=64, c=document.createElement('canvas'); c.width=sz; c.height=sz;
+  const g=c.getContext('2d'), rg=g.createRadialGradient(sz/2,sz/2,1,sz/2,sz/2,sz/2);
+  rg.addColorStop(0,'rgba(0,0,0,0.5)'); rg.addColorStop(1,'rgba(0,0,0,0)'); g.fillStyle=rg; g.fillRect(0,0,sz,sz); _mtnHaze=c; return c; }
+
 // ---- 2x2 walk-under topography feature (tree / rock) ----
 // Drawn in the depth sort, bottom-anchored on the footprint's ground line so units in
 // the passable TOP row are occluded (walk under the canopy) and units below draw over.
@@ -1311,7 +1521,9 @@ function drawFeature(state, f, ox, oy, dim){
   const fw=Math.max(1,(f.w||FEAT_SIZE)|0), fh=Math.max(1,(f.h||FEAT_SIZE)|0);
   const px=f.tx*TILE+ox, baseW=fw*TILE, baseH=fh*TILE;
   const overhang=f.overhang||1.08;                       // slight upward growth, like buildings/megas
-  const rscale = f.base ? 1 : (0.8 + h2(f.tx*1.3+7, f.ty*1.7+3)*0.55);  // P7.4 per-feature SIZE variety (cosmetic — footprint/blocked mask/depth ground-line unchanged; coord-hash → co-op-safe). f.base (funding crystal) → fixed size.
+  // SIZE: clustered grove band (f.vscale, set at map-gen so a clump shares one size) when present, else the
+  // legacy per-feature hash jitter. Cosmetic — footprint/blocked mask/depth ground-line unchanged. f.base → fixed.
+  const rscale = f.base ? 1 : ((RENDER.vscale && f.vscale!=null) ? f.vscale : (0.8 + h2(f.tx*1.3+7, f.ty*1.7+3)*0.55));
   const dw=baseW*overhang*rscale, dh=baseH*overhang*(f.heightScale||1)*rscale;
   const dx=px+(baseW-dw)/2, dy=(f.ty+fh)*TILE+oy - dh + 2; // centered, bottom-anchored on the ground line
   // P3.1 walk-under: is a unit standing in this feature's PASSABLE top rows (rows [0, fh-floor(fh/2))? → fade
@@ -1382,7 +1594,10 @@ function drawFeatureSprite(f, dx, dy, dw, dh){
   // 0) P7.4 VARIANT atlas (features_var.webp): one of FEAT_VAR_N distinct shapes per biome+slot, hash-picked
   //    from the feature's coords (deterministic → co-op-safe). The big "lifeless one-rock-per-biome" fix.
   if(!f.base && typeof FEAT_VAR_READY!=='undefined' && FEAT_VAR_READY && typeof featVarRect==='function'){
-    const vr = featVarRect(f.biome, f.slot, (h2(f.tx,f.ty)*featVarN(f.slot))|0);   // rocks: 4 variants, trees: 8 (own + dead mix)
+    // VARIANT: clustered grove pick (f.var, assigned at map-gen so neighbours share a shape) when present,
+    // else the legacy uncorrelated per-tile hash. ?nofeatclu=1 forces the old look for A/B on the same map.
+    const idx = (RENDER.featclu && f.var!=null) ? f.var : ((h2(f.tx,f.ty)*featVarN(f.slot))|0);
+    const vr = featVarRect(f.biome, f.slot, idx);   // rocks: 8 variants, trees: 16 (own 0-7 + dead 8-15)
     if(vr){ ctx.drawImage(FEAT_VAR_IMG, vr[0],vr[1],vr[2],vr[3], dx,dy,dw,dh); ctx.restore(); return; }
   }
   // 1) transparent high-res cut-out (features.png) — only the rock/tree pixels, so terrain shows
@@ -1619,12 +1834,51 @@ function drawBuilding(state,e,ox,oy,dim){
     // animated 9-frame strip (neon flicker), aspect-preserved, bottom-anchored with a
     // little upward overhang for height. Per-building phase from e.id so identical
     // buildings don't flicker in lockstep. No ground shadow (intentionally dropped).
-    const n=spr.frames, fi=((((state.time*BUILDING_FPS + e.id*0.13)|0)%n)+n)%n;
-    const box=buildingDrawBox(e,spr);   // BUILDING_DRAW_SCALE× footprint, bottom-anchored
+    const n=spr.frames;
+    const box=buildingDrawBox(e,spr);   // BUILDING_DRAW_SCALE× footprint, bottom-anchored (SIZE unchanged)
     const dw=box.w, dh=box.h, dx=box.x+ox, dy=box.y+oy;
     topY=dy;
     if(e.constructing) ctx.globalAlpha*=0.5;   // rises faintly while building
-    ctx.drawImage(spr.img, fi*spr.fw,0,spr.fw,spr.fh, dx,dy,dw,dh);
+    // BUILDING NEON + soft cross-fade (mirrors drawOneMega): per-faction glow on the light pixels (key = the
+    // same per-faction art file). The SPRITE frame cross-fade (A→B smoothstep) runs at EVERY zoom so the frame
+    // transition is always smooth; only the NEON detail drops when zoomed out (full A/B blend → one cheap layer)
+    // to bound fill cost. QUAL≥2 / constructing / unmapped / single-frame opt out to today's hard-swap.
+    const z=state.zoom||1, rm=(typeof megaReducedMotion==='function' && megaReducedMotion());
+    const neonOn = RENDER.bldgneon && n>1 && !e.constructing
+                   && !(typeof QUAL!=='undefined' && QUAL && QUAL.level>=2)
+                   && typeof buildingNeonFrame==='function' && typeof drawMegaNeonLayer==='function';
+    if(neonOn){
+      // auraScale keeps the glow ON the building + immediate edge (no terrain wash); coreScale trims the soft
+      // additive bleed of the bright cores so big buildings (open-plan HQ) don't light up the ground around them.
+      const sid=e.type+'_'+((ao||isTower)?'ao':factionKey(e.owner)), ph={seed:(e.id||0)*0.131, auraScale:0.42, coreScale:0.7, noBreath:true, cacheGrad:true};
+      if(rm){                                                          // reduced-motion → static frame + static single glow (no animation)
+        const fi=((((state.time*BUILDING_FPS + e.id*0.13)|0)%n)+n)%n, neon=buildingNeonFrame(sid,fi);
+        drawMegaNeonLayer(state,ph,neon,dx,dy,dw,dh,'aura');
+        ctx.drawImage(spr.img, fi*spr.fw,0,spr.fw,spr.fh, dx,dy,dw,dh);
+        drawMegaNeonLayer(state,ph,neon,dx,dy,dw,dh,'core');
+      } else {
+        const p=state.time*BUILDING_FPS*BUILDING_ANIM_SPEED + (e.id||0)*0.37, fl=Math.floor(p), s=(p-fl)*(p-fl)*(3-2*(p-fl));
+        const fiA=((fl%n)+n)%n, fiB=(fiA+1)%n;
+        if(z>=NEON_LOD_ZOOM){                                          // zoomed-in → full A/B neon cross-fade + sprite cross-fade
+          const nA=buildingNeonFrame(sid,fiA), nB=buildingNeonFrame(sid,fiB);
+          ctx.save(); ctx.globalAlpha*=(1-s); drawMegaNeonLayer(state,ph,nA,dx,dy,dw,dh,'aura'); ctx.restore();
+          ctx.save(); ctx.globalAlpha*=s;     drawMegaNeonLayer(state,ph,nB,dx,dy,dw,dh,'aura'); ctx.restore();
+          ctx.drawImage(spr.img, fiA*spr.fw,0,spr.fw,spr.fh, dx,dy,dw,dh);
+          ctx.save(); ctx.globalAlpha*=s; ctx.drawImage(spr.img, fiB*spr.fw,0,spr.fw,spr.fh, dx,dy,dw,dh); ctx.restore();
+          ctx.save(); ctx.globalAlpha*=(1-s); drawMegaNeonLayer(state,ph,nA,dx,dy,dw,dh,'core'); ctx.restore();
+          ctx.save(); ctx.globalAlpha*=s;     drawMegaNeonLayer(state,ph,nB,dx,dy,dw,dh,'core'); ctx.restore();
+        } else {                                                       // zoomed-out → SPRITE still cross-fades; neon = ONE cheap dominant-frame layer
+          const neon=buildingNeonFrame(sid, s<0.5?fiA:fiB);
+          drawMegaNeonLayer(state,ph,neon,dx,dy,dw,dh,'aura');
+          ctx.drawImage(spr.img, fiA*spr.fw,0,spr.fw,spr.fh, dx,dy,dw,dh);
+          ctx.save(); ctx.globalAlpha*=s; ctx.drawImage(spr.img, fiB*spr.fw,0,spr.fw,spr.fh, dx,dy,dw,dh); ctx.restore();
+          drawMegaNeonLayer(state,ph,neon,dx,dy,dw,dh,'core');
+        }
+      }
+    } else {
+      const fi=((((state.time*BUILDING_FPS + e.id*0.13)|0)%n)+n)%n;    // hard-swap, no neon (QUAL≥2 / constructing / unmapped / flag off)
+      ctx.drawImage(spr.img, fi*spr.fw,0,spr.fw,spr.fh, dx,dy,dw,dh);
+    }
     // The Dark Tower always storms: reuse the Wake's green lightning conduit, scaled to the DRAWN
     // sprite (dw*0.5 keeps the corona/flash proportional to the giant tower instead of its tiny footprint).
     if(isTower) drawHubWakeFX(state, e, ox, oy, topY, true, dw*0.5);
@@ -2013,10 +2267,36 @@ function drawUnit(state,u,ox,oy){
   const jz = u._jumpZ||0;   // REX jump-stomp: lifts the sprite off the ground (shadow drawn at the foot below)
 
   if(PERF.opts.spriteLod && (state.zoom||1) < SPRITE_LOD_ZOOM){
+    // LIGHT path: the legible animations (walk cycle + attack/action swing) DO play — a static
+    // sprite read as a rendering bug here — but the sub-pixel idle "life" layers (breathing/fidget),
+    // glow/rim/aura/shadow and ALL per-unit HUD (hp bar / stars / badge / pip) stay culled (illegible
+    // at ~11–14px, yet cost real work ×units). Movement + frame selection mirror the canonical full
+    // path below (render.js ~2026 + ~2083); keep the two in sync if the walk/attack timing changes.
     const sType = u.spriteType || u.type;
     const anim = unitWalk(sType, u.owner, fac);
+    // movement state (also keeps _ax/_ay fresh, so the walk cycle/facing don't snap on zoom-in)
+    const lax = u._ax==null?u.x:u._ax, lay = u._ay==null?u.y:u._ay;
+    const mvx = u.x-lax, mvy = u.y-lay, md = Math.hypot(mvx,mvy);
+    u._ax=u.x; u._ay=u.y;
+    u._walkDist = (u._walkDist||0)+md;
+    if(md>0.25){ u._still=0; if(Math.abs(mvx)>0.15 && !u._actState) u._face = mvx<0?-1:1; }
+    else u._still=(u._still||0)+1;
+    const moving = u._netMoving || (u._still||0) < 6;
     if(u.selected){ ctx.strokeStyle='#8effb0'; ctx.lineWidth=2; ctx.beginPath(); ctx.ellipse(px, py-alt+vh*0.3, vh*0.34, vh*0.14, 0,0,6.28); ctx.stroke(); }
-    if(anim){ blitFrame(u, px, py-alt, anim, vh, 0); }                    // light: static frame, no idle/action anim, no HUD
+    if(anim){
+      let useAnim = anim, fi;
+      const act = u._actState ? actionAnim(sType, u._actState, u.owner, fac) : null;
+      if(act){
+        useAnim = act; const n = act.frames.length;
+        if(u._actState==='attack' || u._actState.indexOf('attack')===0){ const t = state.time-(u._actStamp||0); const adur = u._actDur || 0.8;
+          fi = t<adur ? Math.min(n-1, (t/adur*n)|0) : (u._actDur ? n-1 : 0); }
+        else fi = ((state.time*7)|0) % n;                                   // mine / heal loop
+      } else {
+        const stridePx = (sType==='ninja') ? 15 : 9;
+        fi = moving ? (((u._walkDist||0)/stridePx)|0) % anim.frames.length : 0;
+      }
+      blitFrame(u, px, py-alt, useAnim, vh, fi);                          // light: walk/attack anim, no idle "life" layers, no HUD
+    }
     else { ctx.fillStyle = isRedSide(u.owner)?'#c0392b':(u.ctrl==='p2'?'#c47a1f':'#3b7fd0'); ctx.fillRect(px-r*0.6, py-alt-r*0.6, r*1.2, r*1.2); }
     if(u.hitFx>0) u.hitFx-=1/60;                                          // keep the transient decaying so it doesn't freeze
     return;

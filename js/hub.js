@@ -820,6 +820,9 @@ function newHubMap(){
   if(typeof hubSpawnHealers==='function') hubSpawnHealers(state);
   hubRevealAll(state);
   recomputeSupply(state);
+  // cosmetic: cluster topography variants/sizes into cohesive groves (parity with newMap). Seeded off the
+  // same family as the hub feature build → deterministic per visit; render-only, nothing serialized reads it.
+  if(typeof clusterTopoFeatures==='function') clusterTopoFeatures(state, (424242 + CAMPAIGN.visit*17 + 909) >>> 0);
   return state;
 }
 function hubRevealAll(state){ state.explored.fill(1); state.visible.fill(1); }

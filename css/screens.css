@@ -862,14 +862,40 @@ body.hub-menu-open #bottom{ display:none; }              /* syncHud() then drops
 .rip-overload{ position:relative; overflow:hidden; border-color:#ff5a5a !important; color:#ff8a8a !important; }
 .rip-overload .rip-ol-fill{ position:absolute; left:0; top:0; bottom:0; width:0; background:rgba(255,60,60,.28); z-index:0; }
 .rip-overload>*{ position:relative; z-index:1; }
-/* responsive: stack rail on top, figure-on-top + groups below */
+/* MOBILE: keep the desktop 3-column body-map (left groups · sprite · right groups); move the
+   resident rail to a horizontal strip on top and scale the live sprite + implant sockets down
+   to fit a phone. Pure CSS; desktop (>860px) is unchanged. Tune sizes live. */
 @media (max-width:860px){
-  .clinic-grid{ grid-template-columns:1fr; }
-  .clinic-roster{ flex-direction:row; overflow-x:auto; border-right:0; border-bottom:1px solid #4a2630; padding-bottom:8px; }
-  .clinic-rail-card{ flex:0 0 auto; min-width:150px; }
-  .rip-grid{ grid-template-columns:1fr; }
-  .rip-figwrap{ order:-1; }
-  .rip-col.right .rip-group, .rip-col.right .rip-group .train-h, .rip-col.right .rip-tiles{ text-align:left; justify-content:flex-start; }
-  .rip-slot{ width:54px; height:54px; }       /* >=44px tap targets */
-  .rip-cat{ width:100%; }
+  /* let .hub-menu-body own the scroll: grids take natural height (flex:none) instead of
+     the desktop flex:1+min-height:0, which would shrink them below content and overlap. */
+  .clinic-grid{ grid-template-columns:1fr; gap:10px; flex:none; min-height:0; }   /* rail on top, body-map full width */
+  .rip-panel{ overflow:visible; gap:10px; }
+
+  /* resident rail as a horizontal scrollable strip on top (instead of the desktop left column) */
+  .clinic-roster{ flex-direction:row; overflow-x:auto; -webkit-overflow-scrolling:touch;
+    border-right:0; border-bottom:1px solid #4a2630; padding-right:0; padding-bottom:8px; }
+  .clinic-rail-card{ flex:0 0 auto; width:auto; min-width:0; white-space:nowrap;   /* hug the name/level line, not full width */
+    padding:5px 6px; gap:7px; min-height:44px; }
+  .clinic-rail-spr{ width:32px; height:32px; }
+  .clinic-rail-tx b{ font-size:11px; }
+
+  /* keep the 3 zones, tighter; figure is the fixed center column */
+  .rip-grid{ grid-template-columns:1fr 96px 1fr; gap:8px; flex:none; min-height:0; }
+  .rip-col{ gap:10px; }
+  .rip-tiles{ gap:5px; margin-top:5px; flex-wrap:wrap; }     /* 2-tile groups wrap, don't overflow */
+
+  /* smaller live unit sprite, vertically centered in its column (grid is align-items:start) */
+  .rip-figwrap{ align-self:stretch; }
+  .rip-figure{ width:96px; height:auto; max-height:30vh; }
+
+  /* smaller implant sockets (≈38px floor for tappability) */
+  .rip-slot{ width:38px; height:38px; }
+  .rip-slot .rip-glyph{ font-size:19px; }
+  .rip-slot .rip-tier{ font-size:8px; top:1px; right:2px; }
+
+  /* stat strip wraps tighter */
+  .rip-stats{ gap:8px 12px; padding:8px 10px; }
+
+  /* catalog stays a side flyout (desktop behavior), a touch wider for narrow screens */
+  .rip-cat{ width:min(320px,90%); padding:12px; }
 }

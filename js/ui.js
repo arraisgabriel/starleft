@@ -1068,7 +1068,10 @@ function hideHubCrumb(){ if(_hubCrumbEl) _hubCrumbEl.style.display='none'; }
 // city-clock chip (hub only) — fed by the main loop's 0.2s UI tick; textContent updates only
 let _hubClockEl=null, _hubClockTxt='';
 function updateHubClockChip(state){
-  const inHub=!!(state && state.hub && typeof HUBNPC!=='undefined' && HUBNPC.clock);
+  // hide while the Off-Hours interior overlay is open: it's a z:90 overlay trapped inside #game, but this
+  // body-level chip is a sibling of #game with positive z, so it would otherwise paint OVER the overlay.
+  const inHub=!!(state && state.hub && typeof HUBNPC!=='undefined' && HUBNPC.clock)
+            && !(typeof ohInteriorOpen==='function' && ohInteriorOpen());
   if(!_hubClockEl){
     if(!inHub) return;
     _hubClockEl=document.createElement('div'); _hubClockEl.id='hub-clock'; document.body.appendChild(_hubClockEl);
@@ -1079,7 +1082,9 @@ function updateHubClockChip(state){
   const txt='🕘 '+String(c.h).padStart(2,'0')+':'+String(mm).padStart(2,'0')+' · '+c.phase.toUpperCase();
   if(_hubClockEl.style.display!=='block') _hubClockEl.style.display='block';
   if(txt!==_hubClockTxt){ _hubClockTxt=txt; _hubClockEl.textContent=txt; }
-  if(typeof HUD_TOP_VIS==='number'){ const t=(HUD_TOP_VIS+8)+'px'; if(_hubClockEl.style.top!==t) _hubClockEl.style.top=t; }
+  // NOTE: vertical position is owned entirely by CSS now (#hub-clock reads --hud-top-h, which
+  // syncHud()/the ResizeObserver keep in lock-step with the topbar). On phones a media query
+  // lifts the chip up onto the objectives row — an inline `top` here would override that.
 }
 
 /* ---- NPC dossier: reuses the #dossierScreen shell + CSS with a bar-less card ---- */

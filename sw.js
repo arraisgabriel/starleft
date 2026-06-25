@@ -21,7 +21,7 @@
    Registered from js/loader.js — http(s) only, and skipped on localhost
    so dev servers and the sandbox never fight a stale cache. | STARLEFT */
 
-const CACHE = 'starleft-assets-v4';   // v4: terrain revamp atlases — floors.webp, features_var.webp, decals.webp
+const CACHE = 'starleft-assets-v5';   // v5: doubled topography/decal atlases — features_var.webp 24-col, decals.webp 24-col
 
 self.addEventListener('install', ()=>{ self.skipWaiting(); });
 

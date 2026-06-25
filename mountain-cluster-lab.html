@@ -1,0 +1,355 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>STARLEFT — Mountain Cluster Lab</title>
+<!--
+  Dev-only tool (not deployed). Serve over http:  python3 -m http.server 8000  → open /mountain-cluster-lab.html
+  Loads the 8 MOUNTAIN rock variants from assets/atlas/features_var.webp (biome row 1, cols 0..7, 256px cells),
+  trims each to its content box, and lets you compose a "mountain chain": ridgeline / field / old-grid modes,
+  per-sprite role tags (Crest / Mid / Base / Off), and placement sliders. Renders depth-sorted + bottom-anchored
+  exactly like the game so a discovered pattern transfers. "Copy params" exports the recipe as JSON.
+-->
+<style>
+  :root{ --bg:#0a0d13; --panel:#11151d; --panel2:#161b25; --ink:#c8d0dc; --dim:#7b8696; --line:#222b38;
+         --accent:#6fd3c7; --crest:#e8b86a; --mid:#9aa7ff; --base:#7fd08a; --off:#5a6270; }
+  *{ box-sizing:border-box; }
+  html,body{ margin:0; height:100%; background:var(--bg); color:var(--ink);
+    font:13px/1.45 ui-monospace,Menlo,Consolas,monospace; }
+  #app{ display:grid; grid-template-columns:188px 1fr 246px; grid-template-rows:1fr auto; height:100vh; }
+  .panel{ background:var(--panel); border-right:1px solid var(--line); overflow:auto; padding:10px; }
+  #right{ border-right:0; border-left:1px solid var(--line); }
+  #stage{ position:relative; display:flex; align-items:center; justify-content:center; overflow:hidden; background:#05080d; }
+  canvas#cv{ display:block; box-shadow:0 0 0 1px #1b2330 inset; cursor:crosshair; }
+  h2{ font-size:11px; text-transform:uppercase; letter-spacing:.12em; color:var(--dim); margin:2px 0 8px; }
+  .row{ display:flex; align-items:center; gap:6px; margin:7px 0; }
+  .row label{ flex:1; color:var(--dim); }
+  .row input[type=range]{ width:108px; accent-color:var(--accent); }
+  .row .val{ width:40px; text-align:right; color:var(--ink); }
+  .seg{ display:flex; gap:0; border:1px solid var(--line); border-radius:6px; overflow:hidden; margin-bottom:8px; }
+  .seg button{ flex:1; background:transparent; color:var(--dim); border:0; padding:6px 0; cursor:pointer; font:inherit; }
+  .seg button.on{ background:var(--panel2); color:var(--accent); }
+  button.act{ width:100%; background:var(--panel2); color:var(--ink); border:1px solid var(--line);
+    border-radius:6px; padding:8px; cursor:pointer; font:inherit; margin-top:6px; }
+  button.act:hover{ border-color:var(--accent); color:var(--accent); }
+  .spr{ display:flex; align-items:center; gap:8px; margin:6px 0; padding:5px; border:1px solid var(--line);
+    border-radius:6px; background:var(--panel2); }
+  .spr canvas{ width:46px; height:46px; background:
+    repeating-conic-gradient(#1a1f29 0% 25%, #141923 0% 50%) 50%/12px 12px; border-radius:4px; }
+  .spr .meta{ flex:1; min-width:0; }
+  .spr .nm{ font-size:11px; color:var(--ink); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .spr select{ width:100%; margin-top:3px; background:#0c1119; color:var(--ink); border:1px solid var(--line);
+    border-radius:4px; padding:2px; font:inherit; font-size:11px; }
+  .spr select[data-role=crest]{ color:var(--crest); }
+  .spr select[data-role=mid]{ color:var(--mid); }
+  .spr select[data-role=base]{ color:var(--base); }
+  .spr select[data-role=off]{ color:var(--off); }
+  #foot{ grid-column:1 / -1; background:#0c0f15; border-top:1px solid var(--line); padding:7px 10px;
+    display:flex; gap:10px; align-items:center; }
+  #params{ flex:1; color:var(--dim); white-space:nowrap; overflow:auto; font-size:11px; }
+  #hint{ position:absolute; left:10px; top:8px; color:var(--dim); font-size:11px; pointer-events:none;
+    text-shadow:0 1px 2px #000; }
+  #err{ position:absolute; inset:0; display:none; align-items:center; justify-content:center; color:#ff8e8e;
+    text-align:center; padding:24px; }
+  .pill{ display:inline-block; padding:1px 6px; border-radius:8px; font-size:10px; }
+  .pill.crest{ background:#3a2f17; color:var(--crest); } .pill.mid{ background:#23284a; color:var(--mid); }
+  .pill.base{ background:#1d3322; color:var(--base); }
+</style>
+</head>
+<body>
+<div id="app">
+  <!-- LEFT: sprite role palette -->
+  <div class="panel" id="left">
+    <h2>Mountain sprites</h2>
+    <div style="color:var(--dim);font-size:11px;margin-bottom:6px">Tag each: <span class="pill crest">Crest</span>
+      <span class="pill mid">Mid</span> <span class="pill base">Base</span> / Off</div>
+    <div id="palette"></div>
+  </div>
+
+  <!-- CENTER: stage -->
+  <div id="stage">
+    <canvas id="cv" width="980" height="660"></canvas>
+    <div id="hint">drag the ◯ ridge handles · scroll = nudge spacing</div>
+    <div id="err"></div>
+  </div>
+
+  <!-- RIGHT: controls -->
+  <div class="panel" id="right">
+    <h2>Mode</h2>
+    <div class="seg" id="mode">
+      <button data-mode="ridge" class="on">Ridgeline</button>
+      <button data-mode="field">Field</button>
+      <button data-mode="grid">Old&nbsp;Grid</button>
+    </div>
+    <h2>Placement</h2>
+    <div id="sliders"></div>
+    <h2>Actions</h2>
+    <button class="act" id="reroll">⟳ Reroll seed</button>
+    <button class="act" id="ab">A / B  (hold to see grid)</button>
+    <button class="act" id="copy">⧉ Copy params (JSON)</button>
+    <button class="act" id="addpt">+ ridge point</button>
+    <button class="act" id="rmpt">– ridge point</button>
+  </div>
+
+  <div id="foot"><div id="params">…</div><div id="count" style="color:var(--dim)"></div></div>
+</div>
+
+<script>
+"use strict";
+/* ---------------------------------------------------------------- atlas + sprite slicing ------------- */
+const ATLAS_SRC='assets/atlas/features_var.webp';
+const CELL=256, MTN_ROW=1, NROCK=8;
+// human labels for the 8 mountain rocks (cols 0..3 = featvar_mountain_rock, 4..7 = featvar_mountain_rock2)
+const NAMES=['0 slate spire','1 tech boulder','2 scree pile','3 leaning monolith',
+             '4 flat slab','5 stacked cairn','6 twin-peak crag','7 round boulder'];
+// sensible defaults from art analysis (owner can re-tag): peaks vs foothills vs standalone props
+const DEFAULT_ROLE=['crest','off','base','mid','base','off','crest','base'];
+
+const cv=document.getElementById('cv'), ctx=cv.getContext('2d');
+const W=cv.width, H=cv.height;
+let SPR=[];           // [{cv,w,h,name}] trimmed mountain sprites (index = variant id 0..7)
+let ROLE=DEFAULT_ROLE.slice();
+
+function mulberry32(a){ return function(){ a|=0; a=a+0x6D2B79F5|0; let t=Math.imul(a^a>>>15,1|a);
+  t=t+Math.imul(t^t>>>7,61|t)^t; return ((t^t>>>14)>>>0)/4294967296; }; }
+
+function trimCell(srcImg, col){
+  const c=document.createElement('canvas'); c.width=CELL; c.height=CELL;
+  const cc=c.getContext('2d'); cc.drawImage(srcImg, col*CELL, MTN_ROW*CELL, CELL,CELL, 0,0, CELL,CELL);
+  const d=cc.getImageData(0,0,CELL,CELL).data;
+  let minx=CELL,miny=CELL,maxx=0,maxy=0,found=false;
+  for(let y=0;y<CELL;y++)for(let x=0;x<CELL;x++){ if(d[(y*CELL+x)*4+3]>18){ found=true;
+    if(x<minx)minx=x; if(x>maxx)maxx=x; if(y<miny)miny=y; if(y>maxy)maxy=y; } }
+  if(!found) return {cv:c,w:CELL,h:CELL,name:NAMES[col]};
+  const w=maxx-minx+1, h=maxy-miny+1, t=document.createElement('canvas'); t.width=w; t.height=h;
+  t.getContext('2d').drawImage(c, minx,miny,w,h, 0,0,w,h);
+  return {cv:t, w, h, name:NAMES[col]};
+}
+
+/* ---------------------------------------------------------------- parameters ------------------------- */
+let MODE='ridge';
+const P = {
+  spacing:46,     // px between sprite centres along the ridge (sub-sprite → overlap)
+  rows:4,         // depth rows perpendicular to the ridge (toward viewer)
+  rowGap:30,      // px between rows
+  gradient:0.45,  // back→front size falloff (0=uniform, 1=front tiny)
+  scale:0.62,     // global sprite scale
+  crestScale:1.25,// extra scale for Crest sprites
+  jitterPos:0.35, // position jitter (×spacing)
+  jitterSize:0.22,// size jitter
+  mirror:0.5,     // mirror probability
+  ridgeNoise:0.5, // along-ridge peak height variation
+  haze:0.5,       // base shadow/haze that merges silhouettes (0..1)
+  seed:12345
+};
+const SLIDERS=[
+  ['spacing','Along spacing',12,120,1],
+  ['rows','Depth rows',1,7,1],
+  ['rowGap','Row gap',10,70,1],
+  ['gradient','Size gradient',0,1,0.01],
+  ['scale','Global scale',0.25,1.4,0.01],
+  ['crestScale','Crest boost',1,2,0.01],
+  ['jitterPos','Pos jitter',0,1,0.01],
+  ['jitterSize','Size jitter',0,0.6,0.01],
+  ['mirror','Mirror %',0,1,0.01],
+  ['ridgeNoise','Peak variance',0,1,0.01],
+  ['haze','Base haze',0,1,0.01],
+];
+// ridge control points (normalised 0..1 in stage space); default a gentle range across the middle
+let RIDGE=[ {x:0.06,y:0.46},{x:0.32,y:0.34},{x:0.58,y:0.42},{x:0.84,y:0.32},{x:0.97,y:0.5} ];
+let showGrid=false;   // A/B hold
+
+/* ---------------------------------------------------------------- spline along the ridge ------------- */
+function catmull(p0,p1,p2,p3,t){ const t2=t*t,t3=t2*t; return {
+  x:0.5*((2*p1.x)+(-p0.x+p2.x)*t+(2*p0.x-5*p1.x+4*p2.x-p3.x)*t2+(-p0.x+3*p1.x-3*p2.x+p3.x)*t3),
+  y:0.5*((2*p1.y)+(-p0.y+p2.y)*t+(2*p0.y-5*p1.y+4*p2.y-p3.y)*t2+(-p0.y+3*p1.y-3*p2.y+p3.y)*t3) }; }
+function ridgePolyline(){           // dense sampled points (stage px) along the Catmull-Rom ridge
+  const pts=RIDGE.map(p=>({x:p.x*W,y:p.y*H})); if(pts.length<2) return pts;
+  const ext=[pts[0],...pts,pts[pts.length-1]], out=[];
+  for(let i=0;i<ext.length-3;i++){ for(let s=0;s<24;s++) out.push(catmull(ext[i],ext[i+1],ext[i+2],ext[i+3],s/24)); }
+  out.push(pts[pts.length-1]); return out;
+}
+function resampleByArc(poly, step){
+  const out=[]; if(poly.length<2) return out; let acc=0; out.push({...poly[0], t:0});
+  for(let i=1;i<poly.length;i++){ let dx=poly[i].x-poly[i-1].x, dy=poly[i].y-poly[i-1].y, seg=Math.hypot(dx,dy);
+    while(acc+seg>=step){ const r=(step-acc)/seg; out.push({x:poly[i-1].x+dx*r, y:poly[i-1].y+dy*r,
+      tx:dx/seg, ty:dy/seg}); poly[i-1]={x:poly[i-1].x+dx*r,y:poly[i-1].y+dy*r}; dx=poly[i].x-poly[i-1].x;
+      dy=poly[i].y-poly[i-1].y; seg=Math.hypot(dx,dy); acc=0; } acc+=seg; }
+  return out;
+}
+
+/* ---------------------------------------------------------------- role pools ------------------------- */
+function pool(role){ const a=[]; for(let i=0;i<NROCK;i++) if(ROLE[i]===role) a.push(i); return a; }
+function pickFrom(role, rng){
+  let p=pool(role);
+  if(!p.length) p=pool('mid'); if(!p.length) p=pool('crest'); if(!p.length) p=pool('base');
+  if(!p.length){ for(let i=0;i<NROCK;i++) if(ROLE[i]!=='off') p.push(i); }
+  if(!p.length) p=[0];
+  return p[(rng()*p.length)|0];
+}
+
+/* ---------------------------------------------------------------- build the sprite list -------------- */
+function build(){
+  const rng=mulberry32(P.seed>>>0), out=[];
+  const push=(variant,bx,by,s,mir)=>{ const sp=SPR[variant]; if(!sp) return;
+    out.push({variant,bx,by,s,mir, dw:sp.w*s, dh:sp.h*s}); };
+
+  if(MODE==='grid' || showGrid){
+    // OLD look: regular ~equidistant grid, ~uniform size, any non-off sprite — the thing we're fixing.
+    const any=[]; for(let i=0;i<NROCK;i++) if(ROLE[i]!=='off') any.push(i);
+    const g=Math.max(30, P.spacing*1.7), s0=P.scale*0.9;
+    for(let y=H*0.30; y<H*0.92; y+=g) for(let x=W*0.06; x<W*0.96; x+=g){
+      const v=any.length?any[(rng()*any.length)|0]:0;
+      push(v, x+(rng()-0.5)*6, y+(rng()-0.5)*6, s0*(0.92+rng()*0.16), rng()<P.mirror);
+    }
+    return out;
+  }
+
+  if(MODE==='field'){
+    // jittered cluster band: a soft mountain blob; role chosen by a vertical "height" noise so peaks
+    // gather along a rough crest line and foothills toward the viewer.
+    const g=Math.max(18,P.spacing), cy=H*0.5, bandH=H*0.42;
+    for(let y=cy-bandH/2; y<cy+bandH/2; y+=g*0.8) for(let x=W*0.05; x<W*0.97; x+=g){
+      if(rng()<0.25) continue;
+      const px=x+(rng()-0.5)*g*P.jitterPos*2, py=y+(rng()-0.5)*g*0.6;
+      const hf=(cy+bandH*0.18 - py)/bandH;                       // higher (back) → crest
+      const role = hf>0.16?'crest':(hf>-0.05?'mid':'base');
+      const rowFrac=Math.max(0,Math.min(1,(py-(cy-bandH/2))/bandH));
+      let s=P.scale*(1-P.gradient*rowFrac)*(role==='crest'?P.crestScale:1)*(1+(rng()-0.5)*2*P.jitterSize);
+      push(pickFrom(role,rng), px, py, s, rng()<P.mirror);
+    }
+    out.sort((a,b)=>a.by-b.by); return out;
+  }
+
+  // RIDGELINE: pack sprites along the ridge, rows toward the viewer, peaks (crest) on the back line.
+  const line=resampleByArc(ridgePolyline(), Math.max(8,P.spacing));
+  for(let i=0;i<line.length;i++){ const pt=line[i];
+    const peak=0.85+ (P.ridgeNoise* (Math.sin(i*1.7)+Math.sin(i*0.6+2))*0.5 + 0.5)*0.5*P.ridgeNoise; // along-ridge height
+    for(let r=0;r<P.rows;r++){
+      const rowFrac = P.rows>1 ? r/(P.rows-1) : 0;                    // 0 = crest/back, 1 = front
+      const role = rowFrac<0.34?'crest':(rowFrac<0.7?'mid':'base');
+      const jx=(rng()-0.5)*P.spacing*P.jitterPos, jy=(rng()-0.5)*P.rowGap*0.4;
+      const bx=pt.x + jx;
+      const by=pt.y + r*P.rowGap + jy;                               // rows step toward viewer (down screen)
+      let s=P.scale*(1-P.gradient*rowFrac)*(role==='crest'?P.crestScale*peak:1)*(1+(rng()-0.5)*2*P.jitterSize);
+      if(s<0.05) continue;
+      push(pickFrom(role,rng), bx, by, s, rng()<P.mirror);
+    }
+  }
+  out.sort((a,b)=>a.by-b.by);                                        // depth: back (small y) first
+  return out;
+}
+
+/* ---------------------------------------------------------------- render ----------------------------- */
+function bg(){
+  const g=ctx.createLinearGradient(0,0,0,H); g.addColorStop(0,'#070a11'); g.addColorStop(1,'#0b0f17');
+  ctx.fillStyle=g; ctx.fillRect(0,0,W,H);
+}
+function grade(){
+  ctx.save(); ctx.globalCompositeOperation='multiply'; ctx.globalAlpha=0.14;
+  ctx.fillStyle='rgb(120,124,140)'; ctx.fillRect(0,0,W,H); ctx.restore();           // mountain BIOME_GRADE
+  const v=ctx.createRadialGradient(W/2,H*0.55,H*0.3, W/2,H*0.55,H*0.85);             // soft vignette
+  v.addColorStop(0,'rgba(0,0,0,0)'); v.addColorStop(1,'rgba(0,0,0,0.45)');
+  ctx.fillStyle=v; ctx.fillRect(0,0,W,H);
+}
+function draw(){
+  bg();
+  const list=build();
+  // base haze first (a soft dark pool under each sprite foot → silhouettes read as one massif)
+  if(P.haze>0){ ctx.save(); ctx.globalCompositeOperation='multiply';
+    for(const it of list){ const rw=it.dw*0.6, rh=it.dh*0.16;
+      const g=ctx.createRadialGradient(it.bx,it.by-rh*0.2,1, it.bx,it.by-rh*0.2,rw);
+      g.addColorStop(0,'rgba(0,0,0,'+(0.5*P.haze).toFixed(3)+')'); g.addColorStop(1,'rgba(0,0,0,0)');
+      ctx.fillStyle=g; ctx.beginPath(); ctx.ellipse(it.bx,it.by-rh*0.2,rw,rh,0,0,7); ctx.fill(); }
+    ctx.restore(); }
+  // sprites, back-to-front, bottom-centre anchored
+  for(const it of list){ const sp=SPR[it.variant]; if(!sp) continue;
+    const dx=it.bx-it.dw/2, dy=it.by-it.dh;
+    ctx.save();
+    if(it.mir){ ctx.translate(it.bx,0); ctx.scale(-1,1); ctx.translate(-it.bx,0); }
+    ctx.drawImage(sp.cv, dx,dy,it.dw,it.dh); ctx.restore();
+  }
+  grade();
+  if(MODE==='ridge' && !showGrid) drawRidgeHandles();
+  document.getElementById('count').textContent=list.length+' sprites'+(showGrid?'  [GRID A/B]':'');
+  syncParams();
+}
+function drawRidgeHandles(){
+  const poly=ridgePolyline(); ctx.save(); ctx.strokeStyle='rgba(111,211,199,0.35)'; ctx.lineWidth=1.5;
+  ctx.beginPath(); poly.forEach((p,i)=> i?ctx.lineTo(p.x,p.y):ctx.moveTo(p.x,p.y)); ctx.stroke();
+  for(const p of RIDGE){ ctx.beginPath(); ctx.arc(p.x*W,p.y*H,6,0,7); ctx.fillStyle='#0a0e15';
+    ctx.fill(); ctx.strokeStyle='var(--accent)'; ctx.strokeStyle='#6fd3c7'; ctx.stroke(); }
+  ctx.restore();
+}
+
+/* ---------------------------------------------------------------- UI ---------------------------------- */
+function buildPalette(){
+  const host=document.getElementById('palette'); host.innerHTML='';
+  for(let i=0;i<NROCK;i++){ const sp=SPR[i];
+    const el=document.createElement('div'); el.className='spr';
+    const c=document.createElement('canvas'); c.width=46; c.height=46;
+    if(sp){ const cc=c.getContext('2d'); const s=Math.min(42/sp.w,42/sp.h); const w=sp.w*s,h=sp.h*s;
+      cc.drawImage(sp.cv,(46-w)/2,(46-h)/2,w,h); }
+    const meta=document.createElement('div'); meta.className='meta';
+    const nm=document.createElement('div'); nm.className='nm'; nm.textContent=NAMES[i];
+    const sel=document.createElement('select'); sel.dataset.role=ROLE[i];
+    ['crest','mid','base','off'].forEach(r=>{ const o=document.createElement('option'); o.value=r;
+      o.textContent=r[0].toUpperCase()+r.slice(1); if(ROLE[i]===r)o.selected=true; sel.appendChild(o); });
+    sel.onchange=()=>{ ROLE[i]=sel.value; sel.dataset.role=sel.value; draw(); };
+    meta.appendChild(nm); meta.appendChild(sel);
+    el.appendChild(c); el.appendChild(meta); host.appendChild(el);
+  }
+}
+function buildSliders(){
+  const host=document.getElementById('sliders'); host.innerHTML='';
+  for(const [k,label,min,max,step] of SLIDERS){
+    const row=document.createElement('div'); row.className='row';
+    const l=document.createElement('label'); l.textContent=label;
+    const inp=document.createElement('input'); inp.type='range'; inp.min=min; inp.max=max; inp.step=step; inp.value=P[k];
+    const val=document.createElement('span'); val.className='val'; val.textContent=fmt(P[k]);
+    inp.oninput=()=>{ P[k]=parseFloat(inp.value); val.textContent=fmt(P[k]); draw(); };
+    row.appendChild(l); row.appendChild(inp); row.appendChild(val); host.appendChild(row);
+  }
+}
+const fmt=v=> (v%1===0)? v : (+v).toFixed(2);
+function syncParams(){
+  const o={mode:MODE, roles:ROLE, params:P, ridge:RIDGE.map(p=>({x:+p.x.toFixed(3),y:+p.y.toFixed(3)}))};
+  document.getElementById('params').textContent=JSON.stringify(o);
+}
+document.querySelectorAll('#mode button').forEach(b=> b.onclick=()=>{ MODE=b.dataset.mode;
+  document.querySelectorAll('#mode button').forEach(x=>x.classList.toggle('on',x===b)); draw(); });
+document.getElementById('reroll').onclick=()=>{ P.seed=(Math.random()*1e9)|0; draw(); };
+document.getElementById('copy').onclick=()=>{ syncParams();
+  const t=document.getElementById('params').textContent;
+  navigator.clipboard?.writeText(t).then(()=>flash('copied ✓'),()=>flash('copy failed')); };
+const ab=document.getElementById('ab');
+ab.onmousedown=()=>{ showGrid=true; draw(); }; ab.onmouseup=ab.onmouseleave=()=>{ if(showGrid){showGrid=false;draw();} };
+document.getElementById('addpt').onclick=()=>{ if(RIDGE.length<9){ RIDGE.splice(RIDGE.length-1,0,
+  {x:(RIDGE[RIDGE.length-2].x+RIDGE[RIDGE.length-1].x)/2, y:0.4}); draw(); } };
+document.getElementById('rmpt').onclick=()=>{ if(RIDGE.length>2){ RIDGE.splice(RIDGE.length-2,1); draw(); } };
+function flash(msg){ const p=document.getElementById('params'); const old=p.textContent; p.textContent=msg;
+  setTimeout(()=>{ syncParams(); },900); }
+
+/* drag ridge handles */
+let drag=-1;
+function pos(e){ const r=cv.getBoundingClientRect(); return {x:(e.clientX-r.left)*(W/r.width)/W,
+  y:(e.clientY-r.top)*(H/r.height)/H}; }
+cv.onmousedown=e=>{ if(MODE!=='ridge'||showGrid) return; const m=pos(e);
+  for(let i=0;i<RIDGE.length;i++){ if(Math.hypot(RIDGE[i].x-m.x,RIDGE[i].y-m.y)<0.02){ drag=i; break; } } };
+window.onmousemove=e=>{ if(drag<0) return; const m=pos(e);
+  RIDGE[drag]={x:Math.max(0,Math.min(1,m.x)), y:Math.max(0,Math.min(1,m.y))}; draw(); };
+window.onmouseup=()=>{ drag=-1; };
+cv.onwheel=e=>{ e.preventDefault(); P.spacing=Math.max(12,Math.min(120,P.spacing+(e.deltaY<0?-2:2)));
+  buildSliders(); draw(); };
+
+/* ---------------------------------------------------------------- boot -------------------------------- */
+const img=new Image();
+img.onload=()=>{ for(let i=0;i<NROCK;i++) SPR[i]=trimCell(img,i);
+  buildPalette(); buildSliders(); draw(); };
+img.onerror=()=>{ const e=document.getElementById('err'); e.style.display='flex';
+  e.textContent='Could not load '+ATLAS_SRC+' — serve over http (python3 -m http.server) from the repo root.'; };
+img.src=ATLAS_SRC;
+</script>
+</body>
+</html>

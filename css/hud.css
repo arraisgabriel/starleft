@@ -361,12 +361,14 @@ html,body{ overscroll-behavior:none; -webkit-touch-callout:none; }
   .cmd-btn .emoji{ font-size:18px; }
   #touch-controls{ display:flex; overflow-x:auto; }
   /* world minimap toggle: lift it OUT of the bottom touch-controls row and fix it to the
-     top-right of the world view, right under the ☰ menu button — its own isolated button,
-     not part of the bottom panel (reuses #btn-minimap → .as-overlay) */
+     top-right of the world view, TOP-aligned to the objectives row (shares that row with the
+     🕘 clock instead of forming a third row below the bar) via --obj-top measured in syncHud —
+     its own isolated button, not part of the bottom panel (reuses #btn-minimap → .as-overlay) */
   #btn-minimap{ position:fixed; z-index:27; right:8px;
-    top:calc(var(--hud-top-h) + 6px);
+    top:var(--obj-top, calc(var(--hud-top-h) - 30px));   /* chip top; the 44px button extends DOWN, clearing the menu */
     width:44px; height:44px; min-width:44px; min-height:44px; }
-  #minimap-wrap.as-overlay{ top:calc(var(--hud-top-h) + 58px); }  /* bloom under the 🗺 */
+  /* toggled minimap bloom drops just under the 🗺 (chip top + 44px button + 4px gap) */
+  #minimap-wrap.as-overlay{ top:calc(var(--obj-top, calc(var(--hud-top-h) - 30px)) + 48px); }
   /* Stop now lives in the touch-controls row; hide the in-panel copy and collapse the
      whole command line unless there are build/train buttons (only the intern + buildings). */
   .cmd-btn.cmd-stop{ display:none; }
@@ -423,11 +425,13 @@ html,body{ overscroll-behavior:none; -webkit-touch-callout:none; }
   #touch-controls{ display:flex; order:3; flex:0 1 auto; min-width:0; justify-content:flex-end;
     overflow-x:auto; -webkit-overflow-scrolling:touch; padding:3px 6px; }
 
-  /* minimap toggle becomes a floating corner button (reuses #btn-minimap → .as-overlay) */
+  /* minimap toggle becomes a floating corner button, TOP-aligned to the objectives row
+     (shares it with the 🕘 clock; reuses #btn-minimap → .as-overlay) */
   #btn-minimap{ position:fixed; z-index:27; right:8px;
-    top:calc(var(--hud-top-h) + 6px);
+    top:var(--obj-top, calc(var(--hud-top-h) - 30px));
     width:44px; height:44px; min-width:44px; min-height:44px; }
-  #minimap-wrap.as-overlay{ top:calc(var(--hud-top-h) + 58px); }  /* bloom under the 🗺 */
+  /* toggled minimap bloom drops just under the 🗺 (chip top + 44px button + 4px gap) */
+  #minimap-wrap.as-overlay{ top:calc(var(--obj-top, calc(var(--hud-top-h) - 30px)) + 48px); }
 
   /* Stop lives in the touch-controls row here too — drop the in-panel copy and let the
      command row vanish for non-builder units (only the intern keeps a 2nd line). */
@@ -561,7 +565,7 @@ html,body{ overscroll-behavior:none; -webkit-touch-callout:none; }
 }
 
 /* ===== LIVING CITY (hub): city-clock chip + locate breadcrumb (below the topbar) ===== */
-#hub-clock{ position:fixed; right:10px; top:58px; z-index:18; display:none; pointer-events:none;
+#hub-clock{ position:fixed; right:10px; top:calc(var(--hud-top-h) + 8px); z-index:18; display:none; pointer-events:none;
   background:linear-gradient(180deg,rgba(50,26,31,.9),rgba(34,17,20,.9));
   border:1px solid #522a32; border-radius:3px; color:#ccaab0;
   font-size:11px; font-weight:700; letter-spacing:.8px; padding:4px 10px; white-space:nowrap; }
@@ -570,3 +574,16 @@ html,body{ overscroll-behavior:none; -webkit-touch-callout:none; }
   border:1px solid #522a32; border-radius:3px; color:#ccaab0;
   font-size:11px; font-weight:700; letter-spacing:.8px; padding:5px 12px; white-space:nowrap; }
 #hub-crumb:hover{ border-color:#ff9a9a; color:#fff; box-shadow:0 0 12px rgba(255,80,80,.45); }
+/* On phones the topbar stacks into rows (funding/menu, then the full-width objectives row),
+   and the 🗺 minimap toggle floats into the top-right corner (#btn-minimap, right:8px, 44px —
+   see the touch/narrow + wide-short blocks). Pull the clock chip up onto the OBJECTIVES ROW and
+   park it just LEFT of the 🗺 (8 + 44 + 6 = 58px), so the two share that row instead of forming a
+   third row below the bar. TOP-aligned to the chip via --obj-top (measured in syncHud) — NOT
+   centred: the 44px 🗺 centred on this row would poke up into the ☰ menu on short/landscape bars
+   where the rows pack tight, so both overlays only ever extend downward into the canvas. Fallback
+   calc() ≈ chip top (var(--hud-top-h) − padBottom 4 − chip 26 = −30px) for when the chip is hidden.
+   MUST come after the base #hub-clock rule above (equal ID specificity → source order decides);
+   updateHubClockChip no longer sets `top` inline. */
+@media (hover:none), (max-width:640px), (min-aspect-ratio:2/1) and (max-height:600px){
+  #hub-clock{ right:58px; top:var(--obj-top, calc(var(--hud-top-h) - 30px)); }
+}

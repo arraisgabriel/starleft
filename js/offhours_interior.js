@@ -59,7 +59,19 @@ function _ensureStyle(){
   .ohi-call:hover{border-color:#5fe0ff;background:rgba(95,224,255,.08)}
   .ohi-call canvas{width:34px;height:34px;display:block}
   .ohi-call .nm{font-family:'JetBrains Mono',monospace;font-size:10px;color:#bcc6d2;max-width:74px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-  .ohi-call .empty{font-family:'Spline Sans';font-size:11px;color:#56606f;padding:6px}`;
+  .ohi-call .empty{font-family:'Spline Sans';font-size:11px;color:#56606f;padding:6px}
+  /* ---- narrow/portrait STACK layout (see _narrow): lead banner pinned under the header, choices in a bottom column ---- */
+  .ohi-leadbar{position:absolute;left:0;right:0;top:46px;z-index:5;margin:0;border-radius:0;max-width:none;transform:none;
+    border-left:none;border-bottom:1px solid #273245;padding:10px 16px;background:rgba(9,13,20,.96);box-shadow:0 6px 16px rgba(0,0,0,.4)}
+  .ohi-stack{position:absolute;left:0;right:0;z-index:4;display:flex;flex-direction:column;gap:8px;padding:0 14px;box-sizing:border-box;
+    bottom:calc(74px + env(safe-area-inset-bottom,0px));
+    max-height:calc(100vh - 46px - 74px - 96px - env(safe-area-inset-bottom,0px));overflow-y:auto;-webkit-overflow-scrolling:touch}
+  .ohi-stack .ohi-choice,.ohi-stack .ohi-bubble,.ohi-stack .ohi-pie{position:static;transform:none;max-width:none;width:auto;margin:0;box-shadow:0 3px 12px rgba(0,0,0,.5)}
+  @keyframes ohiPopUp{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+  .ohi-leadbar,.ohi-stack .ohi-choice,.ohi-stack .ohi-bubble,.ohi-stack .ohi-pie{animation:ohiPopUp .18s ease both}   /* non-translating entry for flow layout (base ohiPop translates off-center) */
+  .ohi-stack .ohi-choice:hover{transform:none;border-color:var(--ac,#ffce6a);color:#fff;background:linear-gradient(180deg,rgba(20,27,38,.99),rgba(12,17,26,.99))}
+  .ohi-stack .ohi-pie:hover{transform:none}
+  .ohi-stack .ohi-stepaway{align-self:center;text-align:center;font-weight:600;margin-top:2px}`;
   const s=document.createElement('style'); s.id='oh-int-style'; s.textContent=css; document.head.appendChild(s);
 }
 
@@ -133,6 +145,7 @@ function openInterior(poi, who){
   $('oh-int-title').textContent=(poi.hubPoi&&poi.hubPoi.name)||layout.name||'THE OFF-HOURS';
   _syncHead();
   const ov=$('oh-interior-overlay'); ov.style.display='block';
+  if(typeof hideHubCrumb==='function') hideHubCrumb();   // body-level crumb (z:23) would bleed over this overlay; it's never re-shown from inside
   _resizeCanvas();
   _camSetZoom();
   // open framed on the player's people (centroid of vets present), fallback room centre — snap, no opening glide
@@ -448,17 +461,21 @@ function _selectAt(cx,cy){   // a tap at canvas-local (cx,cy) → hit-test an oc
 /* ---- the Sims pie-menu ---- */
 function _showPie(o){
   const ui=$('oh-int-ui'); const m=_metrics();
-  const cx=m.offX+o.x*m.scale, cy=m.offY+(o.y-SPR_H*0.62)*m.scale;     // centre on the upper body
   const acts=[ {k:'talk',t:'Talk'},{k:'gift',t:'Gift'},{k:'sit',t:'Sit'},{k:'watch',t:'Watch'},{k:'leave',t:'Leave'} ];
+  const mkBtn=function(a){ const b=document.createElement('button'); b.className='ohi-pie'; b.textContent=a.t; b.style.setProperty('--ac', _accent());
+    b.addEventListener('click', function(ev){ ev.stopPropagation(); _pieAct(a.k, o); }); return b; };
+  if(_narrow()){   // narrow → vertical stack so the fan can't clip/crowd on phones
+    acts.forEach(a=>_placeStack(mkBtn(a)));
+    _setCloseLabel(true); return;
+  }
+  const cx=m.offX+o.x*m.scale, cy=m.offY+(o.y-SPR_H*0.62)*m.scale;     // centre on the upper body
   const n=acts.length, R=132, step=54*Math.PI/180;                     // wide radius + 54° between items → no overlap
   const base=-Math.PI/2 - (n-1)*step/2;                                // fan symmetric about straight-up, top hemisphere
   acts.forEach((a,i)=>{
     const A=base + i*step;
     const x=Math.max(56, Math.min(m.cssW-56, cx + Math.cos(A)*R));
     const y=Math.max(58, Math.min(m.cssH-128, cy + Math.sin(A)*R));
-    const b=document.createElement('button'); b.className='ohi-pie'; b.textContent=a.t; b.style.setProperty('--ac', _accent());
-    b.style.left=x+'px'; b.style.top=y+'px';
-    b.addEventListener('click', function(ev){ ev.stopPropagation(); _pieAct(a.k, o); });
+    const b=mkBtn(a); b.style.left=x+'px'; b.style.top=y+'px';
     ui.appendChild(b);
   });
   _setCloseLabel(true);   // pie fans at 54° over a 132px radius → already non-overlapping by construction
@@ -508,6 +525,10 @@ function _interactionContext(vet, target){
 /* ---- the clock-dial: every dialog box orbits the talking unit, anti-clockwise from 12 o'clock ---- */
 // 12 = the spoken/context line (blue), then choices cascade 10 → ~8.5 → 7 … down the left. Tight, never overlapping.
 const _DIAL={ R:150, R12:170, hours:[10, 8.5, 7, 5.5, 4], leftBias:16, headFrac:0.58 };
+// On narrow/portrait/short viewports the radial dial (needs ~2·R + boxWidth ≈ 500px wide, ~R12+R tall) can't fit
+// and boxes pile up — fall back to a clean vertical STACK (top lead banner + bottom choice column). cssW/cssH == viewport (overlay is inset:0).
+const _STACK={ maxW:560, minH:480 };
+function _narrow(m){ m=m||_metrics(); return m.cssW < _STACK.maxW || m.cssH > m.cssW || m.cssH < _STACK.minH; }
 function _clockXY(C, hour, R){ const a=hour*Math.PI/6; return { x:C.x + Math.sin(a)*R, y:C.y - Math.cos(a)*R }; }
 function _dialCenter(unit, m){ m=m||_metrics(); return v2c(unit.x, unit.y - SPR_H*_DIAL.headFrac, m); }
 function _placeClock(el, C, hour, R, m){
@@ -527,6 +548,11 @@ function _dialChoice(approach, line, onClick){
   el.innerHTML='<span class="ap">['+_esc(approach||'say')+']</span>'+_esc(line);
   el.addEventListener('click', onClick); ui.appendChild(el); return el;
 }
+/* ---- narrow/portrait STACK layout: CSS flow (no inline left/top) so boxes never overlap ---- */
+function _ensureStack(){ const ui=$('oh-int-ui'); let s=ui.querySelector('.ohi-stack');
+  if(!s){ s=document.createElement('div'); s.className='ohi-stack'; ui.appendChild(s); } return s; }
+function _placeStack(el){ el.style.left=''; el.style.top=''; _ensureStack().appendChild(el); }   // clear inline pos → CSS flow wins
+function _placeLead(el){ el.style.left=''; el.style.top=''; el.classList.add('ohi-leadbar'); $('oh-int-ui').appendChild(el); }   // top banner, disjoint from the column
 function _openScene(vet, target){
   _hideHint();
   const ic=_interactionContext(vet, target);
@@ -545,6 +571,14 @@ function _renderBeat(){
   const all=(beat?beat.choices:sc.pick.scene.choices)||[];
   const choices=all.filter(c=> !c.gate || (typeof ohVetHas==='function' && ohVetHas(ic.vu, c.gate)));
   _clearUI();
+  if(_narrow()){   // portrait/narrow → vertical stack (lead banner on top, choices in a bottom column); no dial, no overlap
+    _placeLead(_dialBubble(sc.lead||'…', 'npc'));
+    choices.forEach(function(c){
+      const ci=all.indexOf(c);
+      _placeStack(_dialChoice(c.approach, ohFill(c.line, ic.vu, ic.npcId), function(ev){ ev.stopPropagation(); _beatChoose(ci); }));
+    });
+    _showStepAway(); _setCloseLabel(true); return;
+  }
   const m=_metrics(), C=_dialCenter(sc.vet, m);
   const lead=_dialBubble(sc.lead||'…', 'npc'); _placeClock(lead, C, 12, _DIAL.R12, m);
   choices.forEach(function(c, idx){
@@ -582,14 +616,21 @@ function _finalizeScene(payload){
   if(res && res.broke){ _flash('Not enough M3rit$.'); return; }   // keep the last beat so they can step away / retry
   // success — bond + dossier are written; show the result and WAIT for the player to step away (no auto-fade)
   _clearUI();
-  const m=_metrics(), C=_dialCenter(sc.vet, m);
-  const reply=_dialBubble((res&&res.reply)||sc.lead||'…', 'reply'); _placeClock(reply, C, 12, _DIAL.R12, m);   // 12 o'clock, persists
-  if(res && res.romanced){ const rb=_dialBubble('✦ Something shifts. The two of them leave together.', 'reply'); _placeClock(rb, C, _DIAL.hours[1], _DIAL.R, m); }
-  if(res && res.wrote!=null){ const note=_dialBubble('A line goes into '+sc.vet.name+'’s file.', 'npc'); _placeClock(note, C, _DIAL.hours[0], _DIAL.R, m); }
-  _showStepAway();
+  if(_narrow()){
+    _placeLead(_dialBubble((res&&res.reply)||sc.lead||'…', 'reply'));
+    if(res && res.romanced) _placeStack(_dialBubble('✦ Something shifts. The two of them leave together.', 'reply'));
+    if(res && res.wrote!=null) _placeStack(_dialBubble('A line goes into '+sc.vet.name+'’s file.', 'npc'));
+    _showStepAway();
+  } else {
+    const m=_metrics(), C=_dialCenter(sc.vet, m);
+    const reply=_dialBubble((res&&res.reply)||sc.lead||'…', 'reply'); _placeClock(reply, C, 12, _DIAL.R12, m);   // 12 o'clock, persists
+    if(res && res.romanced){ const rb=_dialBubble('✦ Something shifts. The two of them leave together.', 'reply'); _placeClock(rb, C, _DIAL.hours[1], _DIAL.R, m); }
+    if(res && res.wrote!=null){ const note=_dialBubble('A line goes into '+sc.vet.name+'’s file.', 'npc'); _placeClock(note, C, _DIAL.hours[0], _DIAL.R, m); }
+    _showStepAway();
+    _resolveDial(C);
+  }
   try{ if(typeof refreshUI==='function') refreshUI(); }catch(_){ }
   _int.scene=null; _int.mode='ended'; _int.selected=null; _syncHead(); _renderRoster(); _setCloseLabel(true);
-  _resolveDial(C);
 }
 function _doGift(vet, target){
   _hideHint(); _focusMid(vet, target); const cx=_interactionContext(vet, target);   // frame the pair for the gift result
@@ -598,13 +639,19 @@ function _doGift(vet, target){
   let res=(typeof netOffhoursCommit==='function')?netOffhoursCommit(G,payload):(typeof applyOffhoursCommit==='function'?applyOffhoursCommit(G,payload):null);
   if(res && res.broke){ _flash('Not enough M3rit$.'); _int.mode='idle'; return; }
   _clearUI();
-  const m=_metrics(), C=_dialCenter(vet, m);
-  const reply=_dialBubble((res&&res.reply)||'They take it with a nod.', 'reply'); _placeClock(reply, C, 12, _DIAL.R12, m);   // persists until dismissed
-  if(res && res.romanced){ const rb=_dialBubble('✦ Something shifts. The two of them leave together.', 'reply'); _placeClock(rb, C, _DIAL.hours[1], _DIAL.R, m); }
-  _showStepAway();
+  if(_narrow()){
+    _placeLead(_dialBubble((res&&res.reply)||'They take it with a nod.', 'reply'));
+    if(res && res.romanced) _placeStack(_dialBubble('✦ Something shifts. The two of them leave together.', 'reply'));
+    _showStepAway();
+  } else {
+    const m=_metrics(), C=_dialCenter(vet, m);
+    const reply=_dialBubble((res&&res.reply)||'They take it with a nod.', 'reply'); _placeClock(reply, C, 12, _DIAL.R12, m);   // persists until dismissed
+    if(res && res.romanced){ const rb=_dialBubble('✦ Something shifts. The two of them leave together.', 'reply'); _placeClock(rb, C, _DIAL.hours[1], _DIAL.R, m); }
+    _showStepAway();
+    _resolveDial(C);
+  }
   try{ if(typeof refreshUI==='function') refreshUI(); }catch(_){ }
   _int.mode='ended'; _int.selected=null; _syncHead(); _setCloseLabel(true);
-  _resolveDial(C);
 }
 
 /* ---- floating UI helpers ---- */
@@ -626,10 +673,12 @@ function _flash(t){   // visible INSIDE the overlay — the game toast is z-30, 
 }
 // the only exit from an open/finished conversation — bottom-centre, persists until clicked (✕/Esc do the same)
 function _showStepAway(){
-  const ui=$('oh-int-ui'); if(!ui) return; const m=_metrics();
+  const ui=$('oh-int-ui'); if(!ui) return;
   const sx=document.createElement('div'); sx.className='ohi-choice ohi-stepaway'; sx.style.setProperty('--ac','#ff5d70');
-  sx.style.left='50%'; sx.style.top=(m.cssH-152)+'px'; sx.style.textAlign='center'; sx.style.fontWeight='600';
   sx.textContent='✕ Step away'; sx.addEventListener('click', function(ev){ ev.stopPropagation(); _dismiss(); });
+  if(_narrow()){ sx.style.left=''; sx.style.top=''; _ensureStack().appendChild(sx); return; }   // last item in the column
+  const m=_metrics();
+  sx.style.left='50%'; sx.style.top=(m.cssH-152)+'px'; sx.style.textAlign='center'; sx.style.fontWeight='600';
   ui.appendChild(sx);   // pinned bottom-centre; _resolveDial (called by the dial) keeps it clear without moving it
 }
 // RADIAL safety net — keep each box at its clock ANGLE from C and only push it further OUT to clear an overlap,
@@ -693,6 +742,9 @@ function _callIn(u){
 
 if(typeof window!=='undefined'){
   window.openInterior=openInterior; window.closeInterior=closeInterior;
+  // authoritative "interior overlay is live" predicate — _int is set on open, nulled on close (js/ui.js hub-clock
+  // guard reads this so the body-level clock/crumb don't bleed over this z:90 overlay trapped inside #game).
+  window.ohInteriorOpen=function(){ return !!_int; };
   // read-only debug accessor (drives in-browser verification): occupants + the current virtual→CSS transform
   window._ohIntDebug=function(){ return _int?{ occ:_int.occ, mode:_int.mode, selected:_int.selected, scene:!!_int.scene, m:_metrics() }:null; };
 }

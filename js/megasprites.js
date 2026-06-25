@@ -14,6 +14,9 @@ const MEGA_BASE = ASSET_BASE + 'mega/';                 // ASSET_BASE from asset
 const MEGA_MANIFEST = { megabuilding:6, mountain:6, volcano:6, ruin:6 }; // variants per category
 const MEGA_FRAMES = 9;                                  // frames per strip (3×3 grid → 9)
 const MEGA_FPS = { megabuilding:1.4, mountain:0.6, volcano:1.2, ruin:0.9 }; // ambient loop speed (slow)
+const MEGA_SCALE = 1.25;          // +25% visual size (render-only; footprint/blocked mask unchanged)
+const MEGA_ANIM_SPEED = 0.14;     // in-game frame-loop speed multiplier (very slow, calm) — frames are cross-faded
+const MEGA_MIRROR_RATE = 0.5;     // fraction of megas drawn horizontally mirrored (deterministic from m.seed)
 function megaPath(cat,n){ return MEGA_BASE + cat + '_' + n + '.webp'; }   // WebP since the mobile-loading fix (_dev/gen/optimize_assets.py)
 
 // Tint a whole 4-frame strip to a biome wash WITHOUT bleeding onto terrain: draw
@@ -249,6 +252,24 @@ function megaNeonFrame(m, fi){
   const fr=spr && spr.frames && spr.frames[fi];
   return fr && fr.glows && fr.glows.length ? fr.glows : null;
 }
+// Dominant neon COLOR of a mega (area×alpha-weighted average of its glow colors across all frames), cached
+// per cat_variant. Lets the P6.2 light-bloom be tinted to the mega's actual neon → halo == the same light.
+const _megaNeonColCache={};
+function megaNeonColor(m){
+  const key=m.cat+'_'+(m.variant||0);
+  if(key in _megaNeonColCache) return _megaNeonColCache[key];
+  let col=null;
+  if(typeof MEGA_NEON_MAPS!=='undefined' && MEGA_NEON_MAPS && MEGA_NEON_MAPS.sprites){
+    const sp=MEGA_NEON_MAPS.sprites[key];
+    if(sp && sp.frames){ let r=0,g=0,b=0,wsum=0;
+      for(const fr of sp.frames){ if(!fr || !fr.glows) continue;
+        for(const gl of fr.glows){ const c=gl.color||[180,120,255], wgt=(gl.rx||0.1)*(gl.ry||0.1)*(gl.alpha==null?1:gl.alpha);
+          r+=c[0]*wgt; g+=c[1]*wgt; b+=c[2]*wgt; wsum+=wgt; } }
+      if(wsum>0) col=[Math.round(r/wsum), Math.round(g/wsum), Math.round(b/wsum)];
+    }
+  }
+  _megaNeonColCache[key]=col; return col;
+}
 function megaRgb(c){ return Array.isArray(c) ? c : [180,120,255]; }
 function megaRgba(c,a){ const r=megaRgb(c); return 'rgba('+((r[0]||0)|0)+','+((r[1]||0)|0)+','+((r[2]||0)|0)+','+Math.max(0,Math.min(1,a)).toFixed(3)+')'; }
 function megaReducedMotion(){
@@ -287,15 +308,32 @@ function megaRoundRectPath(x,y,w,h,r){
   ctx.lineTo(x+r,y+h); ctx.quadraticCurveTo(x,y+h,x,y+h-r);
   ctx.lineTo(x,y+r); ctx.quadraticCurveTo(x,y,x+r,y); ctx.closePath();
 }
+// Gradient memoization for BUILDING neon (opt-in via m.cacheGrad, set by drawMegaNeonLayer). Buildings are far
+// more numerous than the ≤12 megas, so per-frame createRadialGradient/addColorStop alloc dominates. The gradient
+// is built at the LOCAL origin (translate handles position), so it depends only on (radius,color,a0,a1) — with
+// breath frozen those are static, so the same gradient object is reused across frames AND across every building.
+let MEGA_GLOW_CACHE_ON = false;
+const _megaGlowGrad = new Map();
 function megaFillEllipseGlow(cx,cy,rx,ry,rot,color,a0,a1){
   rx=Math.max(1,rx); ry=Math.max(1,ry);
   ctx.save();
   ctx.translate(cx,cy); ctx.rotate(rot||0); ctx.scale(1,ry/rx);
-  const g=ctx.createRadialGradient(0,0,Math.max(1,rx*0.04), 0,0,rx);
-  g.addColorStop(0, megaRgba(color,a0));
-  g.addColorStop(0.54, megaRgba(color,a1));
-  g.addColorStop(1, megaRgba(color,0));
-  ctx.fillStyle=g; ctx.beginPath(); ctx.arc(0,0,rx,0,Math.PI*2); ctx.fill();
+  let g, R=rx;
+  if(MEGA_GLOW_CACHE_ON){
+    R=Math.max(1,Math.round(rx));   // quantize radius so the cache actually hits (sub-px size diff is invisible)
+    const key=R+'|'+(color[0]|0)+','+(color[1]|0)+','+(color[2]|0)+'|'+a0.toFixed(2)+'|'+a1.toFixed(2);
+    g=_megaGlowGrad.get(key);
+    if(!g){
+      g=ctx.createRadialGradient(0,0,Math.max(1,R*0.04), 0,0,R);
+      g.addColorStop(0, megaRgba(color,a0)); g.addColorStop(0.54, megaRgba(color,a1)); g.addColorStop(1, megaRgba(color,0));
+      if(_megaGlowGrad.size>1500) _megaGlowGrad.clear();   // bounded — a base never approaches this many distinct keys
+      _megaGlowGrad.set(key,g);
+    }
+  } else {
+    g=ctx.createRadialGradient(0,0,Math.max(1,rx*0.04), 0,0,rx);
+    g.addColorStop(0, megaRgba(color,a0)); g.addColorStop(0.54, megaRgba(color,a1)); g.addColorStop(1, megaRgba(color,0));
+  }
+  ctx.fillStyle=g; ctx.beginPath(); ctx.arc(0,0,R,0,Math.PI*2); ctx.fill();
   ctx.restore();
 }
 function megaStrokeRing(cx,cy,rx,ry,rot,color,a,width){
@@ -353,50 +391,61 @@ function megaDrawSpark(x,y,r,color,a){
 function drawMegaNeonLayer(state, m, glows, dx, dy, dw, dh, layer){
   if(!glows || !glows.length) return;
   const t=state.time||0, seed=m.seed||0;
+  // BUILDINGS opt into noBreath (freeze per-glow animation → static glow params) + cacheGrad (reuse gradients).
+  // Megas pass neither, so they keep their live per-glow breath/flicker/sparkle and fresh gradients (unchanged).
+  const FB=!!m.noBreath;
+  MEGA_GLOW_CACHE_ON = !!m.cacheGrad;
   ctx.save();
   ctx.globalCompositeOperation = layer==='core' ? 'lighter' : 'source-over';
   for(const g of glows){
     const cx=dx+g.x*dw, cy=dy+g.y*dh, rx=Math.max(1,g.rx*dw), ry=Math.max(1,g.ry*dh);
-    const rot=g.rot||0, color=g.color||[180,120,255], breath=megaBreath(t, (g.phase||0)+seed*0.37);
+    const rot=g.rot||0, color=g.color||[180,120,255], breath=FB?0.6:megaBreath(t, (g.phase||0)+seed*0.37);
     let base=(g.alpha==null?1:g.alpha)*(g.pulse==null?1:g.pulse);
-    if(g.flicker) base *= megaNeonFlicker(t, (g.phase||0)+seed*0.37, g.flicker);
+    if(g.flicker && !FB) base *= megaNeonFlicker(t, (g.phase||0)+seed*0.37, g.flicker);
     if(layer==='aura'){
+      // auraScale (m.auraScale, default 1 → megas unchanged) tightens the halo: buildings pass a small value
+      // so the glow stays ON the sprite + its immediate edge instead of washing the surrounding terrain.
+      // Below 0.8 the WIDE secondary falloff ellipse is dropped entirely (no far spill, and far cheaper fill).
+      const aS = m.auraScale==null ? 1 : m.auraScale, wide = aS>=0.8;
       if(g.kind==='ring'){
         const pulse=0.7+0.3*breath, aura=base*(0.46+0.22*breath);
-        megaFillEllipseGlow(cx,cy,rx*3.45*pulse,Math.max(ry*4.25*pulse,rx*0.48*pulse),rot,color,aura,aura*0.50);
-        megaFillEllipseGlow(cx,cy,rx*5.2*pulse,Math.max(ry*5.8*pulse,rx*0.68*pulse),rot,color,aura*0.25,aura*0.14);
+        megaFillEllipseGlow(cx,cy,rx*3.45*pulse*aS,Math.max(ry*4.25*pulse*aS,rx*0.48*pulse),rot,color,aura,aura*0.50);
+        if(wide) megaFillEllipseGlow(cx,cy,rx*5.2*pulse,Math.max(ry*5.8*pulse,rx*0.68*pulse),rot,color,aura*0.25,aura*0.14);
         continue;
       }
       if(g.kind==='bar'){
         const pulse=0.78+0.22*breath, aura=base*(0.36+0.20*breath);
-        megaFillEllipseGlow(cx,cy,rx*3.35*pulse,Math.max(ry*4.1*pulse,rx*0.22*pulse),rot,color,aura,aura*0.44);
-        megaFillEllipseGlow(cx,cy,rx*4.9*pulse,Math.max(ry*5.8*pulse,rx*0.33*pulse),rot,color,aura*0.20,aura*0.10);
+        megaFillEllipseGlow(cx,cy,rx*3.35*pulse*aS,Math.max(ry*4.1*pulse*aS,rx*0.22*pulse),rot,color,aura,aura*0.44);
+        if(wide) megaFillEllipseGlow(cx,cy,rx*4.9*pulse,Math.max(ry*5.8*pulse,rx*0.33*pulse),rot,color,aura*0.20,aura*0.10);
         continue;
       }
-      const aura=base*(0.24+0.27*breath), spread=g.kind==='bar'?2.4:2.65;
+      const aura=base*(0.24+0.27*breath), spread=(g.kind==='bar'?2.4:2.65)*aS;
       megaFillEllipseGlow(cx,cy,rx*(spread+0.25),ry*(spread+0.25),rot,color,aura,aura*0.38);
       continue;
     }
+    // cS (m.coreScale, default 1 → megas unchanged) shrinks ONLY the soft outer core ellipses that bleed past
+    // the light; the bright inner core / bar / ring stroke stay tight on the pixel so the light still reads.
+    const cS = m.coreScale==null ? 1 : m.coreScale;
     const core=base*(0.34+0.52*breath);
     if(g.kind==='bar'){
       const stripCore=base*(0.20+0.30*breath);
-      megaFillEllipseGlow(cx,cy,rx*2.75,Math.max(ry*3.8,rx*0.23),rot,color,stripCore*0.34,stripCore*0.14);
-      megaFillEllipseGlow(cx,cy,rx*1.85,Math.max(ry*2.55,rx*0.16),rot,color,stripCore*0.30,stripCore*0.09);
+      megaFillEllipseGlow(cx,cy,rx*2.75*cS,Math.max(ry*3.8*cS,rx*0.23),rot,color,stripCore*0.34,stripCore*0.14);
+      megaFillEllipseGlow(cx,cy,rx*1.85*cS,Math.max(ry*2.55*cS,rx*0.16),rot,color,stripCore*0.30,stripCore*0.09);
       megaFillBar(cx,cy,rx*1.18,Math.max(2.0,ry*0.74),rot,color,stripCore);
     }
     else if(g.kind==='ring'){
-      megaFillEllipseGlow(cx,cy,rx*2.15,Math.max(ry*2.45,rx*0.34),rot,color,core*0.30,core*0.12);
+      megaFillEllipseGlow(cx,cy,rx*2.15*cS,Math.max(ry*2.45*cS,rx*0.34),rot,color,core*0.30,core*0.12);
       megaFillEllipseGlow(cx,cy,rx*1.24,Math.max(ry*1.38,rx*0.20),rot,color,core*0.34,core*0.08);
       megaStrokeRing(cx,cy,rx*1.04,ry*1.04,rot,color,core,Math.max(1.5,Math.min(rx,ry)*0.12));
     }
     else {
       const stripish=rx>ry*1.12;
       const spotCore=stripish ? base*(0.20+0.32*breath) : core;
-      megaFillEllipseGlow(cx,cy,rx*(stripish?2.85:2.0),ry*(stripish?2.55:2.0),rot,color,spotCore*0.38,spotCore*0.14);
+      megaFillEllipseGlow(cx,cy,rx*(stripish?2.85:2.0)*cS,ry*(stripish?2.55:2.0)*cS,rot,color,spotCore*0.38,spotCore*0.14);
       if(stripish) megaFillEllipseGlow(cx,cy,rx*1.65,ry*1.48,rot,color,spotCore*0.44,spotCore*0.12);
       else megaFillEllipseGlow(cx,cy,rx*1.15,ry*1.15,rot,color,spotCore,spotCore*0.24);
     }
-    const sparks=g.sparkle|0;
+    const sparks=FB?0:(g.sparkle|0);
     for(let i=0;i<sparks;i++){
       const tw=megaReducedMotion()?0.62:(0.5+0.5*Math.sin(t*(Math.PI*2/(2.9+((i+(g.id||0))%4)*0.5)) + (g.phase||0)*7.1 + i*1.9));
       if(tw<0.08) continue;
@@ -404,6 +453,7 @@ function drawMegaNeonLayer(state, m, glows, dx, dy, dw, dh, layer){
       megaDrawSpark(p.x,p.y,sr,color,base*0.68*tw);
     }
   }
+  MEGA_GLOW_CACHE_ON=false;   // never leak the building cache flag to megas / drawWasteMegaSmoke
   ctx.restore();
 }
 function megaHash01(a,b){
@@ -449,7 +499,8 @@ function drawWasteMegaSmoke(state,m,dx,dy,dw,dh,layer){
 // gets a thick sea while the 7-wide chain peaks get a lighter band. Deterministic per
 // instance via m.seed; motion freezes under prefers-reduced-motion. Cool off-white
 // (not pure #fff) so it reads as moonlit fog, not a glare, against the dark sky.
-function drawMountainFog(state,m,dx,dy,dw,dh,layer){
+function drawMountainFog(state,m,dx,dy,dw,dh,layer,den){
+  den=(den==null?1:den);                                        // in-game density factor (lighter than hub)
   const rm=megaReducedMotion(), t=rm?0:(state.time||0), seed=m.seed||0;
   const big=Math.max(0,Math.min(1,((m.w||7)-7)/12));            // 0 chain peak → 1 giant
   const wind=Math.sin(t*0.08+seed*6.283)*dw*0.05;              // shared sway → bank moves as one
@@ -462,7 +513,7 @@ function drawMountainFog(state,m,dx,dy,dw,dh,layer){
       const cx=dx+dw*(0.5+(h0-0.5)*0.95)+wind;
       const cy=dy+dh*(0.10+h1*(0.10+big*0.10))+Math.sin(t*(0.25+0.1*h2)+h2*6.283)*dh*0.02;
       const rx=dw*(0.22+0.16*h1)*(1+big*0.5), ry=rx*0.55;
-      const a=(0.06+0.06*big)*(0.7+0.3*Math.sin(t*(0.4+0.1*i)+h0*6.283));
+      const a=(0.06+0.06*big)*(0.7+0.3*Math.sin(t*(0.4+0.1*i)+h0*6.283))*den;
       megaFillEllipseGlow(cx,cy,rx,ry,0,[210,228,246],a,a*0.4);
     }
     ctx.restore();
@@ -474,7 +525,7 @@ function drawMountainFog(state,m,dx,dy,dw,dh,layer){
   for(let s=0;s<slabs;s++){
     const hs=megaHash01(seed,s+40);
     const cx=dx+dw*0.5+wind*0.6, cy=dy+dh*(0.13+s*0.05)+Math.sin(t*0.3+hs*6.283)*dh*0.012;
-    const rx=dw*(0.55+0.12*big), ry=dh*(0.06+0.03*big), a=0.20+0.16*big;
+    const rx=dw*(0.55+0.12*big), ry=dh*(0.06+0.03*big), a=(0.20+0.16*big)*den;
     ctx.save();
     ctx.translate(cx,cy); ctx.scale(1,ry/rx);
     const g=ctx.createRadialGradient(0,0,rx*0.05,0,0,rx);
@@ -490,13 +541,47 @@ function drawMountainFog(state,m,dx,dy,dw,dh,layer){
     const cx=dx+dw*(0.5+(h0-0.5)*0.9)+wind+Math.sin(t*(0.12+0.05*h1)+h0*6.283)*dw*0.03;
     const cy=dy+dh*(0.08+h1*(0.14+big*0.10))+Math.sin(t*(0.5+0.15*h2)+h2*6.283)*dh*0.02;
     const rx=dw*(0.16+0.12*h2)*(1+big*0.35), ry=rx*0.6;
-    const a=(0.30+0.18*big)*(0.7+0.3*Math.sin(t*(0.6+0.1*i)+h0*6.283));
+    const a=(0.30+0.18*big)*(0.7+0.3*Math.sin(t*(0.6+0.1*i)+h0*6.283))*den;
     ctx.save();
     ctx.translate(cx,cy); ctx.rotate((h0-0.5)*0.3); ctx.scale(1,ry/rx);
     const g=ctx.createRadialGradient(0,0,rx*0.05,0,0,rx);
     g.addColorStop(0, megaRgba([238,245,252],a));
     g.addColorStop(0.5, megaRgba([214,228,242],a*0.5));
     g.addColorStop(1, megaRgba([198,214,232],0));
+    ctx.fillStyle=g; ctx.beginPath(); ctx.arc(0,0,rx,0,Math.PI*2); ctx.fill();
+    ctx.restore();
+  }
+  ctx.restore();
+}
+
+// Volcano crater HEAT-HAZE for in-game volcano megasprites: a few ember-warm soft puffs RISING off the crater
+// (+ a faint heat halo behind), reusing the fog's radial-gradient puff technique — no new art. A focused crater
+// plume that complements (does not duplicate) the biome-wide weather plane + the P6.2 ember bloom. Deterministic
+// per m.seed; motion freezes under prefers-reduced-motion.
+function drawVolcanoHeat(state,m,dx,dy,dw,dh,layer){
+  const rm=megaReducedMotion(), t=rm?0:(state.time||0), seed=m.seed||0;
+  ctx.save();
+  ctx.globalCompositeOperation='lighter';
+  if(layer==='back'){
+    const cx=dx+dw*0.5, cy=dy+dh*0.32, pulse=megaBreath(t,seed*0.27);          // faint warm halo over the crater
+    megaFillEllipseGlow(cx,cy,dw*(0.34+0.05*pulse),dh*(0.30+0.04*pulse),0,[255,120,40],0.10+0.05*pulse,0.03);
+    ctx.restore(); return;
+  }
+  const n=6;                                                                    // ember puffs rising + fading
+  for(let i=0;i<n;i++){
+    const h0=megaHash01(seed,i+3), h1=megaHash01(seed,i+13), h2=megaHash01(seed,i+29);
+    const climb=((t*(0.10+0.05*h1)+h0)%1+1)%1;                                   // 0→1 rise loop
+    const cx=dx+dw*(0.5+(h0-0.5)*0.30)+Math.sin(t*0.5+h2*6.283)*dw*0.03;
+    const cy=dy+dh*(0.34 - climb*0.30);                                          // rise upward off the crater
+    const rx=dw*(0.10+0.06*h1)*(0.8+climb*0.7), ry=rx*0.85;
+    const a=(0.14*(1-climb))*(0.6+0.4*Math.sin(t*(0.7+0.1*i)+h0*6.283));         // fade as it climbs
+    if(a<0.004) continue;
+    ctx.save();
+    ctx.translate(cx,cy); ctx.scale(1,ry/rx);
+    const g=ctx.createRadialGradient(0,0,rx*0.05,0,0,rx);
+    g.addColorStop(0, megaRgba([255,150,70],a));
+    g.addColorStop(0.5, megaRgba([255,100,40],a*0.45));
+    g.addColorStop(1, megaRgba([180,60,20],0));
     ctx.fillStyle=g; ctx.beginPath(); ctx.arc(0,0,rx,0,Math.PI*2); ctx.fill();
     ctx.restore();
   }
@@ -519,21 +604,29 @@ function drawOneMega(state, m, ox, oy, x0, y0, x1, y1){
   ctx.save();
   if(!lit) ctx.globalAlpha=0.5;                                          // explored-not-visible dim
   if(spr){
-    const dw=w*(m.overhang||1.3), dh=dw*(spr.fh/spr.fw)*(m.heightScale||1);
-    const dx=px+(w-dw)/2, dy=py+h-dh+2;
+    const dw=w*(m.overhang||1.3)*MEGA_SCALE, dh=dw*(spr.fh/spr.fw)*(m.heightScale||1);   // +25% size (MEGA_SCALE)
+    const dx=px+(w-dw)/2, dy=py+h-dh+2, cxm=dx+dw/2;
     let img=spr.img;
     if(m.cat==='ruin') img=megaTintFor(spr, m.biome) || spr.img;   // lazy one-time tint bake (snow/sand)
-    if(m.hubAnim){
-      // MADOSIS Mental Health Facility: animate (not the static HUB frame) at HALF the ambient speed,
-      // CROSS-FADING consecutive frames so the lights pulse smoothly with no hard frame pops. Frames
-      // share one bbox, so alpha-blending A→B reads as a slow breath of the cyan neon.
-      const N=MEGA_FRAMES, fps=(MEGA_FPS[m.cat]||1.4)*0.5;
-      const p=t*fps + (m.seed||0), fl=Math.floor(p), s=(p-fl)*(p-fl)*(3-2*(p-fl));   // smoothstep
-      const fiA=((fl%N)+N)%N, fiB=(fiA+1)%N, useNeon=(state.hub || m.neon);
-      // force the facility's lights to a calm cyan (the strip bakes red in later frames; recolor the
-      // generated glows so the Mental Health Facility reads as a steady cyan, not an alarm red).
-      const cyanize=(gl)=> gl ? gl.map(g=>Object.assign({},g,{color:[80,230,255]})) : null;
-      const nA=useNeon?cyanize(megaNeonFrame(m,fiA)):null, nB=useNeon?cyanize(megaNeonFrame(m,fiB)):null;
+    // deterministic horizontal MIRROR (seed-stable → identical host/client/reload). Wraps the whole draw so
+    // the neon glows (positioned relative to dx/dw) flip WITH the sprite and stay aligned.
+    const mir = megaHash01(m.seed||0, 777) < MEGA_MIRROR_RATE;
+    if(mir){ ctx.translate(cxm,0); ctx.scale(-1,1); ctx.translate(-cxm,0); }
+    // facility recolor (MADOSIS) → calm cyan; everything else keeps its mapped colors.
+    const cyanize=(gl)=> (m.hubAnim && gl) ? gl.map(g=>Object.assign({},g,{color:[80,230,255]})) : gl;
+    // atmosphere flags (now in-game too): mountain summit fog (lighter on battle maps), volcano crater heat.
+    const mtnFog=(m.cat==='mountain'), volHeat=(m.cat==='volcano' && !state.hub), fogDen=state.hub?1:0.55;
+    const noFx=(typeof QUAL!=='undefined'&&QUAL&&QUAL.level>=2)||megaReducedMotion();   // drop the atmosphere FX under load/reduced-motion
+    // ATMOSPHERE — back
+    if(m.hubWaste) drawWasteMegaSmoke(state,m,dx,dy,dw,dh,'back');
+    if(mtnFog && (state.hub||!noFx)) drawMountainFog(state,m,dx,dy,dw,dh,'back',fogDen);
+    if(volHeat && !noFx) drawVolcanoHeat(state,m,dx,dy,dw,dh,'back');
+    // animated megas (in-game, or the hub facility) CROSS-FADE frame A→B + their neon; hub-static / fixed
+    // megas draw a single frame. Neon is no longer hub-gated → in-game megas light up from their maps.
+    if(m.fixedFrame==null && (m.hubAnim || !state.hub)){
+      const N=MEGA_FRAMES, fps=(MEGA_FPS[m.cat]||1.4)*(m.hubAnim?0.5:MEGA_ANIM_SPEED);
+      const p=t*fps + (m.seed||0)*N, fl=Math.floor(p), e=p-fl, s=e*e*(3-2*e);          // smoothstep cross-fade
+      const fiA=((fl%N)+N)%N, fiB=(fiA+1)%N, nA=cyanize(megaNeonFrame(m,fiA)), nB=cyanize(megaNeonFrame(m,fiB));
       ctx.save(); ctx.globalAlpha*=(1-s); drawMegaNeonLayer(state,m,nA,dx,dy,dw,dh,'aura'); ctx.restore();
       ctx.save(); ctx.globalAlpha*=s;     drawMegaNeonLayer(state,m,nB,dx,dy,dw,dh,'aura'); ctx.restore();
       ctx.drawImage(img, fiA*spr.fw, 0, spr.fw, spr.fh, dx, dy, dw, dh);
@@ -541,17 +634,15 @@ function drawOneMega(state, m, ox, oy, x0, y0, x1, y1){
       ctx.save(); ctx.globalAlpha*=(1-s); drawMegaNeonLayer(state,m,nA,dx,dy,dw,dh,'core'); ctx.restore();
       ctx.save(); ctx.globalAlpha*=s;     drawMegaNeonLayer(state,m,nB,dx,dy,dw,dh,'core'); ctx.restore();
     } else {
-      const fi=megaFrameIndex(state,m);
-      const neon=(state.hub || m.neon) ? megaNeonFrame(m,fi) : null;
-      const fog=state.hub && m.cat==='mountain';                 // dense summit fog on hub peaks
-      if(m.hubWaste) drawWasteMegaSmoke(state,m,dx,dy,dw,dh,'back');
-      if(fog) drawMountainFog(state,m,dx,dy,dw,dh,'back');         // halo behind the peak
+      const fi=megaFrameIndex(state,m), neon=cyanize(megaNeonFrame(m,fi));
       drawMegaNeonLayer(state,m,neon,dx,dy,dw,dh,'aura');
       ctx.drawImage(img, fi*spr.fw, 0, spr.fw, spr.fh, dx, dy, dw, dh);
       drawMegaNeonLayer(state,m,neon,dx,dy,dw,dh,'core');
-      if(fog) drawMountainFog(state,m,dx,dy,dw,dh,'front');        // dense cloud over the summit
-      if(m.hubWaste) drawWasteMegaSmoke(state,m,dx,dy,dw,dh,'front');
     }
+    // ATMOSPHERE — front
+    if(mtnFog && (state.hub||!noFx)) drawMountainFog(state,m,dx,dy,dw,dh,'front',fogDen);
+    if(volHeat && !noFx) drawVolcanoHeat(state,m,dx,dy,dw,dh,'front');
+    if(m.hubWaste) drawWasteMegaSmoke(state,m,dx,dy,dw,dh,'front');
   } else {
     ctx.fillStyle='rgba(16,18,24,.92)';                                  // fallback mass so the obstacle reads
     roundRect(px+3, py+3, w-6, h-6, 7); ctx.fill();

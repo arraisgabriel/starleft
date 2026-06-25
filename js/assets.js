@@ -109,10 +109,37 @@ function featSpriteFor(biome, slot){
 const ATLAS_FEAT_VAR = ASSET_BASE + 'atlas/features_var.webp';
 const FEAT_VAR_IMG = new Image();
 let FEAT_VAR_READY = false;
-FEAT_VAR_IMG.onload = ()=>{ FEAT_VAR_READY = true; };
+FEAT_VAR_IMG.onload = ()=>{ FEAT_VAR_READY = true; buildMtnTrim(); };
 FEAT_VAR_IMG.onerror = ()=>{ FEAT_VAR_READY = false; };
 LOADER.register(FEAT_VAR_IMG, ATLAS_FEAT_VAR, { tag:'atlas:feature-variant', tier:LOADER.T_GAMEPLAY, weight:2, optional:true });
-const FEAT_VAR_CELL = 256, FEAT_VAR_ROCK_N = 4, FEAT_VAR_TREE_N = 8;   // cols: [0..3] rocks, [4..11] trees
+const FEAT_VAR_CELL = 256, FEAT_VAR_ROCK_N = 8, FEAT_VAR_TREE_N = 16;   // cols: [0..7] rocks, [8..23] trees
+// ---- Mountain-CHAIN trim cache: the content bbox of each of the 8 MOUNTAIN rock cells (atlas row 1), so the
+// mountain-chain render (js/render.js) bottom-anchors sprites on their true base (like mountain-cluster-lab).
+// Computed ONCE on atlas load; falls back to fractions measured over http when getImageData is tainted (file://). ----
+let MTN_TRIM = null;     // [8] of {x,y,w,h} src rects in features_var.webp px, or null until built
+const MTN_TRIM_FALLBACK = [   // content box as a fraction of the 256 cell (measured): 0 spire..7 boulder
+  {x:0.219,y:0.039,w:0.563,h:0.922}, {x:0.039,y:0.137,w:0.922,h:0.727}, {x:0.039,y:0.186,w:0.922,h:0.629},
+  {x:0.203,y:0.039,w:0.594,h:0.922}, {x:0.039,y:0.301,w:0.922,h:0.398}, {x:0.039,y:0.086,w:0.922,h:0.828},
+  {x:0.156,y:0.039,w:0.688,h:0.922}, {x:0.041,y:0.133,w:0.918,h:0.734}
+];
+function buildMtnTrim(){
+  if(!FEAT_VAR_READY || typeof FEAT_ROW==='undefined' || FEAT_ROW[B_MOUNTAIN]==null || typeof _opaqueBounds!=='function') return;
+  const C=FEAT_VAR_CELL, y0=FEAT_ROW[B_MOUNTAIN]*C, out=[];
+  for(let c=0;c<FEAT_VAR_ROCK_N;c++){
+    const b=_opaqueBounds(FEAT_VAR_IMG, c*C, C, C, 0, y0);
+    if(b) out.push({x:c*C+b.x, y:y0+b.y, w:b.w, h:b.h});
+    else { const f=MTN_TRIM_FALLBACK[c]; out.push({x:c*C+Math.round(f.x*C), y:y0+Math.round(f.y*C), w:Math.round(f.w*C), h:Math.round(f.h*C)}); }
+  }
+  MTN_TRIM=out;
+}
+// Tree-variant convention (used by clusterTopoFeatures' alive/dead grove split): within the 16 tree
+// indices, [0..7] = the biome's OWN trees, [8..15] = shared DEAD trees (mixing biomes grass/mountain/
+// tech/desert; other biomes just cycle their own into 8..15). Lets a clump stay all-alive or all-dead.
+const FEAT_VAR_TREE_OWN = 8;
+// Biomes whose tree indices 8..15 are the SHARED DEAD pool (per slice_feature_variants.py TREE_SOURCES).
+// Used by clusterTopoFeatures to gate the alive/dead split + dead-stump "soloist" handling to ONLY these
+// biomes — water/ice/volcanic cycle their own (alive) trees into 8..15, so they must be left alone.
+const FEAT_VAR_DEAD_BIOMES = [B_GRASS, B_MOUNTAIN, B_TECH, B_DESERT];
 function featVarN(slot){ return slot==='tree' ? FEAT_VAR_TREE_N : FEAT_VAR_ROCK_N; }
 function featVarRect(biome, slot, idx){
   if(!FEAT_VAR_READY) return null;
@@ -131,7 +158,7 @@ let DECAL_READY = false;
 DECAL_IMG.onload = ()=>{ DECAL_READY = true; };
 DECAL_IMG.onerror = ()=>{ DECAL_READY = false; };
 LOADER.register(DECAL_IMG, ATLAS_DECALS, { tag:'atlas:decals', tier:LOADER.T_AMBIENT, weight:1, optional:true });
-const DECAL_CELL = 128, DECAL_N = 12;   // 2 sets of 6 painted decals per biome
+const DECAL_CELL = 128, DECAL_N = 24;   // 4 sets of 6 painted decals per biome
 function decalRect(biome, idx){
   if(!DECAL_READY) return null;
   const r = FEAT_ROW[biome]; if(r==null) return null;
@@ -216,9 +243,9 @@ BUILDING_ANIM.intel = { player:{ready:false}, enemy:{ready:false}, ao:{ready:fal
 // minWFrac (optional): push the TOP edge down to the first row whose opaque span is at least
 // that fraction of the full width — skips thin rooftop antennas that would stretch into a
 // disconnected hairline when the art is scaled to an extreme aspect.
-function _opaqueBounds(img, sx, sw, sh, minWFrac){
+function _opaqueBounds(img, sx, sw, sh, minWFrac, sy=0){
   const c=document.createElement('canvas'); c.width=sw; c.height=sh;
-  const g=c.getContext('2d'); g.drawImage(img, sx,0,sw,sh, 0,0,sw,sh);
+  const g=c.getContext('2d'); g.drawImage(img, sx,sy,sw,sh, 0,0,sw,sh);
   let d; try{ d=g.getImageData(0,0,sw,sh).data; }catch(_){ return null; }
   let x0=sw,y0=sh,x1=-1,y1=-1;
   const rowW=new Array(sh).fill(0);
