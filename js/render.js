@@ -401,6 +401,38 @@ function drawLaserBolt(x0,y0,x1,y1, red, w, p, charge){
 
 // T2-1: the alt-win objective beacon — a tall gold pulse at the survive/escort/hold target, plus a
 // gold ring under the escort VIP. Cosmetic; reads the (already-scaled) cfg, so it works on clients.
+// BOSS coolant nodes (cfg.bossNodes): a cyan ground capture-point. Reads live progress from state.bossNodes
+// (host/solo) and falls back to cfg positions on a co-op client. Hold it to force the boss's EXPOSED window.
+function drawBossNodes(state,ox,oy){
+  const cfg=state.cfg; if(!cfg || !cfg.bossNodes || !cfg.bossNodes.length || state.over) return;
+  const live=state.bossNodes, t=state.time||0;
+  for(let i=0;i<cfg.bossNodes.length;i++){
+    const base=cfg.bossNodes[i], n=(live&&live[i])||base;
+    const cx=((n.x!=null?n.x:base.x)+0.5)*TILE+ox, cy=((n.y!=null?n.y:base.y)+0.5)*TILE+oy;
+    const R=((n.radius!=null?n.radius:1.8))*TILE;
+    const cooling=(n.cool||0)>0, prog=n.holdSec?Math.min(1,(n.holdT||0)/n.holdSec):0;
+    const pulse=0.5+0.5*Math.sin(t*3);
+    ctx.save();
+    // soft inner glow (additive)
+    ctx.globalCompositeOperation='lighter';
+    const g=ctx.createRadialGradient(cx,cy,0,cx,cy,R);
+    g.addColorStop(0, cooling?'rgba(120,160,180,0.10)':`rgba(123,220,255,${(0.16+0.16*pulse).toFixed(3)})`);
+    g.addColorStop(1,'rgba(123,220,255,0)');
+    ctx.fillStyle=g; ctx.globalAlpha=1;
+    ctx.beginPath(); ctx.ellipse(cx,cy,R,R*0.5,0,0,6.28); ctx.fill();
+    // outer ring
+    ctx.globalCompositeOperation='source-over';
+    ctx.globalAlpha=cooling?0.4:0.85; ctx.lineWidth=2.5;
+    ctx.strokeStyle=cooling?'rgba(130,170,190,0.8)':'#7bdcff';
+    ctx.beginPath(); ctx.ellipse(cx,cy,R,R*0.5,0,0,6.28); ctx.stroke();
+    // hold-progress arc (fills clockwise from top); cooldown shows a dim ring only
+    if(prog>0 && !cooling){
+      ctx.globalAlpha=1; ctx.lineWidth=4; ctx.strokeStyle='#d6f4ff';
+      ctx.beginPath(); ctx.ellipse(cx,cy,R*0.72,R*0.72*0.5,0,-1.5708,-1.5708+prog*6.2831853); ctx.stroke();
+    }
+    ctx.restore(); ctx.globalAlpha=1; ctx.globalCompositeOperation='source-over';
+  }
+}
 function drawWinObjective(state,ox,oy){
   const wc=state.cfg && state.cfg.winCondition; if(!wc || state.over) return;
   const t=(wc.to||wc.at);
@@ -826,6 +858,9 @@ function render(state){
 
   // ---- alt-win objective beacon + escort VIP marker (T2-1) — gold, fog-independent (it's YOUR objective) ----
   drawWinObjective(state,ox,oy);
+
+  // ---- BOSS coolant nodes (cfg.bossNodes) — hold one to force the boss's EXPOSED window; world-space ground marker ----
+  if(typeof drawBossNodes==='function') drawBossNodes(state,ox,oy);
 
   // ---- H.U.B. locate beacon (condo-card "find them" ping) — world space, above sprites ----
   if(state.hub && typeof drawHubLocatePing==='function') drawHubLocatePing(state, ox, oy);
@@ -2416,6 +2451,10 @@ function drawUnit(state,u,ox,oy){
     if(u.reborn) drawRebornRim(u, useAnim, px, pyB, S*bScale, fi, state.time||0);
     else if(u.villain && _vdef && _vdef.cyborgRim) drawRebornRim(u, useAnim, px, pyB, S*bScale, fi, state.time||0, '#3ad070', '#7dffa6', _exA);   // GREEN cyborg silhouette rim (EX-TERMINATOR) — render-only FX, body sprite untouched; _exA fades the rim WITH the body during bomber-board
     else if(u._convFlashT>0) drawRebornRim(u, useAnim, px, pyB, S*bScale, fi, state.time||0, '#ff6055', '#ffb060', u._convFlashT);   // BIBA mind-control: red conversion flash, fades with _convFlashT
+    if(u.villain && u._exposed){   // OVERHEAT: a hot pulsing rim while the boss is vented + EXPOSED (the "burn it now" tell) — render-only, body untouched
+      const ohPulse=0.55+0.45*Math.abs(Math.sin((state.time||0)*16));
+      drawRebornRim(u, useAnim, px, pyB, S*bScale, fi, state.time||0, '#ff9326', '#fff0c2', ohPulse);
+    }
     if(_exA<1) ctx.globalAlpha *= _exA;   // EX-TERMINATOR board-fade: re-apply — drawRebornRim above reset globalAlpha to 1
     // NINO cloak: the body stays a CLEAN 25%-opacity ghost — it was dimmed once at the ctx.save() above and
     // composites straight over the world (NO silhouette drawn behind it, which is what greyed it before).
@@ -2657,7 +2696,7 @@ function drawPlacement(state,ox,oy){
 }
 
 /* selection-ring fx (+ cyan-ninja smoke puffs/slashes, + REX mech missiles/explosions/shockwaves — all cosmetic) */
-let rings=[], smokes=[], slashes=[], missiles=[], explosions=[], shockwaves=[];
+let rings=[], smokes=[], slashes=[], missiles=[], explosions=[], shockwaves=[], dangerDecals=[];
 
 /* ---- floating combat numbers (T0-4): pooled, merged per-target, additive, capped.
    Module-local (never on G) → save/rollback/net untouched. Spawned from damage()/heal ticks on
@@ -2882,6 +2921,9 @@ function deathFx(state, e){
 }
 // the earthquake: a fast, thick green double ground-ring (flattened ellipse = ground perspective).
 function spawnShockwave(wx,wy,rMax){ shockwaves.push({x:wx,y:wy,rMax,t:0,life:0.55}); }
+// BOSS AoE telegraph: a red ground danger-zone that FILLS over `lead` seconds and completes exactly at impact
+// (the universal RTS "move out NOW" read). Drawn isometric (squashed) on the ground; brief flash, then fades.
+function spawnDangerDecal(wx,wy,rad,lead){ dangerDecals.push({x:wx,y:wy,r:rad||TILE,lead:Math.max(0.15,lead||1),t:0}); }
 // owner-colored variant for death FX (rgb string e.g. 'rgb(255,96,84)')
 function spawnShockwaveC(wx,wy,rMax,col){ const w={x:wx,y:wy,rMax,t:0,life:0.55}; if(col){ const m=col.match(/(\d+),\s*(\d+),\s*(\d+)/); if(m){ w.cr=+m[1]; w.cg=+m[2]; w.cb=+m[3]; } } shockwaves.push(w); }
 // thruster jet: a downward fan of bright green-white plasma exhaust.
@@ -2912,6 +2954,27 @@ function drawRings(ox,oy){
     }
     ctx.shadowBlur=0; ctx.restore(); ctx.globalAlpha=1;
     slashes=slashes.filter(s=>s.t>0);
+  }
+  if(dangerDecals.length){                                     // BOSS AoE danger-zones (drawn under the impact FX): a filling red ground ring telegraphing where the blast lands
+    ctx.save();
+    for(const d of dangerDecals){
+      d.t+=1/60;
+      const p=Math.min(1, d.t/d.lead);                         // 0→1 fill toward impact
+      const post=Math.max(0, d.t-d.lead), fade=post>0?Math.max(0,1-post/0.22):1;
+      const px=d.x+ox, py=d.y+oy, R=d.r, rp=R*p;
+      // filling inner disc — the radial "fuse" that reaches the rim at impact
+      ctx.globalAlpha=1;
+      const fg=ctx.createRadialGradient(px,py,0, px,py, Math.max(2,rp));
+      fg.addColorStop(0, `rgba(255,95,60,${(0.34*fade).toFixed(3)})`);
+      fg.addColorStop(1, `rgba(255,40,30,${(0.12*fade).toFixed(3)})`);
+      ctx.fillStyle=fg;
+      ctx.beginPath(); ctx.ellipse(px,py, rp, rp*0.5, 0,0,6.28); ctx.fill();
+      // fixed outer danger ring (the full blast extent) so the player sees the final size immediately
+      ctx.globalAlpha=(0.5+0.3*p)*fade; ctx.lineWidth=2.5; ctx.strokeStyle=`rgba(255,70,50,${(0.7*fade).toFixed(3)})`;
+      ctx.beginPath(); ctx.ellipse(px,py, R, R*0.5, 0,0,6.28); ctx.stroke();
+    }
+    ctx.globalAlpha=1; ctx.restore();
+    dangerDecals=dangerDecals.filter(d=>d.t < d.lead+0.22);
   }
   if(shockwaves.length){                                       // earthquake ground-rings (drawn under the dust)
     ctx.save(); ctx.globalCompositeOperation='lighter';

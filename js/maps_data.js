@@ -841,6 +841,10 @@ Weaponize your buzzwords, circle back, and disrupt MegaCorp into bankruptcy. The
     terrain:{ biomes:['tech'], seaFrac:0.05, mtnFrac:0.06, forest:0 },
     enemies:[],                                  // boss duel — no enemy bases; the villain IS the encounter
     villain:{ id:'rex', x:30, y:9 },
+    // COOLANT NODE (villains.js bossNodeTick): hold it with a detachment for ~3s to FORCE REX's EXPOSED window
+    // on demand — a "use the map" play that splits the army between the node and the fight. Mid-arena, on the
+    // approach to REX so holding it means pushing forward (risk/reward). Optional layer atop the AoE/overheat.
+    bossNodes:[ {x:20,y:14,holdSec:3,cd:18,radius:2.0} ],
     lakes:[ {x:14,y:6,r:3} ], rockClusters:[ {x:12,y:12,n:10}, {x:26,y:26,n:10} ], forests:[],
     goldNodes:[ {x:7,y:30,amt:2400}, {x:4,y:25,amt:2000}, {x:11,y:31,amt:2000}, {x:20,y:18,amt:2600} ],
   },

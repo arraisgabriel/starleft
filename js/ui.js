@@ -20,14 +20,21 @@ function updateBossBar(){
   bb.style.display='';
   // themed "Madosis" enrage (Rex phase 2): red + crack + shake. Derive from synced bossPhase + the static
   // VILLAINS def so it's correct on a co-op CLIENT too (boss.madFlavor itself isn't synced).
-  const rage = !!boss.madFlavor || (boss.bossPhase>=2 && def && def.phases && def.phases.some(ph=>ph.madFlavor));
+  // bossPhase carries the LEVEL (1 base, 2, 3…); the madFlavor phase fires red only when its level is reached
+  // (rex's red is its SECOND phase, at 30%, not the first at 60%) — so host & client agree from synced bossPhase.
+  const madIdx = (def && def.phases) ? def.phases.findIndex(ph=>ph.madFlavor) : -1;
+  const rage = !!boss.madFlavor || (madIdx>=0 && boss.bossPhase >= madIdx+2);
   bb.classList.toggle('bossbar--rage', rage);
+  // OVERHEAT / EXPOSED window (synced _exposed → correct on a co-op client): a gold "burn it now" pulse.
+  // The class is ADDITIVE (wins over rage) so the call-to-action shows even during a phase-2 rage.
+  const exposed = !!boss._exposed;
+  bb.classList.toggle('bossbar--exposed', exposed);
   // inline --boss-color wins over the stylesheet, so set the rage RED here (else the .bossbar--rage rule can't apply)
-  bb.style.setProperty('--boss-color', rage ? '#ff5b5b' : ((def && def.neonColor) || '#50e6ff'));
+  bb.style.setProperty('--boss-color', exposed ? '#ffc63c' : (rage ? '#ff5b5b' : ((def && def.neonColor) || '#50e6ff')));
   document.getElementById('bossbar-name').textContent = boss.villainName || (def && def.name) || 'BOSS';
   const frac=Math.max(0, Math.min(1, boss.maxHp ? boss.hp/boss.maxHp : 0));
   document.getElementById('bossbar-fill').style.width=(frac*100)+'%';
-  const hpEl=document.getElementById('bossbar-hp'); if(hpEl) hpEl.textContent=Math.round(frac*100)+'%';
+  const hpEl=document.getElementById('bossbar-hp'); if(hpEl) hpEl.textContent = exposed ? 'OVERHEAT' : (Math.round(frac*100)+'%');
 }
 // T2-5: income/sec — a rolling ~3s delta of gold_collected (intern deposits).
 // Local HUD read only; pruned sample window, no sim impact.

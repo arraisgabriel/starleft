@@ -101,6 +101,10 @@ function update(state, dt){
   // the boss is both spawned and gone, so the one-tick lag vs questsTick can't trigger an early win. ----
   if(!state.hub && typeof villainDeferredSpawn==='function') villainDeferredSpawn(state);
 
+  // ---- COOLANT NODE (villains.js): a capturable arena objective that, when held, FORCES the boss's
+  // overheat/EXPOSED window on demand (the "use the map" lever). Host/solo only; per-map cfg.bossNodes. ----
+  if(!state.hub && typeof bossNodeTick==='function') bossNodeTick(state, dt);
+
   // ---- generic map cutscenes (story-polish §5): intro at mission start / reach-the-objective beats ----
   if(!state.hub && typeof mapCutsceneTick==='function') mapCutsceneTick(state);
 

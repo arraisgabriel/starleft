@@ -123,12 +123,13 @@ const VILLAINS = {
     name:'THE DARK TOWER GUARDIAN',
     base:'founder', ao:true,
     neonId:'rex', neonColor:'#b05bff', auraColor:[176,91,255], bossScale:2.6,   // violet lattice-warden
-    hp:9000, dmg:55, range:3.6, cd:1.4, speed:1.4, sight:10, killXp:460,
-    dmgReduce:0.25, hpVpiScale:1/75, dmgVpiScale:1/170,
+    hp:9000, dmg:55, range:3.6, cd:1.4, speed:1.05, sight:10, killXp:460,   // speed 1.4→1.05: a slow lattice-warden the player can kite
+    dmgReduce:0.25, hpVpiScale:1/75, dmgVpiScale:1/170, hpVpiCap:1.6,
+    overheat:{ exposeMul:0.25, dur:2.4, rootDur:2.0 },   // vents + EXPOSED after its stomp
     abilities:[
-      {k:'stomp', cd:11, range:5.5, dmg:48, waveR:3.0, jumpDur:0.65, capFrac:0.45},
+      {k:'stomp', cd:11, range:5.5, dmg:48, waveR:3.0, jumpDur:0.65, capFrac:0.45, maxHits:6, overheat:true},
     ],
-    phases:[ {at:0.45, dmgMul:1.5, cdMul:0.7, speedMul:1.2, tint:[255,90,200]} ],
+    phases:[ {at:0.45, dmgMul:1.5, cdMul:0.7, speedMul:1.0, tint:[255,90,200]} ],   // enrage hits harder/faster but NO speed boost (kiting stays viable)
     flee:false,
     taunts:{
       intro:['THE TOWER DOES NOT CHANGE HANDS.', 'Trespass logged. Sentence: immediate.'],
@@ -143,15 +144,20 @@ const VILLAINS = {
     spriteType:'rex',          // bespoke alien A&O mech sprite (assets/units/rex/*_ao); gameplay still founder via base
     spriteFaction:'ao',        // always render the A&O toxic-green variant (robust even if a map omits enemyFaction:'ao')
     neonId:'rexBoss', neonColor:'#7bff5b', auraColor:[120,255,90], bossScale:4.0,   // own neon map; tower_guardian keeps 'rex'
-    hp:18000, dmg:80, range:4.0, cd:1.3, speed:1.5, sight:10, killXp:700,   // finale boss — the biggest payout
-    dmgReduce:0.28, hpVpiScale:1/80, dmgVpiScale:1/160,   // ≈ 25k effective HP at VPI 0 — the finale superboss
-    // two telegraphed AREA specials (updateMech). capFrac caps EACH blast to a % of a unit's maxHp,
-    // so neither move can ever one-shot — they chunk clumped units and force the player to spread out.
+    hp:18000, dmg:80, range:4.0, cd:1.3, speed:1.0, sight:10, killXp:700,   // finale boss — the biggest payout. speed 1.0 < every player combat unit (Lobbyist 2.2) so ranged units can KITE and escape his barrage
+    dmgReduce:0.20, hpVpiScale:1/120, dmgVpiScale:1/160, hpVpiCap:1.6,   // ↓reduce (the OVERHEAT window is now the durability lever) + ↓scale + a HARD cap so a veteran roster faces ≤+160% HP, not a ~5× wall
+    overheat:{ exposeMul:0.22, dur:2.8, rootDur:2.3 },   // after a heavy move (stomp) he VENTS: rooted + EXPOSED (dmgReduce ×0.22) for ~2.8s — the burn window where stacked fire finally pays off
+    // two telegraphed AREA specials (updateMech). capFrac caps EACH blast to a % of a unit's maxHp and
+    // maxHits caps HOW MANY units one blast fully hits — so a clumped ball loses a few, not all (spread!).
     abilities:[
-      {k:'missile', cd:8,  range:9,   count:3, dmg:46, splashR:1.9, flight:0.78, spreadTiles:2.2, capFrac:0.40},
-      {k:'stomp',   cd:13, range:6.5, dmg:60, waveR:3.4, jumpDur:0.7, capFrac:0.45},
+      {k:'missile', cd:13, range:9,   count:3, dmg:46, splashR:1.9, flight:0.78, spreadTiles:2.2, capFrac:0.40, maxHits:6},   // cd 8→13: the ranged barrage is far less frequent → room to reposition between volleys
+      {k:'stomp',   cd:13, range:6.5, dmg:60, waveR:3.4, jumpDur:0.7, capFrac:0.45, maxHits:6, overheat:true},
+      {k:'summon',  cd:22, comp:[['soldier',3],['ranger',2]], at:'fog', tauntKey:'phase', phaseGate:2},   // P2-unlocked adds: give the army a second job + create ebb/flow burn windows
     ],
-    phases:[ {at:0.40, dmgMul:1.8, cdMul:0.6, speedMul:1.25, madFlavor:true, tint:[255,70,60]} ],
+    phases:[
+      {at:0.60, dmgMul:1.0, cdMul:1.0,  speedMul:1.0, unlocks:['summon'], tint:[120,255,90]},                                   // P2: a NEW mechanic (adds), not bigger numbers
+      {at:0.30, dmgMul:1.2, cdMul:0.85, speedMul:1.0, overheatBonus:{durMul:1.3, exposeMul:0.16}, madFlavor:true, tint:[255,70,60]},   // P3: soft-enrage burn — bigger overheat windows, gentle dmg, NO speed boost (kiting stays alive)
+    ],
     flee:false,
     taunts:{
       intro:['LIQUIDATION PROTOCOL ENGAGED.', 'You are an expense. I am the write-off.'],
@@ -168,12 +174,13 @@ const VILLAINS = {
     name:'PEDRO "RUST"',
     base:'founder', ao:true,
     neonId:'rust', neonColor:'#ff8c3c', auraColor:[255,140,60], bossScale:2.6,   // foundry orange
-    hp:9000, dmg:60, range:3.6, cd:1.3, speed:1.4, sight:10, killXp:380,
-    dmgReduce:0.24, hpVpiScale:1/78, dmgVpiScale:1/168,
+    hp:9000, dmg:60, range:3.6, cd:1.3, speed:1.05, sight:10, killXp:380,   // speed 1.4→1.05
+    dmgReduce:0.24, hpVpiScale:1/78, dmgVpiScale:1/168, hpVpiCap:1.6,
+    overheat:{ exposeMul:0.25, dur:2.4, rootDur:2.0 },
     abilities:[
-      {k:'stomp', cd:12, range:6.0, dmg:52, waveR:3.2, jumpDur:0.7, capFrac:0.45},
+      {k:'stomp', cd:12, range:6.0, dmg:52, waveR:3.2, jumpDur:0.7, capFrac:0.45, maxHits:6, overheat:true},
     ],
-    phases:[ {at:0.45, dmgMul:1.5, cdMul:0.7, speedMul:1.2, tint:[255,140,60]} ],
+    phases:[ {at:0.45, dmgMul:1.5, cdMul:0.7, speedMul:1.0, tint:[255,140,60]} ],   // no enrage speed boost
     flee:false,
     taunts:{
       intro:['Company property doesn\'t quit. Neither do I.', 'They pay me to lose slow. I\'m good at it.'],
@@ -195,14 +202,15 @@ const VILLAINS = {
     // KITES + heals must endure: lighter HP, thin armor, lower damage, and — crucially — speed BELOW the
     // boss's old sprint so the snipers can actually keep their distance (was 3.4 > lobbyist 2.2). The Ep XVI
     // mk2 stays tough; only this opening encounter is softened.
-    hp:5200, dmg:17, range:1.9, cd:1.0, speed:2, sight:12, killXp:120,   // squad-wide bonus XP on kill (lowest — the first boss)   // speed 2 < Lobbyist 2.2 → the snipers can fully kite him; soldier-tier basic dmg
-    dmgReduce:0.16, hpVpiScale:1/95, dmgVpiScale:1/210,      // thin armor + gentle career-scaling so a leveled roster isn't walled
+    hp:5200, dmg:17, range:1.9, cd:1.0, speed:2, sight:12, killXp:120,   // movement/cadence UNCHANGED per owner — speed 2 < Lobbyist 2.2 → the snipers can fully kite him
+    dmgReduce:0.12, hpVpiScale:1/130, dmgVpiScale:1/210, hpVpiCap:1.2,   // ↓reduce + ↓scale + cap; the OVERHEAT window is the durability lever now
     splashFrac:0.5, splashR:1.9,                             // his BASIC swing still splashes, but softer (~50%)
+    overheat:{ exposeMul:0.30, dur:2.4, rootDur:2.0 },       // after the big pistol burst he VENTS: rooted + EXPOSED — the punish window
     // windup/recover are LONG on purpose: the render plays the 10-frame attack strip across the whole
     // (windup+recover) window, so ~1.3-1.5s per move = a readable ~7fps telegraph, not a 0.8s blur.
     abilities:[
-      { k:'melee_aoe',  cd:6.0, range:2.3, dmg:26, splashR:2.5, capFrac:0.20, windup:0.45, recover:0.85 },   // ~1.3s — nearby units all take a (capped) hit
-      { k:'pistol_aoe', cd:8.0, range:8,   dmg:22, splashR:1.9, capFrac:0.18, windup:0.55, recover:0.90 },   // ~1.45s — splash at the target
+      { k:'melee_aoe',  cd:6.0, range:2.3, dmg:26, splashR:2.5, capFrac:0.20, windup:0.45, recover:0.85, maxHits:5 },   // ~1.3s — nearby units all take a (capped) hit
+      { k:'pistol_aoe', cd:8.0, range:8,   dmg:22, splashR:1.9, capFrac:0.18, windup:1.0,  recover:0.90, maxHits:5, overheat:true },   // longer telegraph (windup 0.55→1.0, NOT more frequent — cd stays 8); vents after firing
     ],
     phases:[ {at:0.45, dmgMul:1.28, cdMul:0.8, speedMul:1.10, tint:[90,255,140]} ],   // a gentler enrage, later — stays GREEN (brighter), never red
     flee:false,
@@ -222,18 +230,19 @@ const VILLAINS = {
     base:'soldier', spriteType:'ex_terminator', spriteFaction:'player',
     neonId:null, neonColor:'#3cff7a', auraColor:[50,210,110], bossScale:3.2, cyborgRim:true,   // GREEN cyborg rim + aura; visibly larger second encounter
     fleeExtract:true,                                        // also escapes by A&O bomber (drop this line to make the XVI climax a definitive kill)
-    hp:16000, dmg:48, range:2.0, cd:0.65, speed:3.2, sight:12, killXp:560,
-    dmgReduce:0.32, hpVpiScale:1/76, dmgVpiScale:1/165,     // basic/melee/pistol stay GROUND-only; only the minigun rake hits flyers (per spec)
+    hp:16000, dmg:48, range:2.0, cd:0.65, speed:3.2, sight:12, killXp:560,   // movement/cadence UNCHANGED per owner (speed + ability cooldowns untouched)
+    dmgReduce:0.22, hpVpiScale:1/110, dmgVpiScale:1/165, hpVpiCap:1.6,   // ↓reduce + ↓scale + cap (the OVERHEAT window covers durability)
     splashFrac:0.7, splashR:2.2,                            // basic swing is area damage too (bigger radius than fight 1)
+    overheat:{ exposeMul:0.22, dur:2.6, rootDur:2.1 },      // vents + EXPOSED after the heavy minigun rake
     // minigun FIRST: the ability dispatch fires the first ready+in-range ability and breaks, so the
     // rarest/biggest move must lead or the short-cooldown melee/pistol would starve it. Result: a big
     // minigun rake roughly every 12s, with melee (adjacent) / pistol (mid-range) filling the gaps.
     abilities:[
-      { k:'minigun_aoe', cd:12,  range:9.5, dmg:30, splashR:3.0, capFrac:0.34, windup:0.80, recover:1.10, sweep:3 },   // ~1.9s heavy rake, HITS FLYERS
-      { k:'melee_aoe',   cd:4.5, range:2.6, dmg:48, splashR:2.8, capFrac:0.32, windup:0.45, recover:0.85 },            // ~1.3s
-      { k:'pistol_aoe',  cd:6.5, range:8.5, dmg:40, splashR:2.0, capFrac:0.28, windup:0.55, recover:0.90 },            // ~1.45s
+      { k:'minigun_aoe', cd:12,  range:9.5, dmg:30, splashR:3.0, capFrac:0.34, windup:1.6,  recover:1.10, sweep:3, maxHits:8, overheat:true },   // longer telegraph (windup 0.8→1.6, cd still 12) → readable + dodgeable; vents after; HITS FLYERS
+      { k:'melee_aoe',   cd:4.5, range:2.6, dmg:48, splashR:2.8, capFrac:0.32, windup:0.45, recover:0.85, maxHits:6 },            // ~1.3s
+      { k:'pistol_aoe',  cd:6.5, range:8.5, dmg:40, splashR:2.0, capFrac:0.28, windup:0.55, recover:0.90, maxHits:5 },            // ~1.45s
     ],
-    phases:[ {at:0.50, dmgMul:1.55, cdMul:0.65, speedMul:1.2, tint:[90,255,140]} ],   // enrage stays GREEN, never red
+    phases:[ {at:0.50, dmgMul:1.55, cdMul:0.65, speedMul:1.2, tint:[90,255,140]} ],   // enrage stays GREEN, never red (speed untouched per owner)
     flee:false,
     taunts:{
       intro:['Postponed, not pardoned. Same machine — more of it.', 'Mr. Tusk sends his compliments. I send the rest.'],
@@ -311,12 +320,15 @@ function spawnVillainEntry(state, v){
     const def = VILLAINS[v.id]; if(!def || typeof mkUnit!=='function') return;
     const u = mkUnit(state, def.base, 'enemy', v.x, v.y);     // pushed to state.entities; seeds DEF stats
     u.villain=true; u.villainId=v.id; u.villainName=def.name; u.guard=true;   // guard → excluded from waves/prod cap (ai.js)
-    u.bossPhase=1; u.bossScale=def.bossScale; u.neonId=def.neonId;
+    u.bossPhase=1; u._phaseIdx=0; u._overheatT=0; u.bossScale=def.bossScale; u.neonId=def.neonId;   // _phaseIdx: ordered-phase cursor; _overheatT: vent/EXPOSED window timer
     if(def.spriteType) u.spriteType=def.spriteType;           // render uses spriteType over type
     // scale HP/dmg to the player's carried career power (VPI, computed in newMap before this) so a
     // leveled veteran army faces a proportionately tougher boss — never trivial, never an instant melt.
     const vpi = state._vpi || 0;
-    u.maxHp = u.hp = Math.round(def.hp * (1 + vpi*(def.hpVpiScale||0)));
+    // hpVpiCap (default uncapped) bounds the veteran HP bonus: a maxed roster faces a tough-but-finite
+    // boss (e.g. ≤+160% HP) instead of the old ~5× wall that made the fight a doomed damage-race.
+    const vpiBonus = Math.min(def.hpVpiCap!=null ? def.hpVpiCap : 99, vpi*(def.hpVpiScale||0));
+    u.maxHp = u.hp = Math.round(def.hp * (1 + vpiBonus));
     u.dmg   = Math.round(def.dmg * (1 + vpi*(def.dmgVpiScale||0)));
     if(def.dmgReduce>0) u.dmgReduce = def.dmgReduce;          // flat incoming-damage mitigation (damage(), units.js)
     if(def.splashFrac){ u.splash=Math.max(1, Math.round(u.dmg*def.splashFrac)); u.splashR=def.splashR||1.8; }   // basic attack splashes too (units.js u.splash override) → an AOE bruiser, not a single-target meleer; tracks the VPI-scaled dmg
@@ -336,18 +348,41 @@ function updateVillain(state, u, dt){
   if(state.hub || u.dead || !u.villain) return;
   const def = VILLAINS[u.villainId]; if(!def) return;
 
-  // (a) phase transitions — Rex's themed "Madosis" enrage
-  if(def.phases) for(const ph of def.phases){
-    if(u.bossPhase<2 && u.hp <= u.maxHp*ph.at){
-      u.bossPhase=2;
-      if(ph.dmgMul) u.bossDmgMul=ph.dmgMul;
-      if(ph.cdMul)  u._bossCd=def.cd*ph.cdMul;
-      if(ph.speedMul) u.speed=def.speed*ph.speedMul;
-      if(ph.madFlavor) u.madFlavor=true;
-      u._abilCastT=state.time;                               // glow peak on the transition
+  // (a) phase transitions — an ORDERED list of HP thresholds; each phase can amp stats AND/OR introduce a
+  // NEW mechanic (unlocks adds, bigger overheat windows). bossPhase carries the LEVEL (1 base, 2, 3…) so the
+  // bossbar/ninja reads (>=2) still work and a co-op client derives the rage tint from the synced level.
+  if(def.phases){
+    let idx = u._phaseIdx||0; const start=idx;
+    while(idx < def.phases.length && u.hp <= u.maxHp*def.phases[idx].at){
+      const ph=def.phases[idx];
+      if(ph.dmgMul)        u.bossDmgMul=ph.dmgMul;
+      if(ph.cdMul)         u._bossCd=def.cd*ph.cdMul;
+      if(ph.speedMul!=null) u.speed=def.speed*ph.speedMul;
+      if(ph.madFlavor)     u.madFlavor=true;
+      if(ph.unlocks)       u._unlocked=(u._unlocked||[]).concat(ph.unlocks);   // gate new abilities (summon) on by phase
+      if(ph.overheatBonus) u._overheatBonus=ph.overheatBonus;                  // bigger/stronger burn windows late
+      idx++;
+    }
+    if(idx>start){
+      u._phaseIdx=idx; u.bossPhase=idx+1; u._abilCastT=state.time;             // glow peak on the transition
       if(!window._rbReplaying) bossTaunt(state, u, 'phase');
     }
   }
+
+  // (a2) OVERHEAT window — after a heavy telegraphed move the boss VENTS: ROOTED + EXPOSED (its dmgReduce is
+  // scaled by exposeMul → it takes the punish-window bonus, the SAME damage() path the ninja strike uses). This
+  // is the burn window where the player's stacked fire finally pays off. Owns the tick (no abilities/movement).
+  if(u._overheatT>0){
+    if(u._mech) mechUpkeep(state, u, dt, def);                                 // still resolve any in-flight missiles / quake wave while venting
+    u._overheatT -= dt;
+    u._exposed=true; u._exposeMul = (u._overheatExposeMul!=null) ? u._overheatExposeMul : ((def.overheat&&def.overheat.exposeMul)||0.25);
+    const dur=u._overheatDur||((def.overheat&&def.overheat.dur)||u._overheatT);
+    const root=(u._overheatRoot!=null)?u._overheatRoot:dur;                    // rooted for the front `root` seconds, then a brief scrambling tail
+    u._mechAirborne = (u._overheatT > (dur-root));                            // reuse the jump-stomp root (updateUnit yields)
+    if(u._overheatT<=0){ u._overheatT=0; u._exposed=false; u._mechAirborne=false; }
+    return;
+  }
+  if(u._exposed && !(u._ninjaAI)) u._exposed=false;                            // clear a stale mech-expose (the ninja AI manages its own _exposed each tick)
 
   // (b) ninja flee — sprint for the nearest map edge and ESCAPE
   if(def.fleeHpFrac && !u.escaped){
@@ -403,6 +438,9 @@ function updateVillain(state, u, dt){
       if(d <= a.range*TILE){ startMissile(state, u, a, tgt, def); break; }   // begin a 3-missile barrage
     } else if(a.k==='stomp'){
       if(d <= a.range*TILE){ startStomp(state, u, a, def); break; }          // begin the thruster jump-stomp
+    } else if(a.k==='summon'){
+      if(a.phaseGate && (u.bossPhase||1) < a.phaseGate) continue;            // gated until that phase level (adds appear at enrage → ebb/flow + burn windows)
+      villainSummon(state, u, a, def); u._abilCd[a.k]=a.cd; break;
     } else if(AOE_KINDS[a.k]){
       if(d <= a.range*TILE){ startAoe(state, u, a, tgt, def); break; }       // EX-TERMINATOR: melee/pistol/minigun area burst
     }
@@ -419,21 +457,111 @@ function updateVillain(state, u, dt){
 // AREA damage with distance falloff and a hard per-unit cap (the "never one-shot / never wipe" rule).
 // Optional volleyId: a unit can be hit at most once per volley, so the 3 missiles of one barrage spread
 // across the cluster instead of stacking ≥2 blasts on the same body (keeps a single volley ≤ capFrac).
-function bossAreaDamage(state, src, cx, cy, R, dmg, capFrac, volleyId, hitAir){
+function bossAreaDamage(state, src, cx, cy, R, dmg, capFrac, volleyId, hitAir, maxHits){
+  const hits=[];
   for(const o of state.entities){
     if(o.dead||o.storedIn||o.owner!=='player'||o.kind!=='unit') continue;
     if(hitAir===false && o.air) continue;               // ground-only blasts (melee/pistol); minigun/missile pass true/omit → flyers included
     if(volleyId!=null && o._volleyHit===volleyId) continue;
     const dd=Math.hypot(o.x-cx, o.y-cy);
     if(dd>R) continue;
+    hits.push({o, dd});
+  }
+  // nearest-first, DETERMINISTIC (id tiebreak — no RNG, so host/client/rollback agree)
+  hits.sort((a,b)=> (a.dd-b.dd) || ((a.o.id||0)-(b.o.id||0)));
+  for(let i=0;i<hits.length;i++){
+    const o=hits[i].o, dd=hits[i].dd;
     if(volleyId!=null) o._volleyHit=volleyId;
-    const fall = 1 - 0.5*(dd/R);                         // 100% at the center → 50% at the rim
+    let fall = 1 - 0.85*(dd/R);                          // 100% at the center → 15% at the rim: standing at the ring EDGE is meaningfully safer (rewards spacing)
+    if(maxHits!=null && i>=maxHits) fall *= 0.15;        // ANTI-WIPE: one blast fully hits only the nearest `maxHits` units; the rest of a clumped ball take a token hit → spreading is the answer
     bossDamageCapped(state, src, o, dmg*fall, capFrac);
   }
 }
 function bossDamageCapped(state, src, o, dmg, capFrac){
   const amt = Math.min(dmg, o.maxHp*(capFrac||0.45));    // a single blast can never exceed capFrac of maxHp
   if(amt>0 && typeof damage==='function') damage(state, o, amt, src);
+}
+
+// Enter the OVERHEAT / EXPOSED window after a heavy telegraphed move whose ability def has overheat:true.
+// Reuses the ninja punish-window fields (_exposed/_exposeMul, read by damage() in units.js) and the
+// jump-stomp root (_mechAirborne → updateUnit yields). The window is ticked in updateVillain (a2).
+function enterOverheatCore(state, u, oh, bonus){
+  let dur=oh.dur||2.4, exposeMul=(oh.exposeMul!=null?oh.exposeMul:0.25);
+  if(bonus){ if(bonus.durMul) dur*=bonus.durMul; if(bonus.exposeMul!=null) exposeMul=bonus.exposeMul; }   // phase-3 burn phase: longer / stronger windows
+  u._overheatT=dur; u._overheatDur=dur;
+  u._overheatRoot=(oh.rootDur!=null ? Math.min(oh.rootDur,dur) : dur);
+  u._overheatExposeMul=exposeMul; u._exposed=true; u._exposeMul=exposeMul;
+  u._mechAirborne=true; u._actState='idle'; u._actStamp=state.time; u._abilCastT=state.time;
+  if(!window._rbReplaying && typeof spawnDust==='function') spawnDust(u.x, u.y-(u.r||16)*0.4);   // vent steam
+}
+function enterOverheat(state, u, def, a){
+  if(!def || !def.overheat || !(a && a.overheat)) return;                                       // only the heavy moves (overheat:true) vent
+  if(u._overheatT>0) return;                                                                    // don't restack an active window
+  enterOverheatCore(state, u, def.overheat, u._overheatBonus);
+}
+
+// SUMMON adds: the boss calls in a small A&O squad (scaled to roster) that attack-moves onto the player's
+// army — giving the fight ebb/flow + the player's big army a correct second job. Reuses the holdout idioms
+// (guard/_holdoutWave so ai.js never caps/sweeps them; off-screen fogged spawn tiles). Host/solo only;
+// clients receive the adds as ordinary synced enemy units. Deterministic (no RNG → rollback-safe).
+function villainSummon(state, u, a, def){
+  if(typeof mkUnit!=='function') return;
+  const comp=a.comp||[['soldier',2]];
+  const scale=(typeof holdoutRosterFactor==='function') ? holdoutRosterFactor(state) : 1;
+  let tiles=(typeof holdoutSpawnTiles==='function' && state.cfg && state.cfg.holdout) ? holdoutSpawnTiles(state) : [];
+  if(!tiles.length){                                   // no holdout config (duel arenas): a ring of tiles around the boss
+    const bx=(u.x/TILE)|0, by=(u.y/TILE)|0;
+    for(const off of [[7,0],[-7,0],[0,7],[0,-7],[5,5],[-5,5],[5,-5],[-5,-5]]) tiles.push({x:bx+off[0], y:by+off[1]});
+  }
+  let pi=0, idx=0; const spawned=[];
+  for(const pair of comp){
+    let count=pair[1]|0; if(scale!==1) count=Math.max(1, Math.round(count*scale));
+    for(let k=0;k<count;k++){
+      const p=tiles[pi%tiles.length]; pi++;
+      const at=villainSnapOpen(state, (p.x+((idx%3)-1))|0, (p.y+((idx/3|0)%3))|0); idx++;
+      const m=mkUnit(state, pair[0], 'enemy', at.x, at.y);
+      if(!m) continue;
+      m.guard=true; m._holdoutWave=true;               // excluded from ai.js prod caps / wave sweeps
+      spawned.push(m);
+    }
+  }
+  const tgt=u.autoTarget||(u.cmd&&u.cmd.target);
+  const gx=tgt?tgt.x:u.x, gy=tgt?tgt.y:u.y;
+  for(const m of spawned){ if(typeof issueMove==='function') issueMove(state, m, gx, gy, {type:'amove', x:gx, y:gy}); }
+  u._abilCastT=state.time;
+  if(!window._rbReplaying) bossTaunt(state, u, a.tauntKey||'phase');
+}
+
+/* ---- COOLANT NODE (cfg.bossNodes): a capturable arena objective. Hold one (a player unit standing on it
+   for holdSec) to FORCE the boss's overheat/EXPOSED window on demand, then it goes on cooldown. Gives the
+   player's idle army a "use the map" play and a two-front micro problem. Called from core.js every
+   authoritative tick (host/solo only); state.bossNodes is plain JSON on G (auto-saves, rides rollback).
+   Deterministic — proximity + state.time only, no RNG. Per-map opt-in. ---- */
+function bossNodeTick(state, dt){
+  const cfg=state.cfg; if(!cfg || !cfg.bossNodes || !cfg.bossNodes.length) return;
+  if(!state.bossNodes || state.bossNodes.length!==cfg.bossNodes.length){     // lazy init / re-derive from cfg (so a legacy save without the field still works)
+    state.bossNodes = cfg.bossNodes.map(n=>({ x:n.x|0, y:n.y|0, holdSec:(n.holdSec!=null?n.holdSec:3), cd:(n.cd!=null?n.cd:18), radius:(n.radius!=null?n.radius:1.8), holdT:0, cool:0 }));
+  }
+  const boss = state.entities.find(e=>e.villain && !e.dead && !e.escaped);
+  for(const node of state.bossNodes){
+    if(node.cool>0){ node.cool=Math.max(0,node.cool-dt); node.holdT=0; continue; }
+    const cx=(node.x+0.5)*TILE, cy=(node.y+0.5)*TILE, RR=node.radius*TILE;
+    const held = state.entities.some(e=>e.owner==='player'&&e.kind==='unit'&&!e.dead&&!e.storedIn && Math.hypot(e.x-cx,e.y-cy)<=RR);
+    if(held){
+      node.holdT+=dt;
+      if(node.holdT>=node.holdSec){
+        node.holdT=0; node.cool=node.cd;
+        const def=boss && VILLAINS[boss.villainId];
+        if(boss && def && def.overheat && !(boss._overheatT>0)){              // force the EXPOSED window (don't stomp an active one)
+          enterOverheatCore(state, boss, def.overheat, boss._overheatBonus);
+          if(!window._rbReplaying){
+            if(typeof spawnRing==='function') spawnRing(cx, cy, '#7bdcff');
+            if(typeof toast==='function') toast('❄ Coolant vented — '+(boss.villainName||'the boss')+' is EXPOSED!');
+          }
+        }
+      }
+    } else node.holdT=Math.max(0, node.holdT-dt*0.5);                         // decay partial progress when abandoned
+  }
 }
 
 // the tile-cluster the most player units are bunched around (where a stomp wants to land)
@@ -456,7 +584,7 @@ function mechUpkeep(state, u, dt, def){
     for(const im of u._mechImpacts){ if(im.done) continue;
       im.t -= dt;
       if(im.t<=0){ im.done=true;
-        bossAreaDamage(state, u, im.x, im.y, im.r, Math.round(im.dmg*(u.bossDmgMul||1)), im.capFrac, im.volleyId);
+        bossAreaDamage(state, u, im.x, im.y, im.r, Math.round(im.dmg*(u.bossDmgMul||1)), im.capFrac, im.volleyId, undefined, im.maxHits);
         if(!window._rbReplaying && typeof spawnExplosion==='function') spawnExplosion(im.x, im.y);
         state._shake = Math.max(state._shake||0, 5);
       }
@@ -470,8 +598,9 @@ function mechUpkeep(state, u, dt, def){
       if(o.dead||o.storedIn||o.owner!=='player'||o.kind!=='unit') continue;
       const dd=Math.hypot(o.x-q.x, o.y-q.y);
       if(dd>prevR && dd<=q.r && o._quakeHit!==q.id){
-        o._quakeHit=q.id;
-        bossDamageCapped(state, u, o, Math.round(q.dmg*(u.bossDmgMul||1)), q.capFrac);
+        o._quakeHit=q.id; q.nHit=(q.nHit||0)+1;
+        const mul=(q.maxHits!=null && q.nHit>q.maxHits) ? 0.15 : 1;   // ANTI-WIPE: the wavefront expands outward (nearest pass first), so it fully hits the nearest maxHits, the rest a token graze
+        bossDamageCapped(state, u, o, Math.round(q.dmg*(u.bossDmgMul||1))*mul, q.capFrac);
       }
     }
     if(q.r>=q.rMax) u._quake=null;
@@ -505,11 +634,14 @@ function stepMissile(state, u, dt, def){
     const pts=missileAimPoints(state, u, v.tx, v.ty, n, (a.spreadTiles||2.2)*TILE);
     for(let i=0;i<pts.length;i++){
       const p=pts[i], delay=i*0.12, t=fl+delay;
-      u._mechImpacts.push({ x:p.x, y:p.y, t, r:R, dmg:a.dmg, capFrac:cap, volleyId:vid });
-      if(!window._rbReplaying && typeof spawnMissile==='function') spawnMissile(muzx, muzy, p.x, p.y, t);
+      u._mechImpacts.push({ x:p.x, y:p.y, t, r:R, dmg:a.dmg, capFrac:cap, volleyId:vid, maxHits:a.maxHits });
+      if(!window._rbReplaying){
+        if(typeof spawnMissile==='function') spawnMissile(muzx, muzy, p.x, p.y, t);
+        if(typeof spawnDangerDecal==='function') spawnDangerDecal(p.x, p.y, R, t);   // each missile telegraphs its landing zone over its flight time
+      }
     }
   }
-  if(u._mechT >= 0.6){ u._mechAct=null; u._volley=null; u._actStamp=state.time; }   // missiles resolve via mechUpkeep
+  if(u._mechT >= 0.6){ const a=u._volley&&u._volley.a; u._mechAct=null; u._volley=null; u._actStamp=state.time; enterOverheat(state, u, def, a); }   // missiles resolve via mechUpkeep
 }
 // aim points: the target plus the nearest other player units (so extra missiles spread across the cluster)
 function missileAimPoints(state, u, tx, ty, n, spread){
@@ -531,7 +663,10 @@ function startStomp(state, u, a, def){
   u._abilCastT=state.time; u._abilCd[a.k]=a.cd;
   const land=densestCluster(state, u, (a.range||6.5)*TILE*1.4) || {x:u.x,y:u.y};
   u._stomp={ a, x0:u.x, y0:u.y, lx:land.x, ly:land.y };
-  if(!window._rbReplaying) bossTaunt(state, u, 'stomp');
+  if(!window._rbReplaying){
+    bossTaunt(state, u, 'stomp');
+    if(typeof spawnDangerDecal==='function') spawnDangerDecal(land.x, land.y, (a.waveR||3.4)*TILE, 0.45+(a.jumpDur||0.7));   // ground telegraph at the landing spot, filling over crouch+air time
+  }
 }
 function stepStomp(state, u, dt, def){
   const s=u._stomp; if(!s){ u._mechAct=null; u._mechAirborne=false; return; }
@@ -559,13 +694,13 @@ function stepStomp(state, u, dt, def){
       if(typeof spawnExplosion==='function') spawnExplosion(u.x, u.y);
     }
     state._shake = 15;
-    u._quake={ x:u.x, y:u.y, r:0, rMax:(a.waveR||3.4)*TILE, dmg:a.dmg, capFrac:a.capFrac||0.45, id:state.time };
+    u._quake={ x:u.x, y:u.y, r:0, rMax:(a.waveR||3.4)*TILE, dmg:a.dmg, capFrac:a.capFrac||0.45, id:state.time, maxHits:a.maxHits };
     u._actStamp=state.time; u._abilCastT=state.time;
     u._stompPhase=4; u._mechT=0;
     return;
   }
-  // RECOVER — a brief rooted opening, then hand back to normal combat
-  if(u._mechT>=tRec){ u._mechAct=null; u._mechAirborne=false; u._stomp=null; u._stompPhase=0; }
+  // RECOVER — a brief rooted opening, then hand back to normal combat (or VENT into the overheat window)
+  if(u._mechT>=tRec){ const a=s.a; u._mechAct=null; u._mechAirborne=false; u._stomp=null; u._stompPhase=0; enterOverheat(state, u, def, a); }
 }
 
 /* =====================================================================
@@ -590,7 +725,10 @@ function startAoe(state, u, a, tgt, def){
   u._abilCastT=state.time; u._actStamp=state.time; u._actState=K.act; u._abilCd[a.k]=a.cd;
   u._actDur=(a.windup||0.28)+(a.recover||0.30);                        // render stretches the attack strip over the FULL move so it's legible (not a 0.8s blur)
   u._aoe={ a, K, tx:K.self?u.x:tgt.x, ty:K.self?u.y:tgt.y, fired:false };
-  if(!window._rbReplaying) bossTaunt(state, u, K.taunt);
+  if(!window._rbReplaying){
+    bossTaunt(state, u, K.taunt);
+    if(typeof spawnDangerDecal==='function') spawnDangerDecal(u._aoe.tx, u._aoe.ty, (a.splashR||2.2)*TILE*(a.sweep>1?1.5:1), a.windup||0.28);   // ground telegraph sized to the blast (wider for the minigun rake), filling over the windup
+  }
 }
 function stepAoe(state, u, dt, def){
   const v=u._aoe; if(!v){ u._mechAct=null; u._mechAirborne=false; u._actDur=0; return; }
@@ -604,7 +742,7 @@ function stepAoe(state, u, dt, def){
     const sweep=Math.max(1, a.sweep||1), vid=state.time;
     for(let i=0;i<sweep;i++){
       const jx = sweep>1 ? (i-(sweep-1)/2)*TILE*1.4 : 0;               // rake the minigun across the cluster
-      bossAreaDamage(state, u, v.tx+jx, v.ty, R, dmg, cap, vid, K.air);
+      bossAreaDamage(state, u, v.tx+jx, v.ty, R, dmg, cap, vid, K.air, a.maxHits);
     }
     if(!window._rbReplaying){
       if(typeof spawnShockwave==='function') spawnShockwave(v.tx, v.ty, R);
@@ -613,7 +751,7 @@ function stepAoe(state, u, dt, def){
     }
     state._shake = Math.max(state._shake||0, K.air?13:7);
   }
-  if(u._mechT >= wind+rec){ u._mechAct=null; u._aoe=null; u._mechAirborne=false; u._actStamp=state.time; u._actDur=0; }
+  if(u._mechT >= wind+rec){ u._mechAct=null; u._aoe=null; u._mechAirborne=false; u._actStamp=state.time; u._actDur=0; enterOverheat(state, u, def, a); }
 }
 
 /* =====================================================================

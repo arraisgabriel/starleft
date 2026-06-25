@@ -1446,7 +1446,14 @@ function damage(state, t, amt, src){
   // armor = DEF base + CYBERWARE subdermal plating (t.chromeArmor); pierce = DEF pierce OR chrome mantis-blades (src.chromePierce)
   const _armor=((_tdef&&_tdef.armor)||0)+(t.chromeArmor||0);
   if(_armor>0 && !(src && ((DEF[src.type]&&DEF[src.type].pierce) || src.chromePierce))) amt *= (1 - _armor);
-  if(t.dmgReduce>0){ const red = t._exposed ? t.dmgReduce*(t._exposeMul||0.4) : t.dmgReduce; amt *= (1 - red); }   // armored units shrug off a flat %; an EXPOSED ninja (mid-strike wind-up) takes the punish-window bonus
+  if(t.dmgReduce>0){
+    let red = t._exposed ? t.dmgReduce*(t._exposeMul||0.4) : t.dmgReduce;   // armored units shrug off a flat %; an EXPOSED ninja/mech (mid-windup or venting) takes the punish-window bonus
+    // T2-4: a PIERCING weapon (Lobbyist regulation / Auditor due-diligence cannon) is sold as the anti-mech
+    // answer — make it also bite through a BOSS's flat mitigation, so target priority means something.
+    // Gated to villains: normal armored enemies are unaffected (their armor is already handled above).
+    if(t.villain && src && ((DEF[src.type]&&DEF[src.type].pierce) || src.chromePierce)) red *= 0.5;
+    amt *= (1 - red);
+  }
   if(t._chromeResist && t._chromeResistUntil>state.time) amt *= (1 - t._chromeResist);                              // CYBERWARE: Berserk damage-resistance window
   if(t.chromeActive && t.chromeActive.trigger==='hit' && typeof chromeActiveProc==='function') chromeActiveProc(state, t);  // CYBERWARE: Kerenzikov reflex spike on taking a hit
   // MADOSIS rescuer survivability: a healer mid-rescue takes a fraction of incoming damage, with a one-time shield pool absorbing the rest first. Keyed off the rescue cmd so it self-clears (inert once the cmd is gone, even if _rescueShield lingers).
