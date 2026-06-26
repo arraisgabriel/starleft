@@ -125,7 +125,7 @@ const VILLAINS = {
     neonId:'rex', neonColor:'#b05bff', auraColor:[176,91,255], bossScale:2.6,   // violet lattice-warden
     hp:9000, dmg:55, range:3.6, cd:1.4, speed:1.05, sight:10, killXp:460,   // speed 1.4→1.05: a slow lattice-warden the player can kite
     dmgReduce:0.25, hpVpiScale:1/75, dmgVpiScale:1/170, hpVpiCap:1.6,
-    overheat:{ exposeMul:0.25, dur:2.4, rootDur:2.0 },   // vents + EXPOSED after its stomp
+    overheat:{ exposeMul:0.25, dur:4.08, rootDur:3.4, chance:0.7 },   // vents + EXPOSED after its stomp (dur +70%, 70% chance to trigger)
     abilities:[
       {k:'stomp', cd:11, range:5.5, dmg:48, waveR:3.0, jumpDur:0.65, capFrac:0.45, maxHits:6, overheat:true},
     ],
@@ -146,7 +146,7 @@ const VILLAINS = {
     neonId:'rexBoss', neonColor:'#7bff5b', auraColor:[120,255,90], bossScale:4.0,   // own neon map; tower_guardian keeps 'rex'
     hp:18000, dmg:80, range:4.0, cd:1.3, speed:1.0, sight:10, killXp:700,   // finale boss — the biggest payout. speed 1.0 < every player combat unit (Lobbyist 2.2) so ranged units can KITE and escape his barrage
     dmgReduce:0.20, hpVpiScale:1/120, dmgVpiScale:1/160, hpVpiCap:1.6,   // ↓reduce (the OVERHEAT window is now the durability lever) + ↓scale + a HARD cap so a veteran roster faces ≤+160% HP, not a ~5× wall
-    overheat:{ exposeMul:0.22, dur:2.8, rootDur:2.3 },   // after a heavy move (stomp) he VENTS: rooted + EXPOSED (dmgReduce ×0.22) for ~2.8s — the burn window where stacked fire finally pays off
+    overheat:{ exposeMul:0.22, dur:4.76, rootDur:3.91, chance:0.7 },   // after a heavy move (stomp) he VENTS: rooted + EXPOSED (dmgReduce ×0.22) for ~4.8s (dur +70%); 70% chance to trigger (was always) — the burn window where stacked fire finally pays off
     // two telegraphed AREA specials (updateMech). capFrac caps EACH blast to a % of a unit's maxHp and
     // maxHits caps HOW MANY units one blast fully hits — so a clumped ball loses a few, not all (spread!).
     abilities:[
@@ -176,7 +176,7 @@ const VILLAINS = {
     neonId:'rust', neonColor:'#ff8c3c', auraColor:[255,140,60], bossScale:2.6,   // foundry orange
     hp:9000, dmg:60, range:3.6, cd:1.3, speed:1.05, sight:10, killXp:380,   // speed 1.4→1.05
     dmgReduce:0.24, hpVpiScale:1/78, dmgVpiScale:1/168, hpVpiCap:1.6,
-    overheat:{ exposeMul:0.25, dur:2.4, rootDur:2.0 },
+    overheat:{ exposeMul:0.25, dur:4.08, rootDur:3.4, chance:0.7 },   // dur +70%, 70% chance to trigger
     abilities:[
       {k:'stomp', cd:12, range:6.0, dmg:52, waveR:3.2, jumpDur:0.7, capFrac:0.45, maxHits:6, overheat:true},
     ],
@@ -205,7 +205,7 @@ const VILLAINS = {
     hp:5200, dmg:17, range:1.9, cd:1.0, speed:2, sight:12, killXp:120,   // movement/cadence UNCHANGED per owner — speed 2 < Lobbyist 2.2 → the snipers can fully kite him
     dmgReduce:0.12, hpVpiScale:1/130, dmgVpiScale:1/210, hpVpiCap:1.2,   // ↓reduce + ↓scale + cap; the OVERHEAT window is the durability lever now
     splashFrac:0.5, splashR:1.9,                             // his BASIC swing still splashes, but softer (~50%)
-    overheat:{ exposeMul:0.30, dur:2.4, rootDur:2.0 },       // after the big pistol burst he VENTS: rooted + EXPOSED — the punish window
+    overheat:{ exposeMul:0.30, dur:4.08, rootDur:3.4, chance:0.7 },       // after the big pistol burst he VENTS: rooted + EXPOSED — the punish window (dur +70%, 70% chance to trigger)
     // windup/recover are LONG on purpose: the render plays the 10-frame attack strip across the whole
     // (windup+recover) window, so ~1.3-1.5s per move = a readable ~7fps telegraph, not a 0.8s blur.
     abilities:[
@@ -233,7 +233,7 @@ const VILLAINS = {
     hp:16000, dmg:48, range:2.0, cd:0.65, speed:3.2, sight:12, killXp:560,   // movement/cadence UNCHANGED per owner (speed + ability cooldowns untouched)
     dmgReduce:0.22, hpVpiScale:1/110, dmgVpiScale:1/165, hpVpiCap:1.6,   // ↓reduce + ↓scale + cap (the OVERHEAT window covers durability)
     splashFrac:0.7, splashR:2.2,                            // basic swing is area damage too (bigger radius than fight 1)
-    overheat:{ exposeMul:0.22, dur:2.6, rootDur:2.1 },      // vents + EXPOSED after the heavy minigun rake
+    overheat:{ exposeMul:0.22, dur:4.42, rootDur:3.57, chance:0.7 },      // vents + EXPOSED after the heavy minigun rake (dur +70%, 70% chance to trigger)
     // minigun FIRST: the ability dispatch fires the first ready+in-range ability and breaks, so the
     // rarest/biggest move must lead or the short-cooldown melee/pistol would starve it. Result: a big
     // minigun rake roughly every 12s, with melee (adjacent) / pistol (mid-range) filling the gaps.
@@ -497,6 +497,8 @@ function enterOverheatCore(state, u, oh, bonus){
 function enterOverheat(state, u, def, a){
   if(!def || !def.overheat || !(a && a.overheat)) return;                                       // only the heavy moves (overheat:true) vent
   if(u._overheatT>0) return;                                                                    // don't restack an active window
+  const ch=def.overheat.chance;                                                                 // chance<1 → a heavy move only SOMETIMES vents (the coolant node still FORCES it regardless)
+  if(ch!=null && ch<1 && (typeof simRandom==='function') && simRandom(state) >= ch) return;     // deterministic roll → co-op / rollback safe
   enterOverheatCore(state, u, def.overheat, u._overheatBonus);
 }
 
