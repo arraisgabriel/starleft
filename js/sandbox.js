@@ -57,9 +57,9 @@
     { heroId:'Nino', name:'Nino', icon:'🎩', type:'lobbyist',  sprite:'nino', level:11 },
     { heroId:'Biba', name:'Biba', icon:'⚕️', type:'recruiter', sprite:'biba', level:12 },
     { heroId:'Rust', name:'Rust', icon:'⚒️', type:'founder',   sprite:'rust', level:6  },
-    // Zeca has no runtime sprite (intern art only) — sprite:null renders him as a 15%-bigger Intern;
-    // hero=true + heroId:'Zeca' still wire his Mass-Fabrication signature + cyberware iconics.
-    { heroId:'Zeca', name:'Zeca', icon:'🔧', type:'worker',    sprite:null,   level:3  },
+    // Zeca renders from his own teal Intern hero art (walk + mine, slice_zeca.py); hero=true +
+    // heroId:'Zeca' wire his Mass-Fabrication signature + cyberware iconics. Gameplay stays a worker.
+    { heroId:'Zeca', name:'Zeca', icon:'🔧', type:'worker',    sprite:'zeca', level:3  },
   ];
   function heroById(id){ return HERO_ROSTER.find(h=>h.heroId===id) || null; }
 
@@ -329,7 +329,7 @@
       e.hero=true; e.heroId=h.heroId;
       e.stars=Math.max(0, Math.min(maxS, h.level||0));
       e.xp=(typeof CAREER!=='undefined'&&CAREER.xpFor)?CAREER.xpFor(e.stars):0;
-      if(h.sprite) e.spriteType=h.sprite;                         // bespoke recolor (Nino/Biba/Rust); Zeca has none → renders as Intern
+      if(h.sprite) e.spriteType=h.sprite;                         // bespoke recolor sprite (Nino/Biba/Rust/Zeca)
       e.lore={ seed:(e.id||0)+1, events:[], fixed:{ name:h.name } };
       ensureHeroSig(h.heroId);                                        // guarantee the tier-2 signature implant is installed for this hero
       if(typeof hubApplyUpgrades==='function') hubApplyUpgrades(e);   // apply any HUB roster upgrades/iconics

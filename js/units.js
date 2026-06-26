@@ -829,6 +829,16 @@ function entRadius(e){ return e.kind==='building' ? Math.max(e.w,e.h)*TILE*0.5 :
 
 function dist(a,b){ return Math.hypot(a.x-b.x,a.y-b.y); }
 
+// Distance from a point (unit center) to a building's footprint rectangle (0 if inside).
+// Used for "am I at the site?" checks so any adjacent tile — corner OR edge — counts,
+// independent of building size. (Distance-to-center mis-judged corners of 3×3+ footprints.)
+function distToFootprint(u, b){
+  const x0=b.tx*TILE, y0=b.ty*TILE, x1=(b.tx+b.w)*TILE, y1=(b.ty+b.h)*TILE;
+  const cx=Math.max(x0, Math.min(u.x, x1));
+  const cy=Math.max(y0, Math.min(u.y, y1));
+  return Math.hypot(u.x-cx, u.y-cy);
+}
+
 
 function spawnTrained(state,b,type){
   // spawn near building, send to rally
@@ -1140,9 +1150,12 @@ function updateUnit(state,u,dt){
     const b=cmd.building;
     if(!b||b.dead){ u.cmd=null; u.state='idle'; u._toBuild=false; return; }
     if(!b.constructing){ u.cmd=null; u.state='idle'; u._toBuild=false; return; }
-    // generous reach: any adjacent tile (incl. diagonal) counts as "at the site"
-    const reach = Math.max(b.w,b.h)*TILE*0.5 + TILE*1.2;
-    if(dist(u,b)<=reach){
+    // generous reach: any adjacent tile (incl. diagonal corners) counts as "at the site".
+    // Measured to the footprint EDGE, not the center — a corner tile of a 3×3+ footprint sits
+    // beyond a center-based radius, which left the intern parked just out of reach, re-pathing to
+    // the same corner forever (progress bar never filled until the player moved it). Size-independent.
+    const reach = TILE*1.0;
+    if(distToFootprint(u,b)<=reach){
       u.path=null; u._toBuild=false;
       // progressive crew speed: 1st intern = 100%, each extra intern adds +ASSIST_BUILD_RATE
       if(b._buildStamp !== state.time){ b._buildStamp = state.time; b._crew = 0; }

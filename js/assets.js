@@ -371,13 +371,20 @@ const UNIT_WALK = {
   // Hero Founder Mech "Pedro Rust" (foundry-orange scorched-steel exosuit) — visual override only;
   // gameplay stays a founder. Bespoke palette written to both faction keys (see slice_rust.py).
   rust:walkPair('rust','walk'),
+  // Hero Intern "Zeca" (teal-trim tank + chest harness, backwards cap, teal mining tool) — visual
+  // override only; gameplay stays a worker. Bespoke teal palette on both faction keys (slice_zeca.py).
+  zeca:walkPair('zeca','walk'),
   // VILLAIN BOSSES — bespoke sprites (visual-only via u.spriteType; gameplay stays soldier/founder).
   ninja:walkPair('ninja','walk'),         rex:walkPair('rex','walk'),
   ex_terminator:walkPair('ex_terminator','walk'),   // recurring nemesis boss (native sheet only — never recolored)
 };
 // drawn sprite HEIGHT per type — ~2× the old values (bigger on screen). Collision
 // radius r / speed / range in DEF are UNCHANGED, so gameplay is unaffected.
-const UNIT_SPRITE_H = { worker:46, soldier:68, ranger:62, recruiter:54, psychologist:54, hustler:56, lobbyist:64, foodtruck:64, auditor:72, founder:92, courier:36, bomber:153.6, biba:60.6, rust:92, ninja:44, rex:92, ex_terminator:60 };
+const UNIT_SPRITE_H = { worker:46, soldier:68, ranger:62, recruiter:54, psychologist:54, hustler:56, lobbyist:64, foodtruck:64, auditor:72, founder:92, courier:36, bomber:153.6, biba:60.6, rust:92, zeca:69.7, ninja:44, rex:92, ex_terminator:60 };
+// zeca:69.7 — slice_zeca.py body-normalises walk+mine into ONE 509px frame whose top ~21% is transparent
+// headroom for the raised mining tool (same idea as ex_terminator's 0.76-body frame); his body fills
+// ~0.786 of it. Intern-equiv would be 58.1 (= 46/0.786), but per owner this is bumped +20% → 69.7 so he
+// reads bigger on screen (then the hero ×1.15 makes drawH ≈ 80). Whole character scales uniformly.
 // ex_terminator:60 → fight 1 (×bossScale 2.0) draws a body ≈ the FOUNDER MECH's (~91px on screen), and fight 2
 // (×3.2) a bigger ~146px. The uniform 159px-tall frame is only 0.76 body (the rest is transparent headroom for the
 // extended gun/leg), so 60 — not 92 — lands the on-screen body at founder size. One frame box shared by walk + all
@@ -423,6 +430,7 @@ const UNIT_ACTION = {
   bomber:{ attack:walkPair('bomber','attack') },       nino:{ attack:walkPair('nino','attack') },
   biba:{ heal:walkPair('biba','heal') },               // hero Recruiter — custom heal animation
   rust:{ attack:walkPair('rust','attack') },           // hero Founder Mech — custom foundry-orange slam
+  zeca:{ mine:walkPair('zeca','mine') },               // hero Intern — custom teal mining swing (gameplay = worker)
   ninja:{ attack:walkPair('ninja','attack') },         rex:{ attack:walkPair('rex','attack') },   // villain bosses
   // EX-TERMINATOR: three distinct attack strips, one per AOE ability kind (villains.js AOE_KINDS → u._actState)
   ex_terminator:{ attack_melee:walkPair('ex_terminator','attack_melee'),

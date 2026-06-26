@@ -2095,6 +2095,7 @@ function heroAura(u){
   return u.spriteType==='nino' ? { color:[168,90,238],  rx:0.34, ry:0.30, alpha:0.50 }   // purple
        : u.spriteType==='biba' ? { color:[236,242,255], rx:0.34, ry:0.30, alpha:0.46 }   // white
        : u.spriteType==='rust' ? { color:[255,140,60],  rx:0.34, ry:0.30, alpha:0.48 }   // PEDRO "RUST": foundry orange
+       : u.spriteType==='zeca' ? { color:[64,224,208],  rx:0.30, ry:0.27, alpha:0.46 }   // ZECA: teal (intern-size aura)
        : null;
 }
 function drawHeroGlowLayer(state, u, anim, px, py, S, layer){
