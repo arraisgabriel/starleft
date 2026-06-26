@@ -315,6 +315,31 @@ function villainSnapOpen(state, tx, ty){
   return { x:W>>1, y:H>>1 };                                           // last resort → map interior
 }
 // one villain from a {id,x,y} entry — shared by map load and scripted mid-mission events (T2-8)
+/* ---- boss HP scaling (shared by spawn + the load-time reconcile below) ----
+   The veteran-scaled max HP a boss should have RIGHT NOW given the current DEF and the player's
+   carried career power (VPI). hpVpiCap bounds a maxed roster to a tough-but-finite pool (≤+160%
+   for most mechs) instead of the old ~5× wall. SINGLE source of truth so spawn and reconcile can
+   never drift. */
+function villainMaxHp(def, vpi){
+  const vpiBonus = Math.min(def.hpVpiCap!=null ? def.hpVpiCap : 99, (vpi||0)*(def.hpVpiScale||0));
+  return Math.round(def.hp * (1 + vpiBonus));
+}
+// LOAD-TIME RECONCILE: an OLD save made before a boss-HP rebalance restored the boss with his
+// PRE-cap maxHp (spawnVillainEntry — which applies hpVpiCap — is never re-run on load, so without
+// this the loaded fight keeps the stale, possibly ~5× health pool). Recompute the intended maxHp
+// from the CURRENT DEF + the saved VPI and scale current hp by the SAME ratio, so the % the player
+// has already chewed off is preserved (a half-dead boss stays half-dead, just against a smaller
+// bar). Idempotent: a boss already at the capped value rescales by 1.0 (no-op), so it is harmless
+// on fresh spawns and on re-saves of an already-reconciled boss. Authoritative path only (called
+// from updateVillain); co-op clients render the host's reconciled hp/maxHp via snapshots.
+function reconcileVillainHp(state, u, def){
+  const want = villainMaxHp(def, state._vpi || 0);
+  const have = u.maxHp;
+  if(!(have>0) || want===have) return;                 // nothing stored or already at the cap → no-op
+  const frac = Math.max(0, Math.min(1, u.hp/have));     // health fraction the player has left
+  u.maxHp = want;
+  u.hp = Math.max(1, Math.round(want*frac));            // never round a still-living boss down to 0
+}
 function spawnVillainEntry(state, v){
   {
     const def = VILLAINS[v.id]; if(!def || typeof mkUnit!=='function') return;
@@ -325,10 +350,11 @@ function spawnVillainEntry(state, v){
     // scale HP/dmg to the player's carried career power (VPI, computed in newMap before this) so a
     // leveled veteran army faces a proportionately tougher boss — never trivial, never an instant melt.
     const vpi = state._vpi || 0;
-    // hpVpiCap (default uncapped) bounds the veteran HP bonus: a maxed roster faces a tough-but-finite
-    // boss (e.g. ≤+160% HP) instead of the old ~5× wall that made the fight a doomed damage-race.
-    const vpiBonus = Math.min(def.hpVpiCap!=null ? def.hpVpiCap : 99, vpi*(def.hpVpiScale||0));
-    u.maxHp = u.hp = Math.round(def.hp * (1 + vpiBonus));
+    // hpVpiCap (applied in villainMaxHp) bounds the veteran HP bonus: a maxed roster faces a
+    // tough-but-finite boss (≤+160% HP for most) instead of the old ~5× wall that made the fight a
+    // doomed damage-race. _hpReconciled flags this boss as born at the current cap so the load-time
+    // reconcile in updateVillain is a no-op for it (only OLD restored bosses lack the flag).
+    u.maxHp = u.hp = villainMaxHp(def, vpi); u._hpReconciled=true;
     u.dmg   = Math.round(def.dmg * (1 + vpi*(def.dmgVpiScale||0)));
     if(def.dmgReduce>0) u.dmgReduce = def.dmgReduce;          // flat incoming-damage mitigation (damage(), units.js)
     if(def.splashFrac){ u.splash=Math.max(1, Math.round(u.dmg*def.splashFrac)); u.splashR=def.splashR||1.8; }   // basic attack splashes too (units.js u.splash override) → an AOE bruiser, not a single-target meleer; tracks the VPI-scaled dmg
@@ -347,6 +373,12 @@ function spawnVillainEntry(state, v){
 function updateVillain(state, u, dt){
   if(state.hub || u.dead || !u.villain) return;
   const def = VILLAINS[u.villainId]; if(!def) return;
+
+  // (a0) load-time HP-cap migration: an OLD save restored this boss with his pre-rebalance maxHp.
+  // Rescale to the current cap (preserving the damage already dealt) ONCE, before the phase check
+  // below reads u.maxHp. Idempotent + fresh spawns are pre-flagged, so this fires only for the
+  // stale-HP case it exists to fix. See reconcileVillainHp.
+  if(!u._hpReconciled){ reconcileVillainHp(state, u, def); u._hpReconciled=true; }
 
   // (a) phase transitions — an ORDERED list of HP thresholds; each phase can amp stats AND/OR introduce a
   // NEW mechanic (unlocks adds, bigger overheat windows). bossPhase carries the LEVEL (1 base, 2, 3…) so the
