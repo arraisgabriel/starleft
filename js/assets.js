@@ -460,9 +460,13 @@ function muzzleWorld(u){
   const anim = actionAnim(sType,'attack',u.owner) || unitWalk(sType,u.owner);
   const vh = unitDrawH(u), dh = vh, dw = vh*(anim ? anim.fw/anim.fh : 1), alt = u.air?16:0;
   let lx = ((m.mx!=null?m.mx:0.7) - 0.5)*dw;
-  const ly = ((m.my!=null?m.my:0.42) - 0.7)*dh;
+  let ly = ((m.my!=null?m.my:0.42) - 0.7)*dh;
   const facesLeft = !!(DEF[u.type] && DEF[u.type].facesLeft);
   if(((u._face||1)<0) !== facesLeft) lx = -lx;     // same mirror as blitFrame
+  if(u._rotMode && u._rot){                          // vehicle/air bank: lean the muzzle offset about the sprite
+    const r=u._rot, c=Math.cos(r), s=Math.sin(r), pivY=-0.2*dh, ry=ly-pivY;   // centre (0,-0.2·dh = ROT_PIVOT), so the beam stays on the barrel
+    const nlx=lx*c-ry*s; ly=pivY+lx*s+ry*c; lx=nlx;
+  }
   return { x:u.x + lx, y:(u.y-alt) + ly };
 }
 /* Drawn sprite box of a building in WORLD px: BUILDING_DRAW_SCALE× the footprint width,

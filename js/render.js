@@ -744,11 +744,16 @@ function render(state){
       if(!hit) continue;
       ctx.save(); ctx.globalAlpha*=0.45;
       if(u.selected){ ctx.strokeStyle='#8effb0'; ctx.lineWidth=2; ctx.beginPath(); ctx.ellipse(lb.px, lb.py+lb.S*0.3, lb.S*0.34, lb.S*0.14, 0,0,6.28); ctx.stroke(); }
-      blitFrame(u, lb.px, lb.py, lb.anim, lb.S, lb.fi);
+      rotBegin(u, lb.px, lb.py, lb.S); blitFrame(u, lb.px, lb.py, lb.anim, lb.S, lb.fi); rotEnd(u);
       ctx.restore();
     }
   }
   if(PERF.on) PERF.lap('depthDraw');
+  // boss-occlusion overlay: a giant boss (REX, 4× scale) is Y-sorted in FRONT of any player unit
+  // standing behind its feet, painting over the unit AND its hp bar so you can't see or micro it.
+  // This repaints every hidden player unit as a SOLID, opaque silhouette + hp bar ON TOP of the boss.
+  // The boss sprite is never read, dimmed, or made transparent. See drawBossOcclusionOverlay.
+  if(typeof drawBossOcclusionOverlay==='function') drawBossOcclusionOverlay(state, ox, oy);
   // Training Grounds: trainees are storedIn (skipped by the depth loop) — draw them live, on
   // top of the facility, standing on their shooting-range lanes.
   if(state.hub && typeof drawHubTrainees==='function') drawHubTrainees(state, ox, oy);
@@ -2261,6 +2266,61 @@ function drawCloakRim(u, anim, px, pyB, S, fi, t){
   ctx.drawImage(sc, 0,0,cw,ch, px-cw/2, pyB-dh*0.7-pad, cw,ch);
   ctx.globalAlpha=1; ctx.restore();
 }
+// ---- boss-occlusion overlay -----------------------------------------------------------------
+// A boss like REX draws 4× big and Y-sorts in front of any player unit behind its feet, swallowing
+// the unit + its hp bar. This pass (run AFTER the depth loop) marks each hidden player unit with a
+// team-colored OUTLINE (rim only — the body interior stays fully TRANSPARENT, so the opaque boss
+// shows through the middle) plus its hp bar + selection ring, ON TOP of the boss. The boss sprite is
+// never read, dimmed, or made transparent. Cosmetic + position-derived (reads only live x/y/hp/owner/
+// selected), identical on solo/host/client; no _ghostBlit, no save/net changes.
+let _occScratch=null;
+function _occRim(u, anim, px, pyB, S, fi, color){
+  if(!anim || !anim.img || !anim.frames || !anim.fh) return false;
+  const n=anim.frames.length, fr=anim.frames[((fi%n)+n)%n]; if(!fr) return false;
+  const dh=S, dw=S*(anim.fw/anim.fh), pad=8;
+  const cw=Math.max(1,Math.ceil(dw+pad*2)), ch=Math.max(1,Math.ceil(dh+pad*2));
+  if(!_occScratch) _occScratch=document.createElement('canvas');
+  const sc=_occScratch; if(sc.width<cw) sc.width=cw; if(sc.height<ch) sc.height=ch;
+  const sx=sc.getContext('2d');
+  sx.save(); sx.setTransform(1,0,0,1,0,0); sx.globalCompositeOperation='source-over'; sx.clearRect(0,0,sc.width,sc.height);
+  sx.translate(cw/2,pad);
+  const facesLeft=!!(DEF[u.type] && DEF[u.type].facesLeft);
+  if(((u._face||1)<0)!==facesLeft) sx.scale(-1,1);
+  const R=Math.max(2, S*0.06);                                                              // outline thickness, scales with the unit
+  for(let i=0;i<8;i++){ const a=i/8*6.2832; sx.drawImage(anim.img, fr[0],fr[1],anim.fw,anim.fh, -dw/2+Math.cos(a)*R, Math.sin(a)*R, dw, dh); }   // dilated silhouette (8 offset copies)
+  sx.globalCompositeOperation='destination-out';
+  sx.drawImage(anim.img, fr[0],fr[1],anim.fw,anim.fh, -dw/2, 0, dw, dh);                    // punch out the body interior → RING only; the middle stays fully transparent
+  sx.restore();
+  sx.save(); sx.setTransform(1,0,0,1,0,0); sx.globalCompositeOperation='source-in'; sx.fillStyle=color; sx.fillRect(0,0,cw,ch); sx.restore();   // tint the ring (keeps the ring's alpha)
+  ctx.save(); ctx.globalCompositeOperation='source-over'; ctx.globalAlpha=1;
+  ctx.drawImage(sc, 0,0,cw,ch, px-cw/2, pyB-dh*0.7-pad, cw,ch);                             // opaque team-color outline; the boss shows through the transparent interior
+  ctx.restore();
+  return true;
+}
+function drawBossOcclusionOverlay(state, ox, oy){
+  if(state.hub) return;
+  if((state.zoom||1) < SPRITE_LOD_ZOOM) return;            // bars/silhouettes are culled this far out anyway
+  const ents=state.entities; if(!ents) return;
+  let bosses=null;
+  for(const u of ents){ if(u && !u.dead && u.villain && (u.bossScale||1)>=1.5) (bosses||(bosses=[])).push({hb:unitHitBox(u), sy:u.y}); }
+  if(!bosses) return;
+  for(const p of ents){
+    if(!p || p.dead || p.owner!=='player' || p.kind==='building' || p._ninjaHidden || p.storedIn) continue;
+    const alt=p.air?16:0, vh=unitDrawH(p), midY=p.y-alt-vh*0.2;
+    let hid=false;
+    for(const b of bosses){ const hb=b.hb; if(p.y<b.sy && p.x>=hb.cx-hb.hw && p.x<=hb.cx+hb.hw && midY>=hb.top && midY<=hb.bot){ hid=true; break; } }   // behind the boss AND inside its drawn box
+    if(!hid) continue;
+    const px=p.x+ox, py=p.y+oy, sType=p.spriteType||p.type;
+    const fac=(typeof aoSide==='function' && aoSide(state,p.owner))?'ao':null;
+    const anim=(typeof unitWalk==='function')?unitWalk(sType,p.owner,fac):null;
+    const n=anim?anim.frames.length:1, fi=((p._still||0)<6) ? (((p._walkDist||0)/9)|0)%n : 0;   // reuse the walk frame drawUnit already advanced this frame
+    const _red=(typeof isRedSide==='function')&&isRedSide(p.owner), _p2=(p.owner==='player'&&p.ctrl==='p2');
+    const rim=_red?'#ff6e5e':(_p2?'#ffc24d':'#5aa0ff');
+    _occRim(p, anim, px, py-alt, vh, fi, rim);
+    barAt(px-vh*0.3, py-alt-vh*0.72-6, vh*0.6, 4, p.hp/p.maxHp, hpColor(p.hp/p.maxHp));   // always show the bar (who's there + their health)
+    if(p.selected){ ctx.strokeStyle='#8effb0'; ctx.lineWidth=2; ctx.beginPath(); ctx.ellipse(px, py-alt+vh*0.3, vh*0.34, vh*0.14, 0,0,6.28); ctx.stroke(); }
+  }
+}
 function drawRebornCore(u, anim, px, pyB, S, fi, t, key){
   const rm=(typeof megaReducedMotion==='function' && megaReducedMotion()), seed=(u.id||0);
   ctx.save(); ctx.globalCompositeOperation='lighter';
@@ -2292,6 +2352,35 @@ function drawRebornCore(u, anim, px, pyB, S, fi, t, key){
   ctx.beginPath(); ctx.arc(ox,oy,Math.max(1.2,S*0.02),0,6.2832); ctx.fill();
   ctx.restore(); ctx.globalAlpha=1;
 }
+// ---- Vehicle/air "lean into the climb" tilt (render-only) ---------------------------------------
+// Vehicle/air sprites are single camera-facing ("down") walk strips with no up/down frames, so heading
+// up reads as driving backwards. FULL rotation tips a camera-facing sprite upside-down, so instead we add
+// a small CLAMPED bank — the sprite still flips L/R normally and stays upright, but tilts up to ROT_LEAN
+// into its travel direction when climbing (0 going straight down/horizontal, so it can never invert). The
+// tilt eases in/out so a turn animates. Pure render: derives from the per-frame movement delta, holds for
+// solo/host/client with NO save/sync change. `?norotate=1` kills it (A/B), matching the repo's flags.
+const ROT_OFF = (typeof location!=='undefined' && /[?&]norotate\b/.test(location.search||''));
+const ROT_PIVOT = 0.2;    // pivot = sprite visual centre, as a fraction of drawn height up from the foot anchor
+const ROT_LEAN  = 0.42;   // max bank in radians (~24°); applied to up-diagonals, scaled by how steep the climb is
+function isRotUnit(u){ const d=DEF[u.type]; return !!(d && (d.vehicle || d.air)); }
+// Update the eased bank angle u._rot (and the u._rotMode gate) once per frame. Non-rot units → _rotMode=false.
+function updateUnitRot(u, mvx, mvy, md){
+  if(ROT_OFF || !isRotUnit(u)){ u._rotMode=false; return; }
+  u._rotMode=true;
+  let goal=0;
+  if(md>0.4){
+    const upfrac=Math.max(0, Math.min(1, -mvy/md));        // 1 = straight up, 0 = horizontal or descending
+    const hsign =Math.max(-1, Math.min(1, mvx/(0.35*md))); // smoothed left/right (no snap when crossing vertical)
+    goal = ROT_LEAN * upfrac * hsign;                       // bank into the climb; 0 going down → never inverts
+  }
+  if(u._rot==null){ u._rot=goal; return; }                 // newly-built: snap, don't ease up from 0
+  const k=(typeof megaReducedMotion==='function'&&megaReducedMotion())?1:0.18;   // reduced-motion → snap, no animated tilt
+  u._rot+=(goal-u._rot)*k;
+}
+// Begin/end a rotation transform around the sprite's visual centre (foot anchor lifted by ROT_PIVOT·S).
+// Wraps the sprite + its overlays so the bank rotates them rigidly together; no-op for non-rot units.
+function rotBegin(u, px, footY, S){ if(!u._rotMode) return; const pivY=footY-ROT_PIVOT*S; ctx.save(); ctx.translate(px,pivY); ctx.rotate(u._rot||0); ctx.translate(-px,-pivY); }
+function rotEnd(u){ if(u._rotMode) ctx.restore(); }
 function drawUnit(state,u,ox,oy){
   const px=u.x+ox, py=u.y+oy;
   const r=u.r;
@@ -2316,6 +2405,7 @@ function drawUnit(state,u,ox,oy){
     u._walkDist = (u._walkDist||0)+md;
     if(md>0.25){ u._still=0; if(Math.abs(mvx)>0.15 && !u._actState) u._face = mvx<0?-1:1; }
     else u._still=(u._still||0)+1;
+    updateUnitRot(u, mvx, mvy, md);
     const moving = u._netMoving || (u._still||0) < 6;
     if(u.selected){ ctx.strokeStyle='#8effb0'; ctx.lineWidth=2; ctx.beginPath(); ctx.ellipse(px, py-alt+vh*0.3, vh*0.34, vh*0.14, 0,0,6.28); ctx.stroke(); }
     if(anim){
@@ -2330,7 +2420,9 @@ function drawUnit(state,u,ox,oy){
         const stridePx = (sType==='ninja') ? 15 : 9;
         fi = moving ? (((u._walkDist||0)/stridePx)|0) % anim.frames.length : 0;
       }
+      rotBegin(u, px, py-alt, vh);
       blitFrame(u, px, py-alt, useAnim, vh, fi);                          // light: walk/attack anim, no idle "life" layers, no HUD
+      rotEnd(u);
     }
     else { ctx.fillStyle = isRedSide(u.owner)?'#c0392b':(u.ctrl==='p2'?'#c47a1f':'#3b7fd0'); ctx.fillRect(px-r*0.6, py-alt-r*0.6, r*1.2, r*1.2); }
     if(u.hitFx>0) u.hitFx-=1/60;                                          // keep the transient decaying so it doesn't freeze
@@ -2345,6 +2437,7 @@ function drawUnit(state,u,ox,oy){
   u._walkDist = (u._walkDist||0)+md;
   if(md>0.25){ u._still=0; if(Math.abs(mvx)>0.15 && !u._actState) u._face = mvx<0?-1:1; }   // combat (_actState) → trust the authoritative facing (host/sim), don't flip from interpolated drift
   else u._still=(u._still||0)+1;
+  updateUnitRot(u, mvx, mvy, md);   // vehicles/air: ease the bank angle u._rot (render-only lean-into-climb)
   const moving = u._netMoving || (u._still||0) < 6;   // debounce so brief stalls don't flicker to idle; _netMoving = host-authoritative locomotion (co-op client) so eased sub-threshold motion still animates
 
   ctx.save();
@@ -2433,6 +2526,7 @@ function drawUnit(state,u,ox,oy){
     }
     u._heroFi = fi;   // frame index actually shown — so the per-frame hero glow looks up the right anchor
     const pyB = (py-alt)+bShift-jz;   // sprite/glow baseline, lifted by a REX leap (jz)
+    rotBegin(u, px, pyB, S*bScale);   // vehicles/air: bank sprite + all silhouette overlays rigidly into the climb
     if(u.hero) drawHeroGlowLayer(state, u, useAnim, px, pyB, S*bScale, 'aura');   // halo behind
     else if(u.villain) drawVillainGlow(state, u, useAnim, px, pyB, S*bScale, 'aura');
     // NINJA-AI villain dash / SPRINT afterimage (T2-6): faint additive ghosts of the current frame at recent
@@ -2470,6 +2564,7 @@ function drawUnit(state,u,ox,oy){
     // Nino's art through it), and only the edge is purple. Never grey, never a solid-purple blob.
     if(u._cloaked) drawCloakRim(u, useAnim, px, pyB, S*bScale, fi, state.time||0);
     if(u.type==='worker' && u.carrying>0){ ctx.fillStyle='#ffd86b'; ctx.beginPath(); ctx.arc(px,py-alt-dh*0.7-4,3,0,6.28); ctx.fill(); }
+    rotEnd(u);
   } else if(u.villain){
     // defensive fallback — a villain whose bespoke sheet is missing still reads as a giant glowing mass
     const def=(typeof VILLAINS!=='undefined') && VILLAINS[u.villainId], col=(def&&def.neonColor)||'#50e6ff';
