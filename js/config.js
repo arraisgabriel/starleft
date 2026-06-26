@@ -129,11 +129,11 @@ const INTEL_SCAN = { time:20, clusterR:12, seenR:4, revealR:5 };
 /* ---- Unit / building definitions (startup-vs-monopoly satire) ---- */
 const DEF = {
   hq:       { name:'Open-Plan HQ', icon:'🏢', kind:'building', w:4,h:3, hp:3000, cost:0,   build:35,  sight:7, supply:24, color:'#3b7fd0',
-              dmg:8, range:7.5, cd:1.6, flavor:'Stores Funding and onboards unpaid Interns. Fires the occasional warning shot from the rooftop.' },
+              dmg:8, range:9.0, cd:1.6, flavor:'Stores Funding and onboards unpaid Interns. Fires the occasional warning shot from the rooftop.' },
   barracks: { name:'People Ops',   icon:'🎯', kind:'building', w:3,h:3, hp:900,  cost:150, build:20,  sight:5, supply:0,  color:'#5a6b8a',
               flavor:'"Recruiting" department. Turns Funding into Growth Cyborgs and Consultants.' },
   turret:   { name:'Legal Team',   icon:'⚖️', kind:'building', w:1,h:1, hp:550,  cost:100, build:14,  sight:7, supply:0,  color:'#7a8aa8',  // 1×1 footprint; sprite scaled up so the DRAWN turret is ~60% of the old size (BUILDING_TYPE_SCALE.turret, assets.js)
-              dmg:14, range:8.625, cd:0.7,   // 15% beyond the longest base unit range (lobbyist 7.5); sieged Auditor (9) still out-ranges it
+              dmg:14, range:10.35, cd:0.7,   // ~15% beyond the longest base unit range (Lobbyist 9.0); sieged Auditor (10.8) still out-ranges it
               flavor:'Fires cease-and-desist letters at anything that trespasses on your IP.' },
   intel:    { name:'Market Research', icon:'🕵️', kind:'building', w:1,h:1, hp:600, cost:1999, build:30, sight:7, supply:0, color:'#8a5aa8',
               flavor:'Runs one "totally anonymous" industry survey and publishes every rival campus it can triangulate — well, the parts Legal would sign off on. Yes, that\'s a Legal Team bolted to the roof: it has never fired a shot, but the consent forms practically notarize themselves.' },
@@ -159,7 +159,7 @@ const DEF = {
               madHeal:true, flavor:'Company psychologist. Channels TEMPORARY calm into one frayed mind at a time — a field stopgap that wears off (and is lost the moment they\'re extracted). Never a real cure, and can\'t fight.' },
   hustler:  { name:'Hustler', icon:'🛹', kind:'unit', hp:70, cost:70, build:11, sight:7, supply:1, speed:3.5, dmg:10, range:1.6, cd:0.7, r:9,
               splash:14, splashR:1.2, flavor:'Moves fast and breaks things. Cheap, fast, harasses your economy.' },
-  lobbyist: { name:'Lobbyist', icon:'🎩', kind:'unit', hp:70, cost:196, build:20, sight:9, supply:2, speed:2.2, dmg:36, range:7.5, cd:2.3, r:9,
+  lobbyist: { name:'Lobbyist', icon:'🎩', kind:'unit', hp:70, cost:196, build:20, sight:10.8, supply:2, speed:2.2, dmg:36, range:9.0, cd:2.3, r:9,
               pierce:true,   // T2-4: regulation ignores armor — the counter to vehicles/mechs
               flavor:'Buys senators wholesale. One devastating armor-piercing shot, then a long reload.' },
   /* ---- The Garage (Factory) tier ---- */
@@ -167,14 +167,15 @@ const DEF = {
               splash:9, splashR:1.4, flavor:'Free cold brew & napalm. A flame cone shreds clustered enemies.' },
   auditor:  { name:'Auditor', icon:'📊', kind:'unit', hp:200, cost:175, build:28, sight:8, supply:3, speed:1.8, dmg:18, range:5.0, cd:1.4, r:12, vehicle:true, antiAir:true,
               armor:0.25, pierce:true,   // T2-4: armored chassis; the due-diligence cannon punches through armor
-              siege:{dmg:42,range:9,splashR:1.6,setup:1.2}, flavor:'Deploys spreadsheets into a long-range due-diligence cannon. Sieges when enemies are near.' },
+              siege:{dmg:42,range:10.8,splashR:1.6,setup:1.2}, // ~4% beyond the Legal Team turret (10.35) — sieged Auditor can still safely shell static defenses
+              flavor:'Deploys spreadsheets into a long-range due-diligence cannon. Sieges when enemies are near.' },
   /* ---- Launch Pad (Starport) tier ---- */
   founder:  { name:'Founder Mech', icon:'🦄', kind:'unit', hp:600, cost:599, build:45, sight:8, supply:6, speed:1.6, dmg:45, range:3.5, cd:1.5, r:16, vehicle:true,
               armor:0.30,   // T2-4: exosuit plating shrugs off small-arms — bring piercing
               splash:20, splashR:1.3, antiAir:true, flavor:'A visionary in a 12-ft exosuit. Armored; hits anything, ground or air.' },
   courier:  { name:'Drugztore Delivery Drone', icon:'🛸', kind:'unit', hp:120, cost:199, build:16, sight:7, supply:2, speed:3.0, dmg:0, range:4.0, cd:1.0, r:10, air:true, action:'heal',
               heal:7, flavor:'Same-day delivery of medkits and morale. Flies over everything.' },
-  bomber:   { name:'Buzzword Bomber', icon:'🛩️', kind:'unit', hp:480, cost:630, build:50, sight:9, supply:6, speed:1.7, dmg:26, range:6.0, cd:0.9, r:16, air:true, antiAir:true, facesLeft:true,
+  bomber:   { name:'Buzzword Bomber', icon:'🛩️', kind:'unit', hp:480, cost:630, build:50, sight:10.8, supply:6, speed:1.7, dmg:26, range:6.0, cd:0.9, r:16, air:true, antiAir:true, facesLeft:true,
               armor:0.20,   // T2-4: armored hull
               flavor:'Capital airship. Rains cyan ordnance on the campus below.' },
 
@@ -186,7 +187,7 @@ const DEF = {
   /* ---- A&O's Dark Tower (indestructible scenery landmark; spawned via cfg.scenery as a neutral prop —
      never buildable, never a combat target). The giant look comes from BUILDING_TYPE_SCALE in assets.js;
      w/h here is only the collision footprint so units route around its base. ---- */
-  darktower:{ name:'The Dark Tower', icon:'🗼', kind:'building', w:6,h:5, hp:1, cost:0, build:1, sight:9, supply:0, color:'#0c0a12',
+  darktower:{ name:'The Dark Tower', icon:'🗼', kind:'building', w:6,h:5, hp:1, cost:0, build:1, sight:10.8, supply:0, color:'#0c0a12',
               // The drawn sprite is ~17×42 tiles (BUILDING_TYPE_SCALE) but w/h above is only the tiny ground rect that
               // drives the DRAW anchor + holdout anchor — leaving it untouched keeps both identical. `collide` is the
               // SOLID lower-fort footprint, decoupled from draw and stamped by markBuilding so units route AROUND the
