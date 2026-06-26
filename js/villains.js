@@ -144,14 +144,14 @@ const VILLAINS = {
     spriteType:'rex',          // bespoke alien A&O mech sprite (assets/units/rex/*_ao); gameplay still founder via base
     spriteFaction:'ao',        // always render the A&O toxic-green variant (robust even if a map omits enemyFaction:'ao')
     neonId:'rexBoss', neonColor:'#7bff5b', auraColor:[120,255,90], bossScale:4.0,   // own neon map; tower_guardian keeps 'rex'
-    hp:18000, dmg:80, range:4.0, cd:1.3, speed:1.0, sight:10, killXp:700,   // finale boss — the biggest payout. speed 1.0 < every player combat unit (Lobbyist 2.2) so ranged units can KITE and escape his barrage
+    hp:18000, dmg:62, range:4.0, cd:1.3, speed:1.0, sight:10, killXp:700,   // finale boss — the biggest payout. speed 1.0 < every player combat unit (Lobbyist 2.2) so ranged units can KITE and escape his barrage. dmg 80→62: a basic no longer one-shots a 70-HP Lobbyist (62×0.90 pierce ≈56), so the squad shrinks per-trade not per-hit (the OVERHEAT window stays the durability lever, not his alpha)
     dmgReduce:0.20, hpVpiScale:1/120, dmgVpiScale:1/160, hpVpiCap:1.6,   // ↓reduce (the OVERHEAT window is now the durability lever) + ↓scale + a HARD cap so a veteran roster faces ≤+160% HP, not a ~5× wall
     overheat:{ exposeMul:0.22, dur:6.19, rootDur:5.08, chance:0.7 },   // after a heavy move (stomp) he VENTS: rooted + EXPOSED (dmgReduce ×0.22) for ~6.2s (dur +120% cumulative); 70% chance to trigger (was always) — the burn window where stacked fire finally pays off
     // two telegraphed AREA specials (updateMech). capFrac caps EACH blast to a % of a unit's maxHp and
     // maxHits caps HOW MANY units one blast fully hits — so a clumped ball loses a few, not all (spread!).
     abilities:[
-      {k:'missile', cd:13, range:9,   count:3, dmg:46, splashR:1.9, flight:0.78, spreadTiles:2.2, capFrac:0.40, maxHits:6},   // cd 8→13: the ranged barrage is far less frequent → room to reposition between volleys
-      {k:'stomp',   cd:13, range:6.5, dmg:60, waveR:3.4, jumpDur:0.7, capFrac:0.45, maxHits:6, overheat:true},
+      {k:'missile', cd:16, range:9,   count:3, dmg:38, splashR:1.9, flight:0.78, spreadTiles:2.2, capFrac:0.34, maxHits:6},   // cd 13→16 (more reposition room) + dmg 46→38 + capFrac .40→.34: the volley chunks ~20% less of a clumped squad, so fewer instant back-rank deaths
+      {k:'stomp',   cd:15, range:6.5, dmg:50, waveR:3.4, jumpDur:0.7, capFrac:0.45, maxHits:6, overheat:true},   // cd 13→15 (desync from missile → cleaner spaced EXPOSED windows) + dmg 60→50 (softer melee punish on vets/vehicles; fragile units still capped)
       {k:'summon',  cd:22, comp:[['soldier',3],['ranger',2]], at:'fog', tauntKey:'phase', phaseGate:2},   // P2-unlocked adds: give the army a second job + create ebb/flow burn windows
     ],
     phases:[
