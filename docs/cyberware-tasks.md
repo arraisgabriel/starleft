@@ -232,6 +232,12 @@
 
 - [x] **T5.1 — `CYBERWARE.iconics`** entries keyed `hero:<id>` for Nino/Rust/Zeca/Biba (unique os/arms pieces,
   superior to generic tier-5). **Acceptance:** `cyberImplant(iconicId)` resolves; not in any buyable catalog.
+  - **⚠ Canon note for Zeca's iconic(s):** per `docs/story-next-steps-ceo-arc.md` §3 HERO 2, Zeca's implants are
+    **Tusk-given bespoke chrome** (he was Tusk's orphan intern/chore-boy, secretly Tusk's bastard son) that grant
+    both his Overclock *and* **A&O internal access** — the in-fiction reason his Overclock cracks Upstream Custody
+    in XIX. His iconic flavor should hint "this isn't standard-issue intern chrome" **without** revealing the
+    bloodline (the reveal lands at XXII–XXIII; Zeca doesn't know yet). The shipped `zeca_greenhorn` flavor
+    ("A&O wired the intern cheap and fast") predates this canon — revisit it when Arc 3 is built.
 
 - [x] **T5.2 — Grant + surface.** A story/quest hook sets `CAMPAIGN.upgrades['hero:'+id].chrome[slot]={id:iconicId,tier:5}`;
   the clinic shows it as a non-buyable, already-filled tile with an iconic badge. **Acceptance:** the four heroes

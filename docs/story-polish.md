@@ -473,7 +473,10 @@ the Reborn stakes:
   aged in a render since the year he supposedly died." (Pays off B.3 VIII NPC.)
 - **XVII / XVII.5 — THE GROWTH TEAM / PERFORMANCE REVIEW:** rescue **ZECA** (Nino-proximity, the Biba pattern):
   a prodigy "paid in exposure and a memorial slot," his throughput is the engine of the purge. Overclock aura
-  previews. *He makes Tusk killable.*
+  previews. *He makes Tusk killable.* **⚠ Canon secret (seed here, reveal at XXII–XXIII):** Zeca is Tusk's
+  orphan intern/chore-boy, wired with Tusk-given implants that grant his Overclock *and* A&O internal access
+  (why he can crack the vault), and is secretly **Tusk's bastard son** — Tusk murdered his mother to hide him.
+  Monstrous, not sympathetic; Zeca doesn't know yet. Full canon: `docs/story-next-steps-ceo-arc.md` §3 HERO 2.
 - **XVIII / XIX — THE VELOCITY TRAP / THE DATA VAULT:** Zeca's Overclock cracks Upstream Custody — **the backup
   pool is saved from the purge**, and inside sits one more backup: **the founder's**. *The keys to the dead
   are the keys to the man.* Now Tusk can die for good. Hollow note: the dead are yours **as data**; the Wake
@@ -488,8 +491,9 @@ the Reborn stakes:
   three home.** The wall is still the wall.
 
 **Guardrails (story-next-steps §7, restated):** dark/Hades, hollow victory; Tusk never redeemed or pitied
-(his defeat is a *write-off*); Rust's humor is gallows not hope-core; Zeca's speed is grief with a stopwatch;
-**Reborn stays scarce (3 ever) and never arc-gated.**
+(his defeat is a *write-off*); Rust's humor is gallows not hope-core; Zeca's speed is grief with a stopwatch
+(and his canonical secret — Tusk's hidden bastard son, mother murdered to bury him — indicts Tusk further,
+never asks for pity); **Reborn stays scarce (3 ever) and never arc-gated.**
 
 ---
 

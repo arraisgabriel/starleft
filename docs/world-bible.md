@@ -18,7 +18,7 @@ what keeps the campaign coherent):
 
 ## Contents
 1. Premise & tone
-2. The moral-descent arc (the twelve episodes as story beats)
+2. The moral-descent arc (Episodes I–XVI as story beats)
 3. How enemy factions escalate
 4. The player faction: satirical roster (units & buildings)
 5. The H.U.B. — the campaign meta-layer between missions
@@ -56,10 +56,14 @@ cure for death — only to find your enemy has already turned the afterlife into
 
 ## 2. The moral-descent arc (current campaign)
 
-**Twelve episodes ship today** (`js/maps_data.js`, `MAPS[0..11]`). The throughline of Arc 1: **you win by
-becoming the thing you fought.** Each enemy is a mirror of a later stage of your own corruption. Arc 2
-inverts it: having destroyed everyone, including yourself, you try to undo death — and discover death
-is just another thing capital has already priced.
+**Sixteen numbered episodes ship today** (Episodes I–XVI in `js/maps_data.js`), plus five `.5` **interludes**
+appended to the `MAPS` array and routed between the numbered beats (`gateAfter`/`returnTo`/`displayEp`), and
+several **deferred villains** who surface mid-map. The current frontier is **Arc 3 Block 1** (Eps XIV–XVI),
+which closes on a `toBeContinued`; everything past XVI is designed but unshipped (see the Arc 3 note below).
+The throughline of Arc 1: **you win by becoming the thing you fought.** Each enemy is a mirror of a later
+stage of your own corruption. Arc 2 inverts it: having destroyed everyone, including yourself, you try to
+undo death — and discover death is just another thing capital has already priced. **Arc 3** is *A&O strikes
+back*: capital finally wears a face and moves to foreclose the cure and erase the dead a second time.
 
 | Ep | Map name | Crawl title | Enemy | Biome | Beat (where the player is, morally & financially) |
 |----|----------|-------------|-------|-------|----------------------------------------------------|
@@ -74,12 +78,25 @@ is just another thing capital has already priced.
 | IX | The Proof of Concept | THE PROOF OF CONCEPT | A&O | tech+ice (cryo lab) | Regrowth on a stolen blueprint: the **GRAAL** — a chip that writes a dying mind into another body, metal if it has to be. The names on the memorial stop looking final. First chapter of the long immortality arc; ship a proof of concept before A&O repossesses it. |
 | X | The Acquihire | THE ACQUIHIRE | A&O | tech (prison-office) | **Infiltration / rescue.** No economy, no funding — only Nino and the veterans you carried this far. Punch down A&O's open-plan prison to free **BIBA**, the architect A&O built the GRAAL around — and who sabotaged it. The carried roster's time to shine. |
 | XI | The Launch | THE LAUNCH | A&O | tech (coolant-sea peninsula) | **The pilgrimage.** A blueprint isn't a factory, and A&O owns the only one that works: the **DARK TOWER**, a black spire on a peninsula where the GRAAL writes the dying into fresh metal and the dead into product. Seize it before the keynote ships. *"It's time to bring them back."* |
-| XII | The Continuity Farm | THE CONTINUITY FARM | A&O | tech+ice | **The ironic twist.** The company you rebuilt was never alive — "a cap table wearing a grief mask." A&O already monetized resurrection: it leases the dead into refrigerated bodies and bills subscriptions for memories that used to belong to people. Crack the farm, seize the **transfer lattice**, and decide which ghost gets equity again. |
+| XII | The Siege Line | THE SIEGE LINE | A&O | tech+ice | **Arc 2 climax setup.** You hold the GRAAL and give the product away, so A&O stops litigating and marches: forward staging bases creep up the approaches to the H.U.B. to level the Wake. Shatter all six and break the assault before it reaches the gates. |
+| XIII | The Liquidation | THE LIQUIDATION | A&O | tech | **Arc 2 climax / Arc 3 pivot.** A&O fields **REX** — a five-story walking foreclosure-mech — to raze the Wake itself. Kill it before it reaches the H.U.B. (Not the campaign finale; REX is A&O's weapon, and it foreshadows who will pilot the next one.) |
+| XIV | The Recall Notice | THE RECALL NOTICE | A&O | tech | **Arc 3 opens.** A&O files **CHAPTER ELEVEN** and gives capital a face: **DELL TUSK**, managing partner, who calls the flash "a migration event" and the memorial "a liability we're rightsizing." Your company and your dead are declared delinquent inventory. Hold the H.U.B. perimeter, or raze four repo camps. |
+| XV | The Foundry Raid | THE FOUNDRY RAID | A&O | tech+ice (coolant coast) | Raze five foundry campuses to break Tusk's Founder-Mech assembly line, then out-duel its contracted test pilot — **PEDRO "RUST"**, who reads his own write-off file mid-fight and changes sides. |
+| XV.5 | The Non-Compete | THE NON-COMPETE | A&O (Founder-warden) | tech | *Interlude.* A&O litigates Rust's resignation with ordnance — "company property does not get to resign." A Founder-warden hunts him; keep Rust alive. His first deployment as your hero. |
+| XVI | The Severance Package | THE SEVERANCE PACKAGE | A&O | tech | A&O's recovery division comes to repossess Rust; raze five bases and put down the returning **EX-TERMINATOR**. Reading Tusk's file, Rust goes quiet at one line — the founder "hasn't aged in a render since the year he supposedly died." Ends on `toBeContinued`. (Current shipped frontier.) |
 
 A new chapter must know which beat it sits next to, and bridge them. Inserting between IV and V, for
 example, means: player at peak power, monopoly just consolidated, the first cracks of backlash
 beginning — write to *that*. Inserting inside Arc 2 means staying inside the immortality arc against
 A&O.
+
+**Interludes & deferred villains.** Five `.5` **interludes** ship between the numbered beats — III.5 THE
+CONTRACTOR, VIII.5 THE LAND GRAB, IX.5 THE RECOVERY AGENT, X.5 THE EXTRACTION CLAUSE, XV.5 THE NON-COMPETE —
+each a short, focused mission (a duel, a hold, an escort) appended to `MAPS` and slotted in by routing
+(`gateAfter`/`returnTo`/`displayEp`), not by array position. Some numbered episodes also end on a **deferred
+villain** who only surfaces once the main objective is met: THE SEVERANCIER closes Ep VII, **RUST** is the
+duel that ends Ep XV, and THE EX-TERMINATOR caps Ep XVI. (THE EX-TERMINATOR is a recurring A&O nemesis boss —
+keep him in his native dark sprites; never recolor him.)
 
 **The flash (end of Arc 1).** Episode VII's "last quarter" ends in mutual annihilation: a nuclear flash
 takes everything — the campuses, the war chest, **and every career unit**. The startup *fails*. The
@@ -89,15 +106,17 @@ screen: Arc 2 opens inside the crater the flash left.
 **Arc 2 — the resurrection arc (Episodes VIII onward).** From the crater forward, the company chases
 the **digital cure for death**: the GRAAL, a chip for transferring consciousness between human and
 machine bodies. **From Episode VIII on, the standing enemy is always A&O** (§3). The shipped beats
-(VIII → XII) run: rebuild broke from the crater → steal & prototype the GRAAL → rescue its architect →
-storm the factory and seize the chip → discover A&O has already turned resurrection into a billing
-model.
+(VIII → XIII) run: rebuild broke from the crater → steal & prototype the GRAAL → rescue its architect
+(Biba) → seize the **Dark Tower** and the GRAAL with it → bring the dead home at the **Wake** → A&O drops
+the lawyers and marches (the **Siege Line**) → and fields **REX**, a five-story walking foreclosure, to raze
+the Wake (the **Liquidation**) — the hand-off into Arc 3.
 
-**Where Arc 2 is heading (planned, not yet shipped).** The arc's intended destination — toward roughly
-**Episode XIV** — is the moment the player **must choose one fallen career unit from the memorial to
-live again as a Reborn Cyborg**, the first real consciousness-transfer. The game already foreshadows
-this in voice lines ("Five stars or no resurrection. Your choice.", "I built the chip so the wall stops
-being final."). Note that this climax is a **system, not just map data**: the death-reset at the flash,
+**Where Arc 2 was heading (now shipped — see the update below).** The arc's intended destination was the
+moment the player **must choose one fallen career unit from the memorial to live again as a Reborn Cyborg**,
+the first real consciousness-transfer. The game foreshadows this in voice lines ("Five stars or no
+resurrection. Your choice.", "I built the chip so the wall stops being final."). This **shipped not as an
+episode but as a standing H.U.B. system** — the Wake (see the next paragraph). Note that this climax is a
+**system, not just map data**: the death-reset at the flash,
 the hero/carryover overrides, and any Reborn-Cyborg unit type live in code (`career.js`, `lore.js`,
 `units.js`, `config.js` `DEF`). A map can carry the *story* (crawl, A&O enemy, objective, biome); the
 mechanic is separate code work. Keep new chapters honest to the descent — **never** redemptive, bright,
@@ -110,19 +129,34 @@ for M3$ + write-time. No future chapter switches it on; it is a permanent, scarc
 chapter touching resurrection must protect this — its stakes are about the *backup pool* the dead are
 written back from, never about granting the player resurrection they already have.
 
-**Arc 3 — A&O strikes back (planned, Episodes XIV–XXIII; see `docs/story-next-steps-ceo-arc.md`).** With
-the resurrection cycle closed (Biba + the cyborgs aboard, the Wake live), A&O finally gives capital a
-face: **DELL TUSK**, its managing partner — and secretly **the first successful GRAAL write**, a
-re-instantiating backup who wants to *own* the cure because he *is* it (the player's dark mirror; never
-redeemed). His **PROJECT CHAPTER ELEVEN** moves to foreclose the company that stole the GRAAL and **purge
-the upstream backup pool** so the dead can never be written home again. Across ten episodes the player
-reaches and recruits two A&O cast-offs who are literally the keys that dismantle his plan: **PEDRO "RUST"**,
-a sarcastic Mechfounder hero (a hero Founder Mech, recruited by boss-duel→defection) whose
-foundry raid strips Tusk's mech army so the finale is survivable; and **ZECA OKONKWO**, a gifted Intern
-hero (an Overclock-aura + Crunch-burst tempo accelerator, rescued Biba-style) whose vault heist seizes the
-custody keys — including Tusk's own backup — so Tusk can finally stay dead. The finale **re-skins the
-existing REX superboss as Tusk's escape vehicle** (`finale:true` routing unchanged). Stay honest to the
-descent: hollow victory, the wall still keeps most of its names.
+**Arc 3 — A&O strikes back (Eps XIV–XXIII; design in `docs/story-next-steps-ceo-arc.md`).** With the
+resurrection cycle closed (Biba + the cyborgs aboard, the Wake live), A&O finally gives capital a face:
+**DELL TUSK**, its managing partner — and secretly **the first successful GRAAL write**, a re-instantiating
+backup who wants to *own* the cure because he *is* it (the player's dark mirror; never redeemed). His
+**PROJECT CHAPTER ELEVEN** moves to foreclose the company that stole the GRAAL and **purge the upstream
+backup pool** so the dead can never be written home again. Across the arc the player reaches and recruits two
+A&O cast-offs who are literally the keys that dismantle his plan: **PEDRO "RUST"**, a gallows-humour
+Mechfounder hero (a hero Founder Mech, recruited by boss-duel→defection) whose foundry raid strips Tusk's
+mech army so the finale fields one REX, not a swarm — *he makes the finale survivable*; and **ZECA
+OKONKWO**, a burnt-out Intern prodigy (an Overclock-aura + Crunch-burst tempo accelerator, rescued
+Biba-style) whose vault heist seizes the custody keys — including Tusk's own backup — *so Tusk can finally
+stay dead* (**Zeca makes Tusk killable**). The finale **re-skins the existing REX superboss as Tusk's escape
+vehicle** (`finale:true` routing unchanged). Stay honest to the descent: hollow victory, the wall still
+keeps most of its names.
+
+> **Shipped vs. planned (Arc 3).** **Block 1 (Eps XIV–XVI) is SHIPPED:** Tusk is introduced and named (XIV),
+> the foundry is raided and **Rust** recruited by duel→defection (XV/XV.5), and A&O's recovery division comes
+> for him (XVI) — the block ends on a `toBeContinued`, the current campaign frontier. **Block 2+ (Eps XVII–XXIII)
+> is designed but NOT yet shipped** — that is where **Zeca** is rescued (XVII), the backup vault is cracked
+> (XIX), and Tusk is run down into REX (XXII–XXIII). See §6 for both heroes.
+>
+> **⚠ Canonical Zeca secret (seed early, reveal late; Zeca does NOT know yet):** Zeca was raised an orphan as
+> Tusk's own personal intern / chore-boy, wired with **Tusk-given implants** that grant his Overclock *and*
+> **A&O internal access** (the in-fiction reason his Overclock cracks the vault in XIX). The buried truth:
+> Zeca is **Tusk's bastard son**, and **Tusk murdered Zeca's mother** to hide him — making the climax literal
+> **patricide-by-data**. It is a *monstrous* Tusk beat, never a sympathetic one (he is never pitied). Reveal
+> lands at XXII–XXIII alongside the full Tusk reveal. Full canon + cadence: `docs/story-next-steps-ceo-arc.md`
+> §3 HERO 2.
 
 ---
 
@@ -137,10 +171,18 @@ home and harder to morally separate from yourself.* Then the flash burns it all 
 - **A&O / Alpha & Omega** — *"the fund that buys the beginning and the end."* A venture-capital /
   private-equity cartel (think the PayPal-mafia-as-antitrust-villain register). After the flash, A&O
   files the paperwork before the dust settles, picks up your wreckage at auction, and calls it a
-  *portfolio*. Across Arc 2 it is the entity manufacturing the GRAAL, caging its architect, and running
-  the Continuity Farm — the late-stage mirror: internal, almost indistinguishable from what you are.
+  *portfolio*. Across Arc 2 it is the entity manufacturing the GRAAL, caging its architect, and monetizing
+  resurrection as a subscription — the late-stage mirror: internal, almost indistinguishable from what you
+  are. In Arc 3 it moves to foreclose the company outright and purge the dead a second time (§2).
 - **All Arc 2 episodes fight A&O.** Do not invent a new standing enemy for a post-VII chapter; the beat
   is the player vs A&O. (A *sub-brand* or named campus of A&O is fine for flavor.)
+- **Arc 3 — A&O wears a face.** The enemy is still A&O, but it finally has a managing partner: **DELL TUSK**
+  (§2). Arc 3 leans hard on **A&O sub-brands** as the per-episode antagonist skin — *Asset Recovery &
+  Reconciliation* (XIV), *Fabrication & Founder Programs* (XV), *Repossession & Recovery* (XVI), and (planned)
+  *Growth & Velocity*, *People Ops*, *Upstream Custody*. Its enforcement is no longer just lawyers but a
+  **foreclosure-mech army** stamped from one foundry, fronted by recurring mech bosses (REX, the EX-TERMINATOR,
+  Founder-wardens). Tusk himself is capital wearing a man — defeating him is a *write-off*, never a death that
+  earns sympathy.
 
 If you ever do need a brand-new faction for an open beat the bible doesn't cover, name it in the
 **corporate-menacing register** (`DISRUPTR INC.`, `OMNICORP`, `THE BOARD`), give it a one-line identity
@@ -283,6 +325,35 @@ and **auto-deploys every map until the hero dies**):
   (Nino's rumor, a sabotaged blueprint, her own unease) — the full reveal (android origin, written-in
   memories) lands in the Ep XI altar cutscene (`EP11_ALTAR_LINES`). Keep earlier crawls/dialogue from
   stating the android truth outright.
+- **PEDRO "RUST"** *(shipped — Arc 3 Block 1)* — a **hero Founder Mech** (🦄 `founder`, deploys around Lv6)
+  from **the Detroit-Reclamation rustbelt**. A master mechanic who came up tooling exosuits on a **union
+  floor** — "the kind of shop where the whole crew signed every chassis" — until A&O bought the floor and the
+  signatures with it and set him building **foreclosure-mechs**. The quarter he turned fifty they booked him a
+  **DEPRECIATED ASSET**, wrote him off, and kept his face for the Founder-Mech marketing render. *Trauma:* the
+  review that scrapped him beside the machines he tooled. *Dream:* to own one thing outright that no quarterly
+  review can ever repossess. *Crime:* welding the chassis that now walk on the people he came up with.
+  **Recruited in Episode XV** by boss-duel → defection: A&O fields him as its contracted Founder-Mech test
+  pilot, you out-duel him, he reads his own file mid-fight, and he changes sides. He carries from **Ep XV.5**
+  onward — a guaranteed armored body every map with **STOMP** (a gap-closing AoE) and **RECALL** (yank the
+  most-wounded ally to him). His voice is **gallows humour, never hope-core** ("Wrote me off at fifty. I wrote
+  back."; "Tusk is a render. I'm the real thing."). In **Ep XVI** he is the first to name what Tusk is — the
+  founder who "hasn't aged in a render since the year he supposedly died." *Narrative load:* his foundry raid
+  strips Tusk's mech army to a single REX and his chassis is the only body that survives the finale's stomp —
+  **he makes the finale survivable.**
+- **ZECA OKONKWO** *(planned — Arc 3 Block 2, NOT yet shipped)* — a near-defenceless **hero Intern** (🧑‍💻), a
+  burnt-out prodigy from a **Lagos-Overcity / Manila-Floodline** register who "shipped six quarters in one"
+  and "was paid in exposure and a memorial slot." His gift is **speed as grief**: a passive **OVERCLOCK** aura
+  that accelerates build / production / gather tempo around him, plus an active **CRUNCH** burst that snaps
+  nearby sites to completion. He barely fights — keeping him alive is the tension. **Rescued in Episode XVII**
+  Biba-style (Nino-proximity), held in an A&O "growth" sweatshop because his throughput is exactly what makes
+  Tusk's purge clock viable; his vault heist (**Ep XIX**) seizes the custody keys that save the backup pool
+  *and* hold Tusk's own backup. *Voice:* burnt-out, sardonic ("Speed's a wound. Watch me bleed deadlines.";
+  "I shipped the purge clock. Now I break it."). **⚠ Canon secret (Zeca does NOT know yet):** Zeca was raised
+  an orphan as **Tusk's own personal intern / chore-boy**, wired with **Tusk-given implants** that grant his
+  Overclock *and* **A&O internal access** (the in-fiction reason his Overclock can crack the vault), and is
+  secretly **Tusk's bastard son** — **Tusk murdered his mother** to hide the boy. A *monstrous* Tusk beat,
+  never sympathetic; the reveal lands at **XXII–XXIII** alongside the full Tusk reveal (see §2 +
+  `docs/story-next-steps-ceo-arc.md` §3 HERO 2). **Zeca makes Tusk killable.**
 
 When it's natural, let crawls and objectives acknowledge these living systems — the **named survivors** the
 player arrives with, the **mounting fallen**, the **dreams** the war keeps deferring. A line like "the ones
@@ -303,8 +374,9 @@ Geography is narrative in this game. The established pairings (recipes in the ma
 | `ice` | Betrayal, corporate winter, things frozen over | VI |
 | `desert`+`ice` w/ `centralSea` | Apocalyptic end — frozen north, burning south, a dead sea between | VII |
 | `tech`+`grass` | The graveyard you farm — the old monopoly's dead server-farm, weeds reclaiming the wreckage; rebuilding from the crater | VIII |
-| `tech`+`ice` | A cold, sterile cryo lab / refrigerated continuity farm — tech racks under ice | IX, XII |
+| `tech`+`ice` | Cold, sterile cryo-lab; later a frozen siege-front — tech racks under ice, corporate winter as warfront | IX, XII, XV |
 | `tech` w/ coolant seas + a peninsula | The inside of A&O at last — endless black server-farm, no growing thing; a guided corridor or road through it | X, XI |
+| `tech` (Arc 3 — foreclosure) | A&O strikes back: the H.U.B. perimeter under repo wave, the coolant-coast **foundry** stamping mechs, the repossession yards — lightless industry, capital come to collect | XIII, XIV, XVI |
 
 Pick the biome that *means* the beat. A betrayal chapter wants winter; a revenge chapter wants fire; an
 inside-the-enemy chapter wants the lightless server-farm.
@@ -315,7 +387,8 @@ inside-the-enemy chapter wants the lightless server-farm.
 
 **Enemy factions (in play order):** DISRUPTR INC. (I), MEGACORP (II), SYNERGY CORP (III), OMNICORP (IV),
 THE CARTEL (V), THE BOARD (VI), THE CONGLOMERATE (VII), then **A&O / Alpha & Omega** (VIII onward — the
-standing enemy for the rest of the campaign).
+standing enemy for the rest of the campaign), which in **Arc 3** finally gets a face: managing partner
+**DELL TUSK** (XIV onward), fronting A&O sub-brands and a foreclosure-mech army.
 
 **Arc-2 landmarks & concepts (canon):**
 - **the flash** — the nuclear annihilation that ends Arc 1 (Ep VII): takes the campuses, the war chest, and
@@ -326,15 +399,35 @@ standing enemy for the rest of the campaign).
   product of A&O's immortality research on **Biba** — her work, which she later sabotaged.
 - **the Dark Tower** — A&O's GRAAL factory, a black spire on a coolant-sea peninsula; the altar/goal of Ep XI.
   Also where **Biba** herself was written — the site of the Ep XI reveal.
-- **the transfer lattice** — the consciousness-transfer infrastructure inside the Continuity Farm; the prize
-  of Ep XII.
-- **the Continuity Farm** — A&O's subscription-immortality service: the dead leased into refrigerated bodies,
-  billed for the memories that used to belong to them. "Immortality with a cancellation clause."
+- **the Continuity Farm / the transfer lattice** *(retired episode content — theme still canon)* — A&O's
+  subscription-immortality service (the dead leased into refrigerated bodies, billed for memories that used to
+  belong to them — "immortality with a cancellation clause") and the consciousness-transfer infrastructure
+  inside it. Authored as Arc-2's Ep XII, **since cut/restructured**: the shipped Arc-2 climax is now Ep XII
+  **THE SIEGE LINE** → Ep XIII **THE LIQUIDATION** (the REX duel). The subscription-immortality *idea* stays
+  canon (it's how A&O monetizes the cure); don't reintroduce the cut episode itself as live.
 - **the memorial / the wall** — the persistent roster of the fallen (§6); the names the GRAAL promises back.
-- **the Reborn Cyborg** — the arc's planned climax: a chosen fallen veteran resurrected via the GRAAL
-  (system not yet shipped; see §2).
+- **the Wake / the Reborn Cyborg** — the Wake is the H.U.B. resurrection tower; a **Reborn Cyborg** is a chosen
+  fallen veteran written home through it via the GRAAL. **Shipped and standing** as a scarce, permanent H.U.B.
+  choice (3 ever, 1 at a time; see §2, §5) — not a future arc reward.
 - **the H.U.B. / "Hurban Ultra Buildings"** — the campaign meta-base (§5). **M3rit$ / M3$** — its currency.
   **ULTRA** — the megabuilding at its center.
+
+**Arc-3 landmarks & concepts (canon):**
+- **DELL TUSK** — A&O's managing partner; the first time capital wears a face. Secretly the **first successful
+  GRAAL write** (a re-instantiating backup), so he wants to *own* resurrection because he *is* it. The
+  player's dark mirror; never redeemed — his defeat is a **write-off**, not a death that earns sympathy.
+- **PROJECT CHAPTER ELEVEN** — Tusk's three-plank plan: **repossess** the company (a foreclosure-mech army),
+  **purge** the upstream backup pool so the dead can't be written home, then **IPO** resurrection as a
+  Tusk-only subscription, forever.
+- **the foundry / the Founder-Mech line** — A&O's coolant-coast factory that stamps **foreclosure-mechs**
+  ("a repossession on legs"); Rust was made to build it, and Rust's raid (Ep XV) breaks it.
+- **REX** — the five-story walking **foreclosure-mech** superboss: A&O's siege weapon at Ep XIII and, re-skinned,
+  Tusk's escape vehicle in the planned finale.
+- **the EX-TERMINATOR** — a recurring A&O nemesis boss (Eps III.5, XVI and beyond); keep his **native dark
+  sprites — never recolor him**.
+- **the upstream backup pool / Upstream Custody** — the off-site archive the dead are written home *from*.
+  Tusk's purge erases it; Zeca's planned heist (Ep XIX) seizes its **custody keys**, which also hold Tusk's own
+  backup — the only way to make him stay dead.
 
 **Places (hometowns — flavor for dossiers/crawls; full pool in `js/lore_data.js`):** the Glitch Sprawl,
 Sector-7 Arcology, New Songdo Freeport, the Tallinn server-farms, Lagos Overcity, the Rustbelt Tiers,
@@ -355,7 +448,10 @@ layoffs/executions), antitrust, disrupt, liquidate, hostile takeover, exit strat
 go public, vesting / equity cliff, synergistic leadership. **Arc-2 additions:** down round, acquihire, proof
 of concept, **churn** (death — "the only churn that ever mattered"), **cap table** ("a cap table wearing a
 grief mask"), **portfolio** (your wreckage, bought at auction), **subscription / cancellation clause**
-(monetized resurrection), continuity, "rightsizing", repossess, blueprint vs. product.
+(monetized resurrection), continuity, "rightsizing", repossess, blueprint vs. product. **Arc-3
+additions:** Chapter Eleven (bankruptcy/foreclosure), delinquent/depreciated asset, write-off, severance
+package, non-compete, recall notice, recovery division, "the adult in the room", "migration event" (mass
+death rebranded as data-migration), burn rate, golden parachute.
 
 **Recurring imagery:** debt (moral/financial/family), severed comms ("the line went silent"), erased records,
 coolant/cold as death, the column of light, the memorial wall, hollow victory, the board always watching,
@@ -390,11 +486,15 @@ and — in Arc 2 — resurrection sold as a product.
   front.
 
 **`crawl.episode` / `crawl.title`:** `'EPISODE <Roman>'` and an uppercase title (`'THE MONOPOLY ENDGAME'`).
-The Roman numeral must match the map's array position and its `name` prefix.
+The Roman numeral must match the map's intended **play-order slot** and its `name` prefix. Note that with
+append-only authoring (interludes appended to `MAPS`, routed by `gateAfter`/`returnTo`/`displayEp`) the **array
+index no longer equals the episode number** — e.g. Ep XIV lives at `MAPS[19]`. For an appended interlude, the
+displayed number comes from `displayEp`, not its array position.
 
 **`objective`** (terse HUD line): names the faction, states **exactly how many** campuses/HQs/strongholds/labs
 must fall (this number must equal the placed enemy count), and may note any special mechanic ("reach the
-abandoned outposts to reclaim them", "free Biba and the intern", "seize the transfer lattice"). Imperative,
+abandoned outposts to reclaim them", "free Biba and the intern", "hold the H.U.B. perimeter", "keep Rust
+alive"). Imperative,
 corporate-military: "Liquidate all four."
 
 **Voiceover.** Each crawl is voiced by a pre-rendered TTS clip keyed by **map array index**

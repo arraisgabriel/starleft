@@ -57,7 +57,9 @@ This is the answer to "make the recruitments matter, not be detours":
 
 - **Tusk is a GRAAL backup** (§2) → killing him normally just **re-instantiates** him. The custody keys
   **Zeca** seizes in XIX **hold Tusk's own backup** → owning them is the only way to make him stay dead.
-  **Zeca is what makes Tusk killable.**
+  **Zeca is what makes Tusk killable.** (Canon: Zeca cracks that vault because Tusk's own implants gave him
+  A&O internal access, and he is secretly Tusk's bastard son — see §3 HERO 2. The key to the man is his
+  own blood.)
 - A&O's foreclosure-mech foundry would swarm the finale; **Rust's** raid (XV) strips it to one REX, and a
   **hero Founder Mech is the only body that tanks REX's stomp**. **Rust is what makes the finale survivable.**
 - Remove either: no Zeca → the dead are purged and Tusk is immortal; no Rust → the finale is unwinnable.
@@ -90,7 +92,10 @@ differs. He is never redeemed — defeat is a **write-off**, not a death he earn
 - **XVI** — Rust's insider knowledge plants it: he scanned Tusk's face for a marketing **render** and the
   render "didn't age between fiscal years."
 - **XXII–XXIII** — full reveal, mechanically bound to the keys: you can only end him because you hold his
-  backup. Biba names it at the keynote ("he is what I built, wearing the man who paid for it").
+  backup. Biba names it at the keynote ("he is what I built, wearing the man who paid for it"). **Pair it
+  with Zeca's blood reveal** (see §3 HERO 2's canonical secret): the intern who cracked the vault is
+  Tusk's hidden bastard son — Tusk murdered the boy's mother to bury him — so the hand holding the only
+  backup is his own blood. Monstrous, not sympathetic; do not soften Tusk.
 
 **Musk-satire register (deadpan, never tragic).** Use sparingly and viciously:
 - Mars-as-backup-drive → off-world **soul-server diaspora** (XXI's launch site).
@@ -153,7 +158,26 @@ Bespoke sprite sheets → `starleft-unit-forge`; dossiers + voice lines → `sta
 ### HERO 2 — ZECA OKONKWO · Gifted Intern · introduced **Ep XVII**
 
 - **Hometown / origin (lore-forge):** a Lagos-Overcity / Manila-Floodline register — a prodigy who
-  "shipped six quarters in one" and was paid in exposure and a memorial slot.
+  "shipped six quarters in one" and was paid in exposure and a memorial slot. *(This is Zeca's **cover /
+  public record** — what Zeca himself believes. The truth is the canonical secret below.)*
+
+> **⚠ CANONICAL — ZECA'S SECRET (seed early, reveal late; Zeca does NOT know yet):**
+> - **Tusk's own orphan.** Zeca is not just another Growth & Velocity register — he was raised an orphan
+>   as **Dell Tusk's personal special intern / chore-boy**, kept close by the managing partner himself.
+> - **The implants explain the access.** Tusk wired the boy with **bespoke implants** that grant both his
+>   abilities (the Overclock) *and* **A&O internal access**. This is the in-fiction reason his Overclock
+>   can crack **Upstream Custody** in XIX — the credentials are baked into his cyberware; he is the one
+>   person A&O's own vault still recognises as *inside*.
+> - **The blood twist.** Zeca is **Dell Tusk's bastard son.** Tusk **murdered Zeca's mother** to bury the
+>   boy's parentage, then kept the child as an intern and weaponised his throughput. Zeca does not know
+>   any of this yet.
+> - **Stays on-tone (monstrous, not sympathetic).** This is a *Tusk-is-a-monster* beat — he killed a
+>   woman and exploited his own son — and must NOT be played for pity (respect §7's "Tusk never redeemed
+>   or pitied"). It deepens the interlock into literal **patricide-by-data**: the bastard son holds the
+>   only backup of his father. **"Zeca makes Tusk killable" becomes personal.**
+> - **Suggested reveal cadence:** XVII (the unease — A&O keeps this intern *too* close, too personal) →
+>   XIX (the vault opens *for him*; his credentials shouldn't exist) → XXII–XXIII (the blood reveal lands
+>   alongside the full Tusk reveal: you hold your own father's only copy).
 - **Recruitment — Nino-proximity rescue** (the Biba pattern, a `cfg.captives` entry with `hero:true`).
   Held in an A&O "growth" sweatshop, kept because he is *faster than the algorithm* — his throughput is
   what makes the purge clock viable in the first place. **Verified:** `freeCaptives()` hardcodes Nino as
@@ -363,7 +387,9 @@ Tagged **`[MAP]`** (map-data, `starleft-mapmaker`), **`[ENG]`** (engine code), *
 - **Rust's humour is gallows, not hope-core.** Jokes about dental, vesting, foreclosure — relief, never
   optimism.
 - **Zeca's speed is grief with a stopwatch.** His gift is a wound; the satire is that capital turned a
-  prodigy into a billing engine.
+  prodigy into a billing engine. **His canonical secret (§3 HERO 2 — Tusk's hidden bastard son, mother
+  murdered to bury him) is a *monstrous* beat, never a tragic one** — it indicts Tusk further, never asks
+  for sympathy, and Zeca himself does not learn it until the finale reveal.
 - **Reborn stays scarce (3 ever) and never arc-gated.** The wall keeps most of them. That permanence is the
   emotional engine — do not soften it.
 
