@@ -836,17 +836,30 @@ Weaponize your buzzwords, circle back, and disrupt MegaCorp into bankruptcy. The
       { id:'heroes', text:'Bring NINO and BIBA through the foreclosure',         type:'heroesAlive', reward:150 },
       { id:'lean',   text:'Keep the final invoice under 12 names',               type:'maxUnitsLost', count:11, reward:150 },
     ],
-    w:40, h:34, seed:13013,
-    player:{ x:6, y:28 },
+    // Ep XIII arena TRIPLED in size (authored coords/dims ×3 over the original 40×34) so REX's march on the
+    // Wake plays out across a much larger battlefield with room to maneuver, spread out, and out-produce it.
+    // The global MAP_SCALE (×1.7) still applies on top → final ~204×173 in-game (on par with Ep XII).
+    // Everything below scales uniformly about the origin, so the base↔coolant-node↔REX geometry is preserved.
+    w:120, h:102, seed:13013,
+    player:{ x:18, y:84 },
     terrain:{ biomes:['tech'], seaFrac:0.05, mtnFrac:0.06, forest:0 },
     enemies:[],                                  // boss duel — no enemy bases; the villain IS the encounter
-    villain:{ id:'rex', x:30, y:9 },
+    villain:{ id:'rex', x:90, y:27 },
     // COOLANT NODE (villains.js bossNodeTick): hold it with a detachment for ~3s to FORCE REX's EXPOSED window
     // on demand — a "use the map" play that splits the army between the node and the fight. Mid-arena, on the
     // approach to REX so holding it means pushing forward (risk/reward). Optional layer atop the AoE/overheat.
-    bossNodes:[ {x:20,y:14,holdSec:3,cd:18,radius:2.0} ],
-    lakes:[ {x:14,y:6,r:3} ], rockClusters:[ {x:12,y:12,n:10}, {x:26,y:26,n:10} ], forests:[],
-    goldNodes:[ {x:7,y:30,amt:2400}, {x:4,y:25,amt:2000}, {x:11,y:31,amt:2000}, {x:20,y:18,amt:2600} ],
+    // NB: bossNodes bypass MAP_SCALE, so its coords ARE final tiles — ×3 over the old (20,14) keeps it in sync.
+    bossNodes:[ {x:60,y:42,holdSec:3,cd:18,radius:3.0} ],   // radius bumped 2.0→3.0 for the larger arena
+    lakes:[ {x:42,y:18,r:9} ], rockClusters:[ {x:36,y:36,n:14}, {x:78,y:78,n:14}, {x:60,y:66,n:12} ], forests:[],
+    // Boss DUEL has no enemy/contested nodes, so the T2-5 home-node nerf (ECON.homeNodeMul) has no macro-tension
+    // to enforce here → honor authored funding literally. Two FRESH near-base nodes add +5,000 funding so the
+    // player can field a bigger army of troops + healers for the tripled-size REX fight.
+    noEconRebalance:true,
+    goldNodes:[
+      {x:21,y:90,amt:2400}, {x:12,y:75,amt:2000}, {x:33,y:93,amt:2000},   // original home cluster (positions ×3)
+      {x:60,y:54,amt:2600},                                               // mid-arena, on the approach to REX
+      {x:13,y:88,amt:2500}, {x:25,y:80,amt:2500},                         // +5,000 fresh funding by the start base
+    ],
   },
   /* ============================ VILLAINS (BIG BOSSES) ============================
      APPENDED past the linear campaign so indices 0–12 (Episodes I–XIII) never shift — save compat,
