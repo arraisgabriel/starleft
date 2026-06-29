@@ -372,7 +372,12 @@ function heroSpriteFor(heroId, type){
 // still plays as `type` in every gameplay respect (DEF stats, icon, AI). See drawUnit/unitDrawH.
 function _placeHero(state, c, pos, type, heroId, stars, xp, lore, dossier, sprite){
   if(!DEF[type]) return;                                       // unknown unit type → skip safely
-  const u=mkUnit(state, type, 'player', c.x+1+(pos%3), c.y+5+((pos/3)|0));
+  // Heroes render ~2.5× their footprint, so the old 1-tile, single-row spacing buried the squad
+  // behind the front silhouette (esp. the Rust mech on Ep XVI — Biba vanished, Nino barely showed).
+  // Space them 2 tiles apart and drop the centre column one row forward so depth-sorting layers all
+  // three as a visible wedge instead of one stack. Centre stays at c.x+2 (same as before).
+  const col=pos%3, grp=(pos/3)|0;
+  const u=mkUnit(state, type, 'player', c.x+col*2, c.y+5+grp*2+(col===1?1:0));
   u.stars=Math.max(0, Math.min(CAREER.maxStars, stars||0));
   u.xp=(xp!=null)?xp:CAREER.xpFor(u.stars);
   u.hero=true; u.heroId=heroId;
