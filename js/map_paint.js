@@ -29,6 +29,11 @@
     lava  : { ch:'v', tile:T_WATER, biome:B_VOLCANIC },  // lava = water tile + volcanic biome (render picks magma ramp)
     rock  : { ch:'r', feat:'rock' },
     tree  : { ch:'e', feat:'tree' },
+    // ERASE (editor Erase tool): drop whatever tree/rock FEATURE owns this tile and leave passable floor
+    // with the underlying biome untouched — so removing a procedural tree doesn't repaint a green grass
+    // patch into a desert/snow/tech locale. Not exposed in the paint-target dropdown; only the Erase tool
+    // writes it. Authored as a normal per-tile override so it persists deterministically via cfg.paint.
+    clear : { ch:'c', clearFeat:true },
   };
   const BY_CH = {};
   for(const key in TARGETS){ BY_CH[TARGETS[key].ch] = Object.assign({ key }, TARGETS[key]); }
@@ -63,7 +68,7 @@
       for(let k=0;k<nums.length;k++){
         const d = parseInt(nums[k], 36); if(isNaN(d)) continue;
         idx = (k === 0) ? d : idx + d;                                   // first absolute, rest deltas
-        ops.push({ i:idx, key:spec.key, tile:spec.tile, biome:spec.biome, feat:spec.feat });
+        ops.push({ i:idx, key:spec.key, tile:spec.tile, biome:spec.biome, feat:spec.feat, clearFeat:spec.clearFeat });
       }
     }
     return { W, H, ops };
@@ -79,7 +84,11 @@
     for(const op of sorted){
       const i = op.i|0; if(i < 0 || i >= W*H) continue;
       const tx = i % W, ty = (i / W)|0;
-      if(op.feat){                                                       // rock / tree → 3×3 walk-under feature
+      if(op.clearFeat){                                                  // ERASE → drop the feature owning this tile, keep biome floor
+        if(state.feat && state.feat[i] && typeof dropFeaturesAt === 'function') dropFeaturesAt(state, new Set([i]));
+        if(state.tiles[i] === T_TREE || state.tiles[i] === T_ROCK) state.tiles[i] = T_GRASS;   // floor-ify any stray un-absorbed obstacle (biome untouched)
+        if(state.blocked) state.blocked[i] = baseBlocked(state, i);
+      } else if(op.feat){                                                // rock / tree → 3×3 walk-under feature
         let ax = tx-(tx%N), ay = ty-(ty%N);
         if(ax > W-N) ax = W-N; if(ay > H-N) ay = H-N; if(ax < 0) ax = 0; if(ay < 0) ay = 0;
         if(typeof addFeature === 'function') addFeature(state, ax, ay, op.feat, rng);

@@ -450,8 +450,7 @@
       return;
     }
     if(app.tool === 'erase'){
-      const hit = hitTest(tx, ty);
-      if(hit){ app.selected = hit; deleteSelection(); status('Deleted placement'); }
+      status(eraseAt(tx, ty));
       return;
     }
     if(app.tool !== 'select'){
@@ -525,6 +524,61 @@
     hits.sort((a, b)=>a.y - b.y);
     const h = hits[hits.length - 1];
     return h ? {kind:h.kind, index:h.index} : null;
+  }
+  // ---- ERASE tool ----------------------------------------------------------------------------------
+  // CAMPAIGN maps: the trees/rocks on screen are PROCEDURAL state.features (regenerated from the map
+  // seed every newMap()), NOT entries in any editable placement array — so the plain placement hit-test
+  // can never delete them. Erase the specific feature under the cursor instead, via a persistent CLEAR
+  // paint override (drops it + leaves the biome floor; applied after buildTopoFeatures by applyPaintLayer
+  // so it survives rebuilds and in-game loads). Fall through to deleting an editable placement (forest/
+  // rock seed, scenery, gold, enemy, …) when no feature is hit. HUB maps store every tree/rock as an
+  // editable topography placement, so there the normal placement hit-test already removes it.
+  function eraseAt(tx, ty){
+    if(app.mode === 'campaign'){
+      const f = featureAt(tx, ty);
+      if(f){ eraseFeature(f); return 'Erased '+(f.slot || 'feature'); }
+    }
+    const hit = hitTest(tx, ty);
+    if(hit){ app.selected = hit; deleteSelection(); return 'Deleted '+hit.kind; }
+    return 'Nothing to erase here';
+  }
+  // Front-most rendered topography feature whose footprint OR drawn sprite box covers the click tile.
+  // Mirrors drawFeature()'s bottom-anchored, upward-growing sprite box so clicking the visible CANOPY
+  // (which overhangs above the footprint) erases the tree, not just its trunk tiles.
+  function featureAt(tx, ty){
+    const feats = app.preview && app.preview.features; if(!feats || !feats.length) return null;
+    const px = tx + 0.5, py = ty + 0.5;
+    let best = null, bestGround = -Infinity;
+    for(const f of feats){
+      if(f.base) continue;                                   // funding crystal / fixed scenery rock — leave it
+      const fw = Math.max(1, (f.w||FEAT_SIZE)|0), fh = Math.max(1, (f.h||FEAT_SIZE)|0);
+      let hit = (px >= f.tx && px < f.tx+fw && py >= f.ty && py < f.ty+fh);   // footprint
+      if(!hit){                                              // drawn sprite box (mirror of drawFeature)
+        const overhang = f.overhang || 1.08;
+        const rscale = (typeof RENDER !== 'undefined' && RENDER.vscale && f.vscale != null)
+          ? f.vscale : (0.8 + h2(f.tx*1.3+7, f.ty*1.7+3)*0.55);
+        const dw = fw*overhang*rscale, dh = fh*overhang*(f.heightScale||1)*rscale;
+        const x0 = f.tx + (fw-dw)/2, y1 = f.ty + fh, y0 = y1 - dh;
+        hit = (px >= x0 && px < x0+dw && py >= y0 && py < y1);
+      }
+      if(hit){ const ground = f.ty + fh; if(ground > bestGround){ bestGround = ground; best = f; } }
+    }
+    return best;
+  }
+  // Erase one campaign feature: write a CLEAR override for every footprint tile (persists across rebuilds
+  // and in-game), then live-drop the feature from the preview for instant feedback (no full rebuild).
+  function eraseFeature(f){
+    const st = app.preview; if(!st || !app.paint) return;
+    const W = st.W, H = st.H, fw = Math.max(1, (f.w||FEAT_SIZE)|0), fh = Math.max(1, (f.h||FEAT_SIZE)|0);
+    const cells = new Set();
+    for(let y=0;y<fh;y++) for(let x=0;x<fw;x++){
+      const gx = f.tx+x, gy = f.ty+y; if(gx<0||gy<0||gx>=W||gy>=H) continue;
+      const i = gy*W+gx; app.paint.set(i, 'clear'); cells.add(i);
+    }
+    if(typeof dropFeaturesAt === 'function') dropFeaturesAt(st, cells);
+    app.selected = null;
+    refreshAll();
+    validate();
   }
   function addPlacement(tx, ty){
     if(app.mode === 'campaign') return null;   // campaign maps: edit existing placements (move/erase/props) + paint; no add-new in v1
@@ -831,7 +885,8 @@
   // dev debug handle (also handy for scripting/automation): expose the editor internals.
   window.MAPEDIT = {
     app, loadCampaign, loadHub, paintAt, rebuildPreview, validate,
-    campaignMapObject, serializeMapObject, locateMapsArray, saveCampaignMapsData, hitTest, collections
+    campaignMapObject, serializeMapObject, locateMapsArray, saveCampaignMapsData, hitTest, collections,
+    eraseAt, featureAt
   };
 
   init();
