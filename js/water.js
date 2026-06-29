@@ -24,6 +24,7 @@
   const _rm = (()=>{ try { return window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch(_){ return false; } })();
   const _touch = (innerWidth < 820) || ('ontouchstart' in window);
   const TIER = _rm ? 0 : (_touch ? 1 : 2);
+  const NOFLOW = /[?&]noflow=1\b/.test((typeof location!=='undefined' && location.search) || '');  // A/B: skip the smooth surface
 
   const R = Math.random;
   function _c8(v){ return v<0?0:(v>255?255:v|0); }
@@ -207,6 +208,9 @@
      _lavaCore : radial orange bloom sprite (hot core) */
   let _caustic=null, _lava=null, _lavaCore=null, _causticPat=null, _lavaPat=null;
 
+  // smooth-surface scratch buffer (corner-resolution; grow-only high-water mark → zero per-frame alloc)
+  let _surf=null, _surfCtx=null, _surfImg=null, _surfW=0, _surfH=0;
+
   // tileable value-noise: blend the cell with its wrapped copies so opposite edges match
   function _tnoise(nz, x, y, S, F){
     const fx=x/S, fy=y/S;
@@ -253,15 +257,104 @@
   }
 
   /* ============================================================
-     OVERLAY SPAN PASS — caustic + magma cracks/core + specular tide band.
+     OVERLAY SPAN PASS — smooth de-blocked surface (below) + caustic + magma cracks/core.
      Called from render() after the terrain loop, inside the world transform. Batches the
      caustic/crack as single pattern-filled paths (a handful of draw calls, not 4k gradients);
-     the per-tile specular band is one cheap fillRect each. Shorelines were already drawn by
-     drawWaterTile and stay correct: caustic is faint additive; magma cracks/core skip the
-     shore ring (depth ~0) so the burnt rim reads cleanly. */
+     the depth+tide base is one bilinear-upscaled buffer (see _drawWaterSurface). Shorelines
+     were already drawn by drawWaterTile and stay correct: caustic is faint additive; magma
+     cracks/core skip the shore ring (depth ~0) so the burnt rim reads cleanly. */
+  /* SMOOTH SURFACE PASS — de-blocks the depth base + tide into ONE corner-resolution buffer that
+     is bilinearly upscaled, so the 32px tile steps disappear (replaces the flat per-tile base fill
+     for liquid water AND the old flat per-tile tide band). Each texel = a tile CORNER: colour =
+     depth-lerp (same ramp as drawWaterBaseTile) + crest highlight; alpha = water-fraction feather.
+     The opaque flat base from drawWaterBaseTile stays underneath, so the feathered shore edge meets
+     the same colour seamlessly and the drawShoreline rim/foam (drawn earlier) still reads. Runs on
+     ALL tiers (static gradient under reduced-motion; animated crest on TIER>=1). Liquid water only
+     (B_WATER/B_TECH) — ice & volcanic keep their per-tile look. Zero per-frame alloc. ?noflow=1 A/B. */
+  function _drawWaterSurface(state, x0,y0,x1,y1){
+    if(NOFLOW || !_box) return false;                                // flag off, or no water on this map
+    if(typeof PERF!=='undefined' && PERF.opts && PERF.opts.waterMerge===false) return false;  // harness A/B gate
+    const W=state.W, H=state.H, T=state.tiles, B=state.biome, DEP=state.waterDepth,
+          EXP=state.explored, VIS=state.visible;
+    // corner grid over the visible span + 1-tile margin each side (keeps bilinear from clamping at
+    // the screen edge → no shimmer while scrolling). texel (u,v) → world tile-corner (cgx0+u,cgy0+v).
+    const cgx0=x0-1, cgy0=y0-1, CW=(x1-x0)+3, CH=(y1-y0)+3;
+    if(CW<2 || CH<2) return false;
+    if(!_surf || CW>_surfW || CH>_surfH){                            // (re)alloc grow-only to the largest span seen
+      _surfW=Math.max(CW,_surfW); _surfH=Math.max(CH,_surfH);
+      _surf=document.createElement('canvas'); _surf.width=_surfW; _surf.height=_surfH;
+      _surfCtx=_surf.getContext('2d'); _surfImg=_surfCtx.createImageData(_surfW,_surfH);
+    }
+    const data=_surfImg.data, BW=_surfW;                             // buffer row stride (>= CW)
+    const atlas=(typeof WATER_READY!=='undefined' && WATER_READY && typeof waterSpriteFor==='function');
+    const crest=(TIER>=1);                                           // tide animates on TIER>=1; frozen on reduced-motion
+    const K=16, HMAX=42;                                             // crest brightness mapping (matches old Pass B feel)
+    const BANK=0.85;                                                 // soft riverbank strength (mute+darken water toward the shore)
+    let anyWater=false;
+    for(let vv=0; vv<CH; vv++){
+      const gy=cgy0+vv, wy=gy*TILE;
+      for(let uu=0; uu<CW; uu++){
+        const gx=cgx0+uu, wx=gx*TILE, o=(vv*BW+uu)*4;
+        // the up-to-4 tiles sharing this corner: (gx-1,gy-1)(gx,gy-1)(gx-1,gy)(gx,gy)
+        let nW=0, nV=0, sd=0, bi=-1;
+        for(let k=0;k<4;k++){
+          const tx=gx-(k&1?0:1), ty=gy-(k<2?1:0);
+          if(tx<0||ty<0||tx>=W||ty>=H) continue;
+          const ii=ty*W+tx;
+          if(T[ii]!==T_WATER || !EXP[ii]) continue;                 // ALL water (any biome) — grass/desert/ice/volcanic lakes too
+          nW++; bi=B[ii]; sd += DEP?DEP[ii]:1; if(VIS && VIS[ii]) nV++;
+        }
+        if(!nW){ data[o+3]=0; continue; }                           // pure-land corner → transparent (RGB filled by the fringe pass)
+        const d=sd/nW;
+        let hi=0;
+        // crest only on liquid blue water — frozen ice doesn't swell, and a cyan crest on lava is wrong
+        if(crest && nV>0 && bi!==B_ICE && bi!==B_VOLCANIC){ const h=waterField(wx,wy); if(h>0.1){ hi=(h-0.1)*K; if(hi>HMAX)hi=HMAX; } }
+        if(atlas){                                                  // atlas floor carries the base → add ONLY a smooth crest
+          if(hi<=0){ data[o+3]=0; continue; }
+          data[o]=_c8(120+hi*0.5); data[o+1]=210; data[o+2]=222; data[o+3]=(Math.min(0.18,hi/HMAX*0.18)*255)|0;
+        } else {
+          const ra=_ramp(bi), sh=ra[0], dp=ra[1];
+          let r=sh[0]+(dp[0]-sh[0])*d, g=sh[1]+(dp[1]-sh[1])*d, b=sh[2]+(dp[2]-sh[2])*d;
+          if(hi>0){ r+=hi*0.50; g+=hi*0.86; b+=hi*0.90; }
+          // soft riverbank: where the corner touches land (s = land-fraction), mute + darken the water
+          // into a wet murky margin. Bilinear-upscaled → a soft band hugging the coast, replacing the
+          // hard bright shoreColor frame. No new sprites; follows the smooth water automatically.
+          const s=(4-nW)*0.25;                                       // 0 deep interior .. .75 at a convex shore
+          if(s>0){ const k=s*BANK, lum=r*0.32+g*0.5+b*0.18;
+            r+=(lum-r)*0.45*k; g+=(lum-g)*0.45*k; b+=(lum-b)*0.45*k;  // desaturate toward grey
+            const dk=1-0.5*k; r*=dk; g*=dk; b*=dk; }                  // and darken
+          // OPAQUE over every water tile (all 4 corners of a water tile touch water → alpha 255), so the
+          // flat per-tile base NEVER shows through — that bleed-through was the residual "pixelated" look.
+          // The 255→0 ramp happens only on the land halo (pure-land corners), feathering onto the shore.
+          data[o]=_c8(r); data[o+1]=_c8(g); data[o+2]=_c8(b); data[o+3]=255;
+        }
+        anyWater=true;
+      }
+    }
+    if(!anyWater) return false;
+    // dark-fringe fix: bleed water RGB into the transparent halo so the non-premultiplied bilinear
+    // edge fades to a water tint, not black/stale. One ring is all the upscale samples.
+    for(let vv=0; vv<CH; vv++)for(let uu=0; uu<CW; uu++){
+      const o=(vv*BW+uu)*4; if(data[o+3]!==0) continue;
+      let so=-1;
+      if(uu>0    && data[(vv*BW+uu-1)*4+3]) so=(vv*BW+uu-1)*4;
+      else if(uu<CW-1 && data[(vv*BW+uu+1)*4+3]) so=(vv*BW+uu+1)*4;
+      else if(vv>0    && data[((vv-1)*BW+uu)*4+3]) so=((vv-1)*BW+uu)*4;
+      else if(vv<CH-1 && data[((vv+1)*BW+uu)*4+3]) so=((vv+1)*BW+uu)*4;
+      if(so>=0){ data[o]=data[so]; data[o+1]=data[so+1]; data[o+2]=data[so+2]; }   // copy RGB, alpha stays 0
+    }
+    _surfCtx.putImageData(_surfImg, 0,0, 0,0, CW,CH);               // upload only the fresh sub-rect
+    ctx.save();
+    const prevSmooth=ctx.imageSmoothingEnabled; ctx.imageSmoothingEnabled=true;    // bilinear ON for this blit only
+    ctx.drawImage(_surf, 0,0, CW,CH, (x0-1.5)*TILE,(y0-1.5)*TILE, CW*TILE,CH*TILE);  // -1.5 aligns texels to true tile corners
+    ctx.imageSmoothingEnabled=prevSmooth; ctx.restore();
+    return true;
+  }
+
   function drawWater(state, x0,y0,x1,y1){
-    if(TIER<1) return;
     _t = state.time||0;
+    const drew=_drawWaterSurface(state, x0,y0,x1,y1);   // smooth, OPAQUE depth+tide base + soft riverbank (kills the 32px checkerboard AND the hard green rim)
+    if(TIER<1) return;                        // reduced-motion: keep the static surface, skip caustic/magma
     _bake();
     const W=state.W, T=state.tiles, B=state.biome, DEP=state.waterDepth, EXP=state.explored;
     let hasMagma=false;
@@ -286,25 +379,7 @@
       for(let ty=y0;ty<y1;ty++)for(let tx=x0;tx<x1;tx++){ const i=ty*W+tx; if(T[i]===T_WATER&&EXP[i]&&B[i]===B_VOLCANIC){ hasMagma=true; ty=y1; break; } }
     }
 
-    // ---- pass B: tide as a soft whole-tile brightness SWELL. Wave crests (positive height)
-    //      glow gently across the whole tile; troughs stay dark. Because the field varies
-    //      smoothly across tiles, this reads as broad MOVING bands of light drifting over the
-    //      water (a tide) — never hard lines or per-tile dashes. Sampled at the tile corners
-    //      and averaged so the brightness is smooth across the 32px seam, not a flat block. ----
-    ctx.save();
-    ctx.globalCompositeOperation='lighter'; ctx.fillStyle='rgba(120,210,222,1)';
-    for(let ty=y0;ty<y1;ty++)for(let tx=x0;tx<x1;tx++){
-      const i=ty*W+tx; if(T[i]!==T_WATER || !EXP[i]) continue;
-      const b=B[i]; if(b===B_ICE || b===B_VOLCANIC) continue;
-      const px=tx*TILE, py=ty*TILE;
-      // average the wave height at the four tile corners → smooth tile-to-tile (no blocky steps)
-      const h=(waterField(px,py)+waterField(px+TILE,py)+waterField(px,py+TILE)+waterField(px+TILE,py+TILE))*0.25;
-      if(h<=0.1) continue;                                   // only crests glow → broad bright bands, dark troughs
-      let a=h*0.05; if(a>0.13) a=0.13;
-      if(!state.visible[i]) a*=0.5;
-      ctx.globalAlpha=a; ctx.fillRect(px, py, TILE, TILE);   // abut, not overscan → no double-bright seam between crest tiles
-    }
-    ctx.restore();
+    // ---- (the tide swell is now baked into the smooth _drawWaterSurface buffer above) ----
 
     // ---- pass C: magma molten cracks + hot-core bloom (interior tiles only) ----
     if(hasMagma){

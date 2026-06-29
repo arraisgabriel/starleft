@@ -27,7 +27,8 @@
     terrainChunks:true,                                 // ON for evaluation — terrain -73%, but slight min-zoom softening + re-bake hitch (see RESULTS.md)
     hubNpcs:true,                                       // living-city HUB NPCs (hub_npcs.js) — a FEATURE flag: A/B measures its cost, not a win
     npcMix:true,                                        // hub NPC wardrobe of band-mixed sprites (npc_sprites.js + hub_npcs.js) — FEATURE flag: A/B measures cost, pixelDiff>0 expected
-    minimapThrottle:false, ctxOpaque:false, depthPool:false, waterMerge:false, fogCache:false,
+    waterMerge:true,                                    // SHIPPED — smooth bilinear water surface (water.js _drawWaterSurface) replaces the flat per-tile depth/tide fills; FEATURE flag, A/B measures cost, pixelDiff>0 expected
+    minimapThrottle:false, ctxOpaque:false, depthPool:false, fogCache:false,
     cullExtra:false, scrollBuffer:false, desync:false,
   };
   for(const k in OPT_DEFAULTS){ if(!(k in PERF.opts)) PERF.opts[k]=OPT_DEFAULTS[k]; }
