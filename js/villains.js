@@ -228,7 +228,7 @@ const VILLAINS = {
   ex_terminator_mk2: {
     name:'THE EX-TERMINATOR',
     base:'soldier', spriteType:'ex_terminator', spriteFaction:'player',
-    neonId:null, neonColor:'#3cff7a', auraColor:[50,210,110], bossScale:3.2, cyborgRim:true,   // GREEN cyborg rim + aura; visibly larger second encounter
+    neonId:null, neonColor:'#3cff7a', auraColor:[50,210,110], bossScale:1.76, cyborgRim:true,   // GREEN cyborg rim + aura; sized to MATCH hero Rust per owner (ex_terminator sprite 60 ×1.76 = 105.6 ≈ rust 92 ×1.15 = 105.8). Collision r + rim/glow are vh-relative → all shrink together.
     fleeExtract:true,                                        // also escapes by A&O bomber (drop this line to make the XVI climax a definitive kill)
     hp:16000, dmg:48, range:2.0, cd:0.65, speed:3.2, sight:12, killXp:560,   // movement/cadence UNCHANGED per owner (speed + ability cooldowns untouched)
     dmgReduce:0.22, hpVpiScale:1/110, dmgVpiScale:1/165, hpVpiCap:1.6,   // ↓reduce + ↓scale + cap (the OVERHEAT window covers durability)
@@ -314,6 +314,136 @@ function villainSnapOpen(state, tx, ty){
   }
   return { x:W>>1, y:H>>1 };                                           // last resort → map interior
 }
+
+/* =====================================================================
+   EX-TERMINATOR HUNTER (Ep XVI escape pursuer) — opt-in via the event `villain:{hunter:true}`.
+   Instead of a kill-to-the-bar boss, it appears NEAR the heroes, chases them like a hunter, and is
+   driven off when they bank a HIDDEN pool of damage (scaled by hero level), then RETURNS later. It is
+   never killed here (the Ep XVI win stays quest-driven). All math derives from synced state + a no-RNG
+   snap, so host/client/rollback agree. The Ep 3.5 set-piece `ex_terminator` (cfg.villain) is untouched.
+   ===================================================================== */
+const HUNTER_POOL_BASE     = 340;    // floor pool a 0-star squad must bank to drive it off (post-mitigation dmg)
+const HUNTER_POOL_PER_STAR = 16;     // + per summed hero star → higher levels deal more DPS AND must bank more (repel-time ~constant). Ep XVI (29★)≈800 → a fast, survivable ~10s repel before attrition
+const HUNTER_POOL_RAMP     = 0.10;   // each repel makes the next pool +10% (it's adapting)…
+const HUNTER_POOL_RAMP_CAP = 0.60;   // …capped at +60% so it never becomes a wall
+const HUNTER_HP_FLOOR      = 0.16;   // a burst that chews it below 16% HP also counts as a repel (it never dies)
+const HUNTER_RETREAT_COOL  = 120;    // seconds off-field after a repel — MIN 2 minutes before it returns (owner)
+const HUNTER_STAGGER_FRAC  = 0.80;   // pool fraction at which it visibly staggers ("about to break off" tell)
+const HUNTER_DMG_MUL       = 0.8;    // soften the ENGAGEMENT (not the chase) — paired with the cadence stretch + smaller pool so a fight is tough but a 3-hero squad survives
+const HUNTER_CD_MUL        = 1.5;    // stretch the AOE cadence in hunter mode → gaps for Biba to heal + the squad to reposition
+const HUNTER_RETREAT_MAX   = 6;      // seconds: hard cap on the retreat sprint so it always leaves the field (even if jungle blocks the edge)
+const HUNTER_RETREAT_SPEED = 1.8;    // it BOLTS when driven off
+const HUNTER_APPROACH_SPEED = 1.8;   // it RUNS IN at full speed from its off-screen spawn; settles to normal once it reaches the squad
+
+// summed career level of every living player hero on the map (the scaling input)
+function heroStarSum(state){
+  let s=0; for(const e of state.entities){ if(e.dead||e.storedIn||e.owner!=='player'||!e.hero) continue; s+=(e.stars||0); } return s;
+}
+// the hidden damage threshold for the CURRENT engagement (grows with hero level + each prior repel)
+function hunterPoolTarget(state){
+  const ramp = 1 + Math.min(HUNTER_POOL_RAMP_CAP, HUNTER_POOL_RAMP*(state._hunterRepels||0));
+  return Math.round((HUNTER_POOL_BASE + HUNTER_POOL_PER_STAR*heroStarSum(state)) * ramp);
+}
+// centroid of the living heroes (fallback: any player unit) — in world px
+function heroCentroid(state){
+  let sx=0, sy=0, n=0;
+  for(const e of state.entities){ if(e.dead||e.storedIn||e.owner!=='player'||!e.hero) continue; sx+=e.x; sy+=e.y; n++; }
+  if(!n) for(const e of state.entities){ if(e.dead||e.storedIn||e.owner!=='player'||e.kind!=='unit') continue; sx+=e.x; sy+=e.y; n++; }
+  return n ? { x:sx/n, y:sy/n } : null;
+}
+// the hunter's pursuit target: it FIXATES on the toughest hero (the founder it was built to reclaim) so the
+// tank holds aggro + eats the focused melee/basic fire while the squishy ranged heroes burst it from cover —
+// this is what keeps a 3-hero squad alive (a faster hunter chasing the SQUISHIEST would just corner + delete it).
+// Falls back to nearest hero, then nearest player unit. maxHp tiebroken by distance so it commits to one target.
+function hunterTarget(state, u){
+  let best=null, bestHp=-1, bd=1e18;
+  for(const e of state.entities){ if(e.dead||e.storedIn||e.owner!=='player'||!e.hero) continue;
+    const dx=e.x-u.x,dy=e.y-u.y,d=dx*dx+dy*dy, hp=e.maxHp||0;
+    if(hp>bestHp || (hp===bestHp && d<bd)){ bestHp=hp; bd=d; best=e; } }
+  if(!best){ for(const e of state.entities){ if(e.dead||e.storedIn||e.owner!=='player'||e.kind!=='unit') continue; const dx=e.x-u.x,dy=e.y-u.y,d=dx*dx+dy*dy; if(d<bd){bd=d;best=e;} } }
+  return best;
+}
+// where the hunter (re)appears: the NEAREST passable tile the player CANNOT currently see (in fog), preferring
+// the BEHIND side (toward the start they fled from). It spawns OFF-SCREEN and then runs in at full speed (the
+// approach sprint in hunterTick) — no "magical teleport" in view. Deterministic full scan (spawns seconds apart).
+function hunterSpawnPos(state){
+  const c=heroCentroid(state), W=state.W, H=state.H, B=state.blocked, V=state.visible;
+  if(!c){ const px=(state.cfg&&state.cfg.player?state.cfg.player.x:(W>>1))|0, py=(state.cfg&&state.cfg.player?state.cfg.player.y:(H>>1))|0; return villainSnapOpen(state,px,py); }
+  const cx=c.x/TILE, cy=c.y/TILE;
+  const startX=(state.cfg&&state.cfg.player?state.cfg.player.x:(W>>1));
+  const dir=Math.sign(startX-cx)||1;                                  // BEHIND = toward the start the squad fled from
+  let best=null, bd=1e18, any=null, ad=1e18;
+  for(let y=1;y<H-1;y++)for(let x=1;x<W-1;x++){
+    const i=y*W+x;
+    if((B&&B[i]) || (V&&V[i]===1)) continue;                          // must be PASSABLE and NOT currently visible (fog)
+    const dx=x-cx, dy=y-cy, d=dx*dx+dy*dy;
+    if(d<ad){ ad=d; any={x,y}; }                                      // nearest fog tile in any direction
+    if((Math.sign(dx)===dir||dx===0) && d<bd){ bd=d; best={x,y}; }    // …preferring the behind side
+  }
+  // best = nearest behind-fog; any = nearest fog; villainSnapOpen = last resort (whole map somehow visible)
+  return best || any || villainSnapOpen(state, Math.round(cx+dir*6), Math.round(cy));
+}
+// per-tick hunter driver (called at the top of updateVillain). Returns true when it OWNS the tick (mid-retreat).
+function hunterTick(state, u, dt, def){
+  u._poolTarget = u._poolTarget || hunterPoolTarget(state);
+  u._poolFrac = Math.max(0, Math.min(1, (u._poolDealt||0)/u._poolTarget));
+  if(u._staggerT>0) u._staggerT -= dt;
+  // (1) RETREATING — sprint to the nearest edge, then vanish + schedule the return
+  if(u._huntState==='retreating'){
+    u.autoTarget=null; u.cmd=null; u._untargetable=true; u.guard=true;
+    u._exposed=false; u._overheatT=0; u._mechAct=null; u._mechAirborne=false; u._aoe=null;
+    const W=state.W, H=state.H;
+    const atEdge = (u.x<TILE*1.5 || u.y<TILE*1.5 || u.x>(W-1.5)*TILE || u.y>(H-1.5)*TILE);
+    if(atEdge || (state.time||0)>=(u._retreatBy||0)){                  // reached an edge OR the sprint timed out (jungle blocked the way)
+      u.dead=true;                                                     // despawn (NOT escaped → no win); the return loop respawns it
+      state._hunterReturnAt=(state.time||0)+HUNTER_RETREAT_COOL;
+      return true;
+    }
+    if(!u._fleeDest || (typeof dist==='function' && dist(u,u._fleeDest)<TILE)){
+      const edge=nearestMapEdge(state,u); u._fleeDest=edge;
+      if(typeof issueMove==='function') issueMove(state, u, edge.x, edge.y, {type:'amove', x:edge.x, y:edge.y});
+    }
+    return true;
+  }
+  // (2) HUNTING — relentlessly lock the TANK hero, IGNORING sight (the chase in updateUnit follows it)
+  const hero = hunterTarget(state, u);
+  if(hero){ u.autoTarget=hero; u._huntLock=hero.id; }
+  // APPROACH SPRINT — it spawned off-screen (in fog), so it RUNS IN at full speed to reach the squad, then
+  // settles to its normal cadence once it's in engage range (so the fight plays at the tuned speed, not a blur).
+  { const base=(def&&def.speed)||u.speed||3.2;
+    const d2 = hero ? ((typeof dist==='function')?dist(u,hero):1e9) : 1e9;
+    u.speed = (d2 <= (u.range*TILE + 4*TILE)) ? base : base*HUNTER_APPROACH_SPEED; }
+  // (3) REPEL — enough banked OR chewed below the HP floor → drive it off ("I'll be back"), restore, schedule return
+  if((u._poolDealt||0) >= u._poolTarget || u.hp <= u.maxHp*HUNTER_HP_FLOOR){
+    u._huntState='retreating'; u._fleeDest=null; u._staggerT=0.9; u.hp=Math.max(1,u.hp);
+    u.speed=(def.speed||u.speed)*HUNTER_RETREAT_SPEED; u._retreatBy=(state.time||0)+HUNTER_RETREAT_MAX;   // BOLT for the edge, with a hard timeout so it always leaves
+    state._hunterRepels=(state._hunterRepels||0)+1;
+    if(!window._rbReplaying){
+      bossTaunt(state, u, 'death');                                    // "I'll be back." (in-world taunt only — NO mechanic-explaining toast)
+      if(typeof spawnRing==='function') spawnRing(u.x, u.y, '#3cff7a');
+      state._shake=Math.max(state._shake||0, 3);
+    }
+    return true;
+  }
+  // (4) STAGGER tell — once, as the hidden pool nears full (the "about to break off" cue)
+  if(u._poolFrac>=HUNTER_STAGGER_FRAC && !u._staggered){
+    u._staggered=true; u._staggerT=0.7;
+    if(!window._rbReplaying){ if(typeof spawnRing==='function') spawnRing(u.x, u.y, '#bfffd6'); state._shake=Math.max(state._shake||0, 1.5); }
+  }
+  return false;
+}
+// RETURN loop — host/solo per-tick check (called from core.js update, beside villainDeferredSpawn). When the
+// retreat cooldown elapses, the hunter reappears NEAR the heroes' new position with a fresh, slightly bigger pool.
+function hunterReturnTick(state){
+  if(state.hub || state.over || !state._hunterReturnAt) return;
+  if(state.entities.some(e=>e._hunter && !e.dead)) return;             // already back (guard)
+  if((state.time||0) < state._hunterReturnAt) return;
+  state._hunterReturnAt=0;
+  const at = hunterSpawnPos(state);
+  spawnVillainEntry(state, { id:state._hunterId||'ex_terminator_mk2', x:at.x, y:at.y, hunter:true });
+  // NO fog reveal — it spawns in the dark and runs in; the player should see it EMERGE from the fog, not pop in.
+  if(!window._rbReplaying && typeof eventToast==='function') eventToast('⚙ THE EX-TERMINATOR is back on your trail.', 7000);
+}
 // one villain from a {id,x,y} entry — shared by map load and scripted mid-mission events (T2-8)
 /* ---- boss HP scaling (shared by spawn + the load-time reconcile below) ----
    The veteran-scaled max HP a boss should have RIGHT NOW given the current DEF and the player's
@@ -364,8 +494,16 @@ function spawnVillainEntry(state, v){
     u._abilCd={};                                            // {blink:0, slam:0}
     if(def.aiKind==='ninja'){ u._ninjaAI=true; u._ninjaState='approach'; u._zig=1; u._exposeMul=(def.ninja&&def.ninja.exposeMul)||0.4; }   // hand ninja-AI villains (THE SEVERANCIER et al.) to updateNinja
     if((def.abilities||[]).some(a=>a.k==='missile'||a.k==='stomp'||AOE_KINDS[a.k])){ u._mech=true; u._mechImpacts=[]; }   // Rex / EX-TERMINATOR: multi-tick area specials (updateMech)
+    if(v.hunter){                                            // Ep XVI pursuer: hidden damage-pool repel + hunt (hunterTick/updateVillain)
+      u._hunter=true; state._hunterId=v.id;
+      u._poolDealt=0; u._poolTarget=hunterPoolTarget(state); u._poolFrac=0;
+      u._huntState='hunting'; u._staggerT=0; u._staggered=false;
+      u.bossDmgMul=HUNTER_DMG_MUL;                            // soften the short engagement so 3 heroes survive (basic + all AOE specials read bossDmgMul)
+      u._huntCdMul=HUNTER_CD_MUL;                             // + stretch AOE cadence (startAoe) for healing/reposition gaps
+    }
     state._villainSpawned=true;
     if(!window._rbReplaying) bossTaunt(state, u, 'intro');
+    return u;
   }
 }
 
@@ -379,6 +517,11 @@ function updateVillain(state, u, dt){
   // below reads u.maxHp. Idempotent + fresh spawns are pre-flagged, so this fires only for the
   // stale-HP case it exists to fix. See reconcileVillainHp.
   if(!u._hpReconciled){ reconcileVillainHp(state, u, def); u._hpReconciled=true; }
+
+  // (a0.5) HUNTER (Ep XVI pursuer): set the pursuit target + check the hidden damage-pool repel each tick.
+  // Owns the tick only while mid-retreat (sprinting off-field); otherwise falls through so its abilities/
+  // OVERHEAT still run as a normal boss. The Ep 3.5 set-piece boss has no _hunter flag → unaffected.
+  if(u._hunter){ if(hunterTick(state, u, dt, def)) return; }
 
   // (a) phase transitions — an ORDERED list of HP thresholds; each phase can amp stats AND/OR introduce a
   // NEW mechanic (unlocks adds, bigger overheat windows). bossPhase carries the LEVEL (1 base, 2, 3…) so the
@@ -756,7 +899,7 @@ const AOE_KINDS = {
 function startAoe(state, u, a, tgt, def){
   const K=AOE_KINDS[a.k];
   u._mechAct=a.k; u._mechT=0; u._mechAirborne=true; u.vx=0; u.vy=0;     // root: updateUnit yields while this runs
-  u._abilCastT=state.time; u._actStamp=state.time; u._actState=K.act; u._abilCd[a.k]=a.cd;
+  u._abilCastT=state.time; u._actStamp=state.time; u._actState=K.act; u._abilCd[a.k]=a.cd*(u._huntCdMul||1);   // hunter mode stretches AOE cadence → healing/reposition gaps for a 3-hero squad
   u._actDur=(a.windup||0.28)+(a.recover||0.30);                        // render stretches the attack strip over the FULL move so it's legible (not a 0.8s blur)
   u._aoe={ a, K, tx:K.self?u.x:tgt.x, ty:K.self?u.y:tgt.y, fired:false };
   if(!window._rbReplaying){
@@ -1150,6 +1293,9 @@ function bossOutcome(state, kind){
     state.over=true; state._outcome='win'; if(!window.USE_ROLLBACK && typeof onVictory==='function') onVictory(); return;
   }
   if(state._skirmish){ state.over=true; state._outcome='win'; if(!window.USE_ROLLBACK && typeof onVictory==='function') onVictory(); return; }   // T3-2
+  // CRASH CHAIN (Ep 15.5): instead of extraction→HUB, the evac bomber is shot down and the next mission
+  // (XVI) loads DIRECTLY through the Hades-style fall cinematic (hub.js beginCrashChain). Solo path.
+  if(state.cfg && state.cfg.crashChainTo && netRole==='solo' && typeof beginCrashChain==='function'){ beginCrashChain(state); return; }
   if(netRole==='solo' && typeof beginExtractionPhase==='function'){ beginExtractionPhase(state); return; }
   if(netRole==='host' && typeof window!=='undefined' && window.MP_SESSION && MP_SESSION.mode==='campaign' && typeof coopCampaignWin==='function'){ coopCampaignWin(state); return; }   // Ep VII → finale; else → H.U.B.
   state.over=true; state._outcome='win'; if(!window.USE_ROLLBACK && typeof onVictory==='function') onVictory();

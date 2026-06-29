@@ -373,6 +373,14 @@ function commandUnits(state, wx, wy, target){
     spawnRing(target.x,target.y,'#b05bff');
     return;
   }
+  // Ep XVI: right-click a dead body → move the squad onto it to extract the memory chip in its
+  // skull (ANY player unit harvests on contact — corpsesTick). Networked like every command target.
+  if(target && target.kind==='corpse' && !target.dead && !target.reached){
+    units.forEach((u,i)=>{ resetMotion(u); issueMove(state,u, target.x+((i%3)-1)*22, target.y+20); });
+    spawnRing(target.x,target.y,'#5fe0ff');
+    toast('Move a hero onto the body to extract its memory.');
+    return;
+  }
   // MADOSIS: a mad dog is owner:'player' but hostile — handle it before the friendly-target paths.
   // A selected healer (Recruiter / Biba) RESCUES it (memory-anchors mini-game); others put it down.
   if(target && target.madDog){
@@ -1476,6 +1484,9 @@ function damage(state, t, amt, src){
   }
   // MADOSIS: don't let a clumsy guarding squad kill the unit being saved — the player's OWN fire on an in-rescue dog is heavily reduced. Enemies (incl. the Kennel) hurt it normally.
   if(t.madDog && t._rescue && src && src.owner==='player' && typeof MADOSIS!=='undefined' && MADOSIS.dogPlayerDmgMul!=null) amt *= MADOSIS.dogPlayerDmgMul;
+  // EX-TERMINATOR HUNTER (Ep XVI): bank the post-mitigation player damage toward the hidden repel pool —
+  // the OVERHEAT/EXPOSED window (which already raised `amt` above) thus fills it faster. (villains.js hunterTick)
+  if(t._hunter && src && src.owner==='player') t._poolDealt = (t._poolDealt||0) + amt;
   t.hp-=amt;
   t.hitFx=0.18;            // T1-2: long enough to actually catch (was 0.12)
   t._lastHit=state.time;   // pauses veteran self-heal (vetRegen) while in/near combat

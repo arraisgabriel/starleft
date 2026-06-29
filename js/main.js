@@ -441,7 +441,7 @@ function loop(now){
     // freeze the mission sim while an in-mission scripted cutscene plays (e.g. the Ep XI dark-tower
     // reveal) so combat/holdout waves pause behind it; updateFlashCutscene (below, outside this guard)
     // still advances the cutscene. Hub cutscenes (G.hub) never gate — the hub has no sim to freeze.
-    if(running && !G.over && !(G.flashCutscene && !G.hub)){
+    if(running && !G.over && !(G.flashCutscene && !G.hub) && !window._memDialogOpen){   // _memDialogOpen: Ep XVI memory dialog freezes the sim (no PAUSED overlay) until clicked
       if(window.USE_ROLLBACK && NET.rbSession){
         NET.rbStepLoop(dt);                                        // rollback co-op: fixed-tick session drives the sim on every peer
       } else if(netRole==='solo'){

@@ -46,6 +46,26 @@ body.scene-dispatch #minimap-wrap { display:none !important; }
 }
 @media (max-width:820px){ #cutsceneCaption .cs-text { font-size:17px; } #cutsceneCaption { padding:20px 16px 24px; } }
 
+/* ---------- Ep XVI memory-chip dialog (corpses.js → ui.js showMemoryDialog): a persistent click-to-
+   close DIALOG BOX, never a transient toast. Cyan "data slate" for flesh memories; red for the A&O
+   service-record reveal. The full-screen backdrop captures the dismiss click. ---------- */
+#memoryDialog { position:fixed; inset:0; z-index:62; display:none; align-items:center; justify-content:center;
+  background:rgba(3,5,9,.58); cursor:pointer; padding:20px; }
+#memoryDialog.show { display:flex; }
+#memoryDialog .mem-card { max-width:600px; width:100%; padding:22px 26px 16px;
+  background:linear-gradient(160deg, rgba(12,20,28,.98), rgba(8,12,18,.99));
+  border:1px solid #1f4a5e; border-left:3px solid #5fe0ff; border-radius:10px;
+  box-shadow:0 18px 60px rgba(0,0,0,.72), 0 0 30px rgba(95,224,255,.12); text-align:left; }
+#memoryDialog .mem-head { display:flex; align-items:center; gap:9px; margin-bottom:13px;
+  font-size:13px; letter-spacing:2.4px; text-transform:uppercase; color:#7fd6ff; font-weight:700; }
+#memoryDialog .mem-icon { font-size:18px; }
+#memoryDialog .mem-body { font-size:16px; line-height:1.62; color:#dce8f2; }
+#memoryDialog .mem-hint { margin-top:16px; font-size:11px; letter-spacing:1.6px; text-transform:uppercase;
+  color:#5a7da0; text-align:right; }
+#memoryDialog.reveal .mem-card { border-left-color:#ff5b6e; box-shadow:0 18px 60px rgba(0,0,0,.72), 0 0 32px rgba(255,91,110,.18); }
+#memoryDialog.reveal .mem-head { color:#ff8a98; }
+@media (max-width:820px){ #memoryDialog .mem-body { font-size:14px; } #memoryDialog .mem-card { padding:18px 18px 13px; } }
+
 /* ---------- Overlays ---------- */
 .overlay {
   position:fixed; inset:0; z-index:50; display:flex; align-items:center; justify-content:center;

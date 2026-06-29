@@ -155,11 +155,16 @@ window.NET = window.NET || {};
       // VILLAIN (boss): client renders the giant size, glow and boss HP bar purely from these — it
       // never simulates the boss. villainId keys the static VILLAINS table (present on every client),
       // so colors/abilities/phases derive locally; only these few fields cross the wire.
-      if(e.villain){ o.vil=1; o.vid=e.villainId; o.vn=e.villainName; o.bp=e.bossPhase||1; o.bsc=e.bossScale||1; o.nid=e.neonId; if(e._ninjaHidden) o.nh=1; if(e._jumpZ) o.jz=Math.round(e._jumpZ); if(e._exposed) o.oh=1; }   // nh: ninja vanish dim; jz: REX leap height; oh: EXPOSED/overheat window (bossbar pulse + overheat rim)
+      if(e.villain){ o.vil=1; o.vid=e.villainId; o.vn=e.villainName; o.bp=e.bossPhase||1; o.bsc=e.bossScale||1; o.nid=e.neonId; if(e._ninjaHidden) o.nh=1; if(e._jumpZ) o.jz=Math.round(e._jumpZ); if(e._exposed) o.oh=1; if(e._hunter){ o.hu=1; o.pf=Math.round((e._poolFrac||0)*15); } }   // nh: ninja vanish dim; jz: REX leap height; oh: EXPOSED/overheat window; hu/pf: Ep XVI hunter + hidden-pool fraction (damage-stress rim)
     } else if(e.kind==='echo'){
       o.fac=e.facet;   // MADOSIS rescue beacon (x/y/hp already in the base packet); facet drives its color
       if(e.dogId!=null) o.did=e.dogId;   // which mad dog this memory belongs to (tether/arrow grouping)
       if(e.reached) o.rc=1;              // recovered — so client arrows/visuals stop pointing at it
+    } else if(e.kind==='corpse'){        // Ep XVI dead body — client builds the gory corpse sprite from these
+      o.src=e.src; o.mid=e.memId;
+      if(e.reveal) o.rv=1; if(e.gore) o.gr=e.gore; if(e.reached) o.rc=1;
+    } else if(e.kind==='wreck'){         // Ep XVI crashed bomber half — client draws the wreck + smoke
+      o.hf=e.half;
     } else if(e.kind==='building'){
       o.tx=e.tx; o.ty=e.ty; o.w=e.w; o.h=e.h;
       if(e.constructing){ o.cn=1; o.bp=e.buildProg; o.bt=e.buildTime; }
@@ -239,9 +244,14 @@ window.NET = window.NET || {};
       e._ninjaHidden = !!o.nh;
       e._jumpZ = o.jz||0;   // REX leap height (render-only on the client)
       e._exposed = !!o.oh;  // EXPOSED/overheat window (render-only on the client: bossbar pulse + overheat rim)
+      e._hunter = !!o.hu; e._poolFrac = o.hu ? ((o.pf||0)/15) : 0;   // Ep XVI hunter damage-stress rim (render-only on the client)
     } else if(o.k==='echo'){
       e.x=o.x; e.y=o.y; e.facet=o.fac; e.r=12;       // MADOSIS rescue beacon (client render)
       e.dogId=(o.did!=null?o.did:null); e.reached=!!o.rc;
+    } else if(o.k==='corpse'){                        // Ep XVI dead body (client render only — host harvests)
+      e.x=o.x; e.y=o.y; e.src=o.src; e.memId=o.mid; e.reveal=!!o.rv; e.gore=o.gr||null; e.reached=!!o.rc; e.r=10; e.sight=0;
+    } else if(o.k==='wreck'){                          // Ep XVI crashed bomber half (client render only)
+      e.x=o.x; e.y=o.y; e.half=o.hf||'back'; e.r=14; e.sight=0;
     } else if(o.k==='building'){
       e.x=o.x; e.y=o.y;                          // buildings don't move → snap directly
       e.tx=o.tx; e.ty=o.ty; e.w=o.w; e.h=o.h; e.sight=d.sight; e.cd=e.cd||0;

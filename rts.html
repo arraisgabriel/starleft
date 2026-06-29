@@ -527,6 +527,12 @@
   <div class="overlay submenu" id="cloudNudge" style="display:none;"></div>
   <!-- Scripted-cutscene caption (lower third), e.g. Nino's Ep VII flash monologue -->
   <div id="cutsceneCaption"><div class="cs-text"></div><div class="cs-hint"></div></div>
+  <!-- Ep XVI memory-chip readout (js/ui.js showMemoryDialog) — a persistent dialog box, click to close. Visibility is CSS-only (#memoryDialog{display:none} / .show{display:flex}); no inline style (inline would override .show). -->
+  <div id="memoryDialog"><div class="mem-card">
+    <div class="mem-head"><span class="mem-icon">🧠</span><span class="mem-title">MEMORY RECOVERED</span></div>
+    <div class="mem-body"></div>
+    <div class="mem-hint">▸ click to close</div>
+  </div></div>
 </div>
 
 <!-- Game code — classic scripts sharing one global scope, loaded in dependency order.
@@ -572,6 +578,7 @@
 <script src="js/fallen_scene.js"></script><!-- "Fallen" memorial interstitial (T1-1): solo-gated 2.6s beat on a Lv2+ veteran death -->
 
 <script src="js/madosis.js"></script><!-- Madosis (madness/sanity) runtime: meter, episodes, mad-dog rescue, Kennel; balance in config.js MADOSIS/KENNEL -->
+<script src="js/corpses.js"></script><!-- Ep XVI "dead-body memory" mechanic: cfg.memBodies dead bodies, walk-over chip extraction, Tusk-cyborg reveal trigger; corpse art in render.js -->
 <script src="js/villains.js"></script><!-- VILLAINS (big bosses): spawn/driver/abilities/phases, boss win condition, campaign gating; balance in VILLAINS table -->
 <script src="js/villain_neon_maps.js"></script><!-- per-frame villain glow anchors (authored later via the calibrator); aura works without it -->
 <script src="js/quests.js"></script><!-- multi-objective quests: cfg.quests evaluation + quest-driven victory (checkWinLose quest branch); maps without cfg.quests keep the legacy win chain -->

@@ -53,6 +53,9 @@ function scaleCfg(cfg){
   if(cfg.forests)      c.forests      = cfg.forests.map(pt);
   if(cfg.goldNodes)    c.goldNodes    = cfg.goldNodes.map(pt);
   if(cfg.lostBases)    c.lostBases    = cfg.lostBases.map(pt);
+  if(cfg.memBodies)    c.memBodies    = cfg.memBodies.map(m=>Object.assign({}, m, { x:S(m.x), y:S(m.y) }));  // Ep XVI dead bodies — scale x,y, keep src/id/text/reveal/gore
+  if(cfg.wrecks)       c.wrecks       = cfg.wrecks.map(w=>Object.assign({}, w, { x:S(w.x), y:S(w.y) }));     // Ep XVI bomber-wreck halves
+  if(cfg.crewWreck)    c.crewWreck    = { x:S(cfg.crewWreck.x), y:S(cfg.crewWreck.y) };                       // Ep XVI front-half wreck = crew-body cluster centre
   if(cfg.scenery)      c.scenery      = cfg.scenery.map(pt);  // {type,x,y} — indestructible backdrop props (e.g. the Dark Tower)
   if(cfg.holdout){ const h=Object.assign({}, cfg.holdout);    // reusable wave-defense (waves.js): scale the map positions, leave tile-radii/comp as authored
     if(h.spawns) h.spawns=h.spawns.map(pt);
@@ -68,6 +71,11 @@ function scaleCfg(cfg){
     if(w.to) w.to=pt(w.to); if(w.at) w.at=pt(w.at);
     if(w.radius!=null) w.radius=w.radius*MAP_SCALE;
     c.winCondition=w; }
+  // reachCutscene {name, at:{x,y}, radius}: the trigger spot is authored in map tiles like everything else
+  if(cfg.reachCutscene && cfg.reachCutscene.at){ const r=Object.assign({}, cfg.reachCutscene);
+    r.at={ x:S(cfg.reachCutscene.at.x), y:S(cfg.reachCutscene.at.y) };
+    if(r.radius!=null) r.radius=Math.round(r.radius*MAP_SCALE);
+    c.reachCutscene=r; }
   // T3-1 New Game+: each lap raises enemy aggression — applied at cfg-derivation time so solo,
   // host, and client (which all re-derive cfg from CAMPAIGN.ngPlus via snapshots) agree.
   const _ng=(typeof CAMPAIGN!=='undefined' && CAMPAIGN && CAMPAIGN.ngPlus)|0;
@@ -240,6 +248,88 @@ function carveBridgesToTargets(state, targets, landBiome){
     }
   }
   dropFeaturesAt(state, carved);      // clear any feature the bridge cut through (rare path)
+}
+
+// JUNGLE TRAILS (opt-in cfg.trails) — carve tree-free, multi-direction TRAILS connecting every POI
+// (player, the far HQ, enemies, guards, gold, dead bodies, wrecks) plus a few dead-end pockets for a
+// labyrinth feel. Without this, a dense feature-grid only leaves horizontal lanes (you can't move up/down).
+// Each corridor meanders, drops whole topography features it touches (dropFeaturesAt) and lays a worn-dirt
+// centerline. Deterministic (seeded rng) → blocked/feat are transient, so co-op/replay stay in sync. Runs
+// AFTER features/thickets, BEFORE the blocked grid is built (so the cleared feat flows into baseBlocked).
+function carveTrails(state, cfg, rng, landBiome){
+  if(!cfg || !cfg.trails) return;
+  const W=state.W, H=state.H, tiles=state.tiles, biome=state.biome;
+  const cx=x=>Math.max(1,Math.min(W-2,x|0)), cy=y=>Math.max(1,Math.min(H-2,y|0));
+  const P=[]; const add=(x,y,k)=>{ if(x!=null&&y!=null) P.push({x:cx(x),y:cy(y),k}); };
+  if(cfg.player) add(cfg.player.x,cfg.player.y,'start');
+  (cfg.lostBases||[]).forEach(b=>add(b.x,b.y,'hq'));
+  (cfg.enemies||[]).forEach(b=>add(b.x,b.y,'enemy'));
+  (cfg.guards||[]).forEach(g=>add(g.x,g.y,'guard'));
+  (cfg.goldNodes||[]).forEach(g=>add(g.x,g.y,'gold'));
+  (cfg.memBodies||[]).forEach(m=>add(m.x,m.y,'body'));
+  if(cfg.crewWreck) add(cfg.crewWreck.x,cfg.crewWreck.y,'crew');
+  (cfg.wrecks||[]).forEach(w=>add(w.x,w.y,'wreck'));
+  if(P.length<2) return;
+  const carved=new Set(), dirt=new Set();
+  const disc=(x0,y0,hw)=>{ for(let dy=-hw;dy<=hw;dy++)for(let dx=-hw;dx<=hw;dx++){
+    if(dx*dx+dy*dy>hw*hw+0.6) continue; const x=x0+dx,y=y0+dy; if(x<1||y<1||x>=W-1||y>=H-1) continue; carved.add(y*W+x); } };
+  // meandering corridor A→B, half-width hw; lays the worn-dirt centerline as it goes
+  const corridor=(ax,ay,bx,by,hw)=>{
+    let x=cx(ax), y=cy(ay), guard=0, maxG=(W+H)*3;
+    while((Math.abs(x-bx)+Math.abs(y-by))>1 && guard++<maxG){
+      disc(x,y,hw); dirt.add(y*W+x);
+      if(rng()<0.30){ if(Math.abs(bx-x)>=Math.abs(by-y)) y+=((rng()*3)|0)-1; else x+=((rng()*3)|0)-1; }   // perpendicular wander → organic
+      else { if(Math.abs(bx-x)>=Math.abs(by-y)) x+=Math.sign(bx-x); else y+=Math.sign(by-y); }
+      x=cx(x); y=cy(y);
+    }
+    disc(bx,by,hw); dirt.add(by*W+bx);
+  };
+  // SPINE: the escape route — player → guards (x-descending) → crew wreck → HQ
+  const start=P.find(p=>p.k==='start')||P[0];
+  const spine=[start];
+  P.filter(p=>p.k==='guard').sort((a,b)=>b.x-a.x).forEach(g=>spine.push(g));
+  P.filter(p=>p.k==='crew').forEach(c=>spine.push(c));
+  P.filter(p=>p.k==='hq').forEach(h=>spine.push(h));
+  for(let i=0;i<spine.length-1;i++) corridor(spine[i].x,spine[i].y,spine[i+1].x,spine[i+1].y,2);
+  // BRANCHES: connect every off-spine POI to its nearest spine node
+  const inSpine=new Set(spine);
+  for(const p of P){ if(inSpine.has(p)) continue;
+    let best=spine[0], bd=1e18; for(const s of spine){ const d=(s.x-p.x)*(s.x-p.x)+(s.y-p.y)*(s.y-p.y); if(d<bd){ bd=d; best=s; } }
+    corridor(best.x,best.y,p.x,p.y,1);
+  }
+  // DEAD-ENDS (labyrinth): wander out of a few spine points and stop in a pocket
+  const nDead=Math.min(6, 2+((spine.length/3)|0));
+  for(let d=0;d<nDead;d++){
+    const s=spine[1+((rng()*Math.max(1,spine.length-2))|0)]||start;
+    let x=s.x, y=s.y, ang=rng()*6.28; const len=8+((rng()*10)|0);
+    for(let i=0;i<len;i++){ disc(x,y,1); dirt.add(cy(y)*W+cx(x)); ang+=(rng()-0.5)*0.8; x=cx(x+Math.round(Math.cos(ang)*2)); y=cy(y+Math.round(Math.sin(ang)*2)); }
+    disc(x,y,2);   // the dead-end clearing
+  }
+  // CROSS-LINKS: weave the network into a WEB (non-exclusive routes) — loop trails
+  // between spine arms that swing back near each other, so the trail isn't one funnel.
+  for(let i=0;i<spine.length;i++)for(let j=i+2;j<spine.length;j++){
+    const a=spine[i], c2=spine[j], dd=Math.hypot(a.x-c2.x,a.y-c2.y);
+    if(dd<26 && rng()<0.7) corridor(a.x,a.y,c2.x,c2.y,1);
+  }
+  // VERTICAL GAME-TRAILS: meandering N↔S cuts across the horizontal walk-under banding
+  // so units can move UP/DOWN through the jungle (the "can't go up or down" fix). They
+  // tie into whatever spine arm they cross → more loops, not more dead funnels. Even-ish
+  // x spread (permeability everywhere) but RANDOM vertical span + jitter → organic game-
+  // trails, not a regular grid of full-height avenues.
+  const nVert=6+((rng()*3)|0);
+  for(let v=0;v<nVert;v++){
+    let x=cx(((v+0.5)/nVert)*W + (rng()*22-11));
+    const span=(0.45+rng()*0.55)*H, y0=cy(rng()*Math.max(1,H-span));
+    let y=y0, end=cy(y0+span), guard=0;
+    while(y<end && guard++<H*2){
+      disc(x,y,1); dirt.add(cy(y)*W+cx(x));
+      if(rng()<0.36) x=cx(x+((rng()*3)|0)-1); else y++;
+    }
+  }
+  // APPLY: drop whole features the trails touch, then floor-ify (water→land) + worn-dirt centerline
+  dropFeaturesAt(state, carved);
+  for(const k of carved){ if(biome[k]===B_WATER||biome[k]===B_MOUNTAIN) biome[k]=landBiome; if(!passableTerrain(tiles[k])) tiles[k]=T_GRASS; }
+  for(const k of dirt) tiles[k]=T_DIRT;
 }
 
 // Stamp a funding node's 3x3 footprint into the topography masks so it occupies 9 slots
@@ -448,7 +538,11 @@ function newMap(idx){
     else if(k===K_MTN){ biome[i]=B_MOUNTAIN; tiles[i]= variant[i]>0.34?T_ROCK:T_GRASS; } // ranges w/ passable gaps
     else { biome[i]=k; tiles[i]=T_GRASS;
       // clustered groves on moist grassland (noise-gated so they form copses, not static)
-      if(k===B_GRASS && P.forest>0 && nzM.fbm(x*0.25+7,y*0.25+7,2) > 1-P.forest*3 && variant[i]>0.3) tiles[i]=T_TREE;
+      // terrain.forestClump (0..1, optional): gate the ambient forest by a LOW-frequency mask so trees
+      // gather into GROVES with open CLEARINGS between (a real jungle) instead of a uniform field.
+      if(k===B_GRASS && P.forest>0 && variant[i]>0.3
+         && nzM.fbm(x*0.25+7,y*0.25+7,2) > 1-P.forest*3
+         && (!P.forestClump || nzM.fbm(x*0.05+31,y*0.05+31,2) > 1-P.forestClump)) tiles[i]=T_TREE;
     }
   }
   // 4) sandy/dirt shore band where land meets sea (Whittaker realism; stays passable)
@@ -547,6 +641,7 @@ function newMap(idx){
     const topoRng = makeRng(cfg.seed*1000+909);
     buildTopoFeatures(state, topoRng);
     placeThickets(state, topoRng);
+    carveTrails(state, cfg, topoRng, landBiome);   // Ep XVI jungle: clear trails between POIs + dead-ends (opt-in cfg.trails)
   }
 
   // build blocked grid from terrain + feature bases
@@ -610,8 +705,13 @@ function newMap(idx){
   // *behind* the tall HQ sprite (only a faint ghost showed through). Muster every starting unit
   // BELOW the HQ footprint (in front, never occluded), in widening rows; push the optional
   // People Ops well to the left and down a row so the two big sprites don't pile.
-  const phq = mkBuilding(state,'hq','player', cfg.player.x, cfg.player.y, true);
-  if(cfg.startBarracks) mkBuilding(state,'barracks','player', (cfg.player.x-8>=0?cfg.player.x-8:cfg.player.x-4), cfg.player.y+1, true); // People Ops: left wing, far enough that the HQ + barracks SPRITES (~2.5× footprint) don't pile
+  // heroEscape maps (Ep XVI) start base-LESS — the squad is shot down with no HQ and must raise a
+  // derelict Open-Plan HQ at the far edge to extract. Skip the HQ + People Ops; standardDefeatChecks
+  // (core.js) suppresses the no-HQ loss for these maps until the whole squad is gone.
+  if(!cfg.heroEscape){
+    mkBuilding(state,'hq','player', cfg.player.x, cfg.player.y, true);
+    if(cfg.startBarracks) mkBuilding(state,'barracks','player', (cfg.player.x-8>=0?cfg.player.x-8:cfg.player.x-4), cfg.player.y+1, true); // People Ops: left wing, far enough that the HQ + barracks SPRITES (~2.5× footprint) don't pile
+  }
   const nW = cfg.startWorkers!=null ? cfg.startWorkers : 4;   // explicit 0 must stay 0 (Ep X starts economy-less)
   const nS = cfg.startSoldiers!=null ? cfg.startSoldiers : 2;
   let mrow = cfg.player.y+4;                                  // first muster row, clear below the 4×3 HQ
@@ -627,6 +727,9 @@ function newMap(idx){
   } mrow += Math.ceil(n/6); });
   spawnVets(state);   // carry veterans from the previous campaign map (count grows every 2 maps)
   spawnHeroes(state); // named campaign heroes declared on the map (e.g. Nino on Episode VIII)
+  if(typeof spawnWrecks==='function') spawnWrecks(state, cfg);       // Ep XVI crashed bomber halves (scenery)
+  if(typeof spawnMemBodies==='function') spawnMemBodies(state, cfg); // Ep XVI dead-body memory chips
+  if(typeof spawnCrewBodies==='function') spawnCrewBodies(state, cfg); // Ep XVI "the other units" — dead veterans by the front-half wreck
   // T2-1 escort verb: flag the VIP the mission must deliver (a named hero, a unit type, or any fighter)
   if(cfg.winCondition && cfg.winCondition.type==='escort'){
     const wc=cfg.winCondition;

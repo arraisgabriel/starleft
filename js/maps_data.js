@@ -1134,6 +1134,7 @@ Weaponize your buzzwords, circle back, and disrupt MegaCorp into bankruptcy. The
     // the "defend the defector" beat.
     name:'THE NON-COMPETE',
     isVillain:true, gateAfter:20, returnTo:22, displayEp:'15.5', vetCarryOverride:7,
+    crashChainTo:true,   // EP XVI link: on victory, the evac bomber is shot down → Hades-style crash → loads XVI directly (no HUB). returnTo (22=XVI) is the target.
     enemyName:'A&O', enemyFaction:'ao',
     aggression:1.0, startGold:700, startWorkers:4, startSoldiers:5, startBarracks:true,
     graceTime:9999, waveTimer:9999,              // boss duel — no enemy waves; the warden IS the encounter
@@ -1167,50 +1168,111 @@ Weaponize your buzzwords, circle back, and disrupt MegaCorp into bankruptcy. The
     goldNodes:[ {x:6,y:24,amt:1500}, {x:4,y:18,amt:1300}, {x:10,y:25,amt:1300} ],
   },
   {
+    // EP XVI REWORK — a hero-only ESCAPE across a 25:9 jungle stripe (right→left). Shot down at the end
+    // of 15.5, Nino/Rust/Biba walk out with NO base (heroEscape) and 400 m3rits, strip memory chips from
+    // the dead along the way (cfg.memBodies → corpses.js), and must reach the far-edge derelict Open-Plan
+    // HQ (cfg.lostBases → reclaim) to extract. The EX-TERMINATOR is an escapable PURSUER (event-spawned,
+    // NO cfg.villain → victory stays quest-driven). toBeContinued → onVictory's cliffhanger card.
     name:'XVI — THE SEVERANCE PACKAGE',
     isVillain:false, displayEp:'XVI', vetCarryOverride:7, toBeContinued:true,
-    enemyName:'A&O', enemyFaction:'ao',
-    aggression:2.1, startGold:2800, startWorkers:10, startSoldiers:12, startBarracks:true,
-    graceTime:100, waveTimer:95,
+    introCutscene:'XVI_CRASH_WAKE',   // heroes come to in the downed bomber (mapCutsceneTick, state.time<4s)
+    reachCutscene:{ name:'XVI_FRONT_WRECK', at:{ x:52, y:34 }, radius:7 },   // discover the FRONT-half wreck + the dead crew
+    enemyName:'A&O', enemyFaction:'ao', heroEscape:true, noCarryVets:true,   // noCarryVets: the veteran roster does NOT deploy (hero-only) — they rode the FRONT half; the dead 10% lie by it
+    aggression:1.0, startGold:400, startWorkers:0, startSoldiers:0, startBarracks:false, startUnits:[],
+    graceTime:60, waveTimer:80,
     crawl:{ episode:'EPISODE XVI', title:'THE SEVERANCE PACKAGE',
-      text:'They expensed Rust the quarter he turned fifty and kept his face for the brochure. Now A&O wants the chassis back.\n\nA recovery division rolls in with the paperwork pre-signed — and Rust, reading his own file off their network, goes quiet at one line. The founder who signed his layoff has not aged in a render since the year he supposedly died.\n\nDefend your new asset. Raze the division. And start asking what Dell Tusk actually is....',
-      summary:`A&O sends a whole recovery division to repossess its "depreciated asset" — and pulling his own file off their network, Rust finds the thread that unravels everything: the founder who signed his layoff hasn't aged in a marketing render since the year he supposedly died. Defend Rust, raze the division, and start asking what Tusk really is.` },
-    objective:'A&O\'s recovery division has come for Rust — raze all FIVE of its repossession bases, then put down the enforcer they send to finish the job. Keep PEDRO "RUST" alive.',
+      text:'The extraction ran hot. A&O knew the route, and a bomber put your evac into the canopy three klicks short of the H.U.B.\n\nNino, Rust and Biba climb out of the wreck into a jungle crawling with a recovery division — sent to repossess its "depreciated asset." The dead are everywhere, and every skull still holds a chip. Strip them. One is an A&O unit, and Rust means to read his own file off it.\n\nFight WEST. Reach the far edge, raise the derelict Open-Plan HQ, and call a second bird — before the thing on your trail runs you down....',
+      summary:`Shot down three klicks short of the H.U.B., the three heroes fight west on foot through a recovery division, stripping memory chips from the dead. The last — an A&O unit — lets Rust read his own file and find the thread that unravels Dell Tusk. Reach the far-edge Open-Plan HQ and extract before the EX-TERMINATOR catches you.` },
+    objective:'Your bird is down. Fight WEST across the jungle with Nino, Rust and Biba — strip the memory chip from every dead body you pass — and reach the derelict Open-Plan HQ at the far edge to extract. Do NOT die to what is chasing you.',
     quests:[
-      { id:'raze',   text:'Raze all five A&O repossession bases',            type:'razeAll', required:true },
-      { id:'duel',   text:'Destroy THE EX-TERMINATOR',                       type:'defeatVillain', required:true },
-      { id:'defend', text:'No hero falls — Rust walks out of this one',      type:'heroesAlive', reward:150 },
-      { id:'lean',   text:'Keep losses under 18',                            type:'maxUnitsLost', count:17, reward:100 },
+      { id:'memories', text:'Extract the memory chip from all FIVE dead (uncover Tusk\'s secret)', type:'collectMemories', group:'route', required:true },
+      { id:'crew',     text:'Discover what happened to the others — read your dead at the front-half wreck', type:'collectMemories', group:'crew', required:true },
+      { id:'extract',  text:'Reach the far edge and raise the derelict Open-Plan HQ to extract',   type:'reclaimOutposts', count:1, required:true },
+      { id:'heroes',   text:'No hero falls — all three walk out',                                  type:'heroesAlive', reward:150 },
+      { id:'cull',     text:'Cut a path west — decommission 25 A&O',                               type:'killUnits', count:25, reward:100 },
     ],
-    // Climax boss: once the five bases fall (after:'raze'), Tusk's enforcer surfaces at the central yard as
-    // the bigger, fuller-kit return of THE EX-TERMINATOR (now with the flyer-shredding minigun rake). The
-    // defeatVillain win-gate (villainCheckWinLose) takes over from razeAll. villainCutscene plays his
-    // arrival the moment he spawns; his death cutscene (EXTERM_DEATH_2) closes on "I'll be back".
-    villain:{ id:'ex_terminator_mk2', x:84, y:46, after:'raze' },
-    villainCutscene:'EXTERM_ARRIVAL_2',
-    w:108, h:88, seed:16016,
-    player:{ x:10, y:78 },
-    terrain:{ biomes:['tech'], temp:{ axis:'diag', base:0.28, gradient:0.14, noise:0.14 }, seaFrac:0.10, mtnFrac:0.08, forest:0 },
-    enemies:[ {x:98,y:10, defenders:7, extraBarracks:true}, {x:58,y:10, defenders:6}, {x:100,y:78, defenders:7, extraBarracks:true}, {x:54,y:80, defenders:6}, {x:84,y:46, defenders:8, extraBarracks:true} ],
-    heroes:[ { name:'Rust', type:'founder', sprite:'rust', level:6, dossier:{
-      first:'Pedro', last:'"Rust"',
-      home:'the Detroit-Reclamation rustbelt',
-      rel:'crew', relName:'the old line crew',
-      family:"Pedro came up tooling exosuits on a union floor in the Reclamation — the kind of shop where the whole crew signed every chassis — until A&O bought the floor and the signatures with it.",
-      trauma:'the review that booked him a DEPRECIATED ASSET and wrote him off the quarter he turned fifty, scrapped beside the machines he tooled',
-      dream:'to own one thing outright that no quarterly review can ever repossess',
-      crime:'welding the foreclosure-mech chassis that now walks on the people he came up with',
-    } } ],
+    w:175, h:63, seed:16016, trails:true,   // carve tree-free trails between every POI + dead-ends (map.js carveTrails)
+    player:{ x:166, y:31 },
+    terrain:{ biomes:['grass','tech'], temp:{ axis:'x', base:0.34, gradient:0.30, noise:0.14 }, seaFrac:0.05, mtnFrac:0.05, forest:0.46, forestClump:0.85 },
+    // No PRODUCING enemy bases — for a 3-hero escape they snowball into unsurvivable escalating waves.
+    // Instead the corridor is studded with STATIC guard checkpoints (cfg.guards: hold position, excluded
+    // from wave reinforcement, ai.js) you fight through one at a time, with lulls between for Biba to heal.
+    enemies:[],
+    guards:[
+      { x:138, y:24, scale:false, comp:[['soldier',3],['hustler',2],['ranger',1]] },                                  // 6 — first contact
+      { x:112, y:42, scale:false, comp:[['soldier',3],['ranger',2],['hustler',2],['recruiter',1]] },                  // 8 — ranged screen + a medic
+      { x:86,  y:22, scale:false, comp:[['soldier',3],['hustler',3],['ranger',3],['recruiter',1]] },                  // 10 — harasser pack
+      { x:60,  y:44, scale:false, comp:[['ranger',3],['soldier',3],['hustler',2],['lobbyist',1],['recruiter',1],['auditor',1]] }, // 11 — first sniper + Auditor siege-wall
+      { x:34,  y:24, scale:false, comp:[['soldier',3],['ranger',3],['hustler',2],['lobbyist',2],['recruiter',1],['auditor',1],['founder',1]] }, // 13 — Founder-Mech anchor
+      { x:18,  y:42, scale:false, comp:[['soldier',4],['ranger',3],['hustler',2],['lobbyist',2],['recruiter',1],['auditor',1],['founder',1]] }, // 14 — last line before the HQ
+    ],
+    // the squad — re-listed so all three are guaranteed present regardless of prior deaths (deduped by
+    // heroId against the carryover, so a survivor isn't doubled).
+    heroes:[
+      { name:'Nino', type:'lobbyist', sprite:'nino', level:11, dossier:{
+        first:'Nino', last:'',
+        home:'the Glitch Sprawl',
+        rel:'crew', relName:'the first team',
+        family:"Nino ran the lobby in the company's first life — bought the votes, wrote the laws, and watched every name he hired end up on the memorial wall.",
+        trauma:'being three streets out when the blast turned the campus into a column of light',
+        dream:'to see one thing he helped build outlast the money that funded it',
+        crime:'authoring the legislation that made a hundred rivals simply vanish, and only now losing sleep over it' } },
+      { name:'Rust', type:'founder', sprite:'rust', level:6, dossier:{
+        first:'Pedro', last:'"Rust"',
+        home:'the Detroit-Reclamation rustbelt',
+        rel:'crew', relName:'the old line crew',
+        family:"Pedro came up tooling exosuits on a union floor in the Reclamation — the kind of shop where the whole crew signed every chassis — until A&O bought the floor and the signatures with it.",
+        trauma:'the review that booked him a DEPRECIATED ASSET and wrote him off the quarter he turned fifty, scrapped beside the machines he tooled',
+        dream:'to own one thing outright that no quarterly review can ever repossess',
+        crime:'welding the foreclosure-mech chassis that now walks on the people he came up with' } },
+      { name:'Biba', type:'recruiter', sprite:'biba', level:12, dossier:{
+        first:'Biba', home:'the flooded arcologies of Lagos-2',
+        family:'raised six younger siblings on relief credits',
+        trauma:'watched her first squad triaged out of existence by an algorithm',
+        dream:'to keep one team alive long enough to age',
+        crime:'designing the chip A&O built to chase immortality — then crippling it when she saw who would pay' } },
+    ],
+    // 5 dead bodies along the corridor — civilians (oxblood) + cyborgs (synthetic/neon). The reveal body
+    // (src:'ao', far-left → collected last) carries the Tusk-cyborg truth and fires Rust's reveal cutscene.
+    memBodies:[
+      { x:150, y:24, src:'civilian', gore:'bleeding', id:'mem_courier',
+        text:'A courier in an A&O windbreaker over a fake H.U.B. lanyard. Her last hour was spent running a crate of skimmed insulin toward a tenement that had stopped answering its buzzer. The division flagged the route as "shrinkage" and closed it. She made it eleven streets.' },
+      { x:122, y:40, src:'soldier', id:'mem_cyborg',
+        text:'A Growth Cyborg — one of yours once, churned to A&O in the Down Round. His chip loops the same ninety seconds: a manager explaining that his pension "vested into the acquirer" and that he should feel grateful to migrate. He was still nodding when the recovery order came for the squad he led.' },
+      { x:94, y:22, src:'civilian', gore:'legless', id:'mem_medic',
+        text:'A field medic, both legs gone below an artillery line she crossed to reach a downed kid who turned out to be a decoy. Her last memory is not pain — it is the triage algorithm in her visor calmly re-ranking her own odds to "not cost-effective" and cutting her own morphine to preserve stock.' },
+      { x:58, y:42, src:'civilian', id:'mem_clerk',
+        text:'A records clerk who tried to leak the repossession manifests — the list of names A&O had already written back into inventory. He got two files out before the non-disclosure enforcement found him. The chip still holds the third, half-uploaded: a column titled FOUNDER · EXEMPTIONS, with a single permanent entry.' },
+      { x:24, y:30, src:'ao', gore:'headshot', reveal:true, id:'mem_tusk',
+        text:'An A&O enforcement unit — the one Rust came for. Its maintenance log is not a memory at all. It is a service record: forty years of firmware, every build signed by the same authoring key — the founder\'s key — with no human re-auth in any of them. Dell Tusk has been a cyborg for many years. The man who signed every layoff stopped being a man before most of the dead here were born.' },
+    ],
+    // THE OTHER UNITS — the bomber split in two. The heroes rode the BACK half (crashes at the player
+    // start). The carried veterans rode the FRONT half, which came down nearer the H.U.B. (left). 90%
+    // survived (walking to the H.U.B.); ~10% died — spawnCrewBodies (corpses.js) builds their bodies from
+    // the REAL roster near crewWreck, the 'crew' collectMemories quest, and removes the dead permanently.
+    wrecks:[ { x:166, y:31, half:'back' }, { x:46, y:34, half:'front' } ],
+    crewWreck:{ x:46, y:34 },          // front-half wreck = the dead-crew cluster centre
+    // the FINISH: a derelict Open-Plan HQ at the far edge. Walk a hero onto it → reclaimOutposts flips it,
+    // the intern boots it (core.js heroEscape hook spends the 400 m3rits + spawns the intern) → extraction.
+    lostBases:[ {x:8, y:31} ],
+    // Light, well-SPACED pursuit from behind (so you can't just turtle) — small squads, no aggression ramp,
+    // so the squad always gets a breather between fights. The EX-TERMINATOR is the recurring HUNTER: it can't
+    // be killed, only DRIVEN OFF (a hidden, hero-level-scaled damage pool), then it returns near you (villains.js).
     events:[
-      { atTime:90,  toast:'A&O doubles the recovery bounty on Rust — heavier crews inbound.', aggression:2.4 },
-      { atTime:200, toast:'Repossession order escalated — recovery division pressing in.', spawnSquad:{ comp:[['soldier',4],['ranger',2],['lobbyist',1]] }, at:{x:54,y:44} },
+      { atTime:45,  toast:'A&O recovery crews are on your tail — keep moving WEST.', spawnSquad:{ comp:[['soldier',2],['hustler',1]] }, at:{x:170,y:31} },
+      { atTime:135, toast:'The division is still behind you — don\'t let them pin you.', spawnSquad:{ comp:[['soldier',2],['ranger',1]] }, at:{x:172,y:34} },
+      // HUNTER: spawns near the squad WHEREVER they are and chases like a hunter. The repel mechanic is DISCOVERED,
+      // never explained — the arrival toast is pure flavor. `hunter:true` → villains.js spawn-near + damage-pool repel.
+      { atTime:120, toast:'⚙ THE EX-TERMINATOR has locked onto your squad.', villain:{ id:'ex_terminator_mk2', hunter:true } },
     ],
-    lakes:[ {x:36,y:30,r:5}, {x:74,y:60,r:5}, {x:24,y:56,r:4} ],
-    rockClusters:[ {x:46,y:24,n:16}, {x:70,y:30,n:14}, {x:88,y:62,n:16}, {x:30,y:42,n:12} ],
-    forests:[],
-    goldNodes:[ {x:6,y:80,amt:3200},{x:12,y:84,amt:3000},{x:8,y:72,amt:2600},{x:20,y:80,amt:2200},
-                {x:52,y:46,amt:3400},{x:38,y:38,amt:2800},{x:72,y:40,amt:2800},{x:92,y:54,amt:2400},
-                {x:100,y:14,amt:1900},{x:58,y:6,amt:1900},{x:100,y:82,amt:1900},{x:56,y:84,amt:1900} ],
+    lakes:[ {x:118,y:50,r:4}, {x:80,y:12,r:4}, {x:44,y:52,r:4} ],
+    rockClusters:[ {x:140,y:30,n:12}, {x:100,y:24,n:14}, {x:60,y:36,n:12}, {x:26,y:24,n:12} ],
+    // the main jungle comes from forest+forestClump (groves + clearings); a handful of extra hand-placed
+    // COPSES add denser thickets of cramped trees in spots. carveTrails cuts clean lanes through all of it.
+    forests:[ {x:150,y:28,n:18},{x:128,y:18,n:16},{x:116,y:46,n:18},{x:96,y:24,n:20},{x:82,y:48,n:16},
+              {x:66,y:16,n:18},{x:52,y:44,n:18},{x:38,y:24,n:20},{x:24,y:48,n:16},{x:140,y:50,n:14},
+              {x:108,y:54,n:14},{x:74,y:34,n:16},{x:46,y:12,n:14},{x:20,y:30,n:14} ],
+    goldNodes:[ {x:12,y:34,amt:2000},{x:6,y:27,amt:1500},{x:14,y:24,amt:1200} ],
   },
   {
     // EX-TERMINATOR INTERLUDE #1 — APPENDED (isVillain → exempt from linear numbering & crawl-index keying,

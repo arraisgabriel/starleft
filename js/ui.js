@@ -14,7 +14,9 @@ const elDossierBtn=document.getElementById('sel-dossier');
 // phase 2 swaps the --boss-color to red and adds the crack/shake via the .bossbar--rage class.
 function updateBossBar(){
   const bb=document.getElementById('bossbar'); if(!bb) return;
-  const boss = G && G.entities && G.entities.find(e=>e.villain && !e.dead && !e.escaped);
+  // The Ep XVI HUNTER (_hunter, synced) is NOT a kill-the-bar boss — its HP is irrelevant (a hidden damage
+  // pool drives it off). Showing an HP bar would reveal/contradict that, so it never claims the boss bar.
+  const boss = G && G.entities && G.entities.find(e=>e.villain && !e.dead && !e.escaped && !e._hunter);
   if(!boss){ if(bb.style.display!=='none') bb.style.display='none'; return; }
   const def=(typeof VILLAINS!=='undefined') && VILLAINS[boss.villainId];
   bb.style.display='';
@@ -660,6 +662,30 @@ function eventToast(html,ms=9000,say){
   const t=document.getElementById('toast'); t.innerHTML=html; t.classList.add('show','event');
   clearTimeout(toastTimer); toastTimer=setTimeout(()=>t.classList.remove('show'),ms);
   logEvent(html,true,say);
+}
+// Ep XVI memory-chip readout: a PERSISTENT dialog BOX (not a toast) that stays until the player clicks
+// to close it. Solo pauses the sim so the player can read it (running=false); co-op shows it without
+// freezing the shared sim. `onClose` fires after dismissal — the A&O reveal body chains Rust's cutscene.
+// window._memDialogOpen gates corpsesTick from harvesting another body while one is being read.
+function showMemoryDialog(text, isReveal, onClose){
+  const el=document.getElementById('memoryDialog');
+  if(!el){ if(typeof onClose==='function') onClose(); return; }
+  const body=el.querySelector('.mem-body'); if(body) body.textContent=text||'';
+  const title=el.querySelector('.mem-title'); if(title) title.textContent=isReveal?'A&O SERVICE RECORD':'MEMORY RECOVERED';
+  el.classList.toggle('reveal', !!isReveal);
+  el.classList.add('show');
+  // Freeze the sim WITHOUT toggling `running` (which would raise the big PAUSED overlay over the dialog):
+  // window._memDialogOpen gates update() in the main loop (like a cutscene) AND corpsesTick. render keeps
+  // drawing the frozen field behind the box; updateFlashCutscene still runs so the reveal can chain.
+  if(typeof window!=='undefined') window._memDialogOpen=true;
+  logEvent('🧠 '+(text||''), true);
+  const close=()=>{
+    el.removeEventListener('click', close);
+    el.classList.remove('show','reveal');
+    if(typeof window!=='undefined') window._memDialogOpen=false;
+    if(typeof onClose==='function') onClose();
+  };
+  el.addEventListener('click', close);
 }
 
 /* =====================================================================

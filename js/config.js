@@ -148,6 +148,7 @@ const DEF = {
   worker:   { name:'Intern',         icon:'🧑‍💻', kind:'unit', hp:60,  cost:50,  build:10, sight:5, supply:1, speed:2.6, dmg:4,  range:1.0, cd:1.0, r:9,
               flavor:'Mines Funding "for the exposure." Builds things. Equity will never vest.' },
   soldier:  { name:'Growth Cyborg',  icon:'🚀', kind:'unit', hp:140, cost:80,  build:13, sight:6, supply:1, speed:2.4, dmg:17, range:1.3, cd:0.9, r:10,
+              cyborg:true,   // Growth Cyborg → bleeds synthetic/neon (corpses.js isCyborgBody)
               flavor:'Moves fast and breaks things — primarily skulls. Hates meetings, loves disruption.' },
   ranger:   { name:'Consultant',     icon:'💼', kind:'unit', hp:95,  cost:95,  build:16, sight:7, supply:1, speed:2.4, dmg:14, range:5.0, cd:1.1, r:9,
               flavor:'Bills $400/hr to lob synergy buzzwords at the enemy from a safe distance.' },
@@ -172,6 +173,7 @@ const DEF = {
   /* ---- Launch Pad (Starport) tier ---- */
   founder:  { name:'Founder Mech', icon:'🦄', kind:'unit', hp:600, cost:599, build:45, sight:8, supply:6, speed:1.6, dmg:45, range:3.5, cd:1.5, r:16, vehicle:true,
               armor:0.30,   // T2-4: exosuit plating shrugs off small-arms — bring piercing
+              cyborg:true,  // Founder Mech (Rust's chassis) → bleeds synthetic/neon (corpses.js isCyborgBody)
               splash:20, splashR:1.3, antiAir:true, flavor:'A visionary in a 12-ft exosuit. Armored; hits anything, ground or air.' },
   courier:  { name:'Drugztore Delivery Drone', icon:'🛸', kind:'unit', hp:120, cost:199, build:16, sight:7, supply:2, speed:3.0, dmg:0, range:4.0, cd:1.0, r:10, air:true, action:'heal',
               heal:7, flavor:'Same-day delivery of medkits and morale. Flies over everything.' },

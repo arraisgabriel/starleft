@@ -1,0 +1,131 @@
+<!doctype html><html><head><meta charset="utf-8"><title>STARLEFT · Corpse Lab — CP2077 × Hades gore calibrator</title>
+<style>
+  :root{ --ink:#0a0d12; --pan:#121822; --line:#26384a; --txt:#cfe6ff; --acc:#5fe0ff; }
+  *{box-sizing:border-box}
+  body{margin:0;background:radial-gradient(circle at 50% 0%,#16202c,#070a0e);color:var(--txt);font:13px/1.4 ui-monospace,Menlo,monospace}
+  header{padding:10px 16px;border-bottom:1px solid var(--line);display:flex;gap:16px;align-items:baseline;flex-wrap:wrap}
+  h1{font-size:15px;margin:0;color:var(--acc);letter-spacing:.5px}
+  .sub{opacity:.6;font-size:11px}
+  .wrap{display:flex;gap:0;min-height:calc(100vh - 46px)}
+  .panel{width:300px;flex:none;padding:14px 16px;border-right:1px solid var(--line);background:var(--pan);overflow:auto}
+  .row{margin:9px 0}
+  .row label{display:flex;justify-content:space-between;opacity:.85;margin-bottom:3px}
+  .row input[type=range]{width:100%}
+  .row .v{color:var(--acc)}
+  select,button{background:#0d1620;color:var(--txt);border:1px solid var(--line);border-radius:5px;padding:5px 8px;font:inherit}
+  button{cursor:pointer}
+  .stage{flex:1;overflow:auto;padding:16px;background:
+     repeating-linear-gradient(45deg,#0b0f15 0 22px,#0e131b 22px 44px)}
+  canvas#grid{image-rendering:auto;display:block;background:transparent}
+  .note{opacity:.55;font-size:11px;margin-top:14px;border-top:1px dashed var(--line);padding-top:10px}
+  code{color:#ffd479}
+</style></head>
+<body>
+<header>
+  <h1>CORPSE LAB</h1>
+  <span class="sub">CP2077 procedural dismemberment × Hades hand-drawn gore — built from the real unit sprites. Tune, then port constants into <code>render.js · corpseSprite</code>.</span>
+</header>
+<div class="wrap">
+  <div class="panel" id="panel">
+    <div class="row"><label>Source <span class="v" id="srcv"></span></label>
+      <select id="src">
+        <option value="flesh">flesh — worker (civilian)</option>
+        <option value="synth">synthetic — soldier A&O (reveal body)</option>
+      </select></div>
+    <div class="row"><label>Variants <span class="v" id="nv"></span></label><input id="n" type="range" min="1" max="24" step="1" value="12"></div>
+    <div class="row"><label>Cell size <span class="v" id="cellv"></span></label><input id="cell" type="range" min="80" max="220" step="2" value="150"></div>
+    <hr style="border-color:var(--line)">
+    <div class="row"><label>P(head off) <span class="v" id="pheadv"></span></label><input id="phead" type="range" min="0" max="1" step="0.02" value="0.42"></div>
+    <div class="row"><label>P(legs off) <span class="v" id="plegsv"></span></label><input id="plegs" type="range" min="0" max="1" step="0.02" value="0.34"></div>
+    <div class="row"><label>P(arm wound) <span class="v" id="parmv"></span></label><input id="parm" type="range" min="0" max="1" step="0.02" value="0.55"></div>
+    <hr style="border-color:var(--line)">
+    <div class="row"><label>Death tint α <span class="v" id="tintv"></span></label><input id="tint" type="range" min="0" max="0.8" step="0.02" value="0.52"></div>
+    <div class="row"><label>Pool size <span class="v" id="poolv"></span></label><input id="pool" type="range" min="0.3" max="1.1" step="0.02" value="0.62"></div>
+    <div class="row"><label>Pool α <span class="v" id="poolav"></span></label><input id="poola" type="range" min="0" max="0.9" step="0.02" value="0.62"></div>
+    <div class="row"><label>Wound size <span class="v" id="woundv"></span></label><input id="wound" type="range" min="0.5" max="1.8" step="0.05" value="1"></div>
+    <div class="row"><label>Bloom α <span class="v" id="bloomv"></span></label><input id="bloom" type="range" min="0" max="0.9" step="0.02" value="0.5"></div>
+    <div class="row"><label>Slump (angle jitter) <span class="v" id="slumpv"></span></label><input id="slump" type="range" min="0" max="0.6" step="0.02" value="0.26"></div>
+    <div class="row"><label><input type="checkbox" id="rim" checked> pseudo rim-light</label></div>
+    <div class="row"><button id="reseed">↻ reseed</button> <button id="shot">⤓ download PNG</button></div>
+    <div class="note">Each cell is one seeded corpse. The body is the real sprite, laid prone; severed bands become flung gibs; every stump is covered by an organic wound so no crop edge shows. Dark oxblood (flesh) / neon coolant + sparks (synthetic).</div>
+  </div>
+  <div class="stage"><canvas id="grid"></canvas></div>
+</div>
+<script>
+const UNIT_FRAMES=10, BASE={flesh:46, synth:68};
+const SHEETS={ flesh:'assets/units/worker/walk.webp', synth:'assets/units/soldier/walk_ao.webp' };
+const imgs={}; let seedBase=1234;
+function loadSheet(key){ return new Promise(res=>{ const im=new Image(); im.onload=()=>{ const fw=im.width/UNIT_FRAMES, fh=im.height; res({img:im,fw,fh,frame:[0,0,fw,fh]}); }; im.onerror=()=>res(null); im.src=SHEETS[key]; }); }
+function rng(seed){ let a=(seed>>>0)||1; return ()=>{ a=a+0x6D2B79F5|0; let t=Math.imul(a^a>>>15,1|a); t=t+Math.imul(t^t>>>7,61|t)^t; return ((t^t>>>14)>>>0)/4294967296; }; }
+function P(id){ return parseFloat(document.getElementById(id).value); }
+function band(g,sh,v0,v1,w,h){ const sy=sh.frame[1]+v0*sh.fh, ssh=(v1-v0)*sh.fh, dh=(v1-v0)*h;
+  g.drawImage(sh.img, sh.frame[0], sy, sh.fw, ssh, -w/2, -h*0.65+v0*h, w, dh); }
+function wound(g,x,y,r,rnd,synth){ g.save();
+  const core=synth?[70,235,205]:[110,16,18], dark=synth?[10,46,44]:[40,5,8];
+  for(let i=0;i<5;i++){ const a=rnd()*6.28,d=r*(0.2+0.7*rnd()),rr=r*(0.35+0.5*rnd());
+    g.globalAlpha=0.55; g.fillStyle=`rgb(${dark})`; g.beginPath(); g.arc(x+Math.cos(a)*d,y+Math.sin(a)*d,rr,0,6.28); g.fill(); }
+  g.globalAlpha=synth?0.9:0.78; g.fillStyle=`rgb(${core})`; g.beginPath(); g.arc(x,y,r*0.46,0,6.28); g.fill();
+  g.globalAlpha=0.85; g.fillStyle=`rgb(${dark})`; g.beginPath(); g.arc(x+(rnd()-0.5)*r*0.2,y+(rnd()-0.5)*r*0.2,r*0.2,0,6.28); g.fill();
+  if(synth){ g.globalCompositeOperation='lighter'; for(let i=0;i<2;i++){ g.globalAlpha=0.8; g.fillStyle='#d8fff6';
+    g.beginPath(); g.arc(x+(rnd()-0.5)*r,y+(rnd()-0.5)*r,0.9,0,6.28); g.fill(); } } g.restore(); }
+function bake(sh, seed, synth, o){
+  const dh=o.base, dw=o.base*(sh.fw/sh.fh), rnd=rng(seed);
+  const severHead=rnd()<o.phead, severLegs=rnd()<o.plegs, armWound=rnd()<o.parm;
+  const armSide=rnd()<0.5?-1:1, flip=rnd()<0.5?1:-1, ang=flip*(Math.PI/2)*(0.86+o.slump*rnd());
+  const W=Math.ceil(dh*2.6), H=Math.ceil(dh*1.8), cx=W*0.5, cy=H*0.6;
+  const cnv=document.createElement('canvas'); cnv.width=W; cnv.height=H; const g=cnv.getContext('2d');
+  const C=Math.cos(ang),S=Math.sin(ang), xf=(lx,ly)=>[cx+lx*C-ly*S, cy+lx*S+ly*C];
+  const neckY=-dh*0.65+0.24*dh, waistY=-dh*0.65+0.58*dh, armY=-dh*0.65+0.40*dh;
+  const body=document.createElement('canvas'); body.width=W; body.height=H; const bg=body.getContext('2d');
+  bg.save(); bg.translate(cx,cy); bg.rotate(ang);
+  if(!severHead) band(bg,sh,0,0.24,dw,dh); band(bg,sh,0.24,0.58,dw,dh); if(!severLegs) band(bg,sh,0.58,1,dw,dh); bg.restore();
+  const gib=(v0,v1,sx,sy,ex)=>{ bg.save(); bg.translate(sx,sy); bg.rotate(ang+ex); band(bg,sh,v0,v1,dw,dh); bg.restore(); };
+  if(severHead){ const p=xf(0,neckY); gib(0,0.24,p[0]+(rnd()-0.3)*dh*0.5,p[1]-dh*0.2-rnd()*dh*0.3,(rnd()-0.5)*2); }
+  if(severLegs){ const p=xf(0,waistY); gib(0.58,1,p[0]+(rnd()-0.5)*dh*0.4,p[1]+dh*0.15+rnd()*dh*0.3,(rnd()-0.5)*1.4); }
+  bg.globalCompositeOperation='source-atop'; bg.fillStyle=synth?`rgba(10,26,30,${o.tint})`:`rgba(16,20,28,${o.tint})`; bg.fillRect(0,0,W,H);
+  // pool
+  const pr=dh*(o.pool+(severHead||severLegs?0.18:0)), pc=synth?[22,150,120]:[64,10,14];
+  const pg=g.createRadialGradient(cx,cy+dh*0.12,2,cx,cy+dh*0.12,pr);
+  pg.addColorStop(0,`rgba(${pc},${o.poola})`); pg.addColorStop(1,`rgba(${pc},0)`);
+  g.save(); g.translate(cx,cy+dh*0.12); g.scale(1,0.42); g.translate(-cx,-(cy+dh*0.12)); g.fillStyle=pg; g.beginPath(); g.arc(cx,cy+dh*0.12,pr,0,6.28); g.fill(); g.restore();
+  if(o.rim){ g.save(); g.globalCompositeOperation='lighter'; g.globalAlpha=0.18; g.drawImage(body,-1.2,-1.4); g.restore(); }
+  g.drawImage(body,0,0);
+  const ws=o.wound;
+  if(severHead){ const p=xf(0,neckY); wound(g,p[0],p[1],dh*0.18*ws,rnd,synth); }
+  if(severLegs){ const p=xf(0,waistY); wound(g,p[0],p[1],dh*0.20*ws,rnd,synth); }
+  if(armWound){ const p=xf(armSide*dw*0.32,armY); wound(g,p[0],p[1],dh*0.13*ws,rnd,synth); }
+  if(!severHead&&!severLegs&&!armWound){ const p=xf(0,waistY*0.4); wound(g,p[0],p[1],dh*0.15*ws,rnd,synth); }
+  if(synth){ g.save(); g.globalCompositeOperation='lighter';   // neon coolant glow — synthetic only
+    const bloom=(x,y,r)=>{ const b=g.createRadialGradient(x,y,0,x,y,r);
+      b.addColorStop(0,`rgba(60,230,200,${o.bloom})`); b.addColorStop(1,'rgba(60,230,200,0)'); g.fillStyle=b; g.beginPath(); g.arc(x,y,r,0,6.28); g.fill(); };
+    if(severHead){ const p=xf(0,neckY); bloom(p[0],p[1],dh*0.3); }
+    if(severLegs){ const p=xf(0,waistY); bloom(p[0],p[1],dh*0.32); }
+    g.restore(); }
+  return cnv;
+}
+let sheets={};
+async function ensureSheets(){ for(const k of Object.keys(SHEETS)) if(!sheets[k]) sheets[k]=await loadSheet(k); }
+async function draw(){
+  await ensureSheets();
+  const key=document.getElementById('src').value, sh=sheets[key];
+  const o={ base:BASE[key], phead:P('phead'),plegs:P('plegs'),parm:P('parm'),tint:P('tint'),
+    pool:P('pool'),poola:P('poola'),wound:P('wound'),bloom:P('bloom'),slump:P('slump'),
+    rim:document.getElementById('rim').checked };
+  ['srcv','nv','cellv','pheadv','plegsv','parmv','tintv','poolv','poolav','woundv','bloomv','slumpv'].forEach(id=>{
+    const map={srcv:key,nv:P('n'),cellv:P('cell'),pheadv:o.phead,plegsv:o.plegs,parmv:o.parm,tintv:o.tint,poolv:o.pool,poolav:o.poola,woundv:o.wound,bloomv:o.bloom,slumpv:o.slump};
+    document.getElementById(id).textContent=map[id]; });
+  const N=P('n'), cell=P('cell'), cols=Math.max(1,Math.floor((document.querySelector('.stage').clientWidth-32)/cell));
+  const rows=Math.ceil(N/cols), grid=document.getElementById('grid'), gx=grid.getContext('2d');
+  grid.width=cols*cell; grid.height=rows*cell; gx.clearRect(0,0,grid.width,grid.height);
+  if(!sh){ gx.fillStyle='#ff6b6b'; gx.font='14px monospace'; gx.fillText('sprite not found: '+SHEETS[key]+'  (serve over http, not file://)',10,24); return; }
+  for(let i=0;i<N;i++){ const c=bake(sh, seedBase+i*97+1, key==='synth', o);
+    const col=i%cols, row=(i/cols)|0, dx=col*cell+(cell-c.width)/2, dy=row*cell+(cell-c.height)/2;
+    gx.drawImage(c,dx,dy);
+    gx.fillStyle='rgba(120,160,190,.5)'; gx.font='10px monospace'; gx.fillText('#'+(seedBase+i*97+1), col*cell+6, row*cell+cell-6); }
+}
+document.querySelectorAll('input,select').forEach(el=>el.addEventListener('input',draw));
+document.getElementById('reseed').onclick=()=>{ seedBase=(Math.random()*1e6)|0; draw(); };
+document.getElementById('shot').onclick=()=>{ const a=document.createElement('a'); a.download='corpse-lab.png'; a.href=document.getElementById('grid').toDataURL(); a.click(); };
+draw();
+</script>
+</body></html>

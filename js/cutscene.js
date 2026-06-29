@@ -99,6 +99,10 @@
       return;
     }
     state.flashCutscene={ lines, i:0, t:0, speaker, clipDone:false, started:false, _onEnd:onEnd||null,
+      // OWNER RULE: every cutscene is CLICK-TO-ADVANCE — no line ever auto-skips (the villain path,
+      // now universal). The opening camera-hold still auto-shows the FIRST line; after that each line,
+      // and the close, wait for the player's click. updateFlashCutscene's auto-advance is gated on this.
+      manual:true,
       // off-hub (in-mission) reveals zoom onto the speaker — remember the player's view to restore on end
       _camRestore: state.hub ? null : { zoom:state.zoom||1, camX:state.camX||0, camY:state.camY||0 } };
     if(typeof document!=='undefined') document.body.classList.add('scene-cutscene');
@@ -194,6 +198,14 @@
       window.startFlashCutscene(state, focus, lines);
     }
   }
+  // Ep XVI: the Tusk-cyborg REVEAL — fired from corpses.js (corpseExtract) the moment the reveal body's
+  // chip is stripped, NOT by a map-position trigger. Reuses armByName so it gets the solo + co-op-host
+  // mirror for free; focuses Rust (falls back to any present speaker). One-shot is enforced by the caller
+  // (state._tuskRevealDone). `collector` is unused (signature parity with the call site).
+  window.fireTuskReveal=function(state, collector){
+    if(!state || state.hub || state.flashCutscene) return;
+    armByName(state, 'RUST_TUSK_REVEAL');
+  };
   window.mapCutsceneTick=function(state){
     if(!state || state.hub || state.over || state.flashCutscene) return;
     if(typeof netRole!=='undefined' && netRole==='client') return;             // the client plays map cutscenes only via host cues (it has no authoritative positions)

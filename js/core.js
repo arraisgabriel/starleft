@@ -16,6 +16,7 @@ function update(state, dt){
     if(_sup>(_hs.peakSupply||0)) _hs.peakSupply=_sup;
   }
   if(state.extractReady && typeof updateExtraction==='function') updateExtraction(state, dt);
+  if(state.crashChain && typeof crashChainTick==='function') crashChainTick(state, dt);   // Ep 15.5→XVI bomber-crash transition
 
   // ---- production for player & enemy buildings ----
   for(const b of state.entities){
@@ -74,7 +75,7 @@ function update(state, dt){
   resolveStuck(state,dt);
 
   // ---- enemy AI ----
-  if(!state.hub && !(state.extractReady && netRole==='solo')) enemyAI(state,dt);
+  if(!state.hub && !(state.extractReady && netRole==='solo') && !state.crashChain) enemyAI(state,dt);
 
   // ---- T2-8: scripted mid-mission beats — cfg.events [{atTime,…}] fire once each, in order.
   // Host/solo only (this whole update path is); clients see results via snapshots. Deterministic:
@@ -101,6 +102,10 @@ function update(state, dt){
   // the boss is both spawned and gone, so the one-tick lag vs questsTick can't trigger an early win. ----
   if(!state.hub && typeof villainDeferredSpawn==='function') villainDeferredSpawn(state);
 
+  // ---- EX-TERMINATOR HUNTER return (villains.js): the Ep XVI pursuer, once driven off, reappears near the
+  // heroes after a cooldown and keeps hunting. Host/solo only; clients see the respawn as a synced entity. ----
+  if(!state.hub && typeof hunterReturnTick==='function') hunterReturnTick(state);
+
   // ---- COOLANT NODE (villains.js): a capturable arena objective that, when held, FORCES the boss's
   // overheat/EXPOSED window on demand (the "use the map" lever). Host/solo only; per-map cfg.bossNodes. ----
   if(!state.hub && typeof bossNodeTick==='function') bossNodeTick(state, dt);
@@ -113,6 +118,9 @@ function update(state, dt){
 
   // ---- MADOSIS: post-episode cooldown + walk-over memory collection (any player unit) ----
   if(!state.hub && typeof madGlobalTick==='function') madGlobalTick(state, dt);
+
+  // ---- Ep XVI: dead-body memory chips — any player unit on a body harvests it (host/solo only) ----
+  if(!state.hub && typeof corpsesTick==='function') corpsesTick(state, dt);
 
   // ---- free captives once their guards are dead (Episode X: Biba + the intern) ----
   if(!state.hub) freeCaptives(state);
@@ -141,10 +149,14 @@ function update(state, dt){
   for(const e of state.entities){
     if(e.dead) continue;
     if(e.hp<=0 && e.type!=='goldmine'){
+      // EX-TERMINATOR HUNTER (Ep XVI pursuer): NEVER dies — a fatal blow just banks as a forced repel. Keep it
+      // alive on a sliver and max the pool so updateVillain's hunterTick drives it off + schedules the return
+      // next tick. Must run BEFORE the fleeExtract/kill paths so a hunter is never airlifted or removed.
+      if(e._hunter){ e.hp=Math.max(1, Math.round(e.maxHp*0.12)); e._poolDealt=Math.max(e._poolDealt||0, (e._poolTarget||1)); changed=true; continue; }
       // EX-TERMINATOR FLEE: a villain flagged fleeExtract does NOT die when beaten — an A&O bomber airlifts
       // him out (escape cinematic, "I'll be back"). beginBossExtract keeps him alive + pays the win XP + plays
       // the cutscene; its close marks him escaped → a (fled) WIN. Skip the normal death/removal path entirely.
-      if(e.villain && e.owner==='enemy' && !e._extracting && typeof VILLAINS!=='undefined' && VILLAINS[e.villainId] && VILLAINS[e.villainId].fleeExtract && typeof beginBossExtract==='function'){
+      if(e.villain && e.owner==='enemy' && !e._hunter && !e._extracting && typeof VILLAINS!=='undefined' && VILLAINS[e.villainId] && VILLAINS[e.villainId].fleeExtract && typeof beginBossExtract==='function'){
         beginBossExtract(state, e); changed=true; continue;
       }
       // VILLAIN DOWN: the tick a boss reaches 0 HP (a real KILL — a fled ninja set e.dead with hp>0 and was
@@ -200,8 +212,11 @@ function runMapEvent(state, ev){
       }
     }
     if(ev.villain && typeof spawnVillainEntry==='function'){
-      const at=ev.at||ev.villain;
-      spawnVillainEntry(state, { id:ev.villain.id||ev.villain, x:(at.x!=null?at.x:ev.villain.x), y:(at.y!=null?at.y:ev.villain.y) });
+      const hunt = !!(ev.villain.hunter);
+      // HUNTER (Ep XVI pursuer): ignore the authored `at` and spawn NEAR the heroes' current position so the
+      // fight actually starts wherever they've fled to (villains.js). Otherwise use the authored event tile.
+      const at = (hunt && typeof hunterSpawnPos==='function') ? hunterSpawnPos(state) : (ev.at||ev.villain);
+      spawnVillainEntry(state, { id:ev.villain.id||ev.villain, x:(at.x!=null?at.x:ev.villain.x), y:(at.y!=null?at.y:ev.villain.y), hunter:hunt });
     }
     if(ev.toast && !window._rbReplaying && typeof eventToast==='function') eventToast('📡 '+ev.toast, 10000);
     if(!window._rbReplaying && typeof refreshUI==='function') refreshUI();
@@ -223,7 +238,17 @@ function reclaimOutposts(state){
       b.owner='player'; b.abandoned=false; b.constructing=false; b.hp=b.maxHp;
       any=true;
       spawnRing(b.x,b.y,'#8effb0');
-      toast('🚩 Outpost reclaimed — fight from the front!');
+      // Ep XVI: the far-edge derelict is the intern's Open-Plan HQ — reaching it rescues the intern,
+      // spends the 400 m3rits to power it up, and starts the extraction (the reclaim quest's win edge).
+      if(state.cfg && state.cfg.heroEscape && !state._internRescued){
+        state._internRescued=true;
+        if(state.eco && state.eco.p1) state.eco.p1.gold=Math.max(0,(state.eco.p1.gold||0)-400);
+        const bx=(b.tx!=null?b.tx:((b.x/TILE)|0)), by=(b.ty!=null?b.ty:((b.y/TILE)|0));
+        if(typeof mkUnit==='function'){ const iw=mkUnit(state,'worker','player', bx+1, by+3); if(iw && typeof spawnRing==='function') spawnRing(iw.x,iw.y,'#8effb0'); }
+        if(!window._rbReplaying && typeof eventToast==='function') eventToast('🧑‍💻 The intern boots the Open-Plan HQ — extraction inbound. Get the squad out.', 9000);
+      } else {
+        toast('🚩 Outpost reclaimed — fight from the front!');
+      }
     }
   }
   if(any){ recomputeSupply(state); computeFog(state); refreshUI(); }
@@ -278,6 +303,7 @@ function checkWinLose(state){
   if(state._sandboxNoEnd) return;   // sandbox test tool: freeze win/loss while staging a battle (localhost only; flag set only by js/sandbox.js)
   if(state.hub) return;
   if(state.extractReady) return;
+  if(state.crashChain) return;   // crash-chain cinematic is playing → the win is already declared
   // ---- BOSS DEATH CUTSCENE (EX-TERMINATOR): the instant the boss is gone, play his death lines (ending
   // "I'll be back") BEFORE any victory path (quest OR villain) declares the win. The sim freezes on the
   // cutscene (main.js), and the natural re-check after it closes declares victory normally. One-shot via
@@ -346,9 +372,16 @@ function checkWinLose(state){
 // alone cannot rebuild without one, and an intern trapped inside a just-destroyed HQ (no room
 // to spill out) doesn't count.
 function standardDefeatChecks(state){
+  const playerHas = state.entities.some(e=>e.owner==='player'&&!e.dead&&(e.kind==='building'||e.kind==='unit'));
+  // heroEscape maps (Ep XVI) start base-less by design — the squad is shot down with no HQ and
+  // raises one only at the far edge. The normal no-HQ/no-worker loss would fire instantly, so for
+  // these maps defeat means the whole squad is gone (no player unit OR building left).
+  if(state.cfg && state.cfg.heroEscape){
+    if(!playerHas){ state.over=true; state._outcome='lose'; if(!window.USE_ROLLBACK) onDefeat(); return true; }
+    return false;
+  }
   const playerHq = state.entities.some(e=>e.owner==='player'&&e.type==='hq'&&!e.dead);
   const canRecoverHq = state.entities.some(e=>e.owner==='player'&&e.type==='worker'&&!e.dead&&!e.storedIn);
-  const playerHas = state.entities.some(e=>e.owner==='player'&&!e.dead&&(e.kind==='building'||e.kind==='unit'));
   if((!playerHq && !canRecoverHq) || !playerHas){
     state.over=true; state._outcome='lose'; if(!window.USE_ROLLBACK) onDefeat();
     return true;
@@ -371,6 +404,11 @@ function winTargetPx(wc){
 }
 function altWinTriggered(state){
   if(state._skirmish){ state.over=true; state._outcome='win'; if(!window.USE_ROLLBACK) onVictory(); return; }   // T3-2
+  // crash chain (data-driven): skip extraction→HUB and load the next mission through the bomber-fall cinematic
+  if(state.cfg && state.cfg.crashChainTo && netRole==='solo' && typeof beginCrashChain==='function'){ beginCrashChain(state); return; }
+  // end-of-content cliffhanger (Ep XVI): a toBeContinued map ends on the "TO BE CONTINUED" card via
+  // onVictory directly — like the finale's IPO — NOT the extraction→HUB loop (there is no next map).
+  if(state.cfg && state.cfg.toBeContinued && netRole==='solo'){ state.over=true; state._outcome='win'; if(!window.USE_ROLLBACK) onVictory(); return; }
   if(netRole==='solo' && typeof beginExtractionPhase==='function'){ beginExtractionPhase(state); return; }
   if(netRole==='host' && typeof window!=='undefined' && window.MP_SESSION && MP_SESSION.mode==='campaign' && typeof coopCampaignWin==='function'){
     coopCampaignWin(state); return;   // Ep VII → shared nuke finale; every other Quarter → H.U.B. (both published via mphub)

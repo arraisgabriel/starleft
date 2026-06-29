@@ -226,6 +226,12 @@ function pickEntity(state,wx,wy){
     if(e.dead || e.kind!=='echo' || e.reached) continue;
     if(wx>=e.x-20 && wx<=e.x+20 && wy>=e.y-36 && wy<=e.y+18) return e;
   }
+  // Ep XVI dead bodies — pickable while the chip is un-harvested (units win the tap above; bodies
+  // beat buildings/ground). Generous box around the prone corpse.
+  for(const e of state.entities){
+    if(e.dead || e.kind!=='corpse' || e.reached) continue;
+    if(wx>=e.x-26 && wx<=e.x+26 && wy>=e.y-30 && wy<=e.y+18) return e;
+  }
   // buildings: a click inside the FOOTPRINT wins outright; a click on the rest of the DRAWN
   // sprite (BUILDING_DRAW_SCALE× the footprint, mostly the tall upper structure) is remembered
   // but loses to a goldmine — so mining right-clicks beside a Satellite Office still hit the rock.

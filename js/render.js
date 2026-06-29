@@ -88,7 +88,7 @@ const RENDER = (function(){
   return { shadows:!off('shadows'), grunge:!off('grunge'), grade:!off('grade'), decals:!off('decals'),
            vignette:!off('vignette'), haze:!off('haze'), rain:!off('rain'), forceRgbaGrade:/[?&]rgbagrade=1\b/.test(qs),
            featclu:!off('featclu'), vscale:!off('vscale'), mtnchain:!off('mtnchain'), lightfx:!off('lightfx'),
-           bldgneon:!off('bldgneon') };
+           bldgneon:!off('bldgneon'), featjit:!off('featjit'), flow:!off('flow') };  // flow = smooth water surface (js/water.js reads ?noflow itself)
 })();
 const BUILDING_ANIM_SPEED = 0.217;  // in-game building frame-loop speed multiplier (calm, slow cross-fade)
 const NEON_LOD_ZOOM = 0.8;          // at/above → full cross-fade neon; below → cheap single-layer neon (still shown at every zoom)
@@ -644,6 +644,10 @@ function render(state){
       depth.push({y:e.y, u:e});
     } else if(e.kind==='echo'){
       depth.push({y:e.y, echo:e});                     // MADOSIS rescue memory beacon
+    } else if(e.kind==='corpse'){
+      depth.push({y:e.y, corpse:e});                   // Ep XVI dead body (gory, depth-sorted with actors)
+    } else if(e.kind==='wreck'){
+      depth.push({y:e.y, wreck:e});                    // Ep XVI crashed bomber half (depth-sorted prop)
     }
   }
   // living-city NPCs (hub only): viewport-culled, pre-allocated {y,n} entries so the
@@ -720,6 +724,8 @@ function render(state){
     else if(d.f) drawFeature(state, d.f, ox,oy, d.dim);
     else if(d.g) drawGoldmine(state, d.g, ox,oy, d.dim);
     else if(d.echo) drawEcho(state, d.echo, ox,oy);
+    else if(d.corpse) drawCorpse(state, d.corpse, ox,oy);   // Ep XVI dead body
+    else if(d.wreck) drawWreck(state, d.wreck, ox,oy);      // Ep XVI crashed bomber half
     else if(d.n) HUBNPC.drawOne(state, d.n);           // living-city NPC (hub only)
     else drawUnit(state, d.u, ox,oy);
   }
@@ -758,6 +764,7 @@ function render(state){
   // top of the facility, standing on their shooting-range lanes.
   if(state.hub && typeof drawHubTrainees==='function') drawHubTrainees(state, ox, oy);
   if(state.extractFlight && typeof drawExtractionFlight==='function') drawExtractionFlight(state);
+  if(state.crashChain && typeof drawCrashChain==='function') drawCrashChain(state);   // Ep 15.5→XVI bomber-crash
   // EX-TERMINATOR escape: the A&O (black+green) Buzzword Bomber that airlifts the beaten boss out — drawn over
   // the frozen cutscene, its world position driven by bossExtractFrame's clock so it stays in sync with the
   // death lines. Still in world space (camera transform active), so world coords map through camera/zoom.
@@ -1577,11 +1584,51 @@ function drawFeature(state, f, ox, oy, dim){
   ctx.save();
   if(under) ctx.globalAlpha*=0.42;                       // canopy ghost (unit walks under)
   else if(dim) ctx.globalAlpha*=0.5;                     // explored-but-not-visible
-  drawFeatureSprite(f, dx, dy, dw, dh);
+  // DE-GRID (trees): one sprite per FEAT_SIZE cell reads as a hand-placed lattice. Draw an overlapping
+  // CLUSTER of crowns instead so the jungle looks cramped/overgrown at EVERY zoom — footprint/blocked/depth
+  // unchanged (purely visual). A/B: ?nofeatjit=1 off. Renders at all zoom + quality levels by design.
+  if(RENDER.featjit && f.slot==='tree' && !f.base){
+    drawTreeClump(f, dx, dy, dw, dh, baseW, baseH);
+  } else {
+    drawFeatureSprite(f, dx, dy, dw, dh);
+  }
   if(state.hub && f.slot==='rock' && typeof hubInWasteland==='function' && hubInWasteland(f.tx+fw/2,f.ty+fh/2)){
     drawWastelandRockFog(state,f,dx,dy,dw,dh);
   }
   ctx.restore();
+}
+
+// De-grid the jungle: instead of ONE sprite per FEAT_SIZE lattice cell (the obvious grid), draw a
+// deterministic CLUSTER of overlapping crowns — a primary that covers the footprint + 1-3 satellites
+// that spill into the inter-cell GAPS, each with its own jittered position, size, mirror and (same
+// alive/dead half) variant. So neighbouring features' crowns merge into a cramped, overgrown canopy.
+// All offsets are coords-only h2 hashes → identical on host/client/reload; nothing is stored and the
+// footprint/blocked mask/depth ground-line are never touched (visual only). A/B: ?nofeatjit=1.
+function drawTreeClump(f, dx, dy, dw, dh, baseW, baseH){
+  const primaryIdx = (RENDER.featclu && f.var!=null) ? (f.var|0) : ((h2(f.tx,f.ty)*featVarN(f.slot))|0);
+  const half = primaryIdx>=8 ? 8 : 0;                    // keep a clump all-alive (0-7) or all-dead (8-15)
+  const cN = 3 + (h2(f.tx*5.1+3, f.ty*3.7+9)*1.999|0);   // 3..4 crowns over the same covered space
+  const crowns=[];
+  // primary — over the footprint but shoved well off the lattice node (±~0.5 tile) so rows/cols blur
+  crowns.push({ x:dx+(h2(f.tx*2.7+11,f.ty*1.9+5)-0.5)*baseW*0.34,
+                y:dy+(h2(f.tx*3.1+19,f.ty*2.3+1)-0.5)*baseH*0.26,
+                w:dw, h:dh, vidx:primaryIdx, flip:f.v>=0.5 });
+  // satellites — spread around the perimeter (evenly-spaced base angle + jitter) and reach ~1-1.8 tiles out
+  // so they land in the DIAGONAL voids between neighbouring clumps → the regular gap pattern fills in.
+  const a0=h2(f.tx*1.1+2, f.ty*1.7+6)*6.283;             // per-feature ring phase
+  for(let i=1;i<cN;i++){
+    const ang=a0 + (i-1)/(cN-1)*6.283 + (h2(f.tx*1.7+i*13+5, f.ty*1.3+i*7+2)-0.5)*1.6;
+    const rad=(0.62+h2(f.tx*2.3+i*9+1, f.ty*2.9+i*11+4)*0.6)*baseW*0.5;     // ~0.95-1.85 tiles from centre
+    const cs =0.66+h2(f.tx+i*17, f.ty+i*5)*0.5;                             // 0.66..1.16 of the primary size
+    const sw=dw*cs, sh=dh*cs;
+    crowns.push({ x:dx+(dw-sw)/2+Math.cos(ang)*rad,
+                  y:dy+(dh-sh)+Math.sin(ang)*rad*0.55-dh*0.03,             // bottoms near the ground line
+                  w:sw, h:sh,
+                  vidx:half+(h2(f.tx*3.3+i*23, f.ty*4.1+i*3)*8|0),
+                  flip:h2(f.tx+i*31, f.ty+i*13)>=0.5 });
+  }
+  crowns.sort((p,q)=>(p.y+p.h)-(q.y+q.h));               // back (higher ground line first) → front overlaps right
+  for(const c of crowns) drawFeatureSprite(f, c.x, c.y, c.w, c.h, {vidx:c.vidx, flip:c.flip});
 }
 
 function wasteFogRgba(rgb,a){
@@ -1628,15 +1675,18 @@ function drawWastelandRockFog(state,f,dx,dy,dw,dh){
 // Blit a feature sprite into the bottom-anchored box. Mirror-only orientation from f.v
 // (never rotate — a canopy must stay upright). Fallback chain: [Phase 2 transparent atlas]
 // → the existing opaque atlas cell → procedural drawTreeTile/drawRockTile, all scaled to the box.
-function drawFeatureSprite(f, dx, dy, dw, dh){
+// ov (optional): a per-crown override {vidx, flip} used by drawTreeClump so each crown in a
+// cramped clump gets its OWN variant/mirror. Absent → today's behaviour (f.var/f.v), byte-identical.
+function drawFeatureSprite(f, dx, dy, dw, dh, ov){
   ctx.save();
-  if(f.v>=0.5){ ctx.translate(dx+dw/2, dy+dh/2); ctx.scale(-1,1); ctx.translate(-(dx+dw/2), -(dy+dh/2)); }
+  const flip = ov ? ov.flip : (f.v>=0.5);
+  if(flip){ ctx.translate(dx+dw/2, dy+dh/2); ctx.scale(-1,1); ctx.translate(-(dx+dw/2), -(dy+dh/2)); }
   // 0) P7.4 VARIANT atlas (features_var.webp): one of FEAT_VAR_N distinct shapes per biome+slot, hash-picked
   //    from the feature's coords (deterministic → co-op-safe). The big "lifeless one-rock-per-biome" fix.
   if(!f.base && typeof FEAT_VAR_READY!=='undefined' && FEAT_VAR_READY && typeof featVarRect==='function'){
-    // VARIANT: clustered grove pick (f.var, assigned at map-gen so neighbours share a shape) when present,
-    // else the legacy uncorrelated per-tile hash. ?nofeatclu=1 forces the old look for A/B on the same map.
-    const idx = (RENDER.featclu && f.var!=null) ? f.var : ((h2(f.tx,f.ty)*featVarN(f.slot))|0);
+    // VARIANT: explicit crown override → clustered grove pick (f.var, assigned at map-gen so neighbours share a
+    // shape) → legacy uncorrelated per-tile hash. ?nofeatclu=1 forces the old look for A/B on the same map.
+    const idx = (ov && ov.vidx!=null) ? ov.vidx : ((RENDER.featclu && f.var!=null) ? f.var : ((h2(f.tx,f.ty)*featVarN(f.slot))|0));
     const vr = featVarRect(f.biome, f.slot, idx);   // rocks: 8 variants, trees: 16 (own 0-7 + dead 8-15)
     if(vr){ ctx.drawImage(FEAT_VAR_IMG, vr[0],vr[1],vr[2],vr[3], dx,dy,dw,dh); ctx.restore(); return; }
   }
@@ -2549,6 +2599,12 @@ function drawUnit(state,u,ox,oy){
     if(u.villain && u._exposed){   // OVERHEAT: a hot pulsing rim while the boss is vented + EXPOSED (the "burn it now" tell) — render-only, body untouched
       const ohPulse=0.55+0.45*Math.abs(Math.sin((state.time||0)*16));
       drawRebornRim(u, useAnim, px, pyB, S*bScale, fi, state.time||0, '#ff9326', '#fff0c2', ohPulse);
+    } else if(u.villain && u._hunter && (u._poolFrac||0)>0.06){
+      // HUNTER damage-stress: the green cyborg rim flickers brighter/whiter as the HIDDEN repel pool fills —
+      // the only on-screen clue (no bar, no number). A brief stagger (_staggerT) flares it near the threshold.
+      const f=u._poolFrac||0, stag=(u._staggerT>0)?0.5:0;
+      const spark=Math.min(1, (0.22+0.78*f)*(0.6+0.4*Math.abs(Math.sin((state.time||0)*(6+16*f)))) + stag);
+      drawRebornRim(u, useAnim, px, pyB, S*bScale, fi, state.time||0, '#a6ffc4', '#ffffff', spark*_exA);
     }
     if(_exA<1) ctx.globalAlpha *= _exA;   // EX-TERMINATOR board-fade: re-apply — drawRebornRim above reset globalAlpha to 1
     // NINO cloak: the body stays a CLEAN 25%-opacity ghost — it was dimmed once at the ctx.save() above and
@@ -2599,8 +2655,10 @@ function drawUnit(state,u,ox,oy){
   }
   ctx.restore();
 
-  // hp bar — above the (bigger) sprite top
-  if(u.hp<u.maxHp || u.selected){
+  // hp bar — above the (bigger) sprite top. The Ep XVI HUNTER (_hunter) shows NO hp bar: its health is not the
+  // gate (a hidden damage pool drives it off), so any bar would reveal/contradict the mechanic. Only the escalating
+  // damage-stress RIM hints at progress.
+  if((u.hp<u.maxHp || u.selected) && !u._hunter){
     barAt(px-vh*0.3, py-alt-vh*0.72-6, vh*0.6, 4, u.hp/u.maxHp, hpColor(u.hp/u.maxHp));
   }
   // MADOSIS (T1-5): a managed-tension bar under the hp bar — always readable on a SELECTED unit
@@ -2698,6 +2756,327 @@ function drawEcho(state, e, ox, oy){
   // facet glyph riding the shard
   ctx.globalAlpha=1; ctx.fillStyle=accent; ctx.font='bold 11px '+GAME_FONT; ctx.textAlign='center'; ctx.textBaseline='middle';
   ctx.fillText(e.facet==='trauma'?'!':e.facet==='dream'?'★':'♥', px, cy+0.5);
+  ctx.restore();
+}
+
+/* =====================================================================
+   Ep XVI DEAD BODIES — CP2077 procedural dismemberment × Hades hand-drawn gore.
+   A corpse entity (kind:'corpse', corpses.js) is rendered as a prone, gory dead person built at
+   runtime from a UNIT SPRITE — never new art. The look comes ONLY from whole-sprite transforms,
+   rectangular source-band crops, a uniform source-atop death tint, organic wound decals over every
+   stump, and additive fluid pools/bloom — NO per-pixel body masking (the reborn-cyborg lesson).
+   Everything is seeded by the entity id, so each body is unique yet deterministic (co-op/rollback-
+   safe). The composite is baked ONCE into an offscreen canvas (WeakMap-cached off the entity, never
+   stored ON it → save-safe) and blitted as one bitmap each frame.
+   ===================================================================== */
+const _CORPSE_CACHE = new WeakMap();   // entity → { canvas, ax, ay, headX, headY }  (rebuilt on save/load relink)
+function _corpseRng(seed){ let a=(seed>>>0)||1; return function(){ a=a+0x6D2B79F5|0; let t=Math.imul(a^a>>>15,1|a); t=t+Math.imul(t^t>>>7,61|t)^t; return ((t^t>>>14)>>>0)/4294967296; }; }
+// which sprite a body is built from: 'civilian'→intern skin, 'ao'→A&O recolor, else a unit type or
+// hero sprite. synth (neon coolant vs oxblood) comes from the authoritative isCyborgBody classifier
+// (corpses.js) — OWNER RULE: every cyborg bleeds synthetic.
+function _corpseSource(corpse){
+  const src=corpse.src||'civilian';
+  let info;
+  if(src==='ao')        info={ type:'soldier', owner:'enemy',  faction:'ao' };
+  else if(src==='civilian') info={ type:'worker', owner:'player', faction:null };
+  else info={ type:src, owner:'player', faction:null };   // explicit unit type OR hero sprite name
+  info.synth = (typeof isCyborgBody==='function') ? isCyborgBody(src, info.faction, corpse.reborn) : (src==='ao');
+  return info;
+}
+// draw a normalized vertical band [v0..v1] of the source frame, centered at the local origin.
+function _corpseBand(g, anim, fr, v0, v1, w, h){
+  const sy=fr[1]+v0*anim.fh, sh=(v1-v0)*anim.fh, dh=(v1-v0)*h;
+  g.drawImage(anim.img, fr[0], sy, anim.fw, sh, -w/2, -h*0.65 + v0*h, w, dh);
+}
+// an organic, painterly wound — a few overlapping blobs (dark ring + hot core) so a crop edge reads
+// as a torn wound, never a rectangle. Synthetic bodies get a chrome/coolant core + a spark or two.
+function _corpseWound(g, x, y, r, rng, synth){
+  g.save();
+  const core = synth ? [70,235,205] : [110,16,18];
+  const dark = synth ? [10,46,44]   : [40,5,8];
+  // ragged dark ring of overlapping blobs — the torn-flesh silhouette (matte, hand-drawn)
+  for(let i=0;i<5;i++){
+    const a=rng()*6.28, d=r*(0.2+0.7*rng()), rr=r*(0.35+0.5*rng());
+    g.globalAlpha=0.55; g.fillStyle='rgb('+dark[0]+','+dark[1]+','+dark[2]+')';
+    g.beginPath(); g.arc(x+Math.cos(a)*d, y+Math.sin(a)*d, rr, 0, 6.28); g.fill();
+  }
+  g.globalAlpha=synth?0.9:0.78; g.fillStyle='rgb('+core[0]+','+core[1]+','+core[2]+')';   // wet core
+  g.beginPath(); g.arc(x, y, r*0.46, 0, 6.28); g.fill();
+  g.globalAlpha=0.85; g.fillStyle='rgb('+dark[0]+','+dark[1]+','+dark[2]+')';              // dark hole centre = depth
+  g.beginPath(); g.arc(x+(rng()-0.5)*r*0.2, y+(rng()-0.5)*r*0.2, r*0.2, 0, 6.28); g.fill();
+  if(synth){ g.globalCompositeOperation='lighter';   // sparks / chrome glint (synthetic only)
+    for(let i=0;i<2;i++){ g.globalAlpha=0.8; g.fillStyle='#d8fff6';
+      g.beginPath(); g.arc(x+(rng()-0.5)*r, y+(rng()-0.5)*r, 0.8, 0, 6.28); g.fill(); } }
+  g.restore();
+}
+// build (or fetch) the cached corpse bitmap. Returns null until the source sprite has loaded.
+function corpseSprite(corpse){
+  const cached=_CORPSE_CACHE.get(corpse); if(cached) return cached;
+  const srcInfo=_corpseSource(corpse);
+  const anim = (typeof unitWalk==='function') ? unitWalk(srcInfo.type, srcInfo.owner, srcInfo.faction) : null;
+  if(!anim || !anim.ready || !anim.frames || !anim.frames.length) return null;   // sprite not loaded yet → retry next frame
+  const fr=anim.frames[0];
+  const base=(typeof UNIT_SPRITE_H!=='undefined' && (UNIT_SPRITE_H[srcInfo.type]||UNIT_SPRITE_H[corpse.src]))||56;
+  const dh=base, dw=base*(anim.fw/anim.fh);
+  const rng=_corpseRng((corpse.id||0)*2654435761 ^ 0x5eef);
+  // --- procedural dismemberment: seeded 0–3 severed parts (or an explicit gore override) ---
+  const ov=corpse.gore;
+  const severHead = ov ? ov==='headshot' : rng()<0.42;
+  const severLegs = ov ? ov==='legless'  : rng()<0.34;
+  const armWound  = ov==='bleeding' ? true : rng()<0.55;
+  const armSide   = rng()<0.5 ? -1 : 1;
+  const flip      = rng()<0.5 ? 1 : -1;                      // head points left or right
+  const ang       = flip*(Math.PI/2)*(0.86+0.26*rng());     // prone, with a little slump
+  const synth=srcInfo.synth;
+  // canvas big enough for the prone body + flung gibs
+  const W=Math.ceil(dh*2.6), H=Math.ceil(dh*1.8), cx=W*0.5, cy=H*0.6;
+  const cnv=document.createElement('canvas'); cnv.width=W; cnv.height=H;
+  const g=cnv.getContext('2d');
+  // local→canvas transform for stump points (same center+rotation as the body draw)
+  const C=Math.cos(ang), S=Math.sin(ang);
+  const xf=(lx,ly)=>[cx+lx*C-ly*S, cy+lx*S+ly*C];
+  const neckY=-dh*0.65+0.24*dh, waistY=-dh*0.65+0.58*dh, armY=-dh*0.65+0.40*dh;
+  // ---------- body layer (sprite pixels + uniform death tint), on its own canvas ----------
+  const body=document.createElement('canvas'); body.width=W; body.height=H;
+  const bg=body.getContext('2d');
+  bg.save(); bg.translate(cx,cy); bg.rotate(ang);
+  if(!severHead) _corpseBand(bg, anim, fr, 0.00, 0.24, dw, dh);   // head
+  _corpseBand(bg, anim, fr, 0.24, 0.58, dw, dh);                  // torso (always)
+  if(!severLegs) _corpseBand(bg, anim, fr, 0.58, 1.00, dw, dh);   // legs
+  bg.restore();
+  // flung gibs (severed bands, offset + extra rotation)
+  const gib=(v0,v1,sx,sy,extra)=>{ bg.save(); bg.translate(sx,sy); bg.rotate(ang+extra);
+    _corpseBand(bg, anim, fr, v0, v1, dw, dh); bg.restore(); };
+  if(severHead){ const p=xf(0,neckY); gib(0.00,0.24, p[0]+(rng()-0.3)*dh*0.5, p[1]-dh*0.2-rng()*dh*0.3, (rng()-0.5)*2); }
+  if(severLegs){ const p=xf(0,waistY); gib(0.58,1.00, p[0]+(rng()-0.5)*dh*0.4, p[1]+dh*0.15+rng()*dh*0.3, (rng()-0.5)*1.4); }
+  // uniform cold death tint over ONLY the drawn body pixels (no per-pixel mask → no blotch)
+  bg.globalCompositeOperation='source-atop';
+  bg.fillStyle = synth ? 'rgba(10,26,30,0.50)' : 'rgba(16,20,28,0.52)';
+  bg.fillRect(0,0,W,H);
+  bg.globalCompositeOperation='source-over';
+  // ---------- compose final: pool (under) → body → wounds → bloom ----------
+  // fluid pool decal (dark oxblood, or neon coolant for synthetics)
+  const pr=dh*(0.62+(severHead||severLegs?0.18:0));
+  const pcol = synth ? [22,150,120] : [64,10,14];
+  const pg=g.createRadialGradient(cx,cy+dh*0.12,2, cx,cy+dh*0.12,pr);
+  pg.addColorStop(0,'rgba('+pcol[0]+','+pcol[1]+','+pcol[2]+',0.62)');
+  pg.addColorStop(1,'rgba('+pcol[0]+','+pcol[1]+','+pcol[2]+',0)');
+  g.save(); g.translate(cx,cy+dh*0.12); g.scale(1,0.42); g.translate(-cx,-(cy+dh*0.12));
+  g.fillStyle=pg; g.beginPath(); g.arc(cx,cy+dh*0.12,pr,0,6.28); g.fill(); g.restore();
+  g.drawImage(body,0,0);
+  // wound decals over every stump (canvas space)
+  if(severHead){ const p=xf(0,neckY); _corpseWound(g, p[0],p[1], dh*0.18, rng, synth); }
+  if(severLegs){ const p=xf(0,waistY); _corpseWound(g, p[0],p[1], dh*0.20, rng, synth); }
+  if(armWound){ const p=xf(armSide*dw*0.32,armY); _corpseWound(g, p[0],p[1], dh*0.13, rng, synth); }
+  if(!severHead && !severLegs && !armWound){ const p=xf(0,waistY*0.4); _corpseWound(g, p[0],p[1], dh*0.15, rng, synth); }   // intact → a bleeding gut wound
+  // additive bloom — SYNTHETIC only (neon coolant glows; flesh blood is matte, never emissive)
+  if(synth){
+    g.save(); g.globalCompositeOperation='lighter';
+    const bloom=(x,y,r)=>{ const bg2=g.createRadialGradient(x,y,0,x,y,r);
+      bg2.addColorStop(0,'rgba(60,230,200,0.5)'); bg2.addColorStop(1,'rgba(60,230,200,0)');
+      g.fillStyle=bg2; g.beginPath(); g.arc(x,y,r,0,6.28); g.fill(); };
+    if(severHead){ const p=xf(0,neckY); bloom(p[0],p[1],dh*0.3); }
+    if(severLegs){ const p=xf(0,waistY); bloom(p[0],p[1],dh*0.32); }
+    g.restore();
+  }
+  // head point (for the chip-glint affordance) — neck if decapitated, else the skull
+  const hp=xf(0, severHead? neckY : -dh*0.5);
+  const out={ canvas:cnv, ax:cx, ay:cy, headX:hp[0]-cx, headY:hp[1]-cy };
+  _CORPSE_CACHE.set(corpse, out);
+  return out;
+}
+function drawCorpse(state, e, ox, oy){
+  const px=e.x+ox, py=e.y+oy;
+  const c=corpseSprite(e);
+  if(c) ctx.drawImage(c.canvas, px-c.ax, py-c.ay);
+  if(!e.reached){                                   // grounded affordance (no floating beacon)
+    const t=state.time||0, ph=(e.id||0), pulse=0.6+0.4*Math.sin(t*3+ph);
+    ctx.save();
+    ctx.globalAlpha=0.28+0.18*pulse; ctx.strokeStyle='#5fe0ff'; ctx.lineWidth=1.5;
+    ctx.beginPath(); ctx.ellipse(px,py,16,7,0,0,6.28); ctx.stroke();
+    const gx=px+(c?c.headX:0), gy=py+(c?c.headY:-6)-3-2*Math.sin(t*2+ph);   // chip-glint at the skull
+    ctx.globalAlpha=0.9; ctx.shadowColor='#9bf0ff'; ctx.shadowBlur=8+5*pulse;
+    ctx.fillStyle='#cdfaff'; ctx.beginPath(); ctx.arc(gx,gy,1.8+0.7*pulse,0,6.28); ctx.fill();
+    ctx.restore();
+  }
+}
+
+/* Ep XVI crashed BOMBER-WRECK halves (cfg.wrecks) — the bomber tore in two on the way down. Each half is
+   the bomber sprite STEEPLY ROTATED so the broken (cut) end digs into the ground; the cut is FEATHERED
+   (dissolves, no clean line) and buried under a dirt furrow + debris + scorch. drawWreck adds a live,
+   flickering FIRE + a thick NON-ADDITIVE dark-smoke column billowing over the hull. The sprite+dirt are
+   baked once per entity; the fire/smoke are live (all roles render them). `ax/ay` anchor the BREAK point
+   (the buried end) to (e.x,e.y) so the fire/smoke originate there. */
+const _WRECK_CACHE = new WeakMap();
+const _WRECK_SMOKE = new Map();        // entity id → {t,n}  emit timer/counter (render-only)
+const _WRECK_SMOKE_PARTS = new Map();  // entity id → [parts]  per-wreck NON-ADDITIVE dark smoke (occludes)
+const _WRECK_TONE=['12,12,17','16,16,22','20,20,27','26,25,33','34,33,43','46,44,57'];   // dark charcoal ramp (drawMushroom)
+function wreckSprite(e){
+  const cached=_WRECK_CACHE.get(e); if(cached) return cached;
+  const anim=(typeof unitWalk==='function')?unitWalk('bomber','player'):null;
+  if(!anim || !anim.ready || !anim.frames || !anim.frames.length) return null;
+  const fr=anim.frames[0], fw=anim.fw, fh=anim.fh;
+  const base=(typeof UNIT_SPRITE_H!=='undefined' && UNIT_SPRITE_H.bomber)||153.6;
+  const S=base*1.7, dw=S*(fw/fh), dh=S;
+  const isFront=(e.half==='front'), cutSign=isFront?1:-1, A=cutSign*0.62;   // front/back tear apart to opposite angles (lying-crashed, not vertical)
+  const ddw=dw*0.64, sw=fw*0.64, sx=isFront?fr[0]:fr[0]+fw*0.36;            // front=nose(left), back=tail(right)
+  const W=Math.ceil(Math.max(ddw,dh)*1.9+80), H=W, cx=W*0.5, cy=H*0.46;
+  const ca=Math.cos(A), sa=Math.sin(A);
+  const bkx=cx+cutSign*(ddw/2)*ca, bky=cy+cutSign*(ddw/2)*sa;               // the BROKEN edge midpoint (buried, low)
+  const gpx=bkx+(cx-bkx)*0.30, gpy=bky+(cy-bky)*0.30;                       // ground/fire anchor: 30% INTO the hull from the cut, so the fire sits among the wreck (not at a far corner)
+  const cnv=document.createElement('canvas'); cnv.width=W; cnv.height=H; const g=cnv.getContext('2d');
+  // ---- body layer: rotated half-sprite, FEATHERED cut, burnt tint (own canvas so the global ops are isolated) ----
+  const body=document.createElement('canvas'); body.width=W; body.height=H; const bg=body.getContext('2d');
+  bg.save(); bg.translate(cx,cy); bg.rotate(A);
+  bg.drawImage(anim.img, sx, fr[1], sw, fh, -ddw/2, -dh/2, ddw, dh);
+  // feather the cut: erase progressively toward the broken edge so it dissolves into the ground (no hard line)
+  bg.globalCompositeOperation='destination-out';
+  const fg=bg.createLinearGradient(cutSign*(ddw/2-ddw*0.22),0, cutSign*(ddw/2),0);
+  fg.addColorStop(0,'rgba(0,0,0,0)'); fg.addColorStop(1,'rgba(0,0,0,0.96)');
+  bg.fillStyle=fg; bg.fillRect(-ddw,-dh,ddw*2,dh*2);
+  bg.restore();
+  bg.globalCompositeOperation='source-atop'; bg.fillStyle='rgba(14,11,15,0.40)'; bg.fillRect(0,0,W,H);   // burnt (keep the hull readable)
+  bg.globalCompositeOperation='source-over';
+  // ---- compose: scorch + dirt furrow (under) → body → debris chunks (over the buried end) ----
+  const ell=(x,y,rx,ry,col)=>{ g.save(); g.translate(x,y); g.scale(1,ry/rx); g.translate(-x,-y);
+    const rg=g.createRadialGradient(x,y,1,x,y,rx); rg.addColorStop(0,col(1)); rg.addColorStop(0.7,col(0.7)); rg.addColorStop(1,col(0));
+    g.fillStyle=rg; g.beginPath(); g.arc(x,y,rx,0,6.28); g.fill(); g.restore(); };
+  ell(gpx,gpy, dw*0.62, dw*0.19, a=>'rgba(6,4,4,'+(0.62*a)+')');                  // scorch
+  ell(gpx,gpy-dh*0.02, dw*0.36, dw*0.14, a=>'rgba(40,31,24,'+(0.85*a)+')');       // dug-up dirt furrow
+  ell(gpx,gpy-dh*0.05, dw*0.24, dw*0.09, a=>'rgba(58,46,35,'+(0.8*a)+')');        // lighter dirt crest
+  g.drawImage(body,0,0);
+  // debris chunks flung around the break
+  for(let i=0;i<7;i++){ const a=i*1.3+(e.id||0), d=dw*(0.1+0.34*(Math.sin(i*3.1+(e.id||0))*0.5+0.5));
+    const x=gpx+Math.cos(a)*d, y=gpy+Math.sin(a)*d*0.45, s=dw*0.018*(1+(i%3)*0.5);
+    g.save(); g.translate(x,y); g.rotate(a*1.7); g.fillStyle=i%2?'rgba(22,20,24,0.92)':'rgba(48,28,22,0.9)';
+    g.fillRect(-s,-s*0.6,s*2,s*1.2); g.restore(); }
+  const out={canvas:cnv, ax:gpx, ay:gpy, dw:dw};
+  _WRECK_CACHE.set(e,out); return out;
+}
+// thick, DARK, occluding smoke column (source-over — NOT the additive smokes[] pool) rising from the fire and
+// drifting over the hull. World-coord particles so they survive camera pans. Per-wreck pool, capped + gated.
+function _wreckSmoke(state, e, ox, oy, dw, lowY){
+  const id=e.id||0, ey=e.y+(lowY||0); let parts=_WRECK_SMOKE_PARTS.get(id); if(!parts){ parts=[]; _WRECK_SMOKE_PARTS.set(id,parts); }
+  const reduced=(typeof megaReducedMotion==='function' && megaReducedMotion());
+  const lowQ=(typeof QUAL!=='undefined' && QUAL && QUAL.level>=2);
+  const cap=reduced?6:(lowQ?20:36);
+  if(!reduced){
+    let st=_WRECK_SMOKE.get(id); if(!st){ st={t:0,n:0}; _WRECK_SMOKE.set(id,st); }
+    st.t+=1/60; const interval=lowQ?0.14:0.07;
+    while(st.t>=interval && parts.length<cap){ st.t-=interval; st.n++;
+      const c=st.n, j1=Math.sin(c*12.9+id)*0.5+0.5, j2=Math.sin(c*7.3+id*3)*0.5+0.5, j3=Math.sin(c*4.7+id*5)*0.5+0.5;
+      parts.push({ x:e.x+(j1-0.5)*dw*0.30, y:ey-dw*0.05, vx:(j2-0.5)*0.21, vy:-0.375-j3*0.375,
+        r:dw*(0.12+0.05*j1), grow:dw*0.0008, tone:_WRECK_TONE[(c*7)%_WRECK_TONE.length], warm:(j3<0.40), t:1, life:2.2+j2*1.0 });
+      // ember spark — additive (glowy), rides the global smokes[] pool, rising from the fire
+      if((c&1) && smokes.length<210) smokes.push({ x:e.x+(j2-0.5)*dw*0.1, y:ey-dw*0.05, vx:(j1-0.5)*0.09, vy:-0.525-j3*0.41,
+        r:dw*0.012+1.5, grow:0.5, cr:255,cg:150,cb:60, t:1, life:0.5, flare:1 }); }
+  } else if(!parts.length){   // reduced-motion: a few static dark blobs so it still reads as smoking
+    for(let i=0;i<5;i++){ const j=Math.sin(i*5.1+id)*0.5+0.5;
+      parts.push({ x:e.x+(j-0.5)*dw*0.3, y:ey-dw*(0.1+i*0.16), vx:0, vy:0, r:dw*(0.16+i*0.05), grow:0, tone:_WRECK_TONE[(i+2)], warm:false, t:0.6, life:1e9, _static:true }); }
+  }
+  const t=state.time||0;
+  ctx.save();
+  for(const s of parts){
+    if(!s._static){ s.x+=s.vx; s.y+=s.vy; s.vy*=0.985; s.vx=s.vx*0.99+Math.sin(t*0.9+s.y*0.012)*0.037; s.r+=s.grow; s.t-=(1/60)/s.life; }
+    const tt=Math.max(0,s.t), env=s._static?1:(tt>0.8?(1-tt)/0.2:Math.min(1,tt*1.7));
+    const a=env*(s.warm?0.34:0.5); if(a<=0.012) continue;
+    const rgb=s.warm?'66,56,52':s.tone, x=s.x+ox, y=s.y+oy;
+    const rg=ctx.createRadialGradient(x,y,0,x,y,s.r);
+    rg.addColorStop(0,'rgba('+rgb+','+a.toFixed(3)+')'); rg.addColorStop(0.6,'rgba('+rgb+','+(a*0.7).toFixed(3)+')'); rg.addColorStop(1,'rgba('+rgb+',0)');
+    ctx.fillStyle=rg; ctx.beginPath(); ctx.arc(x,y,s.r,0,6.28); ctx.fill();
+  }
+  ctx.restore();
+  for(let i=parts.length-1;i>=0;i--) if(parts[i].t<=0) parts.splice(i,1);
+}
+// a real, flickering FIRE at the buried break point: a base glow + a hot core + layered teardrop flame
+// tongues (additive), tightly clustered so it reads as fire ENGULFING the break (not a wide triangle).
+function drawWreckFire(state, bx, by, dw, id){
+  const reduced=(typeof megaReducedMotion==='function' && megaReducedMotion());
+  const t=state.time||0, fw=dw*0.30;
+  ctx.save(); ctx.globalCompositeOperation='lighter';
+  const flick=reduced?1:(0.84+0.16*Math.sin(t*6.4+id));
+  const gx=bx, gy=by-fw*0.28;
+  const bgl=ctx.createRadialGradient(gx,gy,0,gx,gy,fw*1.15*flick);            // base heat glow (tight)
+  bgl.addColorStop(0,'rgba(255,170,85,0.55)'); bgl.addColorStop(0.5,'rgba(255,90,38,0.24)'); bgl.addColorStop(1,'rgba(255,70,30,0)');
+  ctx.fillStyle=bgl; ctx.beginPath(); ctx.arc(gx,gy,fw*1.15*flick,0,6.28); ctx.fill();
+  const N=reduced?3:9;
+  for(let i=0;i<N;i++){
+    const ph=i*1.7+id, fl=reduced?0.9:(0.55+0.6*Math.abs(Math.sin(t*4.65+ph)));
+    const ex=bx+Math.sin(i*2.7+id)*fw*0.34, ey=by-Math.abs(Math.sin(i*1.9+id))*fw*0.12;   // cluster tight around the break
+    const w=fw*(0.16+0.05*(i%3)), h=fw*(0.8+1.0*fl);
+    const lg=ctx.createLinearGradient(ex,ey, ex,ey-h);
+    lg.addColorStop(0,'rgba(255,244,210,0.95)'); lg.addColorStop(0.26,'rgba(255,172,60,0.85)');
+    lg.addColorStop(0.62,'rgba(255,86,26,0.52)'); lg.addColorStop(1,'rgba(185,38,16,0)');
+    ctx.fillStyle=lg;
+    ctx.beginPath(); ctx.moveTo(ex-w,ey);
+    ctx.quadraticCurveTo(ex-w*0.85,ey-h*0.62, ex,ey-h);
+    ctx.quadraticCurveTo(ex+w*0.85,ey-h*0.62, ex+w,ey);
+    ctx.quadraticCurveTo(ex,ey+h*0.12, ex-w,ey); ctx.closePath(); ctx.fill();
+  }
+  // white-hot core at the base
+  const cr=ctx.createRadialGradient(bx,by-fw*0.12,0,bx,by-fw*0.12,fw*0.4*flick);
+  cr.addColorStop(0,'rgba(255,250,235,0.9)'); cr.addColorStop(0.6,'rgba(255,180,90,0.4)'); cr.addColorStop(1,'rgba(255,160,80,0)');
+  ctx.fillStyle=cr; ctx.beginPath(); ctx.arc(bx,by-fw*0.12,fw*0.4*flick,0,6.28); ctx.fill();
+  ctx.restore();
+}
+function drawWreck(state, e, ox, oy){
+  const w=wreckSprite(e); const dw=w?w.dw:200;
+  if(w) ctx.drawImage(w.canvas, e.x+ox-w.ax, e.y+oy-w.ay);
+  const lowY=dw*0.11;                                  // sit the fire/smoke a touch LOWER — at the ground contact, not above it
+  drawWreckFire(state, e.x+ox, e.y+lowY+oy, dw, e.id||0);   // fire at the buried break point (over the sprite base)
+  _wreckSmoke(state, e, ox, oy, dw, lowY);                  // thick dark smoke column (over the hull)
+}
+
+/* CRASH CHAIN (Ep 15.5 → XVI): the evac bomber is shot down in a Hades-style spinning fall, played over
+   the frozen battlefield in SCREEN space (hub.js beginCrashChain/crashChainTick own the clock + the map
+   swap). Fly-in → A&O bomb streak → hit flash → spin-fall with fire/smoke trail → ground burst → fade. */
+function drawCrashChain(state){
+  const c=state.crashChain; if(!c) return;
+  const W=cv.width, H=cv.height, t=c.t;
+  const T_HIT=2.0, T_FALL_END=4.7, T_FADE_END=6.0;
+  ctx.save();
+  ctx.setTransform(1,0,0,1,0,0);                                  // full-screen cinematic, ignore world camera
+  ctx.fillStyle='rgba(4,3,7,'+Math.min(0.72, t*0.5)+')'; ctx.fillRect(0,0,W,H);   // darken the frozen field
+  const anim=(typeof unitWalk==='function')?unitWalk('bomber','player'):null;
+  const S=H*0.18;
+  const falling=(t>=T_HIT);
+  let bx,by,spin=0;
+  if(!falling){ const p=t/T_HIT; bx=W*0.88-p*W*0.46; by=H*0.20+Math.sin(t*2.2)*H*0.012; }
+  else { const p=Math.min(1,(t-T_HIT)/(T_FALL_END-T_HIT)), e=p*p; bx=W*0.42-e*W*0.30; by=H*0.20+e*(H*0.82); spin=e*8.6; }
+  // A&O bomb streak from upper-right, striking just before T_HIT
+  if(t<T_HIT && t>T_HIT-0.7){ const p=(t-(T_HIT-0.7))/0.7, sx=W*1.05-(W*1.05-bx)*p, sy=-H*0.1+(by+H*0.1)*p;
+    ctx.globalCompositeOperation='lighter'; ctx.strokeStyle='rgba(255,180,90,0.8)'; ctx.lineWidth=3;
+    ctx.beginPath(); ctx.moveTo(sx+46,sy-46); ctx.lineTo(sx,sy); ctx.stroke();
+    ctx.fillStyle='rgba(255,232,170,0.95)'; ctx.beginPath(); ctx.arc(sx,sy,4,0,6.28); ctx.fill();
+    ctx.globalCompositeOperation='source-over'; }
+  // hit flash
+  if(t>=T_HIT && t<T_HIT+0.2){ ctx.fillStyle='rgba(255,240,210,'+(1-(t-T_HIT)/0.2)*0.85+')'; ctx.fillRect(0,0,W,H); }
+  // fire+smoke trail behind the falling bomber
+  if(falling){ ctx.globalCompositeOperation='lighter';
+    for(let i=0;i<14;i++){ const a=(t-T_HIT)-i*0.05; if(a<0) continue;
+      const e=Math.min(1,a/(T_FALL_END-T_HIT)), px=W*0.42-e*e*W*0.30+Math.sin(i*1.3)*8, py=H*0.20+e*e*(H*0.82)-i*4,
+            fade=Math.max(0,1-i/14), r=S*0.18*(1+i*0.12), col=i<5?[255,150,60]:[72,62,68];
+      const g=ctx.createRadialGradient(px,py,0,px,py,r);
+      g.addColorStop(0,'rgba('+col[0]+','+col[1]+','+col[2]+','+(0.5*fade)+')'); g.addColorStop(1,'rgba('+col[0]+','+col[1]+','+col[2]+',0)');
+      ctx.fillStyle=g; ctx.beginPath(); ctx.arc(px,py,r,0,6.28); ctx.fill(); }
+    ctx.globalCompositeOperation='source-over'; }
+  // the bomber (spinning as it falls)
+  ctx.save(); ctx.translate(bx,by); ctx.rotate(spin);
+  if(anim && anim.ready && typeof blitFrame==='function') blitFrame({type:'bomber',_face:-1}, 0,0, anim, S, ((t*9)|0));
+  else { ctx.fillStyle='#b23'; ctx.fillRect(-S*0.5,-S*0.16,S,S*0.32); ctx.fillStyle='#e55'; ctx.fillRect(-S*0.5,-S*0.05,S*0.9,S*0.1); }
+  ctx.restore();
+  // ground impact burst
+  if(t>=T_FALL_END-0.35){ const ip=Math.min(1,(t-(T_FALL_END-0.35))/0.5), ix=bx, iy=Math.min(H*0.96,by), r=S*(0.6+ip*1.9);
+    ctx.globalCompositeOperation='lighter';
+    const g=ctx.createRadialGradient(ix,iy,0,ix,iy,r);
+    g.addColorStop(0,'rgba(255,200,120,'+(0.7*(1-ip))+')'); g.addColorStop(0.5,'rgba(255,90,40,'+(0.4*(1-ip))+')'); g.addColorStop(1,'rgba(255,90,40,0)');
+    ctx.fillStyle=g; ctx.beginPath(); ctx.arc(ix,iy,r,0,6.28); ctx.fill(); ctx.globalCompositeOperation='source-over'; }
+  // fade to black into the next map
+  if(t>=T_FALL_END){ const fp=Math.min(1,(t-T_FALL_END)/(T_FADE_END-T_FALL_END)); ctx.fillStyle='rgba(0,0,0,'+fp+')'; ctx.fillRect(0,0,W,H); }
+  // stark caption over the strike
+  if(t>0.4 && t<T_HIT+0.5){ ctx.globalAlpha=Math.min(1,(t-0.4)*2)*Math.min(1,(T_HIT+0.5-t)*2.5);
+    ctx.fillStyle='#dfeaff'; ctx.font='600 '+Math.round(H*0.030)+'px '+(typeof GAME_FONT!=='undefined'?GAME_FONT:'monospace');
+    ctx.textAlign='center'; ctx.fillText('THE EVAC RAN HOT.', W/2, H*0.85); ctx.globalAlpha=1; }
   ctx.restore();
 }
 

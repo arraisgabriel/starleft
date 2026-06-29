@@ -392,6 +392,44 @@ function updateExtraction(state, dt){
   }
 }
 
+/* ====================================================================================
+   CRASH CHAIN (Ep 15.5 → XVI) — a cfg.crashChainTo map skips the extraction→HUB loop: on victory the
+   evac bomber is shot down in a Hades-style fall (drawCrashChain, render.js) and the next mission loads
+   DIRECTLY — the only place one mission chains into another without the H.U.B. Solo path here; co-op is
+   routed via mphub (Phase 5). Frozen field: checkWinLose + enemyAI early-out on state.crashChain.
+   ==================================================================================== */
+const CRASH_TOTAL = 6.0;   // seconds before the next map loads (drawCrashChain keys its phases off this)
+function beginCrashChain(state){
+  if(!state || state.crashChain) return;
+  // villainNextLinear marks THIS (villain) map cleared as a side-effect; call it for that, then prefer the
+  // authored cfg.returnTo (15.5 → 22 = XVI) as the robust target (independent of the global mapIndex).
+  const linear = (typeof villainNextLinear==='function') ? villainNextLinear(typeof mapIndex==='number'?mapIndex:0)
+                                                         : ((typeof mapIndex==='number'?mapIndex:0)+1);
+  const last = (typeof MAPS!=='undefined') ? MAPS.length-1 : linear;
+  const toIdx = (state.cfg && state.cfg.returnTo!=null) ? Math.max(0,Math.min(state.cfg.returnTo,last))
+                                                        : Math.max(0,Math.min(linear,last));
+  if(typeof CAMPAIGN!=='undefined' && CAMPAIGN) CAMPAIGN.nextMapIndex=toIdx;
+  // freeze the field behind the cinematic so nothing can kill a hero mid-fall
+  for(const e of state.entities){ if(e.owner==='enemy' && e.kind==='unit') e.dead=true; }
+  state.crashChain={ t:0, toIdx, done:false };
+  if(typeof clearToast==='function') clearToast();
+  if(typeof document!=='undefined') document.body.classList.add('scene-cutscene');   // dim the HUD chrome during the fall
+}
+// advance the crash clock (called from core.js update); when it elapses, load the next mission directly.
+// loadMap reassigns the global G mid-update — same as enterHubFromCombat — which is safe (the rest of this
+// tick runs on the old `state`, the next frame uses the new G). XVI's introCutscene then plays the wake-up.
+function crashChainTick(state, dt){
+  const c=state.crashChain; if(!c || c.done) return;
+  c.t += dt;
+  if(c.t >= CRASH_TOTAL){
+    c.done=true; state.crashChain=null;
+    const idx=c.toIdx;
+    if(typeof mapIndex!=='undefined') mapIndex=idx;
+    if(typeof document!=='undefined') document.body.classList.remove('scene-cutscene');
+    if(typeof loadMap==='function') loadMap(idx);
+  }
+}
+
 /* ---- CO-OP Episode VII finale (the "flash") ---------------------------------------------------
    Co-op skips the interactive garrison + bomber-approach extraction, but BOTH players still get the
    full nuke set-piece. The host arms it on the Ep VII win (coopCampaignWin) and mirrors it to the client

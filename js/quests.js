@@ -50,6 +50,7 @@ function questInit(state, def){
     case 'maxUnitsLost':     q.goal=def.count|0; break;
     case 'reclaimOutposts':  q.goal=def.count||((state.cfg.lostBases||[]).length||1); break;
     case 'freeCaptives':     q.goal=def.count||((state.cfg.captives||[]).length||1); break;
+    case 'collectMemories':  q.goal=def.count||((state.cfg.memBodies||[]).length||1); break;
     case 'heroesAlive':{     // carryover-dependent: no hero on the field this run → not applicable (hidden, unpaid)
       const hero=state.entities.some(e=>!e.dead && e.kind==='unit' && e.owner==='player' && e.hero && !e.captive);
       if(!hero) q.na=1; break;
@@ -124,6 +125,19 @@ const QUEST_EVAL={
     let caged=0; for(const e of state.entities){ if(!e.dead && e.captive) caged++; }
     q.cur=Math.min(q.goal, Math.max(0, cfgTotal-caged));
     return q.cur>=q.goal ? 'done' : 'run';
+  },
+  // Ep XVI: harvest the memory chip from every dead body of a GROUP (corpse entities with .group +
+  // .reached). `def.group` scopes the objective: 'route' = the 5 Tusk-thread bodies, 'crew' = the dead
+  // veterans by the front-half wreck (count is dynamic → goal derives from live entities). State-derived
+  // and not unit-specific (any player unit walks one over) → safe as a `required` win-gate.
+  collectMemories(state, def, q){
+    const group=def.group||null;
+    const total=(typeof corpsesTotal==='function')?corpsesTotal(state, group):0;
+    if(total<=0) return 'done';                        // nothing of this group on the map → vacuously complete (no softlock)
+    q.goal=total;
+    const remain=(typeof corpsesRemaining==='function')?corpsesRemaining(state, group):total;
+    q.cur=Math.max(0, total-remain);
+    return remain===0 ? 'done' : 'run';
   },
   guardsCleared(state, def, q){
     if(!(state.cfg.guards && state.cfg.guards.length)) return 'run';   // never authored without cfg.guards

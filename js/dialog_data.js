@@ -1392,6 +1392,38 @@ const EXTERM_DEATH_2 = [
 ];
 if(typeof window!=='undefined') window.EXTERM_DEATH_2 = EXTERM_DEATH_2;
 
+/* ---- EP XVI — the heroes come to in the downed bomber (introCutscene 'XVI_CRASH_WAKE'), and the
+   Tusk-cyborg REVEAL ('RUST_TUSK_REVEAL') fired when the last memory chip — a dead A&O unit — is
+   stripped (corpses.js → fireTuskReveal). Text-only; ids reserved for a later TTS pass. speakers are
+   hero heroIds (Nino/Rust/Biba) so armByName focuses whichever is present. ---- */
+const XVI_CRASH_WAKE = [
+  { id:'xvi_wake_00', speaker:'Nino', text:"...Everyone still breathing? Count off. The bird's in the canopy and the canopy's on fire." },
+  { id:'xvi_wake_01', speaker:'Biba', text:"Three of us walked out of that. No one else did. Stay in reach — I can only patch what's close." },
+  { id:'xvi_wake_02', speaker:'Rust', text:"They put us down on purpose. That's a recovery division out there, and the asset it came for is me." },
+  { id:'xvi_wake_03', speaker:'Nino', text:"Then we don't die here. West — toward the H.U.B. And strip every chip off the dead on the way. Somebody sold them this route." },
+];
+if(typeof window!=='undefined') window.XVI_CRASH_WAKE = XVI_CRASH_WAKE;
+
+const RUST_TUSK_REVEAL = [
+  { id:'rust_reveal_00', speaker:'Rust', text:"Hold — this one's A&O, and its skull's still warm enough to read. Let me pull my own file off it." },
+  { id:'rust_reveal_01', speaker:'Rust', text:"There I am. DEPRECIATED ASSET. Signed off by the founder himself — same key that signed my layoff." },
+  { id:'rust_reveal_02', speaker:'Rust', text:"...That same key signed every build on this thing. Forty years of them. No human ever re-authed. Not once." },
+  { id:'rust_reveal_03', speaker:'Rust', text:"The face in the brochure hasn't aged a render since the year he supposedly died. Because Dell Tusk isn't a man. He's been a machine longer than most of these dead were alive." },
+  { id:'rust_reveal_04', speaker:'Rust', text:"We're not fighting a CEO. We're fighting the thing wearing him. Move — I want OUT of this jungle before it sends the rest of itself." },
+];
+if(typeof window!=='undefined') window.RUST_TUSK_REVEAL = RUST_TUSK_REVEAL;
+
+/* ---- EP XVI — reaching the FRONT half of the split bomber (reachCutscene 'XVI_FRONT_WRECK'): the
+   heroes find where the REST of the squad came down. 90% walked away to the H.U.B.; ~10% didn't.
+   Motivates reading the crew bodies (the new required objective). Text-only; click-to-advance. ---- */
+const XVI_FRONT_WRECK = [
+  { id:'xvi_wreck_00', speaker:'Biba', text:"There — the nose half. That's where the rest of us came down, the half that made it past the tree line." },
+  { id:'xvi_wreck_01', speaker:'Nino', text:"Bodies in the grass. Count them... ten. Out of a hundred. The landing took ten of ours." },
+  { id:'xvi_wreck_02', speaker:'Rust', text:"Ninety walked away from this. They're already on foot to the H.U.B. — they made it. These ten didn't." },
+  { id:'xvi_wreck_03', speaker:'Biba', text:"Then they don't get left as a number. Pull their chips. We carry their names out, even when we can't carry them." },
+];
+if(typeof window!=='undefined') window.XVI_FRONT_WRECK = XVI_FRONT_WRECK;
+
 /* ---- Event-triggered hero banter (story-polish §5.3): a watching hero reacts to a battlefield
    event. Cosmetic + local, throttled per kind in dialogs.js sayHeroEvent(). Voice key <hero>_<kind>.
      grief — a veteran fell while a hero was on the field (lore.js recordFallen)
