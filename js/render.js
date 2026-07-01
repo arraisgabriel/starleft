@@ -2809,6 +2809,86 @@ function _corpseWound(g, x, y, r, rng, synth){
       g.beginPath(); g.arc(x+(rng()-0.5)*r, y+(rng()-0.5)*r, 0.8, 0, 6.28); g.fill(); } }
   g.restore();
 }
+// A fresh, wet, irregular blood pool — the spread decal under a corpse. Built from a single wobbly
+// closed outline (NOT a disc), elongated toward `dir`, with a deep wet centre, a glossy sheen,
+// scattered spatter droplets and a couple of thin runnels. Colour follows `synth` — neon coolant
+// for cyborgs, matte oxblood for flesh (OWNER RULE: every cyborg bleeds synthetic). Drawn under a
+// 0.42 vertical squash for ground perspective and baked once into the corpse bitmap.
+function _bloodPool(g, px, py, r, rng, synth, dir){
+  const pool = synth ? [22,150,120] : [64,10,14];
+  const wet  = synth ? [10,46,44]   : [40,5,8];
+  const dx=Math.cos(dir), dy=Math.sin(dir);
+  const p1=rng()*6.28, p2=rng()*6.28, p3=rng()*6.28;   // fixed phases for the layered-sine edge
+  // a closed wobbly outline around (0,0): base radius `rad`, stretched along `dir`, nibbled per-vertex
+  const outline=(rad)=>{
+    const N=26, pts=[];
+    for(let i=0;i<N;i++){
+      const a=i/N*6.2832, along=Math.cos(a-dir);
+      let rr=rad*(1+0.34*along)*(1 + 0.24*Math.sin(a*3+p1) + 0.15*Math.sin(a*5+p2) + 0.09*Math.sin(a*7+p3));
+      rr*=(1 - 0.10*rng());
+      pts.push([Math.cos(a)*rr, Math.sin(a)*rr]);
+    }
+    return pts;
+  };
+  // trace a point ring as a smooth lobed path (quadratics through the midpoints — never polygonal)
+  const tracePath=(pts, ox, oy)=>{
+    const n=pts.length; g.beginPath();
+    let mx=(pts[n-1][0]+pts[0][0])/2, my=(pts[n-1][1]+pts[0][1])/2;
+    g.moveTo(ox+mx, oy+my);
+    for(let i=0;i<n;i++){ const c=pts[i], nx=pts[(i+1)%n];
+      g.quadraticCurveTo(ox+c[0], oy+c[1], ox+(c[0]+nx[0])/2, oy+(c[1]+nx[1])/2); }
+    g.closePath();
+  };
+  g.save();
+  g.translate(px,py); g.scale(1,0.42);                  // ground-plane squash
+  // 1) main irregular pool — radial gradient offset toward the flow head (wettest near the wound)
+  const gcx=dx*r*0.18, gcy=dy*r*0.18;
+  tracePath(outline(r),0,0);
+  const pg=g.createRadialGradient(gcx,gcy,r*0.06, gcx,gcy,r*2.2);
+  pg.addColorStop(0,   'rgba('+pool[0]+','+pool[1]+','+pool[2]+',0.62)');
+  pg.addColorStop(0.45,'rgba('+pool[0]+','+pool[1]+','+pool[2]+',0.52)');
+  pg.addColorStop(1,   'rgba('+pool[0]+','+pool[1]+','+pool[2]+',0)');
+  g.fillStyle=pg; g.fill();
+  // 2) deep wet centre — smaller irregular blob, darker + more opaque, pulled to the flow head
+  tracePath(outline(r*0.52), gcx*1.5, gcy*1.5);
+  g.globalAlpha=0.72; g.fillStyle='rgb('+wet[0]+','+wet[1]+','+wet[2]+')'; g.fill(); g.globalAlpha=1;
+  // 3) glossy wet sheen — a small offset specular streak (fresh, not dried)
+  if(synth){ g.globalCompositeOperation='lighter'; g.fillStyle='rgba(120,255,230,0.26)'; }
+  else     { g.fillStyle='rgba(150,60,60,0.20)'; }
+  g.beginPath(); g.ellipse(gcx-r*0.16, gcy-r*0.20, r*0.24, r*0.11, dir, 0, 6.2832); g.fill();
+  g.globalCompositeOperation='source-over';
+  // 4) spatter droplets flung mostly along the flow, + a scatter of fine specks
+  g.fillStyle='rgb('+pool[0]+','+pool[1]+','+pool[2]+')';
+  const spat=3+(rng()*3|0);
+  for(let i=0;i<spat;i++){
+    const a=dir+(rng()-0.5)*1.6, d=r*(0.95+rng()*0.6);
+    const bx=Math.cos(a)*d, by=Math.sin(a)*d, br=r*(0.06+rng()*0.11);
+    g.globalAlpha=0.5;
+    for(let k=0,kn=2+(rng()*2|0);k<kn;k++){ const oa=rng()*6.28, od=br*rng();
+      g.beginPath(); g.arc(bx+Math.cos(oa)*od, by+Math.sin(oa)*od, br*(0.6+0.5*rng()), 0, 6.28); g.fill(); }
+  }
+  g.globalAlpha=0.42;
+  for(let i=0,n=4+(rng()*3|0);i<n;i++){ const a=dir+(rng()-0.5)*2.2, d=r*(0.8+rng()*0.9);
+    g.beginPath(); g.arc(Math.cos(a)*d, Math.sin(a)*d, 0.7+rng()*0.6, 0, 6.28); g.fill(); }
+  g.globalAlpha=1;
+  // 5) runnels — thin tapering streaks creeping out from the edge, each ending in a droplet head
+  for(let i=0,rn=1+(rng()*2|0);i<rn;i++){
+    let a=dir+(rng()-0.5)*1.1, x=Math.cos(a)*r*0.7, y=Math.sin(a)*r*0.7, w=r*0.15;
+    g.globalAlpha=0.55;
+    for(let s=0,sn=2+(rng()*2|0);s<sn;s++){
+      a+=(rng()-0.5)*0.7; const len=r*(0.28+rng()*0.4), nx=x+Math.cos(a)*len, ny=y+Math.sin(a)*len, nw=w*0.55;
+      const nrx=-Math.sin(a), nry=Math.cos(a);
+      g.beginPath();
+      g.moveTo(x+nrx*w, y+nry*w);   g.lineTo(x-nrx*w, y-nry*w);
+      g.lineTo(nx-nrx*nw, ny-nry*nw); g.lineTo(nx+nrx*nw, ny+nry*nw);
+      g.closePath(); g.fill();
+      x=nx; y=ny; w=nw;
+    }
+    g.beginPath(); g.arc(x,y,w*1.3,0,6.28); g.fill();
+  }
+  g.globalAlpha=1;
+  g.restore();
+}
 // build (or fetch) the cached corpse bitmap. Returns null until the source sprite has loaded.
 function corpseSprite(corpse){
   const cached=_CORPSE_CACHE.get(corpse); if(cached) return cached;
@@ -2819,6 +2899,7 @@ function corpseSprite(corpse){
   const base=(typeof UNIT_SPRITE_H!=='undefined' && (UNIT_SPRITE_H[srcInfo.type]||UNIT_SPRITE_H[corpse.src]))||56;
   const dh=base, dw=base*(anim.fw/anim.fh);
   const rng=_corpseRng((corpse.id||0)*2654435761 ^ 0x5eef);
+  const prng=_corpseRng((corpse.id||0)*2654435761 ^ 0xB100D);   // dedicated pool RNG — leaves the wound/dismember stream untouched
   // --- procedural dismemberment: seeded 0–3 severed parts (or an explicit gore override) ---
   const ov=corpse.gore;
   const severHead = ov ? ov==='headshot' : rng()<0.42;
@@ -2829,7 +2910,7 @@ function corpseSprite(corpse){
   const ang       = flip*(Math.PI/2)*(0.86+0.26*rng());     // prone, with a little slump
   const synth=srcInfo.synth;
   // canvas big enough for the prone body + flung gibs
-  const W=Math.ceil(dh*2.6), H=Math.ceil(dh*1.8), cx=W*0.5, cy=H*0.6;
+  const W=Math.ceil(dh*3.0), H=Math.ceil(dh*2.0), cx=W*0.5, cy=Math.round(H*0.54);   // extra room below for the pool spread/spatter
   const cnv=document.createElement('canvas'); cnv.width=W; cnv.height=H;
   const g=cnv.getContext('2d');
   // local→canvas transform for stump points (same center+rotation as the body draw)
@@ -2855,14 +2936,10 @@ function corpseSprite(corpse){
   bg.fillRect(0,0,W,H);
   bg.globalCompositeOperation='source-over';
   // ---------- compose final: pool (under) → body → wounds → bloom ----------
-  // fluid pool decal (dark oxblood, or neon coolant for synthetics)
+  // fresh, wet, irregular fluid pool (oxblood, or neon coolant for synthetics) — spread + spatter + runnels
   const pr=dh*(0.62+(severHead||severLegs?0.18:0));
-  const pcol = synth ? [22,150,120] : [64,10,14];
-  const pg=g.createRadialGradient(cx,cy+dh*0.12,2, cx,cy+dh*0.12,pr);
-  pg.addColorStop(0,'rgba('+pcol[0]+','+pcol[1]+','+pcol[2]+',0.62)');
-  pg.addColorStop(1,'rgba('+pcol[0]+','+pcol[1]+','+pcol[2]+',0)');
-  g.save(); g.translate(cx,cy+dh*0.12); g.scale(1,0.42); g.translate(-cx,-(cy+dh*0.12));
-  g.fillStyle=pg; g.beginPath(); g.arc(cx,cy+dh*0.12,pr,0,6.28); g.fill(); g.restore();
+  const poolDir=(flip>0?0:Math.PI)+(prng()-0.5)*1.4;   // spreads toward the head-side, with per-corpse jitter
+  _bloodPool(g, cx, cy+dh*0.12, pr, prng, synth, poolDir);
   g.drawImage(body,0,0);
   // wound decals over every stump (canvas space)
   if(severHead){ const p=xf(0,neckY); _corpseWound(g, p[0],p[1], dh*0.18, rng, synth); }

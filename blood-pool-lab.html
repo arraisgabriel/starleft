@@ -1,0 +1,319 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>STARLEFT · blood-pool lab</title>
+<style>
+  :root{ --bg:#0a0d10; --panel:#12171c; --ink:#c7d6d0; --accent:#5fe0ff; }
+  *{ box-sizing:border-box; }
+  html,body{ margin:0; background:var(--bg); color:var(--ink); font:14px/1.4 ui-monospace,Menlo,Consolas,monospace; }
+  header{ padding:10px 16px; border-bottom:1px solid #1e2830; display:flex; gap:14px; align-items:baseline; flex-wrap:wrap; }
+  header h1{ font-size:15px; margin:0; letter-spacing:.5px; color:#e9f6f2; }
+  header .hint{ color:#6f8a84; font-size:12px; }
+  .wrap{ display:flex; gap:14px; padding:14px; align-items:flex-start; flex-wrap:wrap; }
+  .panel{ background:var(--panel); border:1px solid #1e2830; border-radius:10px; padding:14px; min-width:236px; }
+  .panel h2{ font-size:12px; text-transform:uppercase; letter-spacing:1px; color:#7fa; margin:14px 0 8px; }
+  .panel h2:first-child{ margin-top:0; }
+  .row{ display:flex; align-items:center; justify-content:space-between; gap:10px; margin:9px 0; }
+  label{ color:#9fb4ae; }
+  input[type=range]{ width:120px; accent-color:var(--accent); }
+  button{ background:#1b262d; color:#cfe; border:1px solid #2b3a44; border-radius:7px; padding:7px 11px; cursor:pointer; font:inherit; }
+  button:hover{ background:#24333c; border-color:#3a4e5a; }
+  button.on{ background:#123; border-color:var(--accent); color:var(--accent); }
+  .seg{ display:flex; gap:6px; flex-wrap:wrap; }
+  canvas{ background:#0c1013; border:1px solid #1e2830; border-radius:10px; display:block; touch-action:none; }
+  .val{ color:#e9f6f2; min-width:34px; text-align:right; }
+  .legend{ color:#6f8a84; font-size:12px; margin-top:8px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>🩸 STARLEFT · blood-pool lab</h1>
+  <span class="hint">real memory-corpses over the new spread puddle — click the canvas to drop one · same code as <code>corpseSprite</code>/<code>_bloodPool</code> in js/render.js</span>
+</header>
+
+<div class="wrap">
+  <div class="panel">
+    <h2>Blood</h2>
+    <div class="row"><label>Type</label>
+      <div class="seg">
+        <button id="bHuman" class="on">flesh</button>
+        <button id="bCyborg">cyborg</button>
+      </div>
+    </div>
+    <h2>Body sprite</h2>
+    <div class="row"><div class="seg">
+      <button data-unit="worker">worker</button>
+      <button data-unit="soldier" class="on">soldier</button>
+      <button data-unit="ranger">ranger</button>
+    </div></div>
+    <h2>View</h2>
+    <div class="row"><label>Zoom</label><input id="zoom" type="range" min="1" max="3" step="0.1" value="1.6"><span class="val" id="zoomV">1.6</span></div>
+    <div class="row"><label>Columns</label><input id="cols" type="range" min="1" max="5" value="3"><span class="val" id="colsV">3</span></div>
+    <div class="row"><label>Rows</label><input id="rows" type="range" min="1" max="4" value="2"><span class="val" id="rowsV">2</span></div>
+    <div class="row"><label>Show body</label><button id="bBody" class="on">on</button></div>
+    <div class="row"><label>Memory glint</label><button id="bAfford" class="on">on</button></div>
+    <div class="row"><label>OLD pool (single arc)</label><button id="bOld">off</button></div>
+    <div class="row"><button id="bRegen" style="flex:1">↻ Regenerate seeds</button></div>
+    <p class="legend">Faithful reproduction of the baked corpse bitmap: pool → body → wounds → bloom, plus the cyan “unreached memory” glint. Each cell shows its seed.</p>
+    <p class="legend" id="stat">loading sprites…</p>
+  </div>
+
+  <canvas id="c" width="1000" height="620"></canvas>
+</div>
+
+<script>
+/* ======================================================================
+   Copied VERBATIM from js/render.js so the lab renders exactly what the
+   game bakes into each corpse bitmap.
+   ====================================================================== */
+function _corpseRng(seed){ let a=(seed>>>0)||1; return function(){ a=a+0x6D2B79F5|0; let t=Math.imul(a^a>>>15,1|a); t=t+Math.imul(t^t>>>7,61|t)^t; return ((t^t>>>14)>>>0)/4294967296; }; }
+
+function _corpseBand(g, anim, fr, v0, v1, w, h){
+  const sy=fr[1]+v0*anim.fh, sh=(v1-v0)*anim.fh, dh=(v1-v0)*h;
+  g.drawImage(anim.img, fr[0], sy, anim.fw, sh, -w/2, -h*0.65 + v0*h, w, dh);
+}
+
+function _corpseWound(g, x, y, r, rng, synth){
+  g.save();
+  const core = synth ? [70,235,205] : [110,16,18];
+  const dark = synth ? [10,46,44]   : [40,5,8];
+  for(let i=0;i<5;i++){
+    const a=rng()*6.28, d=r*(0.2+0.7*rng()), rr=r*(0.35+0.5*rng());
+    g.globalAlpha=0.55; g.fillStyle='rgb('+dark[0]+','+dark[1]+','+dark[2]+')';
+    g.beginPath(); g.arc(x+Math.cos(a)*d, y+Math.sin(a)*d, rr, 0, 6.28); g.fill();
+  }
+  g.globalAlpha=synth?0.9:0.78; g.fillStyle='rgb('+core[0]+','+core[1]+','+core[2]+')';
+  g.beginPath(); g.arc(x, y, r*0.46, 0, 6.28); g.fill();
+  g.globalAlpha=0.85; g.fillStyle='rgb('+dark[0]+','+dark[1]+','+dark[2]+')';
+  g.beginPath(); g.arc(x+(rng()-0.5)*r*0.2, y+(rng()-0.5)*r*0.2, r*0.2, 0, 6.28); g.fill();
+  if(synth){ g.globalCompositeOperation='lighter';
+    for(let i=0;i<2;i++){ g.globalAlpha=0.8; g.fillStyle='#d8fff6';
+      g.beginPath(); g.arc(x+(rng()-0.5)*r, y+(rng()-0.5)*r, 0.8, 0, 6.28); g.fill(); } }
+  g.restore();
+}
+
+function _bloodPool(g, px, py, r, rng, synth, dir){
+  const pool = synth ? [22,150,120] : [64,10,14];
+  const wet  = synth ? [10,46,44]   : [40,5,8];
+  const dx=Math.cos(dir), dy=Math.sin(dir);
+  const p1=rng()*6.28, p2=rng()*6.28, p3=rng()*6.28;
+  const outline=(rad)=>{
+    const N=26, pts=[];
+    for(let i=0;i<N;i++){
+      const a=i/N*6.2832, along=Math.cos(a-dir);
+      let rr=rad*(1+0.34*along)*(1 + 0.24*Math.sin(a*3+p1) + 0.15*Math.sin(a*5+p2) + 0.09*Math.sin(a*7+p3));
+      rr*=(1 - 0.10*rng());
+      pts.push([Math.cos(a)*rr, Math.sin(a)*rr]);
+    }
+    return pts;
+  };
+  const tracePath=(pts, ox, oy)=>{
+    const n=pts.length; g.beginPath();
+    let mx=(pts[n-1][0]+pts[0][0])/2, my=(pts[n-1][1]+pts[0][1])/2;
+    g.moveTo(ox+mx, oy+my);
+    for(let i=0;i<n;i++){ const c=pts[i], nx=pts[(i+1)%n];
+      g.quadraticCurveTo(ox+c[0], oy+c[1], ox+(c[0]+nx[0])/2, oy+(c[1]+nx[1])/2); }
+    g.closePath();
+  };
+  g.save();
+  g.translate(px,py); g.scale(1,0.42);
+  const gcx=dx*r*0.18, gcy=dy*r*0.18;
+  tracePath(outline(r),0,0);
+  const pg=g.createRadialGradient(gcx,gcy,r*0.06, gcx,gcy,r*2.2);
+  pg.addColorStop(0,   'rgba('+pool[0]+','+pool[1]+','+pool[2]+',0.62)');
+  pg.addColorStop(0.45,'rgba('+pool[0]+','+pool[1]+','+pool[2]+',0.52)');
+  pg.addColorStop(1,   'rgba('+pool[0]+','+pool[1]+','+pool[2]+',0)');
+  g.fillStyle=pg; g.fill();
+  tracePath(outline(r*0.52), gcx*1.5, gcy*1.5);
+  g.globalAlpha=0.72; g.fillStyle='rgb('+wet[0]+','+wet[1]+','+wet[2]+')'; g.fill(); g.globalAlpha=1;
+  if(synth){ g.globalCompositeOperation='lighter'; g.fillStyle='rgba(120,255,230,0.26)'; }
+  else     { g.fillStyle='rgba(150,60,60,0.20)'; }
+  g.beginPath(); g.ellipse(gcx-r*0.16, gcy-r*0.20, r*0.24, r*0.11, dir, 0, 6.2832); g.fill();
+  g.globalCompositeOperation='source-over';
+  g.fillStyle='rgb('+pool[0]+','+pool[1]+','+pool[2]+')';
+  const spat=3+(rng()*3|0);
+  for(let i=0;i<spat;i++){
+    const a=dir+(rng()-0.5)*1.6, d=r*(0.95+rng()*0.6);
+    const bx=Math.cos(a)*d, by=Math.sin(a)*d, br=r*(0.06+rng()*0.11);
+    g.globalAlpha=0.5;
+    for(let k=0,kn=2+(rng()*2|0);k<kn;k++){ const oa=rng()*6.28, od=br*rng();
+      g.beginPath(); g.arc(bx+Math.cos(oa)*od, by+Math.sin(oa)*od, br*(0.6+0.5*rng()), 0, 6.28); g.fill(); }
+  }
+  g.globalAlpha=0.42;
+  for(let i=0,n=4+(rng()*3|0);i<n;i++){ const a=dir+(rng()-0.5)*2.2, d=r*(0.8+rng()*0.9);
+    g.beginPath(); g.arc(Math.cos(a)*d, Math.sin(a)*d, 0.7+rng()*0.6, 0, 6.28); g.fill(); }
+  g.globalAlpha=1;
+  for(let i=0,rn=1+(rng()*2|0);i<rn;i++){
+    let a=dir+(rng()-0.5)*1.1, x=Math.cos(a)*r*0.7, y=Math.sin(a)*r*0.7, w=r*0.15;
+    g.globalAlpha=0.55;
+    for(let s=0,sn=2+(rng()*2|0);s<sn;s++){
+      a+=(rng()-0.5)*0.7; const len=r*(0.28+rng()*0.4), nx=x+Math.cos(a)*len, ny=y+Math.sin(a)*len, nw=w*0.55;
+      const nrx=-Math.sin(a), nry=Math.cos(a);
+      g.beginPath();
+      g.moveTo(x+nrx*w, y+nry*w);   g.lineTo(x-nrx*w, y-nry*w);
+      g.lineTo(nx-nrx*nw, ny-nry*nw); g.lineTo(nx+nrx*nw, ny+nry*nw);
+      g.closePath(); g.fill();
+      x=nx; y=ny; w=nw;
+    }
+    g.beginPath(); g.arc(x,y,w*1.3,0,6.28); g.fill();
+  }
+  g.globalAlpha=1;
+  g.restore();
+}
+
+/* OLD single-arc pool (previous version) — lab-only, for the before/after toggle. */
+function _oldPool(g,cx,cy,pr,synth){
+  const pcol = synth ? [22,150,120] : [64,10,14];
+  const pg=g.createRadialGradient(cx,cy,2, cx,cy,pr);
+  pg.addColorStop(0,'rgba('+pcol[0]+','+pcol[1]+','+pcol[2]+',0.62)');
+  pg.addColorStop(1,'rgba('+pcol[0]+','+pcol[1]+','+pcol[2]+',0)');
+  g.save(); g.translate(cx,cy); g.scale(1,0.42); g.translate(-cx,-cy);
+  g.fillStyle=pg; g.beginPath(); g.arc(cx,cy,pr,0,6.28); g.fill(); g.restore();
+}
+
+/* ======================================================================
+   Faithful port of corpseSprite (js/render.js) — builds one corpse bitmap
+   with a real sprite. `useOld`/`showBody` are lab toggles.
+   ====================================================================== */
+function buildCorpse(anim, dh, seed, synth, useOld, showBody){
+  const dw = anim && anim.ready ? dh*(anim.fw/anim.fh) : dh*0.5;
+  const rng  = _corpseRng((seed>>>0)*2654435761 ^ 0x5eef);
+  const prng = _corpseRng((seed>>>0)*2654435761 ^ 0xB100D);
+  const severHead = rng()<0.42, severLegs = rng()<0.34, armWound = rng()<0.55;
+  const armSide   = rng()<0.5 ? -1 : 1;
+  const flip      = rng()<0.5 ? 1 : -1;
+  const ang       = flip*(Math.PI/2)*(0.86+0.26*rng());
+  const W=Math.ceil(dh*3.0), H=Math.ceil(dh*2.0), cx=W*0.5, cy=Math.round(H*0.54);
+  const cnv=document.createElement('canvas'); cnv.width=W; cnv.height=H; const g=cnv.getContext('2d');
+  const C=Math.cos(ang), S=Math.sin(ang);
+  const xf=(lx,ly)=>[cx+lx*C-ly*S, cy+lx*S+ly*C];
+  const neckY=-dh*0.65+0.24*dh, waistY=-dh*0.65+0.58*dh, armY=-dh*0.65+0.40*dh;
+  const ready = anim && anim.ready;
+  const fr = ready ? anim.frames[0] : null;
+  // body layer
+  let body=null;
+  if(ready && showBody){
+    body=document.createElement('canvas'); body.width=W; body.height=H; const bg=body.getContext('2d');
+    bg.save(); bg.translate(cx,cy); bg.rotate(ang);
+    if(!severHead) _corpseBand(bg, anim, fr, 0.00, 0.24, dw, dh);
+    _corpseBand(bg, anim, fr, 0.24, 0.58, dw, dh);
+    if(!severLegs) _corpseBand(bg, anim, fr, 0.58, 1.00, dw, dh);
+    bg.restore();
+    const gib=(v0,v1,sx,sy,extra)=>{ bg.save(); bg.translate(sx,sy); bg.rotate(ang+extra);
+      _corpseBand(bg, anim, fr, v0, v1, dw, dh); bg.restore(); };
+    if(severHead){ const p=xf(0,neckY); gib(0.00,0.24, p[0]+(rng()-0.3)*dh*0.5, p[1]-dh*0.2-rng()*dh*0.3, (rng()-0.5)*2); }
+    if(severLegs){ const p=xf(0,waistY); gib(0.58,1.00, p[0]+(rng()-0.5)*dh*0.4, p[1]+dh*0.15+rng()*dh*0.3, (rng()-0.5)*1.4); }
+    bg.globalCompositeOperation='source-atop';
+    bg.fillStyle = synth ? 'rgba(10,26,30,0.50)' : 'rgba(16,20,28,0.52)';
+    bg.fillRect(0,0,W,H);
+    bg.globalCompositeOperation='source-over';
+  }
+  // compose: pool → body → wounds → bloom
+  const pr=dh*(0.62+(severHead||severLegs?0.18:0));
+  const poolDir=(flip>0?0:Math.PI)+(prng()-0.5)*1.4;
+  if(useOld) _oldPool(g, cx, cy+dh*0.12, pr, synth);
+  else       _bloodPool(g, cx, cy+dh*0.12, pr, prng, synth, poolDir);
+  if(body) g.drawImage(body,0,0);
+  if(body){
+    if(severHead){ const p=xf(0,neckY); _corpseWound(g, p[0],p[1], dh*0.18, rng, synth); }
+    if(severLegs){ const p=xf(0,waistY); _corpseWound(g, p[0],p[1], dh*0.20, rng, synth); }
+    if(armWound){ const p=xf(armSide*dw*0.32,armY); _corpseWound(g, p[0],p[1], dh*0.13, rng, synth); }
+    if(!severHead && !severLegs && !armWound){ const p=xf(0,waistY*0.4); _corpseWound(g, p[0],p[1], dh*0.15, rng, synth); }
+    if(synth){
+      g.save(); g.globalCompositeOperation='lighter';
+      const bloom=(x,y,r)=>{ const bg2=g.createRadialGradient(x,y,0,x,y,r);
+        bg2.addColorStop(0,'rgba(60,230,200,0.5)'); bg2.addColorStop(1,'rgba(60,230,200,0)');
+        g.fillStyle=bg2; g.beginPath(); g.arc(x,y,r,0,6.28); g.fill(); };
+      if(severHead){ const p=xf(0,neckY); bloom(p[0],p[1],dh*0.3); }
+      if(severLegs){ const p=xf(0,waistY); bloom(p[0],p[1],dh*0.32); }
+      g.restore();
+    }
+  }
+  const hp=xf(0, severHead? neckY : -dh*0.5);
+  return { canvas:cnv, ax:cx, ay:cy, headX:hp[0]-cx, headY:hp[1]-cy };
+}
+
+/* ---- sprite loading (real game art) ---- */
+const UNIT_SPRITE_H = { worker:46, soldier:68, ranger:62 };
+const UNIT_FRAMES = 10;
+const ANIMS = {};
+function loadUnit(type){
+  const a={ img:new Image(), ready:false, fw:0, fh:0, frames:null };
+  a.img.onload=()=>{ const n=UNIT_FRAMES; a.fw=a.img.width/n; a.fh=a.img.height;
+    a.frames=[]; for(let i=0;i<n;i++) a.frames.push([i*a.fw,0,a.fw,a.fh]); a.ready=true; loaded++; draw(); };
+  a.img.onerror=()=>{ a.failed=true; loaded++; draw(); };
+  a.img.src='assets/units/'+type+'/walk.webp';
+  ANIMS[type]=a;
+}
+let loaded=0;
+['worker','soldier','ranger'].forEach(loadUnit);
+
+/* ---- lab wiring ---- */
+const cv=document.getElementById('c'), g=cv.getContext('2d');
+const S={ synth:false, unit:'soldier', zoom:1.6, cols:3, rows:2, body:true, afford:true, old:false, salt:1, drops:[] };
+const el=id=>document.getElementById(id);
+
+function drawAfford(x,y,c){
+  const pulse=1;
+  g.save();
+  g.globalAlpha=0.4; g.strokeStyle='#5fe0ff'; g.lineWidth=1.5;
+  g.beginPath(); g.ellipse(x,y,16,7,0,0,6.28); g.stroke();
+  const gx=x+(c?c.headX:0), gy=y+(c?c.headY:-6)-3;
+  g.globalAlpha=0.9; g.shadowColor='#9bf0ff'; g.shadowBlur=11;
+  g.fillStyle='#cdfaff'; g.beginPath(); g.arc(gx,gy,2.4,0,6.28); g.fill();
+  g.restore();
+}
+
+function cellCorpse(x,y,seed){
+  const anim=ANIMS[S.unit], dh=UNIT_SPRITE_H[S.unit]*S.zoom;
+  const c=buildCorpse(anim, dh, seed, S.synth, S.old, S.body);
+  g.drawImage(c.canvas, x-c.ax, y-c.ay);
+  if(S.afford) drawAfford(x,y,c);
+  return c;
+}
+
+function draw(){
+  g.clearRect(0,0,cv.width,cv.height);
+  g.fillStyle='#0c1013'; g.fillRect(0,0,cv.width,cv.height);
+  const grd=g.createLinearGradient(0,0,0,cv.height); grd.addColorStop(0,'rgba(30,40,46,0.10)'); grd.addColorStop(1,'rgba(0,0,0,0.28)');
+  g.fillStyle=grd; g.fillRect(0,0,cv.width,cv.height);
+
+  const cols=S.cols, rows=S.rows, cw=cv.width/cols, ch=cv.height/rows;
+  let n=0;
+  for(let ry=0;ry<rows;ry++) for(let cx0=0;cx0<cols;cx0++){
+    const x=cw*(cx0+0.5), y=ch*(ry+0.52);
+    const seed=((n+1)*1013904223 ^ (S.salt*2654435761))>>>0;
+    cellCorpse(x,y,seed);
+    g.fillStyle='#3c4a50'; g.font='11px ui-monospace,monospace';
+    g.fillText('#'+seed.toString(16).slice(0,6), cw*cx0+8, ch*ry+16);
+    n++;
+  }
+  for(const d of S.drops) cellCorpse(d.x,d.y,d.seed);
+
+  const anim=ANIMS[S.unit];
+  const note = anim&&anim.failed ? '⚠ sprite missing — pool only (serve the repo over http to load webp)' :
+               anim&&anim.ready ? (S.old?'OLD single-arc':'NEW _bloodPool')+' · '+(S.synth?'cyborg coolant':'flesh oxblood')+' · '+S.unit+' · zoom '+S.zoom.toFixed(1) :
+               'loading '+S.unit+' sprite…';
+  el('stat').textContent=note;
+}
+
+el('bHuman').onclick =()=>{ S.synth=false; el('bHuman').classList.add('on'); el('bCyborg').classList.remove('on'); draw(); };
+el('bCyborg').onclick=()=>{ S.synth=true;  el('bCyborg').classList.add('on'); el('bHuman').classList.remove('on'); draw(); };
+document.querySelectorAll('[data-unit]').forEach(b=>b.onclick=()=>{
+  S.unit=b.dataset.unit; document.querySelectorAll('[data-unit]').forEach(x=>x.classList.toggle('on',x===b)); draw(); });
+el('zoom').oninput=e=>{ S.zoom=+e.target.value; el('zoomV').textContent=S.zoom.toFixed(1); draw(); };
+el('cols').oninput=e=>{ S.cols=+e.target.value; el('colsV').textContent=S.cols; draw(); };
+el('rows').oninput=e=>{ S.rows=+e.target.value; el('rowsV').textContent=S.rows; draw(); };
+el('bBody').onclick=()=>{ S.body=!S.body; el('bBody').textContent=S.body?'on':'off'; el('bBody').classList.toggle('on',S.body); draw(); };
+el('bAfford').onclick=()=>{ S.afford=!S.afford; el('bAfford').textContent=S.afford?'on':'off'; el('bAfford').classList.toggle('on',S.afford); draw(); };
+el('bOld').onclick=()=>{ S.old=!S.old; el('bOld').textContent=S.old?'on':'off'; el('bOld').classList.toggle('on',S.old); draw(); };
+el('bRegen').onclick=()=>{ S.salt=(S.salt*1664525+1013904223)>>>0; S.drops.length=0; draw(); };
+cv.addEventListener('pointerdown',e=>{ const b=cv.getBoundingClientRect();
+  S.drops.push({x:(e.clientX-b.left)*cv.width/b.width, y:(e.clientY-b.top)*cv.height/b.height, seed:((S.drops.length*40503)^(S.salt*7)^7)>>>0}); draw(); });
+
+draw();
+</script>
+</body>
+</html>
