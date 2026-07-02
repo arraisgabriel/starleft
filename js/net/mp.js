@@ -273,7 +273,11 @@
       case 'endcard': {
         // campaign end-state (IPO / to-be-continued): the sim is over on the host — freeze + show the read-only
         // mirror card. The host owns NG+/restart; its mpstart (NG+ lap) pulls us back in via beginClientMatch.
+        // G.over=true closes applySnap's `snap.over && !G.over` gate: one in-flight over:true snap can otherwise
+        // land AFTER this cue (host-clock sends once more the tick the win lands) and pop a spurious
+        // "Match over" toast over the card (adversarial-review finding 1b).
         running=false;
+        if(typeof G!=='undefined' && G) G.over=true;
         if(typeof clientEndScreen==='function') clientEndScreen(true, d.kind);
         break;
       }
