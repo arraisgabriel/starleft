@@ -108,7 +108,10 @@ function serializeEntity(e){
 // feat[] is the per-cell topography mask — rebuilt from features[] on load (keeps saves small).
 // waterDepth: a renderer-only distance-to-shore field (js/water.js), rebuilt from tiles[] on load.
 // roadTiles/roadMask/roadCost: transient HUB road grids — rebuilt by hubBuildRoads on load (keeps saves small + auto-migrates old hubs).
-const SKIP = {cfg:1, visible:1, _cmdSig:1, placing:1, sprint:1, entities:1, selection:1, groups:1, blocked:1, explored:1, feat:1, waterDepth:1, hubPois:1, roadTiles:1, roadMask:1, roadCost:1, roadAxis:1};
+// interiorMat/interiorFeatures/interiorTheme: derived interior-tileset render data (typed array + sprite
+// list) — rebuilt from cfg + the restored tiles/biome by buildInteriorData on load (walls persist as
+// serialized T_ROCK tiles, so passability round-trips by itself). docs/interior-tilesets.md E8.
+const SKIP = {cfg:1, visible:1, _cmdSig:1, placing:1, sprint:1, entities:1, selection:1, groups:1, blocked:1, explored:1, feat:1, waterDepth:1, hubPois:1, roadTiles:1, roadMask:1, roadCost:1, roadAxis:1, interiorMat:1, interiorFeatures:1, interiorTheme:1};
 function serializeGame(){
   const s={};
   for(const k in G){ if(!SKIP[k]) s[k]=G[k]; }       // primitives + JSON-safe arrays (tiles/biome/megaSprites)
@@ -225,6 +228,10 @@ function deserializeGame(s){
   // Dark Tower placement + terrain paint so an OLD save reflects map-editor edits (relocating any buried
   // unit/building near its origin). Runs after terrain/feat/blocked + entity footprints are restored.
   if(!g.hub) migrateCampaignTerrain(g);
+  // interior tilesets (E8): rebuild the derived render data (interiorMat/interiorFeatures/interiorTheme)
+  // from cfg + the FINAL restored grid. Never re-stamps rooms — the serialized tiles[] already carry the
+  // carved doorways, and a re-stamp would seal them. No-op on legacy / non-interior / hub saves.
+  if(typeof buildInteriorData==='function' && g.cfg) buildInteriorData(g, g.cfg);
   // back-fill hero sprite overrides for saves written before heroes[].sprite existed (e.g. a
   // carried Nino restored as a plain lobbyist) — derive it from the map configs by heroId.
   if(typeof heroSpriteFor==='function') g.entities.forEach(e=>{

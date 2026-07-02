@@ -211,6 +211,27 @@ function bakeDecals(g, state, tx0, ty0){
     const i=ty*W+tx; if(!state.explored[i]) continue;
     const t=state.tiles[i]; if(t!==T_GRASS && t!==T_DIRT) continue;     // GROUND only (skip water/rock/tree)
     const b=state.biome[i], pal=DECAL[b]||DECAL[B_GRASS];
+    // ---- INTERIOR set-dressing: BIG sparse painted stamps (2.5–4 tiles wide) — Hades-style ground
+    //      pieces you can actually read, instead of one-tile specks. Very sparse (~1 per 10×10 tiles);
+    //      a stamp only lands when its whole footprint is open interior floor (never rides a wall). ----
+    if(b===B_INTERIOR){
+      if(typeof INTERIOR_DECAL_ATL==='undefined' || !INTERIOR_DECAL_ATL.ready) continue;
+      if(rnd()>0.02) continue;
+      const theme=interiorMatAt(state,i)>>1;
+      const dr=interiorDecalRect(theme, (rnd()*INTERIOR_DECAL_N)|0); if(!dr) continue;
+      const ds=TILE*(2.5+rnd()*1.5), rot=rnd()*6.2832;
+      const t0x=((wx-ds/2)/TILE)|0, t1x=((wx+ds/2)/TILE)|0, t0y=((wy-ds/2)/TILE)|0, t1y=((wy+ds/2)/TILE)|0;
+      let clear=true;
+      for(let yy=t0y;yy<=t1y&&clear;yy++)for(let xx=t0x;xx<=t1x;xx++){
+        if(xx<0||yy<0||xx>=W||yy>=H){ clear=false; break; }
+        const j=yy*W+xx;
+        if(state.biome[j]!==B_INTERIOR || state.tiles[j]===T_ROCK){ clear=false; break; }
+      }
+      if(!clear) continue;
+      g.save(); g.globalAlpha=0.85; g.translate(wx-wx0, wy-wy0); g.rotate(rot);
+      g.drawImage(INTERIOR_DECAL_IMG, dr[0],dr[1],dr[2],dr[3], -ds/2,-ds/2, ds, ds); g.restore();
+      continue;
+    }
     if(rnd()>pal.dens*DECAL_FREQ) continue;                             // sparse (DECAL_FREQ dials overall density)
     const lx=wx-wx0, ly=wy-wy0;
     // P7.3: painted decal stamp (if the atlas loaded) — richer ground detail; else procedural. Both baked,
@@ -252,7 +273,10 @@ function applyPostStack(state, z, vx, vy){
   if(RENDER.grade && state.biome){
     const wx=vx+(W/z)/2, wy=vy+(H/z)/2;
     const tx=Math.max(0,Math.min(state.W-1,(wx/TILE)|0)), ty=Math.max(0,Math.min(state.H-1,(wy/TILE)|0));
-    const G=_biomeGrade(state.biome[ty*state.W+tx]); if(G) tg=[G.mult[0],G.mult[1],G.mult[2],G.mult[3]*255];
+    const bi=state.biome[ty*state.W+tx];
+    let G=_biomeGrade(bi);
+    if(bi===B_INTERIOR && state.interiorTheme!=null && INTERIOR_GRADE_T[state.interiorTheme]) G={mult:INTERIOR_GRADE_T[state.interiorTheme]};   // per-theme interior grade (E6)
+    if(G) tg=[G.mult[0],G.mult[1],G.mult[2],G.mult[3]*255];
   }
   for(let i=0;i<4;i++) _gradeCur[i] += (tg[i]-_gradeCur[i])*0.06;  // ~16-frame ease
   ctx.save(); ctx.setTransform(dpr,0,0,dpr,0,0);
@@ -628,6 +652,20 @@ function render(state){
     if(!state.explored[si]) continue;                                // hidden until explored
     depth.push({y:(fty+N)*TILE, g:e, dim:state.visible[si]!==1});
   } }
+  // INTERIOR features (walls / props / setpieces / overhangs — docs/interior-tilesets.md E5):
+  // geometry re-derived from cfg by applyInteriors (never serialized/networked). Entries Y-sort
+  // with units on the footprint ground line exactly like topo features; the wall cap is a 2nd blit
+  // inside the SAME entry (offset one tile up) so a tall wall sorts as one object. Doors are
+  // neon anchors for the E6 pass only — nothing to draw here. tie is coord-derived (cross-peer).
+  if(state.interiorFeatures) for(const inf of state.interiorFeatures){
+    if(inf.slot==='door') continue;
+    const fw=inf.w||1, fh=inf.h||1;
+    if(inf.tx+fw<=x0 || inf.tx>=x1 || inf.ty+fh<=y0 || inf.ty>=y1) continue;   // AABB cull
+    const sx=Math.max(0, Math.min(state.W-1, inf.tx+(fw>>1))), sy=Math.max(0, Math.min(state.H-1, inf.ty+fh-1));
+    const si=sy*state.W+sx;
+    if(!state.explored[si]) continue;
+    depth.push({y:(inf.ty+fh)*TILE, interior:inf, tie:(inf.tx*131+inf.ty)&255, dim:state.visible[si]!==1});
+  }
   for(const e of state.entities){
     if(e.dead) continue;
     if(e.kind==='building'){
@@ -727,6 +765,7 @@ function render(state){
     else if(d.corpse) drawCorpse(state, d.corpse, ox,oy);   // Ep XVI dead body
     else if(d.wreck) drawWreck(state, d.wreck, ox,oy);      // Ep XVI crashed bomber half
     else if(d.n) HUBNPC.drawOne(state, d.n);           // living-city NPC (hub only)
+    else if(d.interior) drawInteriorFeature(state, d.interior, ox,oy, d.dim);
     else drawUnit(state, d.u, ox,oy);
   }
   // ---- occluded-unit ghosts: building sprites draw BUILDING_DRAW_SCALE× their footprint, so
@@ -788,6 +827,8 @@ function render(state){
   // ---- P6.2 animated painted light: god-ray shafts off emissive landmarks + per-biome flicker glows ----
   if(PERF.on) PERF.mark('lightfx');
   if(typeof drawLightFX==='function') drawLightFX(state, ox,oy, x0,y0,x1,y1);
+  // ---- INTERIOR_NEON (E6): door/objective glows for interior rooms — same FX window ----
+  drawInteriorNeon(state, ox,oy, x0,y0,x1,y1);
   if(PERF.on) PERF.lap('lightfx');
 
   // ---- HUB decorative drones: a dedicated pass AFTER the depth sort so they fly on top of
@@ -1048,6 +1089,10 @@ function _tcBake(state, ccx, ccy, z, cnt){
     const t=state.tiles[i];
     if(t===T_WATER){ live.push([tx,ty]); continue; }        // animated water → live overlay
     const b=state.biome[i], v=state.variant[i];
+    if(b===B_INTERIOR){                                     // interior: bake the autotiled floor plane; procedural falls back live
+      if(!drawInteriorFloor(g, state, i, tx, ty, (tx-tx0)*TILE, (ty-ty0)*TILE)) live.push([tx,ty]);
+      continue;
+    }
     const slot=t===T_ROCK?'rock':t===T_TREE?'tree':'floor';
     let img=ATLAS_IMG, r=null;
     if(slot==='floor' && typeof FLOOR_VAR_READY!=='undefined' && FLOOR_VAR_READY){   // P1.1/P1.2: hash-pick a floor variant (coords-only → co-op safe)
@@ -1204,6 +1249,163 @@ function renderTerrainChunks(state, z, x0,y0,x1,y1){
     drawTile(state,tx,ty, tx*TILE, ty*TILE);               // water/procedural live, world space
   }
 }
+/* ---- Interior floor helpers (docs/interior-tilesets.md E4). An interior tile ALWAYS draws the
+   autotiled floor plane — walls are T_ROCK tiles rendered as state.interiorFeatures in the ACTORS
+   depth pass (E5), never as rock/tree tile art. Material comes from state.interiorMat (per-tile
+   Uint8Array, value = mat+1, stamped by applyInteriors; 0/absent → default material 0). The floor
+   autotile treats wall tiles as matching material so the plane runs seamlessly under walls; edges
+   appear only at true interior↔exterior thresholds. All picks coord-pure (CC.1). ---- */
+function interiorMatAt(state,i){
+  const im=state.interiorMat; if(im){ const m=im[i]; if(m) return m-1; }
+  return 0;
+}
+// Wall-contact AO sprites (the Hades painted-AO trick): 4 cached directional dark gradients drawn
+// on floor tiles that touch an interior wall, so every room edge reads grounded. dir 0=wall to the
+// N (shadow falls from the top edge), 1=E, 2=S, 3=W. Built once, 64px, drawn at TILE+1.
+let _intAo=null;
+function _intAoSprite(dir){
+  if(!_intAo){
+    _intAo=[];
+    for(let d=0;d<4;d++){
+      const c=document.createElement('canvas'); c.width=c.height=64;
+      const q=c.getContext('2d');
+      const gr = d===0 ? q.createLinearGradient(0,0,0,64) : d===1 ? q.createLinearGradient(64,0,0,0)
+               : d===2 ? q.createLinearGradient(0,64,0,0) : q.createLinearGradient(0,0,64,0);
+      gr.addColorStop(0,'rgba(0,0,0,0.38)'); gr.addColorStop(0.55,'rgba(0,0,0,0.10)'); gr.addColorStop(1,'rgba(0,0,0,0)');
+      q.fillStyle=gr; q.fillRect(0,0,64,64);
+      _intAo.push(c);
+    }
+  }
+  return _intAo[dir];
+}
+function _intIsWall(state,x,y){
+  if(x<0||y<0||x>=state.W||y>=state.H) return false;
+  const i=y*state.W+x;
+  return state.biome[i]===B_INTERIOR && state.tiles[i]===T_ROCK;
+}
+// Draw one interior tile's floor plane into ctx g. Returns false when the surface atlas isn't
+// ready (caller falls back to procedural / marks the tile live in the chunk bake). THE REVAMP:
+// the tile blits a WORLD-ANCHORED 64px sub-rect of the theme's 1024² macro texture (tx%16, ty%16)
+// — no variants, no rotation — so the material's large panel structure runs continuously across
+// 16×16 tiles. Then the painted wall-contact AO grounds tiles that touch a wall.
+function drawInteriorFloor(g, state, i, tx, ty, px, py){
+  if(typeof INTERIOR_SURF_ATL==='undefined' || !INTERIOR_SURF_ATL.ready) return false;
+  const mat=interiorMatAt(state,i), theme=mat>>1;
+  const r=interiorSurfRect(theme, mat&1, tx, ty);
+  if(!r) return false;
+  g.drawImage(INTERIOR_SURF_IMG, r[0],r[1],r[2],r[3], px,py, TILE+1,TILE+1);
+  if(state.tiles[i]!==T_ROCK){                                       // AO only on open floor, not under walls
+    if(_intIsWall(state,tx,ty-1)) g.drawImage(_intAoSprite(0), px,py, TILE+1,TILE+1);
+    if(_intIsWall(state,tx+1,ty)) g.drawImage(_intAoSprite(1), px,py, TILE+1,TILE+1);
+    if(_intIsWall(state,tx,ty+1)) g.drawImage(_intAoSprite(2), px,py, TILE+1,TILE+1);
+    if(_intIsWall(state,tx-1,ty)) g.drawImage(_intAoSprite(3), px,py, TILE+1,TILE+1);
+  }
+  return true;
+}
+/* ---- drawInteriorFeature (E5): one depth-sorted interior sprite. Walls draw face + cap (cap is a
+   2nd blit one tile UP in the same entry, so vertical runs paint a continuous top plane and only
+   south-exposed faces show — classic oblique wall rendering). Props/pillars/setpieces are
+   bottom-anchored Y-sorted blits; overhangs span their footprint and fade when a unit passes under
+   (same _unitTileSet trick as tree canopies). Procedural fallback = flat dark slabs + rim, so the
+   whole system is playable with zero art. inf.mask/variant are stamped by applyInteriors (coord-
+   pure), never computed from time. ---- */
+function drawInteriorFeature(state, inf, ox, oy, dim){
+  const T=TILE, fw=inf.w||1, fh=inf.h||1, theme=inf.theme||0;
+  const px=inf.tx*T+ox, py=inf.ty*T+oy;
+  ctx.save();
+  if(dim) ctx.globalAlpha*=0.55;
+  if(inf.slot==='wall'){
+    // material = world-anchored surface sub-rect (kind 2 face / 3 cap) so texture runs CONTINUOUSLY
+    // along wall runs; the blob-indexed cell is just a transparent TRIM overlay (AO/rims/seams).
+    const surfOk = typeof INTERIOR_SURF_ATL!=='undefined' && INTERIOR_SURF_ATL.ready;
+    const idx = (typeof AUTOTILE!=='undefined') ? AUTOTILE.wallIndex(inf.mask|0) : 0;
+    const fs = surfOk ? interiorSurfRect(theme, 2, inf.tx, inf.ty) : null;
+    const cs = surfOk ? interiorSurfRect(theme, 3, inf.tx, inf.ty) : null;
+    if(fs){
+      ctx.drawImage(INTERIOR_SURF_IMG, fs[0],fs[1],fs[2],fs[3], px,py, T+1,T+1);
+      const fr=INTERIOR_WALL_ATL.ready ? interiorWallRect(theme, idx, false) : null;
+      if(fr) ctx.drawImage(INTERIOR_WALL_IMG, fr[0],fr[1],fr[2],fr[3], px,py, T+1,T+1);
+    } else {                                         // procedural bulkhead face: dark slab, shaded foot, thin rim
+      ctx.fillStyle='#232a35'; ctx.fillRect(px,py,T+1,T+1);
+      ctx.fillStyle='rgba(0,0,0,.4)'; ctx.fillRect(px,py+T*0.72,T+1,T*0.28+1);
+      ctx.strokeStyle='rgba(140,200,170,.16)'; ctx.lineWidth=1; ctx.strokeRect(px+0.5,py+0.5,T,T);
+    }
+    if(cs){
+      ctx.drawImage(INTERIOR_SURF_IMG, cs[0],cs[1],cs[2],cs[3], px,py-T, T+1,T+1);
+      const cr=INTERIOR_WALL_ATL.ready ? interiorWallRect(theme, idx, true) : null;
+      if(cr) ctx.drawImage(INTERIOR_WALL_IMG, cr[0],cr[1],cr[2],cr[3], px,py-T, T+1,T+1);
+    } else {                                         // procedural cap: lighter top plane
+      ctx.fillStyle='#313a49'; ctx.fillRect(px,py-T,T+1,T+1);
+      ctx.strokeStyle='rgba(255,255,255,.08)'; ctx.lineWidth=1; ctx.strokeRect(px+0.5,py-T+0.5,T,T);
+    }
+  } else if(inf.slot==='overhang'){
+    let under=false;                                 // unit below the catwalk → fade it (walk-under)
+    if(_unitTileSet.size) for(let ry=0;ry<fh && !under;ry++)
+      for(let rx=0;rx<fw;rx++) if(_unitTileSet.has((inf.ty+ry)*state.W+(inf.tx+rx))){ under=true; break; }
+    if(under) ctx.globalAlpha*=0.42;
+    const pr=INTERIOR_PROP_ATL.ready ? interiorPropRect(theme, INTERIOR_OVERHANG_BASE + (inf.variant||0)%INTERIOR_OVERHANG_N) : null;
+    if(pr) ctx.drawImage(INTERIOR_PROP_IMG, pr[0],pr[1],pr[2],pr[3], px,py, fw*T+1, fh*T+1);
+    else{                                            // procedural grated catwalk
+      ctx.fillStyle='rgba(24,29,37,.88)'; ctx.fillRect(px,py,fw*T+1,fh*T+1);
+      ctx.strokeStyle='rgba(0,0,0,.5)'; ctx.lineWidth=1; ctx.beginPath();
+      for(let gx=px+4;gx<px+fw*T;gx+=6){ ctx.moveTo(gx,py+2); ctx.lineTo(gx,py+fh*T-2); }
+      ctx.stroke();
+      ctx.strokeStyle='rgba(150,200,170,.15)'; ctx.strokeRect(px+0.5,py+0.5,fw*T,fh*T);
+    }
+  } else if(inf.slot==='setpiece'){
+    const dw=fw*T*1.25, dh=dw;                       // large landmark prop, bottom-anchored, spills up
+    const bx=px+fw*T/2, by=py+fh*T;
+    const sr=INTERIOR_SETPIECE_ATL.ready ? interiorSetpieceRect(theme, (inf.variant||0)%INTERIOR_SETPIECE_N) : null;
+    if(sr) ctx.drawImage(INTERIOR_SETPIECE_IMG, sr[0],sr[1],sr[2],sr[3], bx-dw/2, by-dh, dw, dh);
+    else{                                            // procedural monolith
+      ctx.fillStyle='#141920'; ctx.fillRect(bx-dw*0.35, by-dh*0.8, dw*0.7, dh*0.8);
+      ctx.fillStyle='#1e2530'; ctx.fillRect(bx-dw*0.35, by-dh*0.8, dw*0.7, dh*0.12);
+      ctx.strokeStyle='rgba(140,200,170,.2)'; ctx.lineWidth=1.5; ctx.strokeRect(bx-dw*0.35, by-dh*0.8, dw*0.7, dh*0.8);
+    }
+  } else {                                           // prop / pillar: single Y-sorted blit like a feature
+    const dw=Math.max(fw,1)*T*1.5, dh=dw;            // spill like buildings (footprint unchanged)
+    const bx=px+fw*T/2, by=py+fh*T;
+    const pr=INTERIOR_PROP_ATL.ready ? interiorPropRect(theme, (inf.variant||0)%INTERIOR_PROP_N) : null;
+    if(pr) ctx.drawImage(INTERIOR_PROP_IMG, pr[0],pr[1],pr[2],pr[3], bx-dw/2, by-dh, dw, dh);
+    else{                                            // procedural crate/pillar block
+      const wob=inf.slot==='pillar'?0.24:0.32;
+      ctx.fillStyle='#171c24'; ctx.fillRect(bx-dw*wob, by-dh*0.55, dw*wob*2, dh*0.55);
+      ctx.fillStyle='#222835'; ctx.fillRect(bx-dw*wob, by-dh*0.55, dw*wob*2, dh*0.1);
+      ctx.strokeStyle='rgba(255,255,255,.07)'; ctx.lineWidth=1; ctx.strokeRect(bx-dw*wob+0.5, by-dh*0.55+0.5, dw*wob*2, dh*0.55);
+    }
+  }
+  ctx.restore();
+}
+/* ---- INTERIOR_NEON (E6): additive FX-band glows on gameplay-relevant interior points — doors
+   brightest, setpieces (objectives) medium, emissive-tagged props dim. Reuses drawMegaNeonLayer
+   with the buildings' opts (noBreath+cacheGrad+tight aura) so gradients cache and nothing washes
+   the dark floor. Gates copy megas/buildings: QUAL>=2 drops the pass; below NEON_LOD_ZOOM only the
+   cheap core layer draws. Cosmetic-local (coord seed, no sim state) — safe on co-op clients. ---- */
+const INTERIOR_ACCENT  = [[74,238,96],[80,220,255],[255,70,110],[255,170,60]];   // tower / ship / clinic / industrial
+const INTERIOR_GRADE_T = [[104,124,106,0.14],[ 96,116,132,0.15],[118,128,118,0.13],[134,114, 92,0.14]];  // per-theme POST mult
+function drawInteriorNeon(state, ox,oy, x0,y0,x1,y1){
+  if(!state.interiorFeatures || !state.interiorFeatures.length) return;
+  if(typeof QUAL!=='undefined' && QUAL && QUAL.level>=2) return;
+  if(typeof drawMegaNeonLayer!=='function') return;
+  const z=state.zoom||1, full=z>=NEON_LOD_ZOOM;
+  for(const inf of state.interiorFeatures){
+    if(!(inf.slot==='door' || inf.slot==='setpiece' || inf.emissive)) continue;
+    const fw=inf.w||1, fh=inf.h||1;
+    if(inf.tx+fw<=x0 || inf.tx>=x1 || inf.ty+fh<=y0 || inf.ty>=y1) continue;   // view cull
+    const sx=Math.max(0, Math.min(state.W-1, inf.tx+(fw>>1))), sy=Math.max(0, Math.min(state.H-1, inf.ty+fh-1));
+    const si=sy*state.W+sx;
+    if(!state.explored[si]) continue;
+    const dim=state.visible[si]!==1;
+    const color=INTERIOR_ACCENT[(inf.theme||0)%4];
+    const dx=inf.tx*TILE+ox, dy=inf.ty*TILE+oy, dw=fw*TILE, dh=fh*TILE;
+    const ph={seed:(inf.tx*73+inf.ty), noBreath:true, cacheGrad:true, auraScale:0.42, coreScale:0.7};
+    const glows=[ inf.slot==='door'
+      ? {x:0.5,y:0.9,rx:0.42,ry:0.10,color,alpha:dim?0.35:0.85,kind:'bar'}                                  // threshold strip — the brightest light
+      : {x:0.5,y:0.55,rx:0.30,ry:0.22,color,alpha:(dim?0.22:0.5)*(inf.slot==='setpiece'?1:0.65),kind:'spot'} ];
+    if(full) drawMegaNeonLayer(state, ph, glows, dx,dy,dw,dh,'aura');
+    drawMegaNeonLayer(state, ph, glows, dx,dy,dw,dh,'core');
+  }
+}
 function drawTile(state,tx,ty,px,py){
   const i=ty*state.W+tx;
   const t=state.tiles[i], b=state.biome[i], v=state.variant[i];
@@ -1211,6 +1413,17 @@ function drawTile(state,tx,ty,px,py){
   // Water always uses the neighbour-aware renderer (never a single atlas/oasis
   // blit), so lakes show open water inside and a real shoreline at the edge.
   if(t===T_WATER){ drawWaterTile(state,tx,ty,b,v,px,py); return; }
+
+  // ---- interior biome: autotiled floor plane (atlas) or flat-dark procedural; walls/props are
+  //      depth-sorted interiorFeatures, so the tile itself never draws rock/tree art. ----
+  if(b===B_INTERIOR){
+    if(drawInteriorFloor(ctx, state, i, tx, ty, px, py)) return;
+    const P = BIOME_PAL[B_INTERIOR];
+    ctx.fillStyle = (t===T_DIRT) ? P.dirt : (v>0.5 ? P.b : P.a);
+    ctx.fillRect(px,py,TILE+1,TILE+1);
+    drawFloorDeco(state,B_INTERIOR,v,px,py);
+    return;
+  }
 
   // ---- atlas path: each terrain maps to one cell that includes its own ground,
   //      blitted as the whole 32px tile (1px overscan to hide seams). The single
@@ -1267,6 +1480,16 @@ function drawFloorDeco(state,b,v,px,py){
         ctx.moveTo(px+3,py+v*TILE); ctx.lineTo(px+TILE*0.5,py+TILE*0.5);
         ctx.lineTo(px+TILE-3,py+(1-v)*TILE); ctx.stroke();
       } else if(v<0.2){ ctx.fillStyle='rgba(255,255,255,.03)'; ctx.fillRect(px+6,py+6,4,4); }
+      break;
+    }
+    case B_INTERIOR: {                              // panel seams + rivets/scuffs (static — geometry never animates)
+      ctx.strokeStyle='rgba(255,255,255,.05)'; ctx.lineWidth=1;
+      ctx.beginPath();
+      if(v>0.5){ ctx.moveTo(px+0.5,py); ctx.lineTo(px+0.5,py+TILE); }
+      else     { ctx.moveTo(px,py+0.5); ctx.lineTo(px+TILE,py+0.5); }
+      ctx.stroke();
+      if(v>0.88){ ctx.fillStyle='rgba(150,200,170,.12)'; ctx.fillRect(px+TILE/2-1,py+TILE/2-1,2,2); }   // dim rivet glint
+      else if(v<0.10){ ctx.fillStyle='rgba(0,0,0,.16)'; ctx.fillRect(px+5,py+5,TILE-10,TILE-10); }      // worn panel inset
       break;
     }
     default: {                                      // grass / mountain speckle

@@ -59,7 +59,8 @@ const FEAT_BLOCK_FROM = FEAT_SIZE - (FEAT_SIZE>>1);   // first blocked row (rows
    A biome reskins the floor + features of a region; terrain type still
    controls gameplay. Water/Mountain biomes also bias terrain generation so
    they read as real seas / impassable ranges. */
-const B_GRASS=0, B_MOUNTAIN=1, B_WATER=2, B_TECH=3, B_DESERT=4, B_ICE=5, B_VOLCANIC=6;
+const B_GRASS=0, B_MOUNTAIN=1, B_WATER=2, B_TECH=3, B_DESERT=4, B_ICE=5, B_VOLCANIC=6, B_INTERIOR=7;
+// B_INTERIOR is authored-only (cfg.interiors / paint / terrain.biomes) — never in BIOME_KINDS.
 const BIOME_KINDS = [B_MOUNTAIN,B_WATER,B_TECH,B_DESERT,B_ICE,B_VOLCANIC];
 // floor palette: a/b = two shades alternated by per-tile variant; dirt = worn-patch tint.
 // DARK / devastated cyberpunk tones — matches the generated atlas; used as the
@@ -72,9 +73,10 @@ const BIOME_PAL = {
   [B_DESERT]:   { a:'#3f3526', b:'#4a4030', dirt:'#342c20' },
   [B_ICE]:      { a:'#2c3742', b:'#37454f', dirt:'#283440' },
   [B_VOLCANIC]: { a:'#16110e', b:'#201913', dirt:'#14100d' },
+  [B_INTERIOR]: { a:'#0c0e12', b:'#12151b', dirt:'#0a0c10' },
 };
 // flat colors for the minimap floor, indexed by biome (dark, matches the atlas)
-const BIOME_MINI = ['#1c2a1e','#24262b','#0c2230','#14181f','#3f3526','#2c3742','#16110e'];
+const BIOME_MINI = ['#1c2a1e','#24262b','#0c2230','#14181f','#3f3526','#2c3742','#16110e','#0c0e12'];
 // Per-biome color grade (P2 post-stack — see docs/terrain-render-revamp.md §5C/§6). `mult`=[r,g,b,alpha]:
 // a full-screen MULTIPLY tint that cools/desaturates the frame toward this biome's mood. Multiply can only
 // DARKEN/tint (all channels <255) — it never brightens. Alpha kept small so units stay legible (the §11
@@ -87,6 +89,7 @@ const BIOME_GRADE = {
   [B_DESERT]:   { mult:[150,128, 92,0.12] },   // grimy ochre
   [B_ICE]:      { mult:[120,140,162,0.14] },   // dirty blue-grey (NOT white)
   [B_VOLCANIC]: { mult:[150, 92, 70,0.14] },   // near-black basalt, ember cast
+  [B_INTERIOR]: { mult:[110,118,130,0.14] },   // cool graphite (per-theme override lands with the atlases)
 };
 
 /* ---- Procedural terrain parameters (Whittaker-style: elevation + climate) ----
@@ -96,7 +99,7 @@ const BIOME_GRADE = {
    A map may override any of these via its `terrain:{}` block; omitted fields
    fall back to TEMPERATE GRASSLAND below. `biomes` is the allowed land palette
    ('grass','desert','ice','tech','volcanic'); climates outside it are remapped. */
-const CLIMATE = { grass:B_GRASS, desert:B_DESERT, ice:B_ICE, tech:B_TECH, volcanic:B_VOLCANIC };
+const CLIMATE = { grass:B_GRASS, desert:B_DESERT, ice:B_ICE, tech:B_TECH, volcanic:B_VOLCANIC, interior:B_INTERIOR };
 const TERRAIN_DEFAULTS = {
   // Coverage is set by QUANTILE (target fraction of the map), not an absolute
   // elevation cutoff, so water/mountain amounts stay consistent across seeds.

@@ -29,6 +29,11 @@
     lava  : { ch:'v', tile:T_WATER, biome:B_VOLCANIC },  // lava = water tile + volcanic biome (render picks magma ramp)
     rock  : { ch:'r', feat:'rock' },
     tree  : { ch:'e', feat:'tree' },
+    // interior tileset (docs/interior-tilesets.md E7): freeform hand-painted rooms. 'W' = an interior
+    // WALL as blocking terrain (T_ROCK on the interior biome — render draws the autotiled bulkhead
+    // via buildInteriorData's grid scan, map.js); 'i' = passable interior floor. Case-sensitive ≠ 'w'.
+    intfloor : { ch:'i', tile:T_GRASS, biome:B_INTERIOR },
+    intwall  : { ch:'W', tile:T_ROCK,  biome:B_INTERIOR },
     // ERASE (editor Erase tool): drop whatever tree/rock FEATURE owns this tile and leave passable floor
     // with the underlying biome untouched — so removing a procedural tree doesn't repaint a green grass
     // patch into a desert/snow/tech locale. Not exposed in the paint-target dropdown; only the Erase tool

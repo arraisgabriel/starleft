@@ -1061,7 +1061,7 @@ Weaponize your buzzwords, circle back, and disrupt MegaCorp into bankruptcy. The
      on XV.5 + XVI (captureHeroes rebuilds carryover from on-field heroes, so a duel-recruit can't be
      pushed onto carryover directly — cfg.heroes is the idiomatic first-appearance, like Nino on Ep VIII).
      vetCarryOverride:7 freezes the carry cap (vetCarryCountFor) so a maxed roster never exceeds HQ supply.
-     Temp end of shipped content: XVI carries toBeContinued → the "TO BE CONTINUED" card instead of the IPO
+     Temp end of shipped content: XVII (appended after the villain entries) carries toBeContinued → the "TO BE CONTINUED" card instead of the IPO
      (no finale:true anywhere now; the real finale, Tusk-in-REX, lands when the rest of Arc 3 ships). */
   {
     name:'XIV — THE RECALL NOTICE',
@@ -1225,7 +1225,7 @@ Weaponize your buzzwords, circle back, and disrupt MegaCorp into bankruptcy. The
     // HQ (cfg.lostBases → reclaim) to extract. The EX-TERMINATOR is an escapable PURSUER (event-spawned,
     // NO cfg.villain → victory stays quest-driven). toBeContinued → onVictory's cliffhanger card.
     name:'XVI — THE SEVERANCE PACKAGE',
-    isVillain:false, displayEp:'XVI', vetCarryOverride:7, toBeContinued:true,
+    isVillain:false, displayEp:'XVI', vetCarryOverride:7,   // toBeContinued moved to XVII (the new end of shipped content)
     introCutscene:'XVI_CRASH_WAKE',   // heroes come to in the downed bomber (mapCutsceneTick, state.time<4s)
     reachCutscene:{ name:'XVI_FRONT_WRECK', at:{ x:52, y:34 }, radius:7 },   // discover the FRONT-half wreck + the dead crew
     enemyName:'A&O', enemyFaction:'ao', heroEscape:true, noCarryVets:true,   // noCarryVets: the veteran roster does NOT deploy (hero-only) — they rode the FRONT half; the dead 10% lie by it
@@ -1352,5 +1352,102 @@ Weaponize your buzzwords, circle back, and disrupt MegaCorp into bankruptcy. The
     villainCutscene:'EXTERM_ARRIVAL_1',          // his nameless arrival — fires when a unit gets NEAR him (not on map load)
     lakes:[], rockClusters:[ {x:16,y:11,n:8}, {x:24,y:20,n:6} ], forests:[],
     goldNodes:[ {x:6,y:26,amt:1500}, {x:4,y:20,amt:1300}, {x:11,y:27,amt:1300} ],
+  },
+  {
+    /* ================= EPISODE XVII — THE GROWTH TEAM (arc-3, docs/story-next-steps-ceo-arc.md §5) ====
+       The FIRST INTERIOR episode (docs/interior-tilesets.md M1): the whole map is INSIDE an A&O tower
+       floor — terrain:{biomes:['interior']} + cfg.interiors rooms (theme 'tower', js/map.js
+       applyInteriors) form the Growth & Velocity glass farm: flanking pens/server rows off a central
+       lane, and ZECA's cell at the north end. Corridor infiltration in the Ep X / EXTRACTION CLAUSE
+       mold: no economy, standing guard squads, scripted security events; win = escort NINO to the
+       cell (canon win-verb "Nino reaches the cell") — freeCaptives (core.js) keys on Nino, so
+       reaching the cell frees Zeca with zero new code. Zeca joins the hero track via captureHeroes;
+       his OVERCLOCK kit (aura + Crunch burst, story doc §3) is SEPARATE code work — this map ships
+       the rescue and the recruitment. Appended AFTER the villain entries (array position ≠ play
+       order: villainNextLinear skips isVillain maps, so XVI at 22 routes here). toBeContinued rides
+       this map now — the moving end-of-shipped-content marker (was XVI's). ============================ */
+    name:'XVII — THE GROWTH TEAM',
+    isVillain:false, displayEp:'XVII', vetCarryOverride:7, toBeContinued:true,
+    enemyName:'A&O', enemyFaction:'ao',
+    aggression:1.6, startGold:0, startWorkers:0, startSoldiers:5, startBarracks:false,
+    graceTime:9999, waveTimer:9999,              // corridor infiltration — pressure is guards + scripted beats, not waves
+    noEconRebalance:true,                        // no economy inside the tower — nothing for T2-5 to rebalance
+    interiorTheme:'tower',                       // interior-tileset POST grade (render.js INTERIOR_GRADE_T)
+    crawl:{ episode:'EPISODE XVII', title:'THE GROWTH TEAM',
+      text:'Rust read his own file off a dead man\'s chip, and the thread inside it runs to a signature — a managing partner nobody at A&O has ever met, signed under every purge order in the stack. You cannot reach him yet. But you found what his clock runs on.\n\nDown in a glass farm called Growth & Velocity, the purge is a person. One intern ships faster than the algorithm can bill, so A&O never let him leave — his throughput is the engine zeroing your dead, quarter after quarter, and the manifests say management keeps this one close. Personally close. Nobody on the floor asks why.\n\nThere is no funding inside the tower and no factory at your back. Walk Nino through the open plan — past the pens, past the server rows, past everyone paid to stand between a resource and the door — to the desk they chained him to. Free the fastest hands in the wasteland, and point them at the clock....',
+      summary:`Rust's stolen file leads inside A&O's own floors: a glass farm called Growth & Velocity, where the purge clock runs on one caged intern who ships faster than the algorithm can bill. No funding and no factory inside the tower — only the crew you walk in with. Walk Nino through the open plan to the cell, and free the fastest hands in the wasteland.` },
+    objective:'A&O\'s purge clock runs on a caged intern deep in the Growth & Velocity floor. Walk NINO through the open plan to the cell and free ZECA — or raze A&O\'s floor-security office and force every door on the floor. If Nino falls, the rescue dies with him.',
+    winCondition:{ type:'escort', vipHero:'Nino', to:{x:24,y:9}, radius:3 },
+    quests:[
+      { id:'escort', text:'Walk NINO to the cell at the north end of the floor', type:'escort', required:true },
+      { id:'free',   text:'Free ZECA — the intern who ships faster than the algorithm', type:'freeCaptives', count:1, reward:200 },
+      { id:'raze',   text:'Or raze A&O\'s floor-security office and force the doors', type:'razeAll', winsAlone:true, reward:75 },
+      { id:'nobody', text:'Lose nobody on the floor', type:'maxUnitsLost', count:2, reward:100 },
+    ],
+    w:48, h:96, seed:17017,
+    player:{ x:24, y:90 },
+    // the inside of the tower: every tile is interior floor; the rooms below give it architecture
+    terrain:{ biomes:['interior'], seaFrac:0, mtnFrac:0, forest:0 },
+    // the Growth & Velocity floor plan (pre-scale rects; walls = blocking terrain, doors default
+    // mid-south + whatever the reachability carve cuts). Themes/templates: js/map.js INT_ROOM_TEMPLATES.
+    interiors:[
+      { tx:18, ty:5,  w:13, h:10, theme:'tower', template:'cell'    },   // ZECA's cell — the holo-desk they chained him to
+      { tx:3,  ty:24, w:16, h:12, theme:'tower', template:'clinic'  },   // server row west — the monolith stacks
+      { tx:29, ty:24, w:16, h:12, theme:'tower', template:'reactor' },   // the Growth engine — corpse-to-product rig
+      { tx:3,  ty:48, w:16, h:12, theme:'tower', template:'test'    },   // open-plan pen west (catwalk overhead)
+      { tx:29, ty:48, w:16, h:12, theme:'tower', template:'altar'   },   // A&O's cold forge — the altar they built first
+      { tx:14, ty:70, w:20, h:11, theme:'tower'                     },   // intake hall — the last room before the lobby
+    ],
+    captives:[
+      { x:24, y:8, type:'worker', hero:true, name:'Zeca', level:5,
+        dossier:{ first:'Zeca', last:'Okonkwo', home:'the Lagos-Overcity flood terraces',
+          family:'raised an orphan — a managing partner\'s "special intern", kept close since childhood; nobody on the floor asks why',
+          trauma:'shipping six quarters in one and being paid in exposure and a memorial slot',
+          dream:'to outrun the clock they built into him',
+          crime:'being faster than the algorithm — so they never let him leave' } },
+    ],
+    // standing guard squads up the lane (map.js comp format) — escalating like the Ep X gauntlet
+    guards:[
+      { x:24, y:78, comp:[['soldier',3],['ranger',2]] },                            // intake hall door
+      { x:24, y:62, comp:[['soldier',2],['hustler',2],['ranger',2]] },              // between the pens
+      { x:18, y:54, comp:[['ranger',3],['recruiter',1]] },                          // pen west door
+      { x:30, y:54, comp:[['soldier',3],['lobbyist',1]] },                          // forge door — first sniper
+      { x:24, y:38, comp:[['ranger',2],['soldier',2],['auditor',1],['recruiter',1]] }, // server rows — siege-wall + medic
+      { x:24, y:20, comp:[['hustler',3],['soldier',2],['lobbyist',1]] },            // last line below the cell
+      { x:24, y:13, comp:[['ranger',2],['founder',1],['recruiter',1]] },            // the cell ring — a Founder-Mech turnkey
+    ],
+    events:[
+      { atTime:90,  toast:'Badge flag: unscheduled headcount on the floor. A&O floor security is converging.', spawnSquad:{ comp:[['hustler',3]] }, at:{x:24,y:74} },
+      { atTime:200, toast:'They know which desk you are walking toward. MOVE.', spawnSquad:{ comp:[['soldier',3],['ranger',2]] }, at:{x:24,y:44} },
+    ],
+    enemies:[ {x:40,y:14, defenders:4, light:true} ],   // the floor-security office (razeAll winsAlone alt-win)
+    goldNodes:[ {x:5,y:91,amt:1200} ],                  // one skimmed payroll node by the lobby — emergency econ only
+    lakes:[], rockClusters:[], forests:[],
+    // the squad — re-listed so all three are guaranteed present regardless of prior deaths (deduped by
+    // heroId against the carryover, so a survivor isn't doubled). Same trio and owners as Ep XVI.
+    heroes:[
+      { name:'Nino', type:'lobbyist', sprite:'nino', level:11, dossier:{
+        first:'Nino', last:'',
+        home:'the Glitch Sprawl',
+        rel:'crew', relName:'the first team',
+        family:"Nino ran the lobby in the company's first life — bought the votes, wrote the laws, and watched every name he hired end up on the memorial wall.",
+        trauma:'being three streets out when the blast turned the campus into a column of light',
+        dream:'to see one thing he helped build outlast the money that funded it',
+        crime:'authoring the legislation that made a hundred rivals simply vanish, and only now losing sleep over it' } },
+      { name:'Rust', type:'founder', sprite:'rust', level:6, owner:'p2', dossier:{   // CO-OP: p2's hero
+        first:'Pedro', last:'"Rust"',
+        home:'the Detroit-Reclamation rustbelt',
+        rel:'crew', relName:'the old line crew',
+        family:"Pedro came up tooling exosuits on a union floor in the Reclamation — the kind of shop where the whole crew signed every chassis — until A&O bought the floor and the signatures with it.",
+        trauma:'the review that booked him a DEPRECIATED ASSET and wrote him off the quarter he turned fifty, scrapped beside the machines he tooled',
+        dream:'to own one thing outright that no quarterly review can ever repossess',
+        crime:'welding the foreclosure-mech chassis that now walks on the people he came up with' } },
+      { name:'Biba', type:'recruiter', sprite:'biba', level:12, owner:'p2', dossier:{   // CO-OP: p2's hero
+        first:'Biba', home:'the flooded arcologies of Lagos-2',
+        family:'raised six younger siblings on relief credits',
+        trauma:'watched her first squad triaged out of existence by an algorithm',
+        dream:'to keep one team alive long enough to age',
+        crime:'designing the chip A&O built to chase immortality — then crippling it when she saw who would pay' } },
+    ],
   },
 ];

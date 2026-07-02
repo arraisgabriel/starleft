@@ -61,7 +61,7 @@ catch (e) { console.error('✗ failed to evaluate js/config.js:', e.message); pr
 if (!Array.isArray(MAPS)) { console.error('✗ MAPS array not found in js/config.js'); process.exit(1); }
 
 /* ---- helpers ---- */
-const VALID_BIOMES = new Set(['grass', 'desert', 'ice', 'tech', 'volcanic']);
+const VALID_BIOMES = new Set(['grass', 'desert', 'ice', 'tech', 'volcanic', 'interior']);   // interior = the authored interior tileset (docs/interior-tilesets.md, CLIMATE.interior)
 const NUM_WORDS = ['zero','one','two','three','four','five','six','seven','eight','nine','ten','eleven','twelve','thirteen','fourteen','fifteen','sixteen'];
 function toRoman(n) {
   const t = [[1000,'M'],[900,'CM'],[500,'D'],[400,'CD'],[100,'C'],[90,'XC'],[50,'L'],[40,'XL'],[10,'X'],[9,'IX'],[5,'V'],[4,'IV'],[1,'I']];
@@ -143,9 +143,11 @@ for (let i = 0; i < MAPS.length; i++) {
     // BOSS arenas have NO enemy bases by design — the boss is the encounter (cfg.villain → villains.js).
     // This holds for appended VILLAIN interludes AND for LINEAR boss episodes (e.g. Ep XIII = the REX
     // duel: a non-villain map carrying `villain:{…}` + `finale`). Appended SIDE MISSIONS instead win by
-    // an alt verb (cfg.winCondition: survive / escort / reachAndHold — core.js checkAltWin). Any of
-    // {enemy bases, a villain block, a winCondition} is a valid win source.
-    if (!bases.length && !m.isVillain && !m.villain && !m.winCondition) err(i, 'no win source — need `enemies:[...]`, a `villain:{ id, x, y }` duel, or a `winCondition:{type,…}`');
+    // an alt verb (cfg.winCondition: survive / escort / reachAndHold — core.js checkAltWin). REQUIRED
+    // quests are ALSO a win source (js/quests.js drives victory on every map — e.g. Ep XVI heroEscape
+    // wins on its required reclaimOutposts/collectMemories quests with no bases/villain/winCondition).
+    const requiredQuest = Array.isArray(m.quests) && m.quests.some(q => q && q.required);
+    if (!bases.length && !m.isVillain && !m.villain && !m.winCondition && !requiredQuest) err(i, 'no win source — need `enemies:[...]`, a `villain:{ id, x, y }` duel, a `winCondition:{type,…}`, or a required quest');
     else if (m.isVillain && !m.villain && !m.winCondition) err(i, 'gated map needs a `villain:{ id, x, y }` block or a `winCondition:{type,…}`');
     if (m.winCondition){
       const wc = m.winCondition, types = ['survive', 'escort', 'reachAndHold', 'razeAll'];

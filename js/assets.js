@@ -188,6 +188,78 @@ function waterSpriteFor(biome, slot, frame){
   return [(base+(frame||0))*WATER_CELL, r*WATER_CELL, WATER_CELL, WATER_CELL];
 }
 
+/* ---- Optional INTERIOR atlases (docs/interior-tilesets.md E3) — the four authored interior themes
+   (Dark Tower / Spacecraft / Clinic / Industrial) as autotiled floors, blob-47 walls+caps, props,
+   decals, setpieces and emissive stamps. Same resilience contract as every terrain atlas: all
+   optional:true, INTERIOR_*_READY stays false when a webp is missing and the renderer falls back to
+   procedural flat-dark interiors. Built by _dev/gen/gen_interiors.mjs + slice_interiors.py; the
+   Python slicer's grid consts MUST mirror the layout consts below (see its emitted manifest).
+   Theme ids are rows: */
+const INT_THEME = { tower:0, ship:1, clinic:2, industrial:3 };
+const INTERIOR_THEME_N = 4;
+function _intAtlas(file, tag){
+  const img = new Image(); const st = { img, ready:false };
+  img.onload = ()=>{ st.ready = true; };
+  img.onerror = ()=>{ st.ready = false; };
+  LOADER.register(img, ASSET_BASE + 'atlas/' + file, { tag:'atlas:'+tag, tier:LOADER.T_GAMEPLAY, weight:2, optional:true });
+  return st;
+}
+const INTERIOR_SURF_ATL     = _intAtlas('interior_surface.webp',  'interior-surface');
+const INTERIOR_WALL_ATL     = _intAtlas('interior_wall.webp',     'interior-wall');
+const INTERIOR_PROP_ATL     = _intAtlas('interior_prop.webp',     'interior-prop');
+const INTERIOR_DECAL_ATL    = _intAtlas('interior_decal.webp',    'interior-decal');
+const INTERIOR_SETPIECE_ATL = _intAtlas('interior_setpiece.webp', 'interior-setpiece');
+const INTERIOR_EMISSIVE_ATL = _intAtlas('interior_emissive.webp', 'interior-emissive');
+const INTERIOR_SURF_IMG = INTERIOR_SURF_ATL.img, INTERIOR_WALL_IMG = INTERIOR_WALL_ATL.img,
+      INTERIOR_PROP_IMG = INTERIOR_PROP_ATL.img, INTERIOR_DECAL_IMG = INTERIOR_DECAL_ATL.img,
+      INTERIOR_SETPIECE_IMG = INTERIOR_SETPIECE_ATL.img, INTERIOR_EMISSIVE_IMG = INTERIOR_EMISSIVE_ATL.img;
+// Layout. SURFACE (the revamp's core): a 4×4 grid of 1024² MACRO material regions — surface id
+// s = theme*4 + kind (0 floorA, 1 floorB, 2 wallface, 3 wallcap), col s%4 row s>>2. The renderer
+// samples a 64px SUB-RECT per tile anchored to WORLD coords (tx%16, ty%16), so the texture's large
+// panel structure spans 16×16 tiles (period 512 world px) instead of being crushed into every tile
+// — pure function of coords → co-op/save/chunk-bake identical. wall: rows theme*2+{0 face,1 cap},
+// col = blob-47 index in AUTOTILE.WALL_TILES order — cells are TRIM OVERLAYS on transparent (foot
+// AO / rims / accent seams); the material underneath is the world-anchored wallface/wallcap surface.
+// prop: row = theme; cols 0..7 props, 8..11 overhangs. decal: row = theme, 8 cols of 256 (drawn
+// 2.5–4 tiles wide by bakeDecals). setpiece: row = theme, 4 large cols. emissive: optional polish.
+const INTERIOR_CELL = 256, INTERIOR_TILE_CELL = 128, INTERIOR_SETPIECE_CELL = 512, INTERIOR_DECAL_CELL = 256, INTERIOR_EMISSIVE_CELL = 128;
+const INTERIOR_SURF_CELL = 1024, INTERIOR_SURF_PERIOD = 16, INTERIOR_SURF_SRC = INTERIOR_SURF_CELL/INTERIOR_SURF_PERIOD;   // 64px of source per tile
+const INTERIOR_PROP_N = 8, INTERIOR_OVERHANG_BASE = 8, INTERIOR_OVERHANG_N = 4,
+      INTERIOR_DECAL_N = 8, INTERIOR_SETPIECE_N = 4, INTERIOR_EMISSIVE_N = 8;
+function interiorWallCols(){ return (typeof AUTOTILE!=='undefined') ? AUTOTILE.WALL_N : 47; }
+// World-anchored 64px sub-rect of a surface region for tile (tx,ty). kind: 0 floorA, 1 floorB,
+// 2 wallface, 3 wallcap. THE anti-patchwork primitive — no variants, no rotation, just the texture.
+function interiorSurfRect(theme, kind, tx, ty){
+  if(!INTERIOR_SURF_ATL.ready) return null;
+  const s = theme*4 + kind, P = INTERIOR_SURF_PERIOD, S = INTERIOR_SURF_SRC;
+  const cx = ((tx%P)+P)%P, cy = ((ty%P)+P)%P;
+  return [(s%4)*INTERIOR_SURF_CELL + cx*S, (s>>2)*INTERIOR_SURF_CELL + cy*S, S, S];
+}
+function interiorWallRect(theme, idx, cap){    // idx = blob-47 index; cap truthy → cap row (TRIM overlay cell)
+  if(!INTERIOR_WALL_ATL.ready) return null;
+  const n = interiorWallCols(), c = ((idx%n)+n)%n, r = theme*2 + (cap?1:0);
+  return [c*INTERIOR_TILE_CELL, r*INTERIOR_TILE_CELL, INTERIOR_TILE_CELL, INTERIOR_TILE_CELL];
+}
+function interiorPropRect(theme, idx){         // idx 0..9 props, 10..15 overhangs
+  if(!INTERIOR_PROP_ATL.ready) return null;
+  return [(idx|0)*INTERIOR_CELL, theme*INTERIOR_CELL, INTERIOR_CELL, INTERIOR_CELL];
+}
+function interiorDecalRect(theme, idx){
+  if(!INTERIOR_DECAL_ATL.ready) return null;
+  const c = ((idx%INTERIOR_DECAL_N)+INTERIOR_DECAL_N)%INTERIOR_DECAL_N;
+  return [c*INTERIOR_DECAL_CELL, theme*INTERIOR_DECAL_CELL, INTERIOR_DECAL_CELL, INTERIOR_DECAL_CELL];
+}
+function interiorSetpieceRect(theme, idx){
+  if(!INTERIOR_SETPIECE_ATL.ready) return null;
+  const c = ((idx%INTERIOR_SETPIECE_N)+INTERIOR_SETPIECE_N)%INTERIOR_SETPIECE_N;
+  return [c*INTERIOR_SETPIECE_CELL, theme*INTERIOR_SETPIECE_CELL, INTERIOR_SETPIECE_CELL, INTERIOR_SETPIECE_CELL];
+}
+function interiorEmissiveRect(theme, idx){
+  if(!INTERIOR_EMISSIVE_ATL.ready) return null;
+  const c = ((idx%INTERIOR_EMISSIVE_N)+INTERIOR_EMISSIVE_N)%INTERIOR_EMISSIVE_N;
+  return [c*INTERIOR_EMISSIVE_CELL, theme*INTERIOR_EMISSIVE_CELL, INTERIOR_EMISSIVE_CELL, INTERIOR_EMISSIVE_CELL];
+}
+
 /* ---- Building sprites (dark cyberpunk-Hades, animated like the mega-sprites) ----
    Every building is a 9-frame strip (player cyan / enemy red), bottom-anchored and
    blitted aspect-preserved so it "stands" on its footprint and overhangs upward;

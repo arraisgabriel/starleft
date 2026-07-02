@@ -66,6 +66,10 @@ function scaleCfg(cfg){
   if(cfg.villain){ const vl=Array.isArray(cfg.villain)?cfg.villain:[cfg.villain]; c.villain = vl.map(v=>Object.assign({}, v, { x:S(v.x), y:S(v.y) })); }   // boss spawn points (villains.js)
   // thickets: scale only the geometry (x,y,w,h); density/mix/trail are unitless
   if(cfg.thickets)     c.thickets     = cfg.thickets.map(t=>Object.assign({},t,{x:S(t.x),y:S(t.y),w:S(t.w),h:S(t.h)}));
+  // interior room stamps: scale the rect + any authored door tiles; theme/template are unitless
+  if(cfg.interiors)    c.interiors    = cfg.interiors.map(r=>Object.assign({}, r,
+    { tx:S(r.tx), ty:S(r.ty), w:S(r.w), h:S(r.h) },
+    r.doors ? { doors:r.doors.map(d=>({ x:S(d.x), y:S(d.y) })) } : {}));
   // T2-1 alt win verbs: the target tile + radius live in map-config tiles → scale with everything else
   if(cfg.winCondition){ const w=Object.assign({}, cfg.winCondition);
     if(w.to) w.to=pt(w.to); if(w.at) w.at=pt(w.at);
@@ -452,6 +456,136 @@ function applyPaintLayer(state, cfg, targets){
   return true;
 }
 
+/* ---- INTERIOR ROOMS (docs/interior-tilesets.md E7): cfg.interiors = [{tx,ty,w,h,theme,template,doors?}]
+   stamps a walled room onto the generated terrain. Walls are BLOCKING TERRAIN TILES (T_ROCK on a
+   B_INTERIOR biome tile) so pathing / blocked[] / save / reachability-carve all work through the
+   existing terrain machinery with zero new sim state; render draws them as autotiled bulkheads via
+   state.interiorFeatures (E5). Split in two on purpose:
+   - applyInteriors(state,cfg)   — MUTATES the grid (newMap only, pre-re-carve). Never on load: the
+     serialized tiles[] already carry the final carved walls, and re-stamping would seal carved doors.
+   - buildInteriorData(state,cfg)— derives the RENDER data (interiorMat/interiorFeatures/interiorTheme)
+     from the FINAL grid + cfg. Runs in newMap after the carve AND from the save loader (E8); pure +
+     deterministic (row-major scan, AUTOTILE hash picks) so host/client/save agree exactly. ---- */
+const INT_ROOM_TEMPLATES = {
+  test:    { pillars:true, overhang:true },
+  altar:   { pillars:true, setpiece:{ w:3, h:2, variant:0 } },    // the GRAAL forge/altar
+  reactor: { setpiece:{ w:3, h:2, variant:1 } },                  // tower row: the corpse-to-product rig
+  clinic:  { setpiece:{ w:2, h:2, variant:2 } },                  // tower row: the server monolith cluster
+  cell:    { setpiece:{ w:2, h:2, variant:3 } },                  // tower row: the holo-desk (Zeca's cell, Ep XVII)
+};
+function _intThemeId(t){
+  if(typeof t==='number') return t;
+  return (typeof INT_THEME!=='undefined' && INT_THEME[t]!=null) ? INT_THEME[t] : 0;
+}
+function _intRoomRect(state, r){
+  const x0=Math.max(0, r.tx|0), y0=Math.max(0, r.ty|0);
+  const x1=Math.min(state.W, (r.tx|0)+(r.w|0)), y1=Math.min(state.H, (r.ty|0)+(r.h|0));
+  return (x1-x0>=3 && y1-y0>=3) ? {x0,y0,x1,y1} : null;
+}
+function _intSetpieceRect(rect, sp){
+  const sx=((rect.x0+rect.x1)>>1)-(sp.w>>1), sy=((rect.y0+rect.y1)>>1)-(sp.h>>1);
+  return { sx, sy, sw:sp.w, sh:sp.h };
+}
+function applyInteriors(state, cfg){
+  const rooms=cfg.interiors||[];
+  if(!rooms.length) return false;
+  const W=state.W, drop=new Set();
+  if(!state.interiorMat) state.interiorMat=new Uint8Array(W*state.H);
+  for(const r of rooms){
+    const rect=_intRoomRect(state, r); if(!rect) continue;
+    const {x0,y0,x1,y1}=rect, theme=_intThemeId(r.theme);
+    for(let y=y0;y<y1;y++)for(let x=x0;x<x1;x++){
+      const i=y*W+x; drop.add(i);
+      state.biome[i]=B_INTERIOR;
+      state.interiorMat[i]=theme*2+1;                                  // material A (value = mat+1; 0 = exterior)
+      state.tiles[i]=(x===x0||x===x1-1||y===y0||y===y1-1)?T_ROCK:T_GRASS;   // perimeter wall / passable floor
+    }
+    // door gaps: authored post-scale tiles, else a 2-wide gap mid-south
+    const doors=(r.doors&&r.doors.length)?r.doors:[{x:((x0+x1)>>1)-1,y:y1-1},{x:(x0+x1)>>1,y:y1-1}];
+    for(const d of doors){ const dx=d.x|0, dy=d.y|0;
+      if(dx>=x0&&dx<x1&&dy>=y0&&dy<y1) state.tiles[dy*W+dx]=T_GRASS; }
+    const tpl=INT_ROOM_TEMPLATES[r.template]||null;
+    if(tpl&&tpl.pillars&&(x1-x0)>=8&&(y1-y0)>=8)                       // inset corner columns (isolated wall tile = the blob "pillar" shape)
+      for(const p of [[x0+2,y0+2],[x1-3,y0+2],[x0+2,y1-3],[x1-3,y1-3]]) state.tiles[p[1]*W+p[0]]=T_ROCK;
+    if(tpl&&tpl.setpiece){                                             // blocking centre footprint; the sprite entry lands in buildInteriorData
+      const s=_intSetpieceRect(rect, tpl.setpiece);
+      for(let y=s.sy;y<s.sy+s.sh;y++)for(let x=s.sx;x<s.sx+s.sw;x++)
+        if(x>x0&&x<x1-1&&y>y0&&y<y1-1) state.tiles[y*W+x]=T_ROCK;
+    }
+  }
+  if(drop.size && typeof dropFeaturesAt==='function') dropFeaturesAt(state, drop);   // no tree canopy inside a room
+  for(const i of drop){ if(state.feat) state.feat[i]=0; state.blocked[i]=baseBlocked(state,i); }
+  return true;
+}
+function buildInteriorData(state, cfg){
+  const rooms=cfg.interiors||[];
+  const painted=!!(cfg.paint && /(^|;|\|)[iW]:/.test(cfg.paint));
+  const wholeMap=cfgLandBiome(cfg)===B_INTERIOR;
+  if(!rooms.length && !painted && !wholeMap){ state.interiorFeatures=[]; return; }
+  const W=state.W, H=state.H, AT=(typeof AUTOTILE!=='undefined')?AUTOTILE:null;
+  if(!state.interiorMat) state.interiorMat=new Uint8Array(W*H);
+  const feats=[], skip=new Set(), roomRects=[];
+  let theme0=null;
+  for(const r of rooms){
+    const rect=_intRoomRect(state, r); if(!rect) continue;
+    roomRects.push(rect);
+    const {x0,y0,x1,y1}=rect, theme=_intThemeId(r.theme);
+    if(theme0==null) theme0=theme;
+    for(let y=y0;y<y1;y++)for(let x=x0;x<x1;x++){ const i=y*W+x;       // re-fix biome/mat (the reachability carve re-skins carved tiles to landBiome)
+      state.biome[i]=B_INTERIOR;
+      if(!state.interiorMat[i]) state.interiorMat[i]=theme*2+1;
+    }
+    // doors = passable perimeter tiles of the FINAL grid (authored gaps AND carve-cut doorways) → E6 neon anchors
+    for(let x=x0;x<x1;x++) for(const y of [y0,y1-1])
+      if(state.tiles[y*W+x]!==T_ROCK) feats.push({tx:x,ty:y,w:1,h:1,slot:'door',theme});
+    for(let y=y0+1;y<y1-1;y++) for(const x of [x0,x1-1])
+      if(state.tiles[y*W+x]!==T_ROCK) feats.push({tx:x,ty:y,w:1,h:1,slot:'door',theme});
+    const tpl=INT_ROOM_TEMPLATES[r.template]||null;
+    if(tpl&&tpl.setpiece){
+      const s=_intSetpieceRect(rect, tpl.setpiece);
+      feats.push({tx:s.sx,ty:s.sy,w:s.sw,h:s.sh,slot:'setpiece',theme,variant:tpl.setpiece.variant||0});
+      for(let y=s.sy;y<s.sy+s.sh;y++)for(let x=s.sx;x<s.sx+s.sw;x++) skip.add(y*W+x);   // wall scan skips the footprint (sprite owns it)
+    }
+    if(tpl&&tpl.overhang&&(x1-x0)>=8&&(y1-y0)>=6){                     // a catwalk across the upper room (non-blocking, CANOPY walk-under)
+      const ox=((x0+x1)>>1)-2, oy2=y0+2;
+      feats.push({tx:ox,ty:oy2,w:4,h:2,slot:'overhang',theme,variant:AT?AT.variant(ox,oy2,INTERIOR_OVERHANG_N):0});
+    }
+    for(let x=x0+1;x<x1-1;x++){                                        // sparse non-blocking props along the inner north wall (~10%)
+      const i=(y0+1)*W+x;
+      if(AT && AT.variant(x,y0+1,10)===0 && state.tiles[i]!==T_ROCK && !skip.has(i))
+        feats.push({tx:x,ty:y0+1,w:1,h:1,slot:'prop',theme,variant:AT.variant(x*3,y0,INTERIOR_PROP_N)});
+    }
+  }
+  // whole-map interiors: sparse OPEN-PLAN prop scatter (the desk rows / racks the fiction
+  // describes) so the floor between authored rooms doesn't read as void. One candidate per
+  // 10×10-tile block, ~40% pass, block-hash positioned, only on open floor OUTSIDE rooms
+  // (rooms dress themselves). Coord-pure via AUTOTILE.variant — co-op/save identical.
+  if(wholeMap && AT){
+    const BS=10, inRoom=(x,y)=>roomRects.some(rc=> x>=rc.x0 && x<rc.x1 && y>=rc.y0 && y<rc.y1);
+    for(let by=0;by*BS<H;by++)for(let bx=0;bx*BS<W;bx++){
+      if(AT.variant(bx*13+5, by*17+9, 100) >= 40) continue;
+      const px=bx*BS+2+AT.variant(bx*3+1, by*5+2, Math.max(1,BS-4));
+      const py=by*BS+2+AT.variant(bx*7+3, by*11+4, Math.max(1,BS-4));
+      if(px>=W||py>=H) continue;
+      const j=py*W+px;
+      if(state.biome[j]!==B_INTERIOR || state.tiles[j]===T_ROCK || inRoom(px,py)) continue;
+      const im=state.interiorMat[j];
+      feats.push({tx:px,ty:py,w:1,h:1,slot:'prop',theme:im?((im-1)>>1):(theme0!=null?theme0:0),
+                  variant:AT.variant(px*5,py*3,INTERIOR_PROP_N)});
+    }
+  }
+  // walls: one row-major grid scan — covers cfg rooms AND hand-painted 'W' tiles identically
+  const isWall=(s,x,y)=>{ const i=y*W+x; return s.biome[i]===B_INTERIOR && s.tiles[i]===T_ROCK && !skip.has(i); };
+  for(let y=0;y<H;y++)for(let x=0;x<W;x++){
+    if(!isWall(state,x,y)) continue;
+    const im=state.interiorMat[y*W+x];
+    feats.push({tx:x,ty:y,w:1,h:1,slot:'wall',theme:im?((im-1)>>1):0,
+                mask:AT?AT.mask8(state,x,y,isWall):0, variant:AT?AT.variant(x,y,4):0});
+  }
+  state.interiorFeatures=feats;
+  state.interiorTheme=(cfg.interiorTheme!=null)?_intThemeId(cfg.interiorTheme):(theme0!=null?theme0:0);
+}
+
 // Clear topography + force passable terrain under owned START-building footprints so every base
 // structure stands on clean, buildable ground. Touches tiles[]/feat[] only — the building's blocked
 // stamp stays, so a future demolish leaves land not water. Owned bases only (never neutral scenery /
@@ -637,6 +771,11 @@ function newMap(idx){
   // terrain stream untouched (geography unchanged); runs after the pads are cleared
   // so it never drops a blocker on a base/gold spot. buildTopoFeatures re-skins the
   // scattered decorative trees/rocks; placeThickets adds opt-in crammed-with-trail regions.
+  // interior maps (biomes:['interior']): the generator's ambient tree/rock scatter never lands
+  // indoors — floor-ify stray obstacle tiles BEFORE the feature pass mints walk-under sprites
+  // (authored walls arrive later as T_ROCK via applyInteriors / the paint layer).
+  if(landBiome===B_INTERIOR) for(let i=0;i<W*H;i++)
+    if(biome[i]===B_INTERIOR && (state.tiles[i]===T_TREE || state.tiles[i]===T_ROCK)) state.tiles[i]=T_GRASS;
   {
     const topoRng = makeRng(cfg.seed*1000+909);
     buildTopoFeatures(state, topoRng);
@@ -660,6 +799,12 @@ function newMap(idx){
   // barrier can't strand a gold node/base. Deterministic (direct assignment + fixed-seed rng).
   // No-op when unset → fully backward compatible. (js/map_paint.js)
   applyPaintLayer(state, cfg, cfg.goldNodes.concat(bases));
+
+  // INTERIOR room stamps (cfg.interiors): stamp floors + blocking wall tiles, then re-carve
+  // reachability exactly like paint (a wall can never strand a node/base — the carve cuts a door),
+  // then derive the render-side interior data from the FINAL grid so carved doorways are honest.
+  if(applyInteriors(state, cfg)) carveBridgesToTargets(state, cfg.goldNodes.concat(bases), landBiome);
+  buildInteriorData(state, cfg);
 
   // distance-to-shore depth field for smooth (non-blocky) water/magma rendering + tide buffers
   // (js/water.js). MUST run after ALL tiles[] water mutation (despeckle + bridge carve + paint above).
@@ -1040,6 +1185,7 @@ function climateBiome(t, m, P, allow){
   if(allow.has(B_GRASS))                               return B_GRASS;
   if(allow.has(B_TECH))                                return B_TECH;
   if(allow.has(B_VOLCANIC))                            return B_VOLCANIC;   // scorched-land maps
+  if(allow.has(B_INTERIOR))                            return B_INTERIOR;   // authored indoor maps (biomes:['interior']) — no climate inside a tower
   if(allow.has(B_DESERT) && allow.has(B_ICE))          return t < (P.freeze+P.hot)/2 ? B_ICE : B_DESERT;
   if(allow.has(B_DESERT))                              return B_DESERT;
   if(allow.has(B_ICE))                                 return B_ICE;
