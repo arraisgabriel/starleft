@@ -234,7 +234,8 @@ function reclaimOutposts(state){
   for(const b of state.entities){
     if(b.dead || !b.abandoned) continue;
     const reach = Math.max(b.w,b.h)*TILE*0.5 + TILE*1.6;   // building radius + ~1.5 tiles
-    const taken = state.entities.some(u=> !u.dead && !u.storedIn && u.kind==='unit' && u.owner==='player' && dist(u,b) < reach);
+    let claimer=null;
+    const taken = state.entities.some(u=>{ const ok= !u.dead && !u.storedIn && u.kind==='unit' && u.owner==='player' && dist(u,b) < reach; if(ok) claimer=u; return ok; });
     if(taken){
       b.owner='player'; b.abandoned=false; b.constructing=false; b.hp=b.maxHp;
       any=true;
@@ -243,9 +244,13 @@ function reclaimOutposts(state){
       // spends the 400 m3rits to power it up, and starts the extraction (the reclaim quest's win edge).
       if(state.cfg && state.cfg.heroEscape && !state._internRescued){
         state._internRescued=true;
-        if(state.eco && state.eco.p1) state.eco.p1.gold=Math.max(0,(state.eco.p1.gold||0)-400);
+        // CO-OP: the co-founder whose unit reaches the HQ pays the boot cost (was hardcoded eco.p1);
+        // solo: claimer is always p1 → identical debit.
+        const bctrl=(claimer && claimer.ctrl)||'p1';
+        const beco=(typeof playerEco==='function')?playerEco(state,bctrl):(state.eco&&state.eco.p1);
+        if(beco) beco.gold=Math.max(0,(beco.gold||0)-400);
         const bx=(b.tx!=null?b.tx:((b.x/TILE)|0)), by=(b.ty!=null?b.ty:((b.y/TILE)|0));
-        if(typeof mkUnit==='function'){ const iw=mkUnit(state,'worker','player', bx+1, by+3); if(iw && typeof spawnRing==='function') spawnRing(iw.x,iw.y,'#8effb0'); }
+        if(typeof mkUnit==='function'){ const iw=mkUnit(state,'worker','player', bx+1, by+3); if(iw && bctrl!=='p1') iw.ctrl=bctrl; if(iw && typeof spawnRing==='function') spawnRing(iw.x,iw.y,'#8effb0'); }
         if(!window._rbReplaying && typeof eventToast==='function') eventToast('🧑‍💻 The intern boots the Open-Plan HQ — extraction inbound. Get the squad out.', 9000);
       } else {
         toast('🚩 Outpost reclaimed — fight from the front!');
@@ -286,6 +291,10 @@ function freeCaptives(state){
       u.stars=Math.max(0, Math.min(CAREER.maxStars, u.captiveLevel||0));
       u.xp=CAREER.xpFor(u.stars);
       u.lore={ seed:(u.id||0)+1, events:[], fixed:u.captiveDossier||{ name:u.captiveName } };
+      // CO-OP: the GRAAL's architect joins the ALLY's roster (owner decision: Biba+Rust are p2's heroes).
+      // Solo → p1 (unchanged). Snapshot ships ctrl → the client can select/command her immediately, and
+      // captureHeroes splits by e.ctrl so she rides carryoverHeroesP2 to every later map.
+      if(typeof netRole!=='undefined' && netRole!=='solo') u.ctrl='p2';
       applyVetHp(u, true);
       toast('🦸 '+u.captiveName+' is free — the GRAAL\'s architect joins you.');
       if(typeof ACH!=='undefined' && !window._rbReplaying) ACH.fire('architect');   // T3-5

@@ -1555,14 +1555,18 @@ function buildWakeBody(body){
   const r=(typeof CAMPAIGN!=='undefined'&&CAMPAIGN.reborn)||{sessions:[],done:[]};
   // The fallen list shown here is veterans-only (heroes/Lv2+); legacy sub-veteran records stay in
   // fallenVets for save/identity but are filtered out of the wall AND the resurrection picker.
-  const sessions=r.sessions||[], fallen=(typeof displayFallen==='function')?displayFallen():((typeof fallenVets!=='undefined')?fallenVets:[]);
+  // CO-OP: each co-founder sees ITS OWN dead + sessions + charge budget (legacy/solo records default
+  // p1 === LOCAL_CTRL → identical lists in solo).
+  const _wmine=(x)=>(((x&&x.ctrl)||'p1')===(typeof LOCAL_CTRL!=='undefined'?LOCAL_CTRL:'p1'));
+  const sessions=(r.sessions||[]).filter(_wmine),
+        fallen=((typeof displayFallen==='function')?displayFallen():((typeof fallenVets!=='undefined')?fallenVets:[])).filter(_wmine);
   const unlocked=(typeof rebornUnlocked==='function')?rebornUnlocked():true;
-  const charges=(typeof rebornChargesLeft==='function')?rebornChargesLeft():0;
+  const charges=(typeof rebornChargesLeft==='function')?rebornChargesLeft(typeof LOCAL_CTRL!=='undefined'?LOCAL_CTRL:'p1'):0;
   const cap=HUB.rebornTotalCap||0;
 
   const sum=document.createElement('div'); sum.className='hub-stat';
   sum.innerHTML = unlocked
-    ? ('The storm holds <b>'+charges+'</b> of its <b>'+cap+'</b> writes — ever. In the lattice now: <b>'+sessions.length+' / '+(HUB.rebornSlotCap||1)+'</b>. Up to '+(HUB.rebornSlotCap||1)+' at a time; the rest stay names.')
+    ? ('The storm holds <b>'+charges+'</b> of your <b>'+cap+'</b> writes — ever. In the lattice now: <b>'+sessions.length+' / '+(HUB.rebornSlotCap||1)+'</b>. Up to '+(HUB.rebornSlotCap||1)+' at a time; the rest stay names.')
     : '⚠ LATTICE OFFLINE — resurrection unlocks at the GRAAL.';
   body.appendChild(sum);
 
@@ -1998,7 +2002,10 @@ function openMdcMenu(poi){
       const vets=live.filter(u=>!u.hero), heroes=live.filter(u=>u.hero);
       // every hero on hand in the H.U.B. (not just the enlisted ones) — they auto-deploy, so they
       // count toward "can we launch?" and reassure the player when no veteran is enlisted yet.
+      // hubHeroes = BOTH co-founders' (launch gate must not strand a p2-only hero roster);
+      // mineHeroes = this player's own (the reassurance copy speaks about YOUR heroes).
       const hubHeroes=(typeof hubDeployableHeroes==='function')?hubDeployableHeroes(G):heroes;
+      const mineHeroes=(typeof hubDeployableHeroes==='function')?hubDeployableHeroes(G, LOCAL_CTRL):hubHeroes;
       let idx=(typeof hubNextDeployIndex==='function') ? hubNextDeployIndex()
             : ((CAMPAIGN&&CAMPAIGN.nextMapIndex!=null)?CAMPAIGN.nextMapIndex:0);   // gate villains + finale routing (T2-7)
 
@@ -2015,7 +2022,7 @@ function openMdcMenu(poi){
       left.appendChild(hubMenuSection('Enlisted for the next mission'));
       if(!live.length){ const m=document.createElement('div'); m.className='muted';
         m.textContent='Walk veterans into a red M.D.C. to enlist them for the next deployment.'
-          + (hubHeroes.length? ' Your hero'+(hubHeroes.length>1?'es':'')+' auto-deploy'+(hubHeroes.length>1?'':'s')+' either way.' : '');
+          + (mineHeroes.length? ' Your hero'+(mineHeroes.length>1?'es':'')+' auto-deploy'+(mineHeroes.length>1?'':'s')+' either way.' : '');
         left.appendChild(m); }
       else {
         left.appendChild(hubMenuUnitGrid(live, u=>({
@@ -2450,7 +2457,7 @@ function openUltraMenu(){
     id:'ultra', icon:'◆', title:'ULTRA Headquarters',
     subtitle:'The company that fabricates life for everyone, everywhere',
     staffPoi:'ultra',
-    signature: function(){ return 'ultra:'+(campaignM3(LOCAL_CTRL)|0)+'|g:'+(CAMPAIGN.gambled?1:0)+'|v:'+(CAMPAIGN.visit|0)+'|si:'+(CAMPAIGN.seriesInf|0); },
+    signature: function(){ return 'ultra:'+(campaignM3(LOCAL_CTRL)|0)+'|g:'+((typeof campaignGambled==='function'&&campaignGambled(LOCAL_CTRL))?1:0)+'|v:'+(CAMPAIGN.visit|0)+'|si:'+(CAMPAIGN.seriesInf|0); },
     build: function(body){
       const s=document.createElement('div'); s.className='hub-stat';
       s.innerHTML='Treasury <b>M3$ '+(campaignM3(LOCAL_CTRL)|0)+'</b> · H.U.B. visit <b>#'+(CAMPAIGN.visit|0)+'</b>';
@@ -2468,14 +2475,14 @@ function openUltraMenu(){
       body.appendChild(siFoot);
       body.appendChild(hubMenuSection('Speculation Kiosk'));
       const note=document.createElement('div'); note.className='hub-note';
-      note.textContent = CAMPAIGN.gambled ? 'The kiosk already liquidated your optimism this visit.'
+      note.textContent = (typeof campaignGambled==='function'&&campaignGambled(LOCAL_CTRL)) ? 'The kiosk already liquidated your optimism this visit.'
         : 'Stake M3$ '+HUB.gambleStake+' on the market. Sometimes it pays out; mostly it calls the loss "learning".';
       body.appendChild(note);
       const foot=document.createElement('div'); foot.className='hub-footer';
       const info=document.createElement('div'); info.className='grow';
       info.innerHTML='Implants, styles and academy training are bought by selecting a resident out on the map.';
       foot.appendChild(info);
-      foot.appendChild(hubMenuActionBtn('📈 Speculate', HUB.gambleStake, !CAMPAIGN.gambled, ()=>{ hubGamble(); buildHubMenuBody(); }));
+      foot.appendChild(hubMenuActionBtn('📈 Speculate', HUB.gambleStake, !(typeof campaignGambled==='function'&&campaignGambled(LOCAL_CTRL)), ()=>{ hubGamble(); buildHubMenuBody(); }));
       body.appendChild(foot);
     }
   });
@@ -2873,15 +2880,18 @@ function showCrawl(idx, done){
 // every advance (carryover, next Quarter, retry, IPO/NG+), so the client only SEES the outcome + summary
 // and waits — none of the host-only buttons/wiring run on the client. Reached from mpUiClientGameOver
 // (defeat / skirmish / terminal); a normal campaign WIN transitions the client to the H.U.B. instead.
-function clientEndScreen(win){
+function clientEndScreen(win, kind){
   running=false;
   if(typeof syncPauseBtn==='function') syncPauseBtn();
   const es=document.getElementById('endScreen'); if(!es) return;
   es.className='overlay '+(win?'win':'lose'); es.style.display='flex';
   if(win){
     if(typeof ACH!=='undefined') ACH.fire('victory', { idx:(typeof mapIndex==='number'?mapIndex:0) });   // client unlocks its own achievement locally
-    es.innerHTML=`<div class="big">📉</div><h1>QUARTER SECURED</h1>
-      <h2>The competition has pivoted to bankruptcy</h2>
+    // kind-specific headers mirror the host's end-state card ('endcard' cue: tbc = arc cliffhanger, ipo = finale)
+    const head = kind==='ipo' ? '<div class="big">🦄</div><h1>IPO!</h1><h2>Total market domination achieved</h2>'
+              : kind==='tbc' ? '<div class="big">⏳</div><h1>TO BE CONTINUED</h1><h2>Arc 3 — the file stays open</h2>'
+              : '<div class="big">📉</div><h1>QUARTER SECURED</h1><h2>The competition has pivoted to bankruptcy</h2>';
+    es.innerHTML=`${head}
       ${typeof victorySummaryHTML==='function'?victorySummaryHTML():''}
       <p style="opacity:.8">⏳ Waiting for the host to choose the next move…</p>
       <div style="display:flex;gap:12px;flex-wrap:wrap;justify-content:center;">
@@ -2932,6 +2942,8 @@ function onVictory(){
   // instead of the triumphant IPO — used as the temporary end of content until the next block of
   // episodes ships (the flag then moves forward; the real finale carries `finale:true`).
   if(MAPS[mapIndex] && MAPS[mapIndex].toBeContinued){
+    // CO-OP: mirror the cliffhanger card to the ally (end-state — the sim is over; a plain one-shot cue).
+    if(typeof netRole!=='undefined' && netRole==='host' && typeof NET!=='undefined' && NET.cueSend) NET.cueSend('endcard',{kind:'tbc'},false);
     es.className='overlay win'; es.style.display='flex';
     es.innerHTML=`<div class="big">⏳</div><h1>TO BE CONTINUED</h1>
       <h2>Arc 3 — the file stays open</h2>
@@ -2978,6 +2990,8 @@ function onVictory(){
     if(vets.length){ buildCarryChooser(document.getElementById('carry-list'), document.getElementById('carry-count'), vets, cap, document.getElementById('nextBtn'), proceed); }
     else { document.getElementById('nextBtn').onclick=()=>proceed([]); }
   } else {
+    // CO-OP: mirror the IPO card to the ally (host owns the NG+/restart choice; the client watches + waits).
+    if(typeof netRole!=='undefined' && netRole==='host' && typeof NET!=='undefined' && NET.cueSend) NET.cueSend('endcard',{kind:'ipo'},false);
     es.className='overlay win'; es.style.display='flex';
     const lap=(typeof CAMPAIGN!=='undefined'&&CAMPAIGN.ngPlus)|0;
     es.innerHTML=`<div class="big">🦄</div><h1>IPO!</h1>
@@ -2999,8 +3013,15 @@ function onVictory(){
 // balance.js musters extra defenders). No resets: this is the same company, richer and more haunted.
 function startNgPlus(){
   if(typeof ACH!=='undefined') ACH.fire('ngplus');   // T3-5: Serial Founder
-  if(typeof eligibleVets==='function' && typeof setCarryover==='function') setCarryover(eligibleVets(G)||[]);
-  if(typeof captureHeroes==='function') captureHeroes(G);
+  // CO-OP: split the lap's survivors by co-founder (was: everyone into p1's track, leaking p2's vets).
+  // ORDER: setCarryover first — handed [] it clears the p2 track (career.js) — then setCarryoverP2.
+  if(typeof eligibleVets==='function' && typeof setCarryover==='function'){
+    const ev=eligibleVets(G)||[];
+    setCarryover(ev.filter(u=>(u.ctrl||'p1')!=='p2'));
+    if(typeof netRole!=='undefined' && netRole==='host' && typeof setCarryoverP2==='function')
+      setCarryoverP2(ev.filter(u=>(u.ctrl||'p1')==='p2'));
+  }
+  if(typeof captureHeroes==='function') captureHeroes(G);   // splits by ctrl already
   if(typeof CAMPAIGN!=='undefined'){
     CAMPAIGN.ngPlus=(CAMPAIGN.ngPlus|0)+1;
     CAMPAIGN.nextMapIndex=0;
@@ -3013,6 +3034,10 @@ function startNgPlus(){
     CAMPAIGN.stats={trainSessions:0, wakeStarts:0, healedHighMad:0};
   }
   const es=document.getElementById('endScreen'); if(es) es.style.display='none';
+  // CO-OP: re-run the full match-start handshake so the ally laps with us (mpstart pulls the client out of
+  // its end screen into Quarter I; mirrors the hub-dispatch + defeat-retry routing). loadMap would lap the
+  // host alone and strand the client.
+  if(typeof netRole!=='undefined' && netRole==='host' && typeof mpHostStart==='function'){ mpHostStart(0, 'campaign'); return; }
   mapIndex=0;
   LOADER.beginMission(missionTags(0));
   showCrawl(0, ()=>gateMission(0, ()=>loadMap(0)));

@@ -422,30 +422,46 @@ function spawnHeroes(state){
     _placeHero(state, c, pos++, h.type, h.heroId, h.stars, h.xp, h.lore, null, h.sprite);
     placed.add(h.heroId);
   }
+  // heroEscape (Ep XVI): the squad walks out of the crash TOGETHER — the ALLY's carried heroes muster at
+  // the p1 crash site too (there is no p2 base to speak of on a base-less map), but KEEP ctrl='p2' so the
+  // co-founder still commands them. spawnHeroesP2 no-ops on these maps. Solo: p2 track empty → skipped.
+  if(cfg && cfg.heroEscape && typeof netRole!=='undefined' && netRole!=='solo'){
+    for(const h of carryoverHeroesP2){
+      if(placed.has(h.heroId)) continue;
+      _placeHero(state, c, pos++, h.type, h.heroId, h.stars, h.xp, h.lore, null, h.sprite);
+      const u=state.entities.find(e=>e.hero&&e.heroId===h.heroId&&!e.dead); if(u) u.ctrl='p2';
+      placed.add(h.heroId);
+    }
+  }
   if(cfg && cfg.heroes) for(const h of cfg.heroes){           // first appearances on this map
     const hid = h.id || h.name;
     if(placed.has(hid)) continue;                             // already carried in — don't duplicate
-    if(heroOwnerFor(state, h)==='p2') continue;               // CO-OP: an ally-assigned hero spawns at the p2 base (spawnHeroesP2)
+    if(typeof heroIsCarried==='function' && heroIsCarried(hid)) continue;   // carried on EITHER track → never double-spawn (a p2-carried Biba is not in `placed`)
+    const own=heroOwnerFor(state, h);
+    if(own==='p2' && !cfg.heroEscape) continue;               // normal maps: p2 first-appearances spawn at the p2 base (spawnHeroesP2)
     const lvl = Math.max(0, Math.min(CAREER.maxStars, h.level||0));
     _placeHero(state, c, pos++, h.type, hid, lvl, CAREER.xpFor(lvl), null, h.dossier || { name:h.name }, h.sprite);
+    if(own==='p2'){ const u=state.entities.find(e=>e.hero&&e.heroId===hid&&!e.dead); if(u) u.ctrl='p2'; }   // heroEscape first-appearance stays with its owner
     placed.add(hid);
   }
 }
 // CO-OP: which co-founder owns a FIRST-APPEARANCE hero. Explicit cfg.heroes[].owner==='p2' opts a hero into
-// the ally's track; everything else (and solo, and heroEscape maps, so a phantom p2 hero-base can't break the
-// Ep XVI escape) stays p1. No automatic even/odd split in v1 — a narrative hero only goes p2 when a map author
-// opts in, so every current map is byte-identical. Deterministic on both peers (both run newMap).
+// the ally's track (Biba + Rust); everything else (and solo — no ally to own them) stays p1. heroEscape maps
+// keep the OWNERSHIP split (else the co-op client has zero controllable units on a hero-only map) — only the
+// PLACEMENT changes there (everyone musters at the crash site; see spawnHeroes). No automatic even/odd split —
+// a narrative hero goes p2 only when a map author opts in. Deterministic on both peers (both run newMap).
 function heroOwnerFor(state, h){
   if(!h || h.owner!=='p2') return 'p1';
-  if(state && state.cfg && state.cfg.heroEscape) return 'p1';
   if(typeof netRole!=='undefined' && netRole==='solo') return 'p1';   // no ally present → don't strand the hero off-map
   return 'p2';
 }
 // CO-OP: deploy the ally's heroes near the p2 base — mirror of spawnHeroes, but anchored at `origin` and
 // tagged p2 (caller addCoopPlayer has set state._defaultCtrl='p2', which mkUnit reads). Carried p2 survivors
-// PLUS any first-appearance hero this map assigns to p2. Dedup by heroId. No-op in solo (empty p2 track).
+// PLUS any first-appearance hero this map assigns to p2. Dedup by heroId. No-op in solo (empty p2 track)
+// and on heroEscape maps (the whole squad musters at the crash site — see spawnHeroes).
 function spawnHeroesP2(state, origin){
   if(!state || !origin) return;
+  if(state.cfg && state.cfg.heroEscape) return;               // base-less escape: heroes muster together at the crash site
   const c={ x:origin.x, y:origin.y };
   let pos=0; const placed=new Set();
   for(const h of carryoverHeroesP2){
@@ -456,6 +472,7 @@ function spawnHeroesP2(state, origin){
   if(cfg && cfg.heroes) for(const h of cfg.heroes){
     const hid=h.id||h.name;
     if(placed.has(hid) || heroOwnerFor(state, h)!=='p2') continue;
+    if(typeof heroIsCarried==='function' && heroIsCarried(hid)) continue;   // carried on EITHER track → never double-spawn
     const lvl=Math.max(0, Math.min(CAREER.maxStars, h.level||0));
     _placeHero(state, c, pos++, h.type, hid, lvl, CAREER.xpFor(lvl), null, h.dossier||{ name:h.name }, h.sprite);
     placed.add(hid);

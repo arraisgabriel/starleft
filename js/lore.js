@@ -239,7 +239,8 @@ function recordFallen(u){
                     lore: u.lore ? { seed:u.lore.seed, v:u.lore.v, events:(u.lore.events||[]).slice(), fixed:u.lore.fixed||null } : null,
                     xp: u.xp||0, stars: u.stars||0, hero:!!u.hero, heroId:u.heroId||null,
                     spriteType: u.spriteType||null, sanityThreshold: u.sanityThreshold||0,
-                    reborn:false };   // f.reborn === "this fallen has been resurrected" (distinct from a unit's u.reborn)
+                    reborn:false,    // f.reborn === "this fallen has been resurrected" (distinct from a unit's u.reborn)
+                    ctrl: u.ctrl||'p1' };   // CO-OP: whose wall this name belongs to — The Wake resurrects OWN dead only (legacy records read missing as p1)
   fallenVets.push(f);
   const _obit = `🕯 <b>${d.full}</b> has fallen — ${u.dreamDone?'their dream fulfilled':'dream unfulfilled: '+_loCap(d.dream)}.`;
   if(typeof eventToast==='function') eventToast(_obit, 10000);
@@ -258,6 +259,7 @@ function recordFallen(u){
       if(parts.length && typeof G!=='undefined' && G && G.entities){
         for(const pp of parts){ for(const e of G.entities){ if(e && !e.dead && e.kind==='unit' && ohUnitKey(e)===pp.id) e._vetGrief=true; } }
         if(!window._rbReplaying && typeof eventToast==='function') eventToast('🖤 The ones closest to <b>'+d.full+'</b> feel it the hardest.', 9000);
+        if(!window._rbReplaying && typeof narrate==='function') narrate('toast',{ html:'🖤 The ones closest to <b>'+d.full+'</b> feel it the hardest.', ev:1, ms:9000 });   // co-op: the ally shares the grief beat
       }
     }catch(_){ }
   }

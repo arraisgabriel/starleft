@@ -240,6 +240,13 @@
         }
         break;
       }
+      case 'endcard': {
+        // campaign end-state (IPO / to-be-continued): the sim is over on the host — freeze + show the read-only
+        // mirror card. The host owns NG+/restart; its mpstart (NG+ lap) pulls us back in via beginClientMatch.
+        running=false;
+        if(typeof clientEndScreen==='function') clientEndScreen(true, d.kind);
+        break;
+      }
     }
   };
 
@@ -385,6 +392,9 @@
     G = newMap(idx);                                 // regenerate identical terrain + pads (deterministic)
     if(S.mode==='duel') G._pvp=true;
     NET._cueHold=false;                               // a fresh Quarter clears any stale finale/cutscene hold
+    // a fresh match dismisses any end-state overlay (endcard IPO/tbc mirror, defeat screen) — e.g. the
+    // host pressed NG+ (mpstart lap) or retry; without this the card would sit over the new Quarter.
+    if(typeof document!=='undefined'){ const _es=document.getElementById('endScreen'); if(_es){ _es.style.display='none'; _es.innerHTML=''; } }
     running = false;                                  // hold until the host's full snapshot lands
     NET._lastAppliedTick = -1;                        // fresh out-of-order baseline for the new match
     if(NET.resetWatchdog) NET.resetWatchdog();        // start the host-liveness clock fresh for this match
@@ -412,6 +422,7 @@
     netRole='client'; LOCAL_CTRL='p2'; pendingPlayers=2; mapIndex=S.mapIndex;
     if(msg && msg.mpCampaignId) S.mpCampaignId=msg.mpCampaignId;
     if(msg && msg.campaign && typeof deserializeHubCampaign==='function') deserializeHubCampaign(msg.campaign);
+    if(msg && Array.isArray(msg.fallen) && typeof restoreFallen==='function') restoreFallen(msg.fallen);   // CO-OP: adopt the host's memorial (the Wake filters it to OUR dead)
     G = newHubMap();
     // the client may still carry the Ep VII finale's full-screen classes (it played the cinematic but never
     // ran the host-only enterHubFlashAftermath that clears them) — strip them so the H.U.B. HUD is visible.
@@ -563,7 +574,8 @@
     S.mapIndex = mapIndex|0;
     NET.tick = 0; NET._sAcc = 0; NET._kAcc = 0;
     NET._baseline = new Map(); NET._lastEcoStr = null; NET._lastQuestStr = null; NET._sinceSend = 0; NET._loreSent = new Map();   // reset Phase 4 delta baseline / eco + quest signatures + dossier-identity dirty-set for the new map
-    MP.send('mphub', { mapIndex:S.mapIndex, mode:S.mode, mpCampaignId:S.mpCampaignId, campaign: typeof serializeHubCampaign==='function' ? serializeHubCampaign() : null });
+    MP.send('mphub', { mapIndex:S.mapIndex, mode:S.mode, mpCampaignId:S.mpCampaignId, campaign: typeof serializeHubCampaign==='function' ? serializeHubCampaign() : null,
+      fallen: (typeof fallenVets!=='undefined') ? fallenVets : [] });   // CO-OP: full memorial → the client's Wake shows ITS OWN dead incl. deaths that predate its join (live deaths ride narrate 'fallen')
     if(S.peerId && NET.sendFull) NET.sendFull(S.peerId);
   };
 

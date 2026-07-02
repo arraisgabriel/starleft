@@ -106,9 +106,12 @@ function hubObjTick(){
       rec.done=1; rec.doneVisit=(CAMPAIGN.visit|0);
       if(!def.repeatable && st.completed.indexOf(def.id)<0) st.completed.push(def.id);
       CAMPAIGN.m3=(CAMPAIGN.m3|0)+(def.reward|0);                 // paid on the spot, no extraction gate
+      if(typeof netRole!=='undefined' && netRole!=='solo') CAMPAIGN.m3p2=(CAMPAIGN.m3p2|0)+(def.reward|0);   // CO-OP: ×player-count — the ally's pool earns the same reward (hub.js enterHubFromCombat pattern)
       if(typeof ACH!=='undefined' && def.ach) ACH.fire(def.ach);
       if(typeof eventToast==='function') eventToast('🏅 <b>H.U.B. OBJECTIVE</b> — '
         +(typeof _escHtml==='function'?_escHtml(def.text):def.text)+' <b>+'+(def.reward|0)+' M3$</b>', 7000);
+      if(typeof narrate==='function') narrate('toast',{ html:'🏅 <b>H.U.B. OBJECTIVE</b> — '
+        +(typeof _escHtml==='function'?_escHtml(def.text):def.text)+' <b>+'+(def.reward|0)+' M3$</b>', ev:1, ms:7000 });   // CO-OP: the ally sees + gets paid the same beat
       changed=true;
     }
   }

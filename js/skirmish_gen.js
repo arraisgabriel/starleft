@@ -103,6 +103,7 @@ function startSkirmish(cfgOrIdx, opts){
   try{
     const boosts=[...document.querySelectorAll('#skirmish-boosts input:checked')].map(i=>i.value);
     for(const b of boosts){
+      // skirmish-only meta spend: always the LOCAL founder's own p1 pool (skirmish has no co-op treasury split)
       if(b==='bigger' && typeof CAMPAIGN!=='undefined' && CAMPAIGN.m3>=150){ CAMPAIGN.m3-=150; const eco=playerEco(G,'p1'); eco.gold+=600; toast('\u{1F4B0} Bigger Round closed \u2014 +600 Funding'); }
       if(b==='lobby' && typeof CAMPAIGN!=='undefined' && CAMPAIGN.m3>=200){ CAMPAIGN.m3-=200;
         for(let i=0;i<2;i++){ const u=mkUnit(G,'lobbyist','player',Math.round(G.cfg.player.x)+i,Math.round(G.cfg.player.y)-3); u.stars=3; u.xp=CAREER.xpFor(3); if(typeof applyVetHp==='function') applyVetHp(u,true); }

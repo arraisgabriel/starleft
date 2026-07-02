@@ -164,7 +164,8 @@ function closeInterior(){
   if(typeof syncHud==='function') try{ syncHud(); }catch(_){ }
 }
 function _syncHead(){
-  const m3=(typeof CAMPAIGN!=='undefined')?(CAMPAIGN.m3|0):0, cost=(typeof OFFHOURS!=='undefined')?(OFFHOURS.tune.sceneCost|0):0;
+  // CO-OP: affordability vs the viewer's OWN pool (spend itself is host-scoped via applyOffhoursCommit)
+  const m3=(typeof campaignM3==='function')?(campaignM3(LOCAL_CTRL)|0):((typeof CAMPAIGN!=='undefined')?(CAMPAIGN.m3|0):0), cost=(typeof OFFHOURS!=='undefined')?(OFFHOURS.tune.sceneCost|0):0;
   $('oh-int-sub').textContent='M3$ '+m3+'  ·  a round costs M3$ '+cost;
 }
 
@@ -609,7 +610,7 @@ function _beatChoose(ci){
 }
 function _finalizeScene(payload){
   const sc=_int.scene; if(!sc) return;
-  if((typeof CAMPAIGN!=='undefined') && (CAMPAIGN.m3|0) < (OFFHOURS.tune.sceneCost|0)){ _flash('Not enough M3rit$ for a round.'); return; }
+  if((typeof CAMPAIGN!=='undefined') && (((typeof campaignM3==='function')?campaignM3(LOCAL_CTRL):CAMPAIGN.m3)|0) < (OFFHOURS.tune.sceneCost|0)){ _flash('Not enough M3rit$ for a round.'); return; }
   let res=null;
   if(typeof netOffhoursCommit==='function') res=netOffhoursCommit(G, payload);
   else if(typeof applyOffhoursCommit==='function') res=applyOffhoursCommit(G, payload);
@@ -634,7 +635,7 @@ function _finalizeScene(payload){
 }
 function _doGift(vet, target){
   _hideHint(); _focusMid(vet, target); const cx=_interactionContext(vet, target);   // frame the pair for the gift result
-  if((typeof CAMPAIGN!=='undefined') && (CAMPAIGN.m3|0) < (OFFHOURS.tune.giftCost|0)){ _flash('Not enough M3rit$ for a gift.'); _int.mode='idle'; return; }
+  if((typeof CAMPAIGN!=='undefined') && (((typeof campaignM3==='function')?campaignM3(LOCAL_CTRL):CAMPAIGN.m3)|0) < (OFFHOURS.tune.giftCost|0)){ _flash('Not enough M3rit$ for a gift.'); _int.mode='idle'; return; }
   const payload={ vetKey:vet.key, npcId:cx.npcId, kind:cx.kind, gift:true };
   let res=(typeof netOffhoursCommit==='function')?netOffhoursCommit(G,payload):(typeof applyOffhoursCommit==='function'?applyOffhoursCommit(G,payload):null);
   if(res && res.broke){ _flash('Not enough M3rit$.'); _int.mode='idle'; return; }

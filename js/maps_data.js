@@ -1206,7 +1206,7 @@ Weaponize your buzzwords, circle back, and disrupt MegaCorp into bankruptcy. The
     // Rust's FIRST deployment as a player hero (founder skin). Fixed dossier (gallows-corporate; the
     // depreciated-asset trauma). He carries forward via captureHeroes after this map; XVI re-lists him
     // (dedup by heroId) so a death here doesn't strip him from his own episode.
-    heroes:[ { name:'Rust', type:'founder', sprite:'rust', level:6, dossier:{
+    heroes:[ { name:'Rust', type:'founder', sprite:'rust', level:6, owner:'p2', dossier:{   // CO-OP: Rust fights for the ALLY (p2); solo/heroEscape → p1 via heroOwnerFor
       first:'Pedro', last:'"Rust"',
       home:'the Detroit-Reclamation rustbelt',
       rel:'crew', relName:'the old line crew',
@@ -1268,7 +1268,7 @@ Weaponize your buzzwords, circle back, and disrupt MegaCorp into bankruptcy. The
         trauma:'being three streets out when the blast turned the campus into a column of light',
         dream:'to see one thing he helped build outlast the money that funded it',
         crime:'authoring the legislation that made a hundred rivals simply vanish, and only now losing sleep over it' } },
-      { name:'Rust', type:'founder', sprite:'rust', level:6, dossier:{
+      { name:'Rust', type:'founder', sprite:'rust', level:6, owner:'p2', dossier:{   // CO-OP: p2's hero
         first:'Pedro', last:'"Rust"',
         home:'the Detroit-Reclamation rustbelt',
         rel:'crew', relName:'the old line crew',
@@ -1276,7 +1276,7 @@ Weaponize your buzzwords, circle back, and disrupt MegaCorp into bankruptcy. The
         trauma:'the review that booked him a DEPRECIATED ASSET and wrote him off the quarter he turned fifty, scrapped beside the machines he tooled',
         dream:'to own one thing outright that no quarterly review can ever repossess',
         crime:'welding the foreclosure-mech chassis that now walks on the people he came up with' } },
-      { name:'Biba', type:'recruiter', sprite:'biba', level:12, dossier:{
+      { name:'Biba', type:'recruiter', sprite:'biba', level:12, owner:'p2', dossier:{   // CO-OP: p2's hero (freed by Nino on Ep X → tagged p2 there too)
         first:'Biba', home:'the flooded arcologies of Lagos-2',
         family:'raised six younger siblings on relief credits',
         trauma:'watched her first squad triaged out of existence by an algorithm',
