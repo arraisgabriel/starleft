@@ -51,6 +51,35 @@ This file is repo-specific context for coding agents. Keep it current when the a
 - `js/net/features.js`: feature availability and network quality helpers.
 - `js/net/trystero-boot.js`: only ES module; loads vendored Trystero/Nostr WebRTC and publishes `window.MP`.
 
+## MULTIPLAYER CAMPAIGN COMPATIBILITY (MANDATORY — binds every agent, skill, and tool)
+
+Owner rule (2026-07): **every future feature/implementation must work identically in the 4-player
+co-op campaign as in solo** — every client is a full co-founder, never a spectator. Full parity has
+shipped; the reusable primitives exist. The engine spawns co-op bases for `p2..pN` (`addCoopPlayer`);
+today's shipped per-player state is p1/p2 — **write new code ctrl-agnostic** (loop controllers / key
+by ctrl string, never hardcode `'p2'`) so the 3-4 player extension stays a data change. The canonical
+10-point checklist + primitive table lives in **`docs/mp/coop-compatibility.md`** — read it before
+ANY non-trivial change. Summary:
+
+1. Answer solo/host/client for every change before coding; `netRole==='solo'` gates on player-facing
+   features need explicit justification + a non-silent co-op fallback.
+2. Player-triggered mutations route through `net*` wrappers / `netHubAct(op)` → `applyHubAct` with
+   host-side cost derivation + ownership checks; clients send selectors, never amounts.
+3. Everything ownable carries `ctrl` (legacy-default `'p1'`); per-player UI filters by `isMine`.
+4. Spends via `hubSpend` (acting pool) / `playerEco(state,ctrl)`; earnings ×player-count — every player's pool gets the full reward.
+5. Presentation reaches EVERY player's screen: `narrate()` for one-shots; the cue channel +
+   `cinematicTick` for cinematics (hold-cue contract for freezing beats — copy the boss-cutscene
+   pattern verbatim); relay ids (not text) for per-device rendering; local-by-design stays local.
+6. Map transitions in co-op go through `mpHostStart(idx,'campaign',{noCrawl?})`, never bare `loadMap`.
+7. Client code never writes sim state or `running` (outside the cue contract); host emits from the
+   authoritative non-replay path only; `USE_ROLLBACK` keeps old fallbacks.
+8. Entity-shape changes → `packEnt`/`unpackInto`; new client-needed `G` scalars → the FULL-snapshot
+   SCALAR list; new CAMPAIGN fields → additive + legacy coercion in `deserializeHubCampaign`.
+9. New maps/missions must be co-op-aware (p2 base or heroEscape muster; `owner:'p2'` heroes —
+   Biba+Rust are p2's, Nino+Zeca p1; state-derivable quests; the client always has something to do).
+10. Verify all three paths headlessly (stub `MP.send` → replay via `NET.playCue`/`applyRemoteCmd`)
+    + a solo byte-identity smoke, before shipping.
+
 ## Important Constraints
 
 - Preserve classic global script order in `rts.html`.

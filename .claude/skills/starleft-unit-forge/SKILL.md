@@ -19,6 +19,17 @@ description: >-
 
 # STARLEFT Unit Forge
 
+> **⚠ MANDATORY — MULTIPLAYER CAMPAIGN COMPATIBILITY (owner rule, 2026-07).** Everything this skill
+> authors must work identically in the co-op campaign (up to 4 players) as in solo — every client is
+> a full co-founder, never a spectator. Before finalizing ANY output, run the 10-point checklist in
+> **`docs/mp/coop-compatibility.md`** (three-paths answer; host-replay intents; `ctrl` ownership —
+> write ctrl-agnostic, never hardcode `'p2'`; split-treasury economy; presentation relayed via
+> `narrate()`/the cue channel; `mpHostStart` for transitions; client sim purity; wire+save shape;
+> co-op-aware map/hero authoring — Biba+Rust are p2's heroes, Nino+Zeca p1; headless three-path
+> verification). A solo-only gate on player-facing content requires explicit justification plus a
+> non-silent co-op fallback.
+
+
 A guided pipeline for adding a unit or hero to STARLEFT. Adding one touches six systems — the Gemini
 art pipeline, the `DEF` stats, the production menu and its prerequisites, the sprite-loader tables,
 the laser-muzzle data, and (for heroes) the dossier/career system — and missing any one fails
