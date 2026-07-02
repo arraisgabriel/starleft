@@ -198,6 +198,7 @@ function questsTick(state){
   let changed=false;
   for(const def of defs){
     const q=Q[def.id]; if(!q || q.done || q.failed || q.na) continue;
+    if(def.requires){ const rq=Q[def.requires]; if(!rq || !rq.done) continue; }   // sequenced objective: hold off until the prerequisite quest is done (locked "PHASE 2")
     const ev=QUEST_EVAL[def.type]; if(!ev) continue;   // unknown type: inert (forward-compat with newer saves/maps)
     const r=ev(state, def, q);
     if(r==='done'){ q.done=1; changed=true; }

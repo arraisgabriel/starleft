@@ -1067,27 +1067,78 @@ Weaponize your buzzwords, circle back, and disrupt MegaCorp into bankruptcy. The
     name:'XIV — THE RECALL NOTICE',
     isVillain:false, displayEp:'XIV', vetCarryOverride:7,
     enemyName:'A&O', enemyFaction:'ao',
-    aggression:2.1, startGold:2400, startWorkers:10, startSoldiers:10, startBarracks:true,
+    // TWO-ACT: PHASE 1 = holdout (14 escalating recovery waves at the H.U.B.); PHASE 2 = raze the 4 repo
+    // camps once the siege breaks. aggression is LOW so the scripted holdout (not the camps) is the phase-1
+    // threat — the t=1080 event bumps it once the recovery crews are meant to be broken. startGold funds
+    // both the hold and the counter-attack army.
+    aggression:1.0, startGold:3000, startWorkers:10, startSoldiers:10, startBarracks:true,
     graceTime:95, waveTimer:92,
     crawl:{ episode:'EPISODE XIV', title:'THE RECALL NOTICE',
-      text:'The cure for death is yours, and the invoice just cleared legal.\n\nA&O does not send an army first; it sends a filing. CHAPTER ELEVEN — the fund that owns the beginning and the end declares your company a delinquent asset and your dead its repossessed inventory. And the man who signs it finally gives the fund a face: DELL TUSK, managing partner, who calls the flash a migration event, calls your memorial a liability he is rightsizing, and calls himself the adult in the room.\n\nHis recovery crews are already at the fence, and a countdown to zero the backups began the moment he spoke. Hold the H.U.B. perimeter. Make the repossession expensive....',
-      summary:`The cure for death is yours — so A&O files CHAPTER ELEVEN, declaring your company a delinquent asset and your dead its repossessed inventory, and the fund finally wears a face: managing partner Dell Tusk. His recovery crews test the H.U.B. fence while a clock to erase the backups starts ticking. Hold the perimeter and make the repossession expensive.` },
-    objective:'A&O has served CHAPTER ELEVEN and is moving to repossess the H.U.B. — HOLD the perimeter until the first recovery wave breaks, or raze all FOUR A&O repo camps to throw them off the fence.',
-    winCondition:{ type:'survive', forSec:300, protect:'hq' },
+      text:'The cure for death is yours, and the invoice just cleared legal.\n\nA&O does not send an army first; it sends a filing. CHAPTER ELEVEN — the fund that owns the beginning and the end declares your company a delinquent asset and your dead its repossessed inventory. And the man who signs it finally gives the fund a face: DELL TUSK, managing partner, who calls the flash a migration event, calls your memorial a liability he is rightsizing, and calls himself the adult in the room.\n\nHis recovery crews are already at the fence, and a countdown to zero the backups began the moment he spoke. Hold the H.U.B. perimeter until the recovery crews break — then take the fight to the fund and raze all four repo camps. Make the repossession expensive, then make it personal....',
+      summary:`The cure for death is yours — so A&O files CHAPTER ELEVEN, declaring your company a delinquent asset and your dead its repossessed inventory, and the fund finally wears a face: managing partner Dell Tusk. His recovery crews test the H.U.B. fence while a clock to erase the backups starts ticking. Hold the perimeter until the recovery crews break, then counter-attack and raze all four A&O repo camps. Make the repossession expensive — then make it personal.` },
+    objective:'PHASE 1 — HOLD the H.U.B. perimeter and break all 14 A&O recovery waves. PHASE 2 — with the siege broken, COUNTER-ATTACK and raze all four A&O repo camps. Victory needs both.',
     quests:[
-      { id:'survive', text:'Hold the H.U.B. perimeter until the recovery wave breaks', type:'survive', required:true },
-      { id:'raze',    text:'Or raze all four A&O repo camps outright',                  type:'razeAll', winsAlone:true, reward:150 },
-      { id:'repel',   text:'Repel the repossession — decommission 90 A&O crew',         type:'killUnits', count:90, reward:100 },
-      { id:'lean',    text:'Keep losses under 16',                                      type:'maxUnitsLost', count:15, reward:100 },
+      { id:'hold',  text:'Hold the H.U.B. perimeter — break all 14 A&O recovery waves', type:'holdout', required:true },
+      { id:'raze',  text:'Counter-attack — raze all four A&O repo camps',              type:'razeAll', required:true, requires:'hold' },
+      { id:'repel', text:'Repel the repossession — decommission 180 A&O crew',         type:'killUnits', count:180, reward:120 },
+      { id:'lean',  text:'Disciplined defense — keep total losses under 30',           type:'maxUnitsLost', count:29, reward:120 },
     ],
+    // PHASE 1 wave-defense. anchor is explicit coords (NOT {type:'hq'} — the 4 enemy camps are also
+    // type:'hq' and would bind the wrong base). resetOnUndefended:false so pushing out for PHASE 2 never
+    // wipes hold progress; the organic punishment for abandoning the base is the wave razing your HQ.
+    // No boss — the composition/size curve carries the finale (W14 is the spike). scaleWithRoster keeps
+    // it honest for veteran carryover and co-op.
+    holdout:{
+      quest:'hold',
+      anchor:{ x:48, y:40 },
+      zone:{ radius:12 },
+      trigger:{ reachRadius:16 },
+      // Stage in the clear DIAGONAL lanes: the N/S/E/W mid-approaches hold the rock clusters
+      // (48,20)/(48,60)/(24,48)/(72,32) and the lakes (30,30)/(66,50) sit off the NW/SE — crews funnel
+      // AROUND them toward the base. All points ≥7 tiles from every rock/lake center (incl. the +2y/±1x
+      // spawn jitter) because mkUnit places on the exact tile and does NOT snap off a blocker.
+      spawns:[
+        { x:64, y:22 }, { x:66, y:24 },   // NE lane
+        { x:32, y:18 }, { x:24, y:20 },   // NW lane
+        { x:64, y:58 }, { x:72, y:56 },   // SE lane
+        { x:32, y:58 }, { x:26, y:58 },   // SW lane
+      ],
+      resetOnUndefended:false,
+      scaleWithRoster:true,
+      gapSec:20,
+      framing:{
+        label:'PERIMETER',
+        armPrompt:'📡 CHAPTER ELEVEN served — A&O recovery crews are breaching the fence. HOLD the H.U.B. perimeter.',
+        startToast:'⚠ Dell Tusk\'s recovery crews hit the perimeter. Hold the line — the staging camps come after.',
+        abortToast:'⚠ The perimeter buckled — re-form on the H.U.B.',
+      },
+      waves:[
+        { comp:[['soldier',5],['ranger',2]] },                                              // W1  light probe
+        { comp:[['soldier',6],['ranger',3]] },                                              // W2
+        { comp:[['soldier',6],['hustler',3],['ranger',2]] },                                // W3
+        { comp:[['soldier',7],['hustler',3],['ranger',3]] },                                // W4
+        { comp:[['soldier',6],['lobbyist',2],['foodtruck',2],['ranger',2]] },               // W5  armor arrives
+        { comp:[['soldier',8],['hustler',4],['ranger',3]] },                                // W6
+        { comp:[['soldier',7],['lobbyist',3],['foodtruck',2],['ranger',3]] },               // W7
+        { comp:[['soldier',9],['hustler',4],['lobbyist',2],['ranger',3]] },                 // W8
+        { comp:[['soldier',8],['lobbyist',3],['foodtruck',3],['hustler',3],['ranger',3]] }, // W9  combined arms
+        { comp:[['soldier',10],['hustler',5],['ranger',4]] },                               // W10
+        { comp:[['soldier',9],['lobbyist',4],['foodtruck',3],['ranger',4]] },               // W11
+        { comp:[['soldier',11],['hustler',5],['lobbyist',3],['ranger',4]] },                // W12
+        { comp:[['soldier',10],['lobbyist',4],['foodtruck',4],['hustler',5],['ranger',4]] },// W13
+        { comp:[['soldier',12],['hustler',6],['lobbyist',4],['foodtruck',3],['ranger',6]] },// W14 finale (biggest)
+      ],
+    },
     w:96, h:80, seed:14014,
     player:{ x:48, y:40 },
     terrain:{ biomes:['tech'], temp:{ axis:'diag', base:0.30, gradient:0.14, noise:0.14 }, seaFrac:0.06, mtnFrac:0.06, forest:0 },
     enemies:[ {x:10,y:10, defenders:6, extraBarracks:true}, {x:86,y:10, defenders:6}, {x:10,y:70, defenders:6}, {x:86,y:70, defenders:6, extraBarracks:true} ],
+    // The holdout owns phase-1 pressure; these are flavor + a time-approximated "siege broken" beat that
+    // wakes the camps for the PHASE-2 assault (there's no phase-transition event hook, so it's clock-based).
     events:[
-      { atTime:80,  toast:'Tusk has escalated the recall — heavier recovery crews filed.', aggression:2.4 },
-      { atTime:170, toast:'CHAPTER ELEVEN enforcement: A&O surge on the fence!', spawnSquad:{ comp:[['soldier',4],['ranger',2]] }, at:{x:48,y:8} },
-      { atTime:240, toast:'The clock to zero the backups is still running. Hold.', aggression:2.7 },
+      { atTime:300,  toast:'Tusk: "The migration is on schedule. Your perimeter is a rounding error."' },
+      { atTime:720,  toast:'Recovery crews regrouping — the heaviest filing is inbound. Hold.' },
+      { atTime:1080, toast:'The recovery crews are broken. The fence is yours — now repossess THEM. Raze all four repo camps.', aggression:1.4 },
     ],
     lakes:[ {x:30,y:30,r:4}, {x:66,y:50,r:4} ],
     rockClusters:[ {x:48,y:20,n:14}, {x:48,y:60,n:14}, {x:24,y:48,n:12}, {x:72,y:32,n:12} ],
