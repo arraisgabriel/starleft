@@ -496,6 +496,7 @@ window.NET = window.NET || {};
     if(typeof updateParticles==='function') updateParticles(G, dt);
     if(typeof updateWater==='function')     updateWater(G, dt);
     if(typeof updateDialogs==='function')   updateDialogs(G, dt);
+    if(typeof TUTORIAL!=='undefined' && TUTORIAL.update) TUTORIAL.update(G, dt);   // C5: advance the joiner's guided tutorial (the client skips update(); this is cosmetic + never writes the sim)
     // the client owns its fog: it has every unit's position, so computeFog reproduces shared vision.
     if(typeof computeFog==='function')      computeFog(G);
     // 3) host-liveness watchdog: no snapshot for too long → the host crashed/dropped. Warn first, then end.

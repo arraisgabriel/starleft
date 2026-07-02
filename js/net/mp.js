@@ -98,6 +98,7 @@
     if(typeof syncHud==='function') syncHud();
     if(typeof clampCam==='function') clampCam(G);
     if(typeof refreshUI==='function') refreshUI();
+    if(S.mode==='campaign' && typeof TUTORIAL!=='undefined' && TUTORIAL.coopInit) TUTORIAL.coopInit(G);   // C5: host's Quarter-I guided tutorial (no-op unless fresh Quarter I + first-time)
     // asset gate (VISUAL-ONLY in co-op): hides the procedural flash while this map's sprites
     // settle. It must never touch `running` or delay mpstart/sendFull — the sim, host clock and
     // snapshot flow all proceed underneath the opaque overlay; the gate just lifts on settle/18s.
@@ -307,6 +308,7 @@
       const o = G._coopOrigins && G._coopOrigins.p2;
       if(o && typeof clampCam==='function'){ const z=G.zoom||1; G.camX=o.x*TILE-(innerWidth/z)/2; G.camY=o.y*TILE-(innerHeight/z)/2; clampCam(G); }
       if(typeof refreshUI==='function') refreshUI();
+      if(typeof TUTORIAL!=='undefined' && TUTORIAL.coopInit) TUTORIAL.coopInit(G);   // C5: joiner's Quarter-I guided tutorial (no-op unless fresh Quarter I + first-time)
       ui('EnterGame');
       toast('Dropped into co-op — your base is marked in amber');
     };
@@ -519,7 +521,10 @@
     running = false;                                         // freeze the world view immediately
     if(typeof mpStopRtt==='function') mpStopRtt();
     if(window.COMMS) try{ COMMS.leave(); }catch(_){}
-    ui('HostGone', reason);                                  // mp-ui shows the "disconnected" overlay + Back to Menu
+    // C2 — remember this campaign's locally-mirrored slot so the drop screen can offer a re-host. Only meaningful
+    // for a co-op CAMPAIGN we hold a mirror of (mpClientPersistSave writes it from the host's save-broadcasts).
+    S._rehostKey = (S.mode==='campaign' && S.mpCampaignId && typeof mpSaveKey==='function') ? mpSaveKey(S.mpCampaignId) : null;
+    ui('HostGone', reason);                                  // mp-ui shows the "disconnected" overlay + Back to Menu / Re-host
   }
   window.mpHostGone = mpHostGone;
 

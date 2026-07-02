@@ -121,19 +121,35 @@
   // action, so the client is always notified and never stuck. reason: 'left' (clean) | 'lost' (timed out).
   window.mpUiHostGone = function(reason){
     if(typeof running!=='undefined') running = false;
+    // C2 — can we re-host? Only if we hold a local mirror of this co-op CAMPAIGN (mpHostGone stashed its slot key).
+    let canRehost=false, rk=null;
+    try{ rk=(window.MP_SESSION||{})._rehostKey; canRehost=!!(rk && typeof saveRead==='function' && saveRead(rk)); }catch(e){}
     const es = $('endScreen');
     if(es){
       es.className = 'overlay lose'; es.style.display = 'flex';
       es.innerHTML =
         '<div class="big">🔌</div><h1>DISCONNECTED</h1>'+
         '<h2>'+(reason==='left' ? 'The host left the match' : 'Lost connection to the host')+'</h2>'+
-        '<p>The co-op session has ended.</p>'+
-        '<button class="btn" onclick="mpReturnFromHostLost()">◀ Back to Menu</button>';
+        '<p>The co-op session has ended.'+(canRehost?' You have a locally-saved copy of this campaign — you can re-host it and your ally can rejoin with the new code.':'')+'</p>'+
+        '<div style="display:flex;gap:12px;flex-wrap:wrap;justify-content:center;">'+
+        (canRehost?'<button class="btn" style="background:linear-gradient(180deg,#2f8f5b,#1a5c38);" onclick="mpRehostFromLost()">🔄 Re-host this campaign</button>':'')+
+        '<button class="btn" onclick="mpReturnFromHostLost()">◀ Back to Menu</button>'+
+        '</div>';
     } else { toast('🔌 Host disconnected — match ended'); window.mpReturnFromHostLost(); }
   };
   window.mpReturnFromHostLost = function(){
     const es = $('endScreen'); if(es){ es.style.display='none'; es.innerHTML=''; }
     if(typeof mpLeave==='function') mpLeave();              // leave the dead room, reset to solo, return to menu
+  };
+  // C2 — become the new host of a dropped campaign. Routes through the SAME tested lobby resume flow (the ally
+  // rejoins the new room BEFORE start, so we never hit the fragile start-with-no-peer path): leave the dead room,
+  // open a fresh host room in RESUME mode (the room screen's picker lists our local mirror), share the new code.
+  window.mpRehostFromLost = function(){
+    const es = $('endScreen'); if(es){ es.style.display='none'; es.innerHTML=''; }
+    if(typeof mpLeave==='function') mpLeave();              // reset to solo — the campaign mirror survives in localStorage
+    UI.mode='resume';
+    if(typeof mpCreateRoom==='function') mpCreateRoom();    // fresh host room; ui('OpenRoom') shows the resume room screen + save picker
+    toast('Re-hosting — share the NEW room code with your ally, pick your campaign, then press Start.', 9000);
   };
   window.mpUiStall       = function(){ toast('⚠ Connection to host unstable — reconnecting…'); };
   window.mpUiReconnected = function(){ toast('✅ Reconnected to host'); };

@@ -303,7 +303,8 @@ const TUTORIAL = (function(){
   function init(state){
     end();                                   // clear any prior run's overlay/state
     if(!requested) return;
-    if(typeof netRole!=='undefined' && netRole!=='solo') return;   // solo only
+    // (C5) co-op runs the SAME guided tutorial via coopInit() below, which sets `requested`; solo sets it
+    // via choosePrompt. No netRole gate here — the fresh/QuarterI/non-hub gates below keep it Quarter-I-only.
     if(!state || !state.cfg || state.hub) return;
     if((typeof mapIndex==='number' ? mapIndex : 0) !== 0) return;   // Quarter I only
     if((state.time||0) > 1) return;                                  // fresh map only (never a loaded save)
@@ -380,6 +381,21 @@ const TUTORIAL = (function(){
 
   function skip_(){ if(typeof VOICE!=='undefined' && VOICE.stopTutorial) VOICE.stopTutorial(); end(); }
 
+  // C5 — co-op onboarding: run the SAME Quarter-I guided tutorial for BOTH co-founders. There's no opt-in
+  // prompt in the co-op start flow, so auto-request ONLY the first time this device ever engages the tutorial
+  // (mirrors solo's first-time behavior via the same LS 'accepted' flag) — repeat players aren't nagged, and
+  // it's fully skippable. Called from the host (mpHostStart) + client (NET.onFullApplied); init() re-checks
+  // fresh/QuarterI/non-hub, so this is a no-op on every other map. It never writes the sim → cannot desync.
+  function coopInit(state){
+    if(typeof netRole==='undefined' || netRole==='solo') return;        // solo uses the prompt flow
+    if(typeof MP_SESSION!=='undefined' && MP_SESSION.mode && MP_SESSION.mode!=='campaign') return;  // campaign only
+    let seen=false; try{ seen=!!(JSON.parse(localStorage.getItem(LS_KEY)||'{}').accepted); }catch(e){}
+    if(seen) return;                                                    // already onboarded once on this device
+    requested = true;
+    init(state);
+    if(active){ try{ localStorage.setItem(LS_KEY, JSON.stringify({ contextualSeen, accepted:true })); }catch(e){} }  // mark onboarded so it won't re-fire next co-op run
+  }
+
   function end(){
     active = false; stepIdx = -1; worldFocus = null; domKey = null; curObjective = '';
     _hidePanel();
@@ -387,6 +403,6 @@ const TUTORIAL = (function(){
     if(typeof VOICE!=='undefined' && VOICE.stopTutorial) VOICE.stopTutorial();
   }
 
-  return { prompt, choosePrompt, init, update, drawWorld, reapplyHighlight, reflow, fireContextual, skip:skip_, end,
+  return { prompt, choosePrompt, init, coopInit, update, drawWorld, reapplyHighlight, reflow, fireContextual, skip:skip_, end,
            isActive:()=>active };
 })();
