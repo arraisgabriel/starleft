@@ -281,15 +281,22 @@ function hubRewardFor(state){
 }
 
 function beginExtractionPhase(state){
-  if(netRole!=='solo'){ state.over=true; onVictory(); return; }
+  // C3 — co-op extraction is HOST-AUTHORITATIVE: the host runs the phase + bomber flight, the client follows to
+  // the H.U.B. via mpHostEnterHub (inside enterHubFromCombat). The client never drives it. (Solo unchanged.)
+  if(netRole==='client'){ state.over=true; onVictory(); return; }
   CAMPAIGN.mode='extraction';
   CAMPAIGN.nextMapIndex=(typeof villainNextLinear==='function') ? villainNextLinear(mapIndex) : Math.min(mapIndex+1, MAPS.length-1);   // skips appended villain maps; resumes at returnTo after a boss
   state.extractReady=true;
   state.extractStarted=false;
-  state.objective='Episode complete. Garrison your survivors inside an Open-Plan HQ (only Lv2+ are extracted), then press Extraction.';
+  // co-op keeps ALL veterans (the garrison-or-lose rule is solo-only, via hubBuildRosterFromCombat), so the
+  // co-op prompt is a regroup beat, not a punishing garrison gate.
+  const coop = (netRole!=='solo');
+  state.objective = coop
+    ? 'Episode complete. Regroup your squad, then press Extraction to fly everyone to the H.U.B.'
+    : 'Episode complete. Garrison your survivors inside an Open-Plan HQ (only Lv2+ are extracted), then press Extraction.';
   state.cfg.objective=state.objective;
   for(const e of state.entities){ if(e.owner==='enemy' && e.kind==='unit') e.dead=true; }
-  toast('Episode complete — garrison units in your HQ, then launch Extraction.', 0);
+  toast(coop ? 'Episode complete — regroup, then launch Extraction.' : 'Episode complete — garrison units in your HQ, then launch Extraction.', 0);
   refreshUI();
 }
 function hubBuildingRoofPoint(b){
@@ -325,14 +332,18 @@ function strandedVets(state){
 // HQ "Extraction" button action: validate, warn about stranded veterans, then launch the bomber.
 function tryStartExtraction(){
   const state=G;
-  if(!state || !state.extractReady || netRole!=='solo') return;
+  if(!state || !state.extractReady || netRole==='client') return;   // C3: host may launch too (client only follows)
   const hq=(typeof selectedBuilding==='function') ? selectedBuilding('hq') : null;
   if(!hq){ toast('Select your HQ to launch extraction.'); return; }
-  if(typeof hqStoredUnits!=='function' || hqStoredUnits(state,hq).length===0){
+  // solo requires ≥1 garrisoned unit (garrison-or-lose); co-op carries everyone regardless, so don't strand a
+  // host whose own units all fell (the ally's survivors still carry) — let it launch from an empty HQ.
+  if(netRole==='solo' && (typeof hqStoredUnits!=='function' || hqStoredUnits(state,hq).length===0)){
     toast('Garrison at least one unit inside the HQ first.'); return;   // guards the disabled-button click
   }
+  // co-op: courtesy heads-up to the ally that the squad is being pulled out (client just waits for the H.U.B.)
+  if(netRole==='host' && typeof narrate==='function') narrate('toast', { html:'🚁 Ally is extracting the squad — regrouping at the H.U.B.…', ms:8000 });
   const stranded=strandedVets(state);
-  if(stranded.length){ showExtractConfirm(state, hq, stranded.length); return; }
+  if(stranded.length && netRole==='solo'){ showExtractConfirm(state, hq, stranded.length); return; }   // co-op keeps everyone → no false "leave them behind" warning
   hubStartExtractFlight(state, hq);
 }
 // Pause + confirm modal shown when Lv2+ veterans would be left behind.
@@ -551,7 +562,12 @@ window.coopCampaignWin=function(state){
     else beginCoopFinale(state);
     return;
   }
-  if(typeof enterHubFromCombat==='function') enterHubFromCombat(state);
+  // C3 — co-op now gets the interactive extraction beat too (host-authoritative). beginExtractionPhase runs the
+  // garrison prompt + Buzzword-Bomber flight, then updateExtraction hands off to enterHubFromCombat exactly as the
+  // solo path does — so the client still follows to the H.U.B. via mpHostEnterHub. Falls back to the direct hub
+  // hand-off if extraction is somehow unavailable (never leave the win without a route to the hub).
+  if(typeof beginExtractionPhase==='function') beginExtractionPhase(state);
+  else if(typeof enterHubFromCombat==='function') enterHubFromCombat(state);
 };
 function drawExtractionFlight(state){
   const f=state.extractFlight; if(!f || f.phase==='panorama' || f.phase==='nuke') return;   // panorama draws its own bomber; the nuke consumes it

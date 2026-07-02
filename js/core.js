@@ -75,7 +75,8 @@ function update(state, dt){
   resolveStuck(state,dt);
 
   // ---- enemy AI ----
-  if(!state.hub && !(state.extractReady && netRole==='solo') && !state.crashChain) enemyAI(state,dt);
+  // paused during any extraction phase (solo OR co-op host — C3) and the crash-chain; the client never runs this.
+  if(!state.hub && !state.extractReady && !state.crashChain) enemyAI(state,dt);
 
   // ---- T2-8: scripted mid-mission beats — cfg.events [{atTime,…}] fire once each, in order.
   // Host/solo only (this whole update path is); clients see results via snapshots. Deterministic:
