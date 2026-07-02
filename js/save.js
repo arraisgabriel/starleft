@@ -125,6 +125,9 @@ function serializeGame(){
   s.mapName=G.cfg.name; s.gameTime=G.time;
   s.hubMap=!!G.hub;
   if(typeof serializeHubCampaign==='function') s.campaign=serializeHubCampaign();
+  // C4 — persist the pending carryover (both co-founders' vet + hero tracks) so a save/resume across a
+  // dispatch keeps the ally's earned roster. Additive top-level field; old loaders ignore it.
+  if(typeof getCarryoverState==='function') s.carry=getCarryoverState();
   return s;
 }
 // Auto-migrate an OLD campaign save to the CURRENT map's editor-authored override layers: the Dark Tower
@@ -162,7 +165,7 @@ function migrateCampaignTerrain(g){
 }
 function deserializeGame(s){
   const g={};
-  const META={v:1, mapIndex:1, savedAt:1, mapName:1, gameTime:1, hubMap:1, campaign:1, fallen:1};
+  const META={v:1, mapIndex:1, savedAt:1, mapName:1, gameTime:1, hubMap:1, campaign:1, fallen:1, carry:1};
   const idx=saveMapIndex(s), isHub=saveIsHubMap(s);
   const legacyMadosis = !(s.v>=2);   // pre-madosis save (v<2 / null) → back-fill an approximation on first load
   for(const k in s){ if(!SKIP[k] && !META[k]) g[k]=s[k]; }
@@ -229,6 +232,8 @@ function deserializeGame(s){
   });
   // memorial persists from save v2 on — restore it so the campaign death-toll survives save/load
   if(Array.isArray(s.fallen) && typeof restoreFallen==='function') restoreFallen(s.fallen);
+  // C4 — restore the pending carryover tracks (legacy saves lack `carry` → skipped, tracks untouched)
+  if(s.carry && typeof restoreCarryoverState==='function') restoreCarryoverState(s.carry);
   // pre-madosis save (v<2): approximate every veteran's current madosis so the system works on older games
   if(legacyMadosis && typeof madosisBackfill==='function') madosisBackfill(g, idx);
   g.selection = (s.selection||[]).map(id=>byId.get(id)).filter(e=>e && !e.dead && !e.storedIn);

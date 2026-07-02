@@ -550,18 +550,9 @@
 
   /* ---------------- campaign advance (host drives the sequence) ---------------- */
   // Called by the host when it wins a campaign Quarter (wired from the victory flow).
-  window.mpAdvanceCampaign = function(){
-    if(S.role!=='host' || S.mode!=='campaign') return false;
-    if(S.mapIndex >= (MAPS.length-1)) return false;
-    // auto-carry the host's top veterans (no interactive chooser in co-op v1); p2 starts fresh.
-    if(typeof eligibleVets==='function' && typeof setCarryover==='function'){
-      const vets = eligibleVets(G) || [];
-      const cap = (typeof vetCarryCountFor==='function') ? vetCarryCountFor(S.mapIndex+1) : 0;
-      setCarryover(vets.slice(0, cap));
-    }
-    mpHostStart(S.mapIndex+1, 'campaign');
-    return true;
-  };
+  // (Removed dead `mpAdvanceCampaign` — never wired, and its "p2 starts fresh" auto-carry was wrong-policy:
+  //  co-op campaign advance routes through the hub via hubDispatchNextEpisode → mpHostStart, which carries
+  //  BOTH co-founders' rosters. C4 now persists the full carryover across save/resume.)
   window.mpHostEnterHub = function(){
     if(S.role!=='host') return;
     S.mapIndex = mapIndex|0;

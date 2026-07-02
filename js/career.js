@@ -212,6 +212,10 @@ let carryoverVetsP2 = [];
 // hero appears, they auto-deploy to every subsequent map until killed — never selectable, never
 // counted against the vet carry cap. (Reset alongside carryoverVets when a new campaign starts.)
 let carryoverHeroes = [];
+// CO-OP: the ally's OWN hero track (mirror of carryoverVetsP2). A hero tagged ctrl==='p2' at victory rides
+// this list and redeploys at the p2 base next Quarter via spawnHeroesP2. Empty in solo + on every current
+// map (no map assigns owner:'p2' yet) → the p1 hero path stays byte-identical.
+let carryoverHeroesP2 = [];
 
 // how many veterans carry into a given (0-based) map index: 2 into map 2-3, 3 into map 4-5,
 // 4 into map 6-7, … — grows +1 every two maps, unbounded.
@@ -294,15 +298,34 @@ function captureHeroes(state){
   // if garrisoned in an HQ and Lv2+. Every other caller (co-op victory, the victory chooser, hub
   // dispatch with a synthetic {entities} state) keeps the legacy "all surviving heroes carry" behavior.
   const requireGarrison = !!(state && state.extractReady && netRole==='solo');
-  carryoverHeroes = (state.entities||[])
+  const alive = (state.entities||[])
     .filter(e=>!e.dead && e.owner==='player' && e.hero && (!requireGarrison || (e.storedIn && (e.stars||0)>=2)))
-    .map(e=>({ heroId:e.heroId, type:e.type, sprite:e.spriteType, stars:e.stars, xp:e.xp, lore:e.lore }));
+    .map(e=>({ heroId:e.heroId, type:e.type, sprite:e.spriteType, stars:e.stars, xp:e.xp, lore:e.lore, ctrl:e.ctrl||'p1' }));
+  // CO-OP: split the surviving heroes by owner so each co-founder's heroes redeploy at THEIR base. Solo /
+  // every current map → all 'p1' (no owner:'p2' assigned anywhere yet), so carryoverHeroes is unchanged.
+  carryoverHeroes   = alive.filter(h=>(h.ctrl||'p1')==='p1');
+  carryoverHeroesP2 = alive.filter(h=>(h.ctrl||'p1')==='p2');
 }
 // clear the hero carryover (a brand-new campaign / map-select replay starts heroless)
-function resetHeroes(){ carryoverHeroes = []; }
+function resetHeroes(){ carryoverHeroes = []; carryoverHeroesP2 = []; }
+
+// C4 — the full carryover INTENT (both co-founders' vet + hero tracks). Serialized onto the save blob
+// (serializeGame) + restored on load (deserializeGame) so a mid-battlefield save/resume keeps the ally's
+// earned roster across a dispatch (previously lost — carryover lived only in RAM). Additive + legacy-safe:
+// an old save lacks `carry` → restoreCarryoverState is never called → the tracks are untouched (as today).
+function getCarryoverState(){
+  return { v:carryoverVets, v2:carryoverVetsP2, h:carryoverHeroes, h2:carryoverHeroesP2 };
+}
+function restoreCarryoverState(c){
+  if(!c || typeof c!=='object') return;
+  if(Array.isArray(c.v))  carryoverVets     = c.v;
+  if(Array.isArray(c.v2)) carryoverVetsP2   = c.v2;
+  if(Array.isArray(c.h))  carryoverHeroes   = c.h;
+  if(Array.isArray(c.h2)) carryoverHeroesP2 = c.h2;
+}
 // is a named hero already on the carryover track? (Episode X: a Biba already freed in a prior run
 // rides the carryover and spawns at HQ, so map.js must NOT also spawn her as a captive again.)
-function heroIsCarried(name){ return carryoverHeroes.some(h=>h.heroId===name); }
+function heroIsCarried(name){ return carryoverHeroes.some(h=>h.heroId===name) || carryoverHeroesP2.some(h=>h.heroId===name); }
 
 /* ---- opening-crawl contextual variables ----
    MAPS[idx].crawl.text may weave in live campaign memory via {token}, {?key}...{/key}
@@ -402,8 +425,39 @@ function spawnHeroes(state){
   if(cfg && cfg.heroes) for(const h of cfg.heroes){           // first appearances on this map
     const hid = h.id || h.name;
     if(placed.has(hid)) continue;                             // already carried in — don't duplicate
+    if(heroOwnerFor(state, h)==='p2') continue;               // CO-OP: an ally-assigned hero spawns at the p2 base (spawnHeroesP2)
     const lvl = Math.max(0, Math.min(CAREER.maxStars, h.level||0));
     _placeHero(state, c, pos++, h.type, hid, lvl, CAREER.xpFor(lvl), null, h.dossier || { name:h.name }, h.sprite);
+    placed.add(hid);
+  }
+}
+// CO-OP: which co-founder owns a FIRST-APPEARANCE hero. Explicit cfg.heroes[].owner==='p2' opts a hero into
+// the ally's track; everything else (and solo, and heroEscape maps, so a phantom p2 hero-base can't break the
+// Ep XVI escape) stays p1. No automatic even/odd split in v1 — a narrative hero only goes p2 when a map author
+// opts in, so every current map is byte-identical. Deterministic on both peers (both run newMap).
+function heroOwnerFor(state, h){
+  if(!h || h.owner!=='p2') return 'p1';
+  if(state && state.cfg && state.cfg.heroEscape) return 'p1';
+  if(typeof netRole!=='undefined' && netRole==='solo') return 'p1';   // no ally present → don't strand the hero off-map
+  return 'p2';
+}
+// CO-OP: deploy the ally's heroes near the p2 base — mirror of spawnHeroes, but anchored at `origin` and
+// tagged p2 (caller addCoopPlayer has set state._defaultCtrl='p2', which mkUnit reads). Carried p2 survivors
+// PLUS any first-appearance hero this map assigns to p2. Dedup by heroId. No-op in solo (empty p2 track).
+function spawnHeroesP2(state, origin){
+  if(!state || !origin) return;
+  const c={ x:origin.x, y:origin.y };
+  let pos=0; const placed=new Set();
+  for(const h of carryoverHeroesP2){
+    _placeHero(state, c, pos++, h.type, h.heroId, h.stars, h.xp, h.lore, null, h.sprite);
+    placed.add(h.heroId);
+  }
+  const cfg=state.cfg;
+  if(cfg && cfg.heroes) for(const h of cfg.heroes){
+    const hid=h.id||h.name;
+    if(placed.has(hid) || heroOwnerFor(state, h)!=='p2') continue;
+    const lvl=Math.max(0, Math.min(CAREER.maxStars, h.level||0));
+    _placeHero(state, c, pos++, h.type, hid, lvl, CAREER.xpFor(lvl), null, h.dossier||{ name:h.name }, h.sprite);
     placed.add(hid);
   }
 }

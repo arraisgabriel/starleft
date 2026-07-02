@@ -1005,6 +1005,7 @@ function addCoopPlayer(state, slot){
   // CO-OP: the ALLY's carried veterans (set at hub dispatch) DO redeploy here, near the p2 base, tagged
   // p2 via _defaultCtrl. Host-only matters — the client gets these units via the snapshot.
   if(typeof spawnVetsP2==='function') spawnVetsP2(state, origin);
+  if(typeof spawnHeroesP2==='function') spawnHeroesP2(state, origin);   // CO-OP: the ally's heroes redeploy at the p2 base too (owner:'p2' + carried p2 heroes)
   state._defaultCtrl=prev;
 
   for(let y=-8;y<=12;y++)for(let x=-8;x<=11;x++){ const gx=origin.x+x, gy=origin.y+y;   // reveal p2's spread start
