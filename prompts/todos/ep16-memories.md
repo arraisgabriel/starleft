@@ -37,3 +37,10 @@ Animate the a&o bomb in the ep 15 extraction sequence. Make the bomber fall down
 
 
 Plan on how to create all of that. Starting by writing a ep16-tasks.md document with de COMPLETE description of each task and a [ ] ticker for completed tasks.
+
+
+---
+
+Episode 16 memories dialog is not appearing as a dialog box as it MUST. Is appearing as a tooltip.
+
+It MUST appear as a dialog box that stays at the screen until the player clicks in it to close it.
