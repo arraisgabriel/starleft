@@ -134,6 +134,9 @@ function madosisEvent(state, key, ctx){
       try{ if(griever.lore && typeof buildDossier==='function') txt=buildDossier(griever).fill(line); }
       catch(e){ txt=line.replace(/\{relName\}/g,'them').replace(/\{home\}/g,'home'); }
       pushDialog(griever, txt, { type:'lore', tone:'grief' });
+      // co-op: mirror the grief bark to the ally (Phase-A say relay; no sayIdx — the line has dossier
+      // fills, no voice clip; a missing unit on the client drops silently, matching solo semantics)
+      if(typeof narrate==='function') narrate('say', { unitId:griever.id, text:txt, tone:'grief' });
     }
   }
 }

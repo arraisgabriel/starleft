@@ -345,9 +345,11 @@ const TUTORIAL = (function(){
   function update(state, dt){
     if(!state || state.over) return;
     if(state.hub){ if(active) end(); return; }   // reached the H.U.B. (extraction done) — tear down cleanly
-    // one-time contextual pop-ups fire in SOLO whether or not the guided tutorial is running —
-    // they teach mechanics at the moment they surface (madosis-live already worked this way).
-    if(typeof netRole==='undefined' || netRole==='solo')
+    // one-time contextual pop-ups fire whether or not the guided tutorial is running — they teach
+    // mechanics at the moment they surface (madosis-live already worked this way). CO-OP: the HOST
+    // polls them too (it runs update(), so the when() predicates are valid) and fireContextual relays
+    // the id to the ally via narrate('ctut'); the CLIENT never polls (it receives the relay instead).
+    if(typeof netRole==='undefined' || netRole!=='client')
       for(const c of CONTEXTUAL){ if(!contextualSeen[c.id] && c.when(state)) fireContextual(c.id, state); }
     if(!active) return;
     // keep the arrow glued to the (reflowing) button
@@ -377,6 +379,10 @@ const TUTORIAL = (function(){
     if(typeof eventToast==='function') eventToast('<b>ROD:</b> '+txt, 9000);
     else if(typeof toast==='function') toast(txt, 6000);
     playVoice(c);
+    // CO-OP: relay the id (not the text) — the client re-renders its OWN copy() (mouse/touch per device),
+    // plays its own Rod clip and marks its own contextualSeen. narrate self-gates (solo/client no-op),
+    // and the client's own fireContextual can't recurse (its narrate no-ops).
+    if(typeof narrate==='function') narrate('ctut', { id:id });
   }
 
   function skip_(){ if(typeof VOICE!=='undefined' && VOICE.stopTutorial) VOICE.stopTutorial(); end(); }

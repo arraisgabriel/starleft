@@ -80,7 +80,8 @@ window.NET = window.NET || {};
                     '_pvp','_pvpWinner',                                          // duel verdict (T4-5)
                     'quests',                                                     // quest progress → client tracker (mid-match joiners get full state here)
                     'scanReveals',                                                // Market Research terrain patches (re-applied below)
-                    'enemySpawnTimer','enemyWaveTimer','enemyFortifyTimer','_recalibratedFor','_coopOrigins'];
+                    'enemySpawnTimer','enemyWaveTimer','enemyFortifyTimer','_recalibratedFor','_coopOrigins',
+                    '_difficulty','_scoreMul'];   // B0: the HOST's difficulty stamp (client newMap stamped its own device's — diffOf/valuationFor display parity)
     for(const k of SCALAR){ if(s[k]!==undefined) G[k]=s[k]; }
     if(s.campaign && typeof deserializeHubCampaign==='function') deserializeHubCampaign(s.campaign);
     G.entities = s.entities.map(e=>Object.assign({}, e));

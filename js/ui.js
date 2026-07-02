@@ -3078,6 +3078,24 @@ function victorySummaryHTML(){
   }catch(e){ return ''; }
   return h;
 }
+// B3 — co-op quarter-cleared summary: the solo endScreen's run summary as a NON-BLOCKING, auto-dismissing
+// card on both peers (the co-op win skips the endScreen — host goes straight to extraction→hub, client
+// follows via mphub). Ships as host-rendered HTML over the 'summary' cue so the numbers match exactly.
+// Never touches `running`; never gates the mphub flow.
+function showCoopVictorySummary(html){
+  if(!html) return;
+  let el=document.getElementById('coopSummary');
+  if(!el){ el=document.createElement('div'); el.id='coopSummary';
+    el.style.cssText='position:fixed;left:50%;top:12%;transform:translateX(-50%);z-index:60;max-width:min(92vw,760px);'
+      +'background:rgba(8,12,20,.94);border:1px solid #3a4a60;border-radius:10px;padding:14px 18px;text-align:center;pointer-events:auto;';
+    el.onclick=()=>{ el.style.display='none'; };
+    document.body.appendChild(el); }
+  el.innerHTML='<h2 style="margin:0 0 6px;">📈 QUARTER CLEARED</h2>'+html
+    +'<div style="opacity:.6;font-size:.85em;margin-top:6px;">tap to dismiss — extraction inbound</div>';
+  el.style.display='block';
+  clearTimeout(el._t); el._t=setTimeout(()=>{ el.style.display='none'; }, 14000);
+}
+window.showCoopVictorySummary=showCoopVictorySummary;
 // victory-screen carryover chooser: pick up to `cap` veteran units to deploy next quarter
 function buildCarryChooser(listEl, countEl, vets, cap, nextBtn, proceed){
   const selected = new Set(vets.slice(0, cap).map(v=>v.id));   // pre-select the strongest `cap`

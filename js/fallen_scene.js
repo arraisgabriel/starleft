@@ -42,7 +42,8 @@
     wasRunning = false;
   }
 
-  function show(u){
+  function show(u, opts){
+    opts = opts || {};
     const box = build();
     let d = null;
     try { d = (typeof buildDossier === 'function') ? buildDossier(u) : null; } catch(e){}
@@ -55,7 +56,7 @@
       dr.innerHTML = (u.dreamDone ? '<b class="ok">dream fulfilled ✓</b> ' : '<b class="no">dream unfulfilled ✗</b> ') + '“' + d.dream + '”';
     } else dr.textContent = '';
     const share = box.querySelector('.fs-share');
-    share.style.display = (typeof shareCard === 'function') ? '' : 'none';
+    share.style.display = (opts.share !== false && typeof shareCard === 'function') ? '' : 'none';   // record-built pseudo-units don't feed shareCard safely (B4)
     share.onclick = (ev)=>{ ev.stopPropagation(); if(typeof shareCard === 'function') shareCard(u); };
     // animated portrait (same live-card draw the dossier panel uses)
     const cv = box.querySelector('.fs-spr');
@@ -68,9 +69,14 @@
     };
     box.style.display = 'flex';
     if(!raf) raf = requestAnimationFrame(tick);
-    // freeze the fight under the beat (restored in close())
-    wasRunning = (typeof running !== 'undefined') && running;
-    if(wasRunning){ running = false; if(typeof syncPauseBtn==='function') syncPauseBtn(); }
+    // freeze the fight under the beat (restored in close()). B4: the co-op CLIENT path passes freeze:false —
+    // it isn't simulating and must NEVER write `running` (the host's hold-cues own that flag); close()'s
+    // `if(wasRunning)` then stays false, so the client can't resume anything either.
+    if(opts.freeze === false){ wasRunning = false; }
+    else {
+      wasRunning = (typeof running !== 'undefined') && running;
+      if(wasRunning){ running = false; if(typeof syncPauseBtn==='function') syncPauseBtn(); }
+    }
     if(closeTimer) clearTimeout(closeTimer);
     closeTimer = setTimeout(close, HOLD_MS);
   }
@@ -78,7 +84,7 @@
   // called from recordFallen (lore.js) — all the gates live HERE so the call site stays one line
   window.fallenSceneMaybe = function(u){
     try {
-      if(typeof netRole !== 'undefined' && netRole !== 'solo') return;        // co-op → toast only
+      if(typeof netRole !== 'undefined' && netRole !== 'solo') return;        // co-op host → toast only (freezing the host stalls snapshots + trips the ally's watchdog); the CLIENT gets the beat via fallenSceneShowRec
       if(window._rbReplaying || window._massMemorialize) return;              // rollback resim / Ep VII flash wave
       if(!u || u.owner !== 'player' || (u.stars||0) < 2) return;              // the beat is for leveled veterans
       if(typeof G === 'undefined' || !G || G.over || G.hub || G.extractFlight) return;
@@ -86,6 +92,25 @@
       if(now - lastAt < MIN_GAP_S) return;                                    // a wipe stacks into toasts
       lastAt = now;
       show(u);
+    } catch(e){}
+  };
+
+  // B4 — co-op CLIENT: render the memorial beat from the relayed plain record (playCue narrate 'fallen',
+  // fresh-fid only). Overlay-only: never touches `running` (the client isn't simulating; the host owns
+  // freeze semantics). Shares the MIN_GAP_S throttle so a wipe stays toasts on the client too.
+  window.fallenSceneShowRec = function(rec){
+    try {
+      if(typeof netRole === 'undefined' || netRole !== 'client') return;      // host keeps its toast (see fallenSceneMaybe)
+      if(!rec || !(rec.hero || (rec.stars != null ? rec.stars : rec.lvl || 0) >= 2)) return;
+      if(typeof G === 'undefined' || !G || G.over || G.hub) return;
+      if(G.extractFlight || G.cinematic || G.crashChain) return;              // never over a cinematic (incl. the Ep VII flash wave)
+      const now = performance.now() / 1000;
+      if(now - lastAt < MIN_GAP_S) return;
+      lastAt = now;
+      const u = { type:rec.type, stars:(rec.stars != null ? rec.stars : rec.lvl) || 0, spriteType:rec.spriteType || null,
+                  heroId:rec.heroId || null, hero:!!rec.hero, dreamDone:!!rec.dreamDone,
+                  lore:(typeof fallenDossierSnap === 'function') ? fallenDossierSnap(rec) : rec.lore };
+      show(u, { freeze:false, share:false });
     } catch(e){}
   };
 })();

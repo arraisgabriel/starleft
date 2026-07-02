@@ -415,7 +415,9 @@ function winTargetPx(wc){
 function altWinTriggered(state){
   if(state._skirmish){ state.over=true; state._outcome='win'; if(!window.USE_ROLLBACK) onVictory(); return; }   // T3-2
   // crash chain (data-driven): skip extraction→HUB and load the next mission through the bomber-fall cinematic
-  if(state.cfg && state.cfg.crashChainTo && netRole==='solo' && typeof beginCrashChain==='function'){ beginCrashChain(state); return; }
+  if(state.cfg && state.cfg.crashChainTo && !window.USE_ROLLBACK
+     && (netRole==='solo' || (netRole==='host' && typeof MP_SESSION!=='undefined' && MP_SESSION.mode==='campaign'))
+     && typeof beginCrashChain==='function'){ beginCrashChain(state); return; }   // B2: co-op campaign hosts chain too (mirrored via 'crashchain' cue; skirmish/rollback keep the old fallback)
   // end-of-content cliffhanger (Ep XVI): a toBeContinued map ends on the "TO BE CONTINUED" card via
   // onVictory directly — like the finale's IPO — NOT the extraction→HUB loop (there is no next map).
   if(state.cfg && state.cfg.toBeContinued && netRole==='solo'){ state.over=true; state._outcome='win'; if(!window.USE_ROLLBACK) onVictory(); return; }

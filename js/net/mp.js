@@ -122,7 +122,8 @@
     }
     // A co-op campaign plays the opening crawl on BOTH peers before the sim starts. The joiner gets a
     // `crawl` flag in mpstart so it shows the same crawl in parallel (see beginClientMatch).
-    const coopCrawl = (S.mode==='campaign' && MAPS[S.mapIndex] && MAPS[S.mapIndex].crawl && typeof showCrawl==='function');
+    // extra.noCrawl skips it (B2 crash-chain: Ep 15.5 cuts DIRECTLY into XVI, matching solo).
+    const coopCrawl = (S.mode==='campaign' && !(extra&&extra.noCrawl) && MAPS[S.mapIndex] && MAPS[S.mapIndex].crawl && typeof showCrawl==='function');
     // tell the joiner to build the same map (and, for a campaign, play the crawl)
     MP.send('mpstart', { mapIndex:S.mapIndex, mode:S.mode, duelSeed:S.duelSeed, mpCampaignId:S.mpCampaignId, crawl:!!coopCrawl });
     // Begin the authoritative sim + ship the first snapshot. DEFERRED behind the crawl for a campaign so
@@ -207,6 +208,21 @@
         if(typeof beginCoopFinale==='function') beginCoopFinale(G);   // Phase 2: arm the nuke finale on the client clock
         break;
       }
+      case 'extract': {
+        // B1: cosmetic bomber-flight + panorama mirror (non-hold — the snapshot stream keeps flowing);
+        // the authoritative hand-off is the host's 'mphub'.
+        if(G && !G.hub && typeof beginCoopExtract==='function') beginCoopExtract(G, d);
+        break;
+      }
+      case 'crashchain': {
+        // B2: Ep 15.5→XVI Hades-fall mirror. drawCrashChain reads only .t (pure screen-space); _client
+        // routes the clock through cinematicTick (the client never runs update()/crashChainTick).
+        if(G && !G.hub && !G.crashChain){
+          G.crashChain={ t:0, toIdx:(d.toIdx|0), done:false, _client:true };
+          if(typeof document!=='undefined') document.body.classList.add('scene-cutscene');
+        }
+        break;
+      }
       case 'resume': {
         NET._cueHold = false;
         if(G && !G.over){ running = true; if(NET.resetWatchdog) NET.resetWatchdog(); }
@@ -233,11 +249,25 @@
           }
         } else if(k==='ach'){
           if(typeof ACH!=='undefined' && ACH.fire) ACH.fire(d.ev, d.ctx||{});   // client runs its OWN test() (per-device localStorage)
+        } else if(k==='ctut'){
+          // B6: one-time contextual tip — the client re-renders its own copy/voice + marks its own localStorage
+          if(typeof TUTORIAL!=='undefined' && TUTORIAL.fireContextual) TUTORIAL.fireContextual(d.id, G);
         } else if(k==='fallen'){
           // A4: append the obituary's fallen record so the client's "The Fallen" wall fills live (dedup by fid).
-          if(d.rec){ if(typeof fallenVets!=='undefined'){ const fid=d.rec.fid; if(!(fid!=null && fallenVets.some(x=>x&&x.fid===fid))) fallenVets.push(d.rec); } }
+          let _fresh=false;
+          if(d.rec && typeof fallenVets!=='undefined'){ const fid=d.rec.fid;
+            _fresh = !(fid!=null && fallenVets.some(x=>x&&x.fid===fid));
+            if(_fresh) fallenVets.push(d.rec); }
           if(d.obit && typeof eventToast==='function') eventToast(d.obit, d.ms||10000);
+          // B4: the memorial interstitial the solo player gets — rendered from the plain record, overlay-only
+          // (never touches running), throttled + deduped by fid so a resend/wipe can't stack modals.
+          if(_fresh && d.rec && typeof fallenSceneShowRec==='function') fallenSceneShowRec(d.rec);
         }
+        break;
+      }
+      case 'summary': {
+        // B3: quarter-cleared run summary (host-rendered HTML) — non-blocking, auto-dismisses; never touches running
+        if(typeof showCoopVictorySummary==='function') showCoopVictorySummary(d.html);
         break;
       }
       case 'endcard': {
@@ -395,6 +425,7 @@
     // a fresh match dismisses any end-state overlay (endcard IPO/tbc mirror, defeat screen) — e.g. the
     // host pressed NG+ (mpstart lap) or retry; without this the card would sit over the new Quarter.
     if(typeof document!=='undefined'){ const _es=document.getElementById('endScreen'); if(_es){ _es.style.display='none'; _es.innerHTML=''; } }
+    if(typeof document!=='undefined') document.body.classList.remove('scene-cutscene');   // B2: the crash-chain mirror ends at this mpstart (XVI direct-load)
     running = false;                                  // hold until the host's full snapshot lands
     NET._lastAppliedTick = -1;                        // fresh out-of-order baseline for the new match
     if(NET.resetWatchdog) NET.resetWatchdog();        // start the host-liveness clock fresh for this match
@@ -429,6 +460,7 @@
     if(typeof document!=='undefined'){ document.body.classList.remove('scene-flash'); document.body.classList.remove('scene-hubload'); }
     NET._cueHold=false;   // arriving at the hub IS the end of any finale hold → let onFullApplied finalize the drop-in normally (a transient reconnect never routes here, so it stays frozen)
     NET._hubReadyLocal=false;   // B5: a fresh quarter's hub starts un-readied (the client re-arms READY once it's staged its units)
+    if(typeof document!=='undefined'){ const _cs=document.getElementById('coopSummary'); if(_cs) _cs.style.display='none'; }   // B3: the summary card ends at the hub
     running = false;
     NET._lastAppliedTick = -1;
     if(NET.resetWatchdog) NET.resetWatchdog();

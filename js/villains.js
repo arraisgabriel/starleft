@@ -1295,7 +1295,9 @@ function bossOutcome(state, kind){
   if(state._skirmish){ state.over=true; state._outcome='win'; if(!window.USE_ROLLBACK && typeof onVictory==='function') onVictory(); return; }   // T3-2
   // CRASH CHAIN (Ep 15.5): instead of extraction→HUB, the evac bomber is shot down and the next mission
   // (XVI) loads DIRECTLY through the Hades-style fall cinematic (hub.js beginCrashChain). Solo path.
-  if(state.cfg && state.cfg.crashChainTo && netRole==='solo' && typeof beginCrashChain==='function'){ beginCrashChain(state); return; }
+  if(state.cfg && state.cfg.crashChainTo && !window.USE_ROLLBACK
+     && (netRole==='solo' || (netRole==='host' && typeof MP_SESSION!=='undefined' && MP_SESSION.mode==='campaign'))
+     && typeof beginCrashChain==='function'){ beginCrashChain(state); return; }   // B2: co-op campaign hosts chain too (mirrored via 'crashchain' cue; skirmish/rollback keep the old fallback)
   if(netRole==='solo' && typeof beginExtractionPhase==='function'){ beginExtractionPhase(state); return; }
   if(netRole==='host' && typeof window!=='undefined' && window.MP_SESSION && MP_SESSION.mode==='campaign' && typeof coopCampaignWin==='function'){ coopCampaignWin(state); return; }   // Ep VII → finale; else → H.U.B.
   state.over=true; state._outcome='win'; if(!window.USE_ROLLBACK && typeof onVictory==='function') onVictory();

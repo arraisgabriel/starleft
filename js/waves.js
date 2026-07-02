@@ -151,14 +151,16 @@ function holdoutAbort(state, msg){
 }
 
 // Optional one-shot reveal cutscene the first time the player reaches the anchor (before wave 0).
-// SOLO only — it blocks the mission sim (main.js gates update() while G.flashCutscene && !G.hub), which
-// co-op can't afford; clients/host keep the existing toast framing. Returns true if it armed a cutscene
-// (caller then returns and stays in `idle`; the next tick, after the cutscene ends, spawns wave 0). Needs
-// at least one named speaker alive to anchor the camera, else returns false and the hold proceeds normally.
+// Solo freezes via the rAF flashCutscene guard (main.js gates update() while G.flashCutscene && !G.hub);
+// the CO-OP HOST plays it too, frozen the boss-cutscene way (running=false + hold cue — the background
+// host-clock worker only respects `running`) so the ally sees the same framing beat. The CLIENT never
+// arms it locally — it mirrors the host's hold cue. Returns true if it armed a cutscene (caller then
+// returns and stays in `idle`; the next tick, after the cutscene ends, spawns wave 0). Needs at least
+// one named speaker alive to anchor the camera, else returns false and the hold proceeds normally.
 function holdoutTryCutscene(state){
   const hd=state.cfg.holdout||{}, name=hd.framing&&hd.framing.cutscene;
   if(!name) return false;
-  if(typeof netRole!=='undefined' && netRole!=='solo') return false;
+  if(typeof netRole!=='undefined' && (netRole==='client' || (netRole!=='solo' && window.USE_ROLLBACK))) return false;   // client mirrors the cue; rollback peers both simulate → toast framing
   if(typeof window!=='undefined' && window._rbReplaying) return false;
   if(typeof startFlashCutscene!=='function') return false;
   const lines=(typeof window!=='undefined' && window[name]) || null;
@@ -171,6 +173,14 @@ function holdoutTryCutscene(state){
   }
   if(!focus) return false;
   startFlashCutscene(state, focus, lines);
+  // CO-OP host: FREEZE the sim behind the cutscene + HOLD cue so the ally freezes on the same beat —
+  // verbatim the boss-death-cutscene pattern (villains.js); endFlashCutscene (via _coopHold) resumes
+  // both sides, then the next holdoutTick spawns wave 0.
+  if(typeof netRole!=='undefined' && netRole==='host'){
+    running=false;
+    if(state.flashCutscene) state.flashCutscene._coopHold=true;
+    if(typeof cinematic==='function') cinematic('flash', { linesKey:name, speaker:focus.heroId||null, speakerId:focus.id }, null, { hold:true });
+  }
   // narrative gate (story-polish §6): the Ep XI altar reveal has now played → Biba may speak post-altar
   if(name==='EP11_ALTAR_LINES' && typeof CAMPAIGN!=='undefined' && CAMPAIGN && CAMPAIGN.storyFlags) CAMPAIGN.storyFlags.altarSeen=true;
   return true;

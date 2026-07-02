@@ -341,6 +341,13 @@ function hubStartExtractFlight(state, hq){
   const roof=hubBuildingRoofPoint(hq);
   state.extractFlight={ phase:'in', t:0, x:sx, y:sy, hqX:roof.x, hqY:roof.y,
     exitX: hq.x < state.W*TILE/2 ? -4*TILE : state.W*TILE+4*TILE, exitY:hq.y-TILE*5 };
+  // B1 — mirror the bomber flight + panorama to the ally (cosmetic; NON-HOLD — the host sim keeps running
+  // through extraction and snapshots keep flowing). Never on Ep VII: mapIndex 6 routes through the finale
+  // cue, and solo's hover→nuke branch replaces the flight. Geometry ships as plain numbers (no entity race).
+  if(typeof netRole!=='undefined' && netRole==='host' && !window.USE_ROLLBACK && mapIndex!==6
+     && typeof NET!=='undefined' && NET.cueSend){
+    NET.cueSend('extract', { rx:roof.x, ry:roof.y, exitX:state.extractFlight.exitX, exitY:state.extractFlight.exitY }, false);
+  }
   toast('Buzzword Bomber inbound.');
 }
 // Player veterans (Lv2+) still in the field — NOT garrisoned in any HQ. These are lost on extraction.
@@ -481,6 +488,11 @@ function beginCrashChain(state){
   // freeze the field behind the cinematic so nothing can kill a hero mid-fall
   for(const e of state.entities){ if(e.owner==='enemy' && e.kind==='unit') e.dead=true; }
   state.crashChain={ t:0, toIdx, done:false };
+  // B2 — mirror the Hades-fall to the ally. NON-HOLD by design: crashChainTick runs inside update(), so a
+  // hold (running=false) would freeze the host's own clock and deadlock the transition; the field is
+  // already inert during the fall (enemies killed above; checkWinLose/enemyAI early-out on crashChain).
+  if(typeof netRole!=='undefined' && netRole==='host' && typeof NET!=='undefined' && NET.cueSend)
+    NET.cueSend('crashchain', { toIdx:toIdx }, false);
   if(typeof clearToast==='function') clearToast();
   if(typeof document!=='undefined') document.body.classList.add('scene-cutscene');   // dim the HUD chrome during the fall
 }
@@ -495,6 +507,10 @@ function crashChainTick(state, dt){
     const idx=c.toIdx;
     if(typeof mapIndex!=='undefined') mapIndex=idx;
     if(typeof document!=='undefined') document.body.classList.remove('scene-cutscene');
+    // B2 CO-OP: re-run the full match-start handshake so the CLIENT follows into the chained mission
+    // (mirrors hub-dispatch). noCrawl preserves the solo "direct cut" feel — XVI's introCutscene plays on
+    // arrival, not the crawl. loadMap would chain the host alone and strand the client on the black frame.
+    if(typeof netRole!=='undefined' && netRole==='host' && typeof mpHostStart==='function'){ mpHostStart(idx, 'campaign', { noCrawl:true }); return; }
     if(typeof loadMap==='function') loadMap(idx);
   }
 }
@@ -517,12 +533,58 @@ window.beginCoopFinale=function(state){
   if(typeof MUSIC!=='undefined' && MUSIC.playCinematic && typeof MUSIC_FLASH!=='undefined') MUSIC.playCinematic(MUSIC_FLASH);   // cue the bomb-drop track
   if(typeof LOADER!=='undefined' && typeof missionTagsHub==='function') LOADER.beginMission(missionTagsHub());   // the ~73s cinematic is the hub's download window
 };
+/* B1 — CLIENT extraction mirror. Non-hold, purely cosmetic: arms a local extractFlight that the EXISTING
+   render paths draw unchanged (drawExtractionFlight bomber, scene-hubload panorama, pano drones), stepped
+   by cinematicTick on the presentation clock. The hand-off is NEVER local — the host's 'mphub'
+   (beginClientHub) rebuilds G and discards this. MIRRORS updateExtraction's in/hover/out/panorama phases
+   (minus the mapIndex===6 nuke branch and the enterHubFromCombat tail) — keep the two in sync. */
+window.beginCoopExtract=function(state, d){
+  if(!state || state.hub || state.extractFlight) return;                        // idempotent (duplicate cue)
+  const z=state.zoom||1, sx=state.camX-3*TILE, sy=state.camY+viewH()/z+2*TILE;  // local camera-relative entry (cosmetic)
+  state.extractFlight={ phase:'in', t:0, x:sx, y:sy, hqX:d.rx, hqY:d.ry, exitX:d.exitX, exitY:d.exitY };
+  state.cinematic={ kind:'extract', t:0 };
+  if(typeof clearToast==='function') clearToast();
+};
+function coopExtractStep(state, c, dt){
+  const f=state.extractFlight; if(!f) return;
+  f.t+=dt;
+  if(f.phase==='panorama' && typeof updateHubPanoDrones==='function') updateHubPanoDrones(state, dt);
+  const flySpeed=((DEF.bomber&&DEF.bomber.speed)||1.7)*TILE;
+  const step=(tx,ty,spd)=>{ const dx=tx-f.x, dy=ty-f.y, d2=Math.hypot(dx,dy);
+    if(d2<4) return true; const s=spd*dt; f.x+=dx/d2*Math.min(s,d2); f.y+=dy/d2*Math.min(s,d2); return false; };
+  if(f.phase==='in' && step(f.hqX,f.hqY,flySpeed)){ f.phase='hover'; f.t=0; }
+  else if(f.phase==='hover' && f.t>1.6){ f.phase='out'; f.t=0; }               // no nuke branch on the client mirror (Ep VII never emits 'extract')
+  else if(f.phase==='out' && step(f.exitX,f.exitY,flySpeed)){
+    f.phase='panorama'; f.t=0;
+    if(typeof resetHubPanoDrones==='function') resetHubPanoDrones();
+    if(typeof document!=='undefined') document.body.classList.add('scene-hubload');
+    if(typeof LOADER!=='undefined' && typeof missionTagsHub==='function') LOADER.beginMission(missionTagsHub());  // pre-warm hub sprites (beginClientHub re-arms; idempotent)
+  }
+  // panorama-end: HOLD the frame — the host's 'mphub' delivers the hub (beginClientHub strips scene-hubload).
+  // Liveness backstop mirrors coopNukeStep's: the host should hand off ~HUB_LOAD_DURATION in; +40s = host gone.
+  else if(f.phase==='panorama' && f.t >= ((typeof HUB_LOAD_DURATION!=='undefined'?HUB_LOAD_DURATION:20)+40) && !c._lost){
+    c._lost=true;
+    if(typeof NET!=='undefined' && typeof NET.onHostLost==='function') NET.onHostLost();
+  }
+}
+// B2 — client-side crash-chain clock (Ep 15.5→XVI Hades-fall): advance the fall; past CRASH_TOTAL hold the
+// black frame until the host's mpstart (beginClientMatch replaces G, discarding this). Backstop mirrors
+// coopNukeStep's +25s (the hold means no snapshots — a wide overrun = the host is genuinely gone).
+function crashChainClientStep(state, dt){
+  const c=state.crashChain; if(!c || c.done) return;
+  c.t += dt;
+  if(c.t >= CRASH_TOTAL + 25 && !c._lost){ c._lost=true;
+    if(typeof NET!=='undefined' && typeof NET.onHostLost==='function') NET.onHostLost(); }
+}
 // Generic per-frame cinematic ticker. Called from main.js for ALL roles OUTSIDE the sim guard (like
 // updateFlashCutscene / updateDispatchFlight) so it advances even while running=false on a frozen client.
 window.cinematicTick=function(state, dt){
+  // B2 — the client's crashChain has no update() driving it (crashChainTick is host/solo); step it here
+  if(state && state.crashChain && state.crashChain._client) crashChainClientStep(state, dt);
   const c=state && state.cinematic; if(!c) return;
   c.t+=dt;
   if(c.kind==='nuke') coopNukeStep(state, c, dt);
+  else if(c.kind==='extract') coopExtractStep(state, c, dt);
 };
 // Mirrors updateExtraction's phase==='nuke' block, reading the presentation clock c.t. Detonation + the
 // hub hand-off are host-authoritative; the client only animates (its CAMPAIGN/hub arrive via 'mphub').
@@ -589,6 +651,16 @@ window.coopCampaignWin=function(state){
     else beginCoopFinale(state);
     return;
   }
+  // B3 — both co-founders get the run summary the solo endScreen shows (non-blocking overlay; extraction
+  // proceeds under it). Host-rendered HTML rides the cue so the numbers match exactly on both screens.
+  // The Ep VII finale branch above returns first — the nuke replaces the summary like it replaces the flight.
+  try{
+    const _sum=(typeof victorySummaryHTML==='function') ? victorySummaryHTML() : '';
+    if(_sum){
+      if(typeof showCoopVictorySummary==='function') showCoopVictorySummary(_sum);
+      if(typeof netRole!=='undefined' && netRole==='host' && typeof NET!=='undefined' && NET.cueSend) NET.cueSend('summary', { html:_sum }, false);
+    }
+  }catch(_){ }
   // C3 — co-op now gets the interactive extraction beat too (host-authoritative). beginExtractionPhase runs the
   // garrison prompt + Buzzword-Bomber flight, then updateExtraction hands off to enterHubFromCombat exactly as the
   // solo path does — so the client still follows to the H.U.B. via mpHostEnterHub. Falls back to the direct hub

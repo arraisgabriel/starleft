@@ -89,6 +89,9 @@
     if(mapRow)  mapRow.style.display  = isResume ? 'none' : '';
     if(saveRow){ saveRow.style.display = isResume ? '' : 'none';
       if(isResume){ if(typeof gdriveOnMpResumeOpen==='function') gdriveOnMpResumeOpen(); else populateSavePick(); } }   // pull MP cloud saves (if connected) then populate
+    // B8a: difficulty applies to fresh skirmish/campaign starts only — a duel has no AI, a resume replays
+    // the save's stamped _difficulty.
+    const diffRow=$('mp-diff-row'); if(diffRow) diffRow.style.display = (mode==='duel'||isResume) ? 'none' : '';
     const mp=$('mp-map-pick'); if(mp) mp.disabled = (mode==='campaign' || mode==='duel' || isResume);   // campaign starts at Quarter 1; duel rolls its own arena (T4-5)
     renderPeers();   // re-evaluate Start gating (resume needs a selected save)
   };
@@ -102,6 +105,7 @@
     if($('mp-ready-row'))  $('mp-ready-row').style.display  = opts.asHost ? 'none' : '';
     if($('mp-share')) $('mp-share').style.display = (navigator.share ? '' : 'none');
     if($('mp-qr-box')){ $('mp-qr-box').style.display='none'; $('mp-qr-box').innerHTML=''; }
+    if(opts.asHost && typeof buildDifficultyRow==='function') buildDifficultyRow('mpDiffRow');   // B8a: host picks the lap's difficulty (same global setting as solo Settings; stamps _difficulty at newMap → synced to the ally)
     populateMapPick(); window.mpUiSetMode(UI.mode); renderPeers(); setConn('Connecting…','wait');
     if(typeof mpStartRtt==='function') mpStartRtt();
     if(typeof mpUiBindChat==='function') mpUiBindChat();   // (re)bind chat/emote/ready now the room exists — covers re-opening a lobby after a leave
