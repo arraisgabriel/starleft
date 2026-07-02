@@ -9,15 +9,18 @@
   const NET = (window.NET = window.NET || {});
 
   /* ---------------- client → host capture (host/solo run directly) ---------------- */
-  function hubClientBlocked(state){
-    if(state && state.hub && LOCAL_CTRL!=='p1'){
+  // CO-OP: in the H.U.B. the client may send only its own-unit hub INTENTS (walk / clinic / off-hours /
+  // hubact); every other command stays host-only. Non-hub commands are never blocked here (k not consulted).
+  const HUB_INTENT_KINDS = { command:1, offhours:1, chrome:1, hubact:1 };
+  function hubClientBlocked(state, k){
+    if(state && state.hub && LOCAL_CTRL!=='p1' && !HUB_INTENT_KINDS[k]){
       toast('Only the host can operate the H.U.B.');
       return true;
     }
     return false;
   }
   function netCommand(state, wx, wy, target){
-    if(hubClientBlocked(state)) return;
+    if(hubClientBlocked(state, 'command')) return;
     if(window.USE_ROLLBACK){   // rollback: queue the command for our next tick; the session applies it on every peer (incl. us → instant)
       const mine = state.selection.filter(e=>!e.dead && !e.storedIn && e.kind==='unit' && isMine(e)).map(e=>e.id);
       const bmine = state.selection.filter(e=>!e.dead && e.kind==='building' && isMine(e)).map(e=>e.id);
@@ -59,7 +62,7 @@
   }
   // Off-Hours scene commit — host-authoritative (mirrors netTrain). Returns the outcome on solo/host (for the local menu).
   function netOffhoursCommit(state, payload){
-    if(hubClientBlocked(state)) return;
+    if(hubClientBlocked(state, 'offhours')) return;
     if(window.USE_ROLLBACK){ NET.rbEnqueue({ k:'offhours', payload }); return; }
     if(netRole!=='client') return (typeof applyOffhoursCommit==='function') ? applyOffhoursCommit(state, payload) : null;
     MP.send('mpcmd', { k:'offhours', from:LOCAL_CTRL, payload, seq:(NET._cmdSeq=(NET._cmdSeq||0)+1) });
@@ -67,11 +70,33 @@
   // Implant Clinic chrome transaction — host-authoritative (mirrors netOffhoursCommit). Returns the
   // outcome on solo/host (for the local clinic UI). Install/upgrade/remove all route through here.
   function netChromeCommit(state, payload){
-    if(hubClientBlocked(state)) return { ok:false };
+    if(hubClientBlocked(state, 'chrome')) return { ok:false };
     if(window.USE_ROLLBACK){ NET.rbEnqueue({ k:'chrome', payload }); return { ok:false }; }
     if(netRole!=='client') return (typeof applyChromeCommit==='function') ? applyChromeCommit(state, payload) : { ok:false };
     MP.send('mpcmd', { k:'chrome', from:LOCAL_CTRL, payload, seq:(NET._cmdSeq=(NET._cmdSeq||0)+1) });
     return { ok:false, pending:true };
+  }
+  // CO-OP hub facility intent (release/train/heal/upgrade). The client's facility fns route here (each
+  // guards `if(netRole==='client') return netHubAct(...)`); host/solo run applyHubAct directly. The host
+  // replays through the SAME facility fns scoped to the acting ctrl (spends p2's own M3$ pool), and
+  // applyHubAct validates target ownership (u.ctrl===ctrl). Payload carries only selectors (keys/op), never
+  // amounts — cost is derived host-side.
+  function netHubAct(op, extra){
+    if(hubClientBlocked(G, 'hubact')) return { ok:false };
+    const payload = Object.assign({ op:op, ctrl:LOCAL_CTRL }, extra||{});
+    if(window.USE_ROLLBACK){ NET.rbEnqueue({ k:'hubact', payload }); return { ok:false }; }
+    if(netRole!=='client') return (typeof applyHubAct==='function') ? applyHubAct(G, payload) : { ok:false };
+    MP.send('mpcmd', { k:'hubact', from:LOCAL_CTRL, payload, seq:(NET._cmdSeq=(NET._cmdSeq||0)+1) });
+    return { ok:false, pending:true };
+  }
+  // B5 — client→host pacing signal: the client stages its own p2 units, then toggles READY. The host's
+  // DISPATCH waits on S._p2HubReady. Non-authoritative (mirrors mppause): a lost/dup toggle can't desync;
+  // the flag is transient host state cleared each fresh dispatch. Client tracks its own view in NET._hubReadyLocal.
+  function netHubReady(ready){
+    NET._hubReadyLocal = !!ready;
+    if(netRole==='client'){ try{ MP.send('mphubready', { ready:!!ready }); }catch(_){ } }
+    if(typeof hubMenuOpen==='function' && hubMenuOpen() && typeof buildHubMenuBody==='function') buildHubMenuBody();
+    return !!ready;
   }
   function netUpgrade(state, building, key){
     if(hubClientBlocked(state)) return;
@@ -156,6 +181,8 @@
   window.netAmove=netAmove; window.netStance=netStance; window.netAbility=netAbility; window.netHeroAbility=netHeroAbility; window.netSigAbility=netSigAbility;
   window.netOffhoursCommit=netOffhoursCommit;
   window.netChromeCommit=netChromeCommit;
+  window.netHubAct=netHubAct;
+  window.netHubReady=netHubReady;
 
   /* ---------------- presentation cinematics (mirror a host cutscene to the client) ----------------
      Wrap a host-side cutscene/overlay so the SAME presentation plays on the client. SOLO: just play
@@ -171,6 +198,17 @@
   }
   window.cinematic = cinematic;
 
+  // Narrative relay (root #2): mirror a host-side toast / in-world speech box / achievement to the client
+  // over the (seq-deduped, non-authoritative) cue channel. The host KEEPS its existing local toast/pushDialog
+  // call — narrate ONLY adds the relay. Solo: nothing to relay. Client: never authors (belt-and-suspenders;
+  // cueSend is host-only anyway). Fire from the authoritative path once (callers are already _rbReplaying-guarded).
+  function narrate(kind, payload){
+    if(typeof netRole==='undefined' || netRole==='solo' || netRole==='client') return;
+    if(typeof window!=='undefined' && window._rbReplaying) return;
+    if(NET.cueSend) NET.cueSend('narrate', Object.assign({ kind:kind }, payload||{}), false);
+  }
+  window.narrate = narrate;
+
   /* ---------------- host: validate + replay a remote command ---------------- */
   function idIndex(state){ const m=new Map(); for(const e of state.entities) if(!e.dead) m.set(e.id,e); return m; }
 
@@ -183,8 +221,9 @@
   function runScoped(ctrl, sel, fn){
     const saveSel=G.selection, saveCtrl=G._cmdCtrl;
     G.selection=sel; G._cmdCtrl=ctrl;
-    quiet(fn);
-    G.selection=saveSel; G._cmdCtrl=saveCtrl;
+    // finally-restore: a throw inside a client-payload-driven replay (hubact/chrome/offhours) must never
+    // strand the host scoped as the client — else every later actingCtrl(G) would spend p2's pool.
+    try{ quiet(fn); } finally{ G.selection=saveSel; G._cmdCtrl=saveCtrl; }
   }
 
   NET.applyRemoteCmd = function(cmd, peerId){
@@ -192,7 +231,7 @@
     if(cmd && cmd.seq!=null) NET._cmdAck = Math.max(NET._cmdAck||0, cmd.seq);   // Phase 3: ack every received command (applied or rejected) so the client can reconcile its prediction
     const ctrl = NET.peerCtrl[peerId];
     if(!ctrl || cmd.from!==ctrl) return;               // anti-spoof: a peer may only act as its own controller
-    if(G.hub && ctrl!=='p1') return;                    // HUB belongs to the host/P1 only
+    if(G.hub && ctrl!=='p1' && !HUB_INTENT_KINDS[cmd.k]) return;   // in the HUB, only the client's own-unit hub intents are honored (else host/P1-only)
     const byId = idIndex(G);
 
     if(cmd.k==='command'){
@@ -215,9 +254,12 @@
       if(!mine.length) return;
       runScoped(ctrl, mine, ()=> stopSelection());
     } else if(cmd.k==='offhours'){
-      if(typeof applyOffhoursCommit==='function') quiet(()=> applyOffhoursCommit(G, cmd.payload));
+      if(typeof applyOffhoursCommit==='function') runScoped(ctrl, [], ()=> applyOffhoursCommit(G, cmd.payload));   // runScoped scopes the spend to the acting ctrl's own M3$ pool
     } else if(cmd.k==='chrome'){
-      if(typeof applyChromeCommit==='function') quiet(()=> applyChromeCommit(G, cmd.payload));
+      if(typeof applyChromeCommit==='function') runScoped(ctrl, [], ()=> applyChromeCommit(G, cmd.payload));
+    } else if(cmd.k==='hubact'){
+      const p=cmd.payload||{}; if(p.ctrl!==ctrl) return;   // anti-spoof: payload ctrl must equal the peer's verified ctrl
+      runScoped(ctrl, [], ()=>{ if(typeof applyHubAct==='function') applyHubAct(G, p); });   // host replays the facility fn scoped to ctrl (spends p2's pool); applyHubAct checks target ownership
     } else if(cmd.k==='train'){
       const b=byId.get(cmd.bid); if(!b||b.owner!=='player'||(b.ctrl||'p1')!==ctrl) return;
       quiet(()=> tryTrain(G, b, cmd.type));
@@ -261,5 +303,11 @@
     }
   };
 
-  NET.bindHostReceivers = function(){ MP.on('mpcmd', (cmd,peerId)=> NET.applyRemoteCmd(cmd,peerId)); };
+  NET.bindHostReceivers = function(){
+    MP.on('mpcmd', (cmd,peerId)=> NET.applyRemoteCmd(cmd,peerId));
+    // B5 — client's READY toggle. Host records it on the session; if the MDC menu is open, rebuild so DISPATCH
+    // enables the instant the ally readies. Transient/non-authoritative (cleared each dispatch in hubDispatchNextEpisode).
+    MP.on('mphubready', (msg)=>{ if(typeof MP_SESSION!=='undefined') MP_SESSION._p2HubReady = !!(msg && msg.ready);
+      if(typeof hubMenuOpen==='function' && hubMenuOpen() && typeof buildHubMenuBody==='function') buildHubMenuBody(); });
+  };
 })();

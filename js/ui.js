@@ -53,7 +53,7 @@ function incomePerSec(eco){
 function refreshUI(){
   if(!G) return;
   const _eco=playerEco(G, LOCAL_CTRL);              // HUD shows THIS client's own pool
-  document.getElementById('gold').textContent = (G.hub && typeof CAMPAIGN!=='undefined') ? ('M3$ '+(CAMPAIGN.m3|0)) : (_eco.gold|0);
+  document.getElementById('gold').textContent = (G.hub && typeof CAMPAIGN!=='undefined') ? ('M3$ '+(campaignM3(LOCAL_CTRL)|0)) : (_eco.gold|0);
   const _inc=document.getElementById('income');
   if(_inc){ const r=(!G.hub && !G.over) ? incomePerSec(_eco) : null; _inc.textContent = r==null ? '' : ('+'+r.toFixed(1)+'/s'); }
   document.getElementById('supply').textContent = _eco.supply+'/'+_eco.supplyCap;
@@ -196,6 +196,10 @@ function questHudSource(tutOn){
   }
   return null;
 }
+// A sequenced objective (def.requires) stays LOCKED until its prerequisite quest is done — rendered as a
+// dimmed 🔒 "PHASE 2" row instead of live progress, so players aren't lured off-task mid-siege. `st` is the
+// hud source's per-id state lookup. Mirrors the questsTick gate so the UI matches what the sim evaluates.
+function questLocked(d, st){ if(!d||!d.requires) return false; const rq=st(d.requires); return !(rq&&rq.done); }
 function updateQuestHud(){
   const chip=document.getElementById('obj-chip'), lab=document.getElementById('objective'),
         cnt=document.getElementById('obj-count'), panel=document.getElementById('quest-panel');
@@ -219,7 +223,7 @@ function updateQuestHud(){
 
   // ---- structural signature: rebuild rows only when the set or the flags flip (mode-prefixed so a
   //      hub↔quest transition always forces a rebuild) ----
-  const sig=src.mode+'|'+defs.map(d=>{ const q=st(d.id); return d.id+(q?(q.na?'n':q.done?'!':q.failed?'x':''):'?'); }).join('|');
+  const sig=src.mode+'|'+defs.map(d=>{ const q=st(d.id); return d.id+(q?(q.na?'n':q.done?'!':q.failed?'x':questLocked(d,st)?'L':''):'?'); }).join('|');
   if(sig!==panel._sig){
     if(src.toasts) questToasts(defs, G.quests||{}, panel._sig!=null && panel._sig!=='' && panel._mapKey===questMapKey());
     panel._sig=sig; panel._mapKey=questMapKey();
@@ -231,19 +235,28 @@ function updateQuestHud(){
     for(const d of defs){
       const q=st(d.id); if(q&&q.na) continue;           // not applicable this run (e.g. no hero deployed)
       const row=document.createElement('div');
-      row.className='q-row'+(q&&q.failed?' failed':q&&q.done?' done':'');
       row.setAttribute('role','listitem');
-      const mark=q&&q.failed?'✖':q&&q.done?'✔':'☐';
-      row.innerHTML='<span class="q-mark">'+mark+'</span><span class="q-text">'
-        +(!d.required?'<span class="q-bonus">BONUS:</span> ':'')+_escHtml(d.text||d.id)+'</span>'
-        +'<span class="q-count"></span>'
-        +(!d.required&&d.reward?'<span class="q-reward">+'+(d.reward|0)+' M3$</span>':'');
+      if(!q||q.failed||q.done? false : questLocked(d,st)){   // sequenced objective still locked → dimmed 🔒 PHASE-2 row
+        const reqDef=defs.find(x=>x.id===d.requires), reqTxt=reqDef?(reqDef.text||reqDef.id):d.requires;
+        row.className='q-row locked'; row.style.opacity='0.55';
+        row.innerHTML='<span class="q-mark">🔒</span><span class="q-text">'
+          +_escHtml(d.text||d.id)+' <span class="q-lock">— unlocks after: '+_escHtml(reqTxt)+'</span></span>'
+          +'<span class="q-count"></span>';
+      } else {
+        row.className='q-row'+(q&&q.failed?' failed':q&&q.done?' done':'');
+        const mark=q&&q.failed?'✖':q&&q.done?'✔':'☐';
+        row.innerHTML='<span class="q-mark">'+mark+'</span><span class="q-text">'
+          +(!d.required?'<span class="q-bonus">BONUS:</span> ':'')+_escHtml(d.text||d.id)+'</span>'
+          +'<span class="q-count"></span>'
+          +(!d.required&&d.reward?'<span class="q-reward">+'+(d.reward|0)+' M3$</span>':'');
+      }
       row._qid=d.id; row._qdef=d; panel.appendChild(row);
     }
   }
   // ---- cheap per-frame counter refresh (progress 3/8, timers ⏳ 212s) ----
   for(const row of panel.children){
     const d=row._qdef; if(!d) continue;
+    if(row.classList.contains('locked')) continue;   // PHASE-2 objective still locked: no live progress
     const q=st(row._qid), el=row.querySelector('.q-count'); if(!el) continue;
     let txt='';
     if(q && typeof QUEST_PROGRESS_TYPES!=='undefined' && QUEST_PROGRESS_TYPES[d.type]){
@@ -359,7 +372,7 @@ function drawCardSprite(card,type,owner){
 
 // Signature of which command buttons should be shown for the current selection.
 function cmdSig(sel){
-  if(G && G.hub) return 'hub:'+sel.map(e=>e.id+':'+(e.hubPoi?e.hubPoi.kind:'')+':'+(e.type||'')).join(',')+':'+(typeof CAMPAIGN!=='undefined'?CAMPAIGN.m3:0)+':'+((typeof CAMPAIGN!=='undefined'&&CAMPAIGN.dispatch&&CAMPAIGN.dispatch.staged)||[]).join('|');
+  if(G && G.hub) return 'hub:'+sel.map(e=>e.id+':'+(e.hubPoi?e.hubPoi.kind:'')+':'+(e.type||'')).join(',')+':'+(typeof CAMPAIGN!=='undefined'?campaignM3(LOCAL_CTRL):0)+':'+((typeof CAMPAIGN!=='undefined'&&CAMPAIGN.dispatch&&CAMPAIGN.dispatch.staged)||[]).join('|');
   if(!sel.length) return 'empty';
   const owned=sel.filter(e=>e.owner==='player');
   if(!owned.length) return 'enemy';
@@ -532,7 +545,7 @@ function buildHubCommands(sel){
     syncCmdLine();
     return;
   }
-  const owned=sel.filter(e=>e.owner==='player');
+  const owned=sel.filter(e=>e.owner==='player' && (typeof isMine!=='function' || isMine(e)));   // CO-OP: each player only gets facility buttons for ITS OWN units (host=p1, client=p2) → spends the right pool
   const poi=sel.find(e=>e.hubPoi);
   const unit=owned.find(e=>e.kind==='unit');
   // Each HUB facility opens its full-screen menu in the reusable shell (openHubMenu).
@@ -585,7 +598,7 @@ function _abilBtnState(b, units, cdKey){
 // Keep the affordability dimming fresh without destroying (and re-creating) buttons.
 function updateAffordability(){
   const kids=elCmd.children; if(!kids) return;
-  const _g=(G && G.hub && typeof CAMPAIGN!=='undefined') ? CAMPAIGN.m3 : playerEco(G, LOCAL_CTRL).gold;
+  const _g=(G && G.hub && typeof CAMPAIGN!=='undefined') ? campaignM3(LOCAL_CTRL) : playerEco(G, LOCAL_CTRL).gold;
   for(const b of kids){
     if(b._cost!=null) b.classList.toggle('disabled', _g < b._cost);
     // T2-2: ability buttons dim while every selected unit of that type is still on cooldown
@@ -617,7 +630,7 @@ function addCmd(emoji,label,cost,fn,extraClass,key){
   const b=document.createElement('div'); b.className='cmd-btn'+(extraClass?' '+extraClass:'');
   if(key) b.dataset.cmd = key;                 // stable, viewport-independent hook for the tutorial highlight
   b._cost = cost;                              // used by updateAffordability()
-  const funds=(G && G.hub && typeof CAMPAIGN!=='undefined') ? CAMPAIGN.m3 : playerEco(G, LOCAL_CTRL).gold;
+  const funds=(G && G.hub && typeof CAMPAIGN!=='undefined') ? campaignM3(LOCAL_CTRL) : playerEco(G, LOCAL_CTRL).gold;
   if(cost!=null && funds<cost) b.classList.add('disabled');
   b.innerHTML=`<span class="emoji">${emoji}</span><span>${label}</span>${cost!=null?`<span class="cost">${cost}🪙</span>`:''}`;
   b.onclick=()=>{ if(typeof isGamePaused==='function' && isGamePaused()) return; fn(); refreshUI(); };
@@ -997,7 +1010,7 @@ function hubMenuUnitGrid(units, optsFn, cls){
 // a themed primary action button; `cost` (M3$) dims/disables it when unaffordable (null = free)
 function hubMenuActionBtn(label, cost, enabled, onClick){
   const b=document.createElement('button');
-  const afford = cost==null || (typeof CAMPAIGN!=='undefined' && (CAMPAIGN.m3|0)>=cost);
+  const afford = cost==null || (typeof CAMPAIGN!=='undefined' && (campaignM3(LOCAL_CTRL)|0)>=cost);
   const ok = enabled!==false && afford;
   b.className='sc-btn hub-action'+(ok?'':' disabled');
   b.innerHTML=label+(cost!=null?' · <b>M3$ '+cost+'</b>':'');
@@ -1402,7 +1415,10 @@ function toggleTrainSel(key){
 }
 function buildTrainingBody(body){
   const t=(typeof CAMPAIGN!=='undefined'&&CAMPAIGN.training)||{staged:[],sessions:[]};
-  const staged=t.staged||[], sessions=t.sessions||[];
+  // CO-OP: each player manages only ITS OWN trainees (snaps carry ctrl via hubSnapUnit). isMine is a
+  // no-op in solo (netRole==='solo' → true), so the solo panel is byte-identical.
+  const mine=(x)=>(typeof isMine!=='function' || isMine(x));
+  const staged=(t.staged||[]).filter(mine), sessions=(t.sessions||[]).filter(s=>mine(s.a||s.b||s));
 
   const sum=document.createElement('div'); sum.className='hub-stat';
   sum.innerHTML='Sessions <b>'+sessions.length+' / '+HUB.trainPairCap+'</b> · Trainees inside <b>'+(staged.length+sessions.length*2)+' / '+(HUB.trainPairCap*2)+'</b>';
@@ -1494,7 +1510,7 @@ function wakeSignature(){
        +'|done:'+((r.done||[]).join(','))
        +'|se:'+((r.sessions||[]).map(s=>s.id+':'+(s.done?1:0)).join(','))
        +'|sort:'+WAKE_SORT
-       +'|m3:'+((typeof CAMPAIGN!=='undefined')?(CAMPAIGN.m3|0):0);
+       +'|m3:'+((typeof CAMPAIGN!=='undefined')?(campaignM3(LOCAL_CTRL)|0):0);
 }
 // map a fallen record → a card snapshot hubMenuUnitCard understands (type/stars/spriteType/lore)
 function fallenCardSnap(f){
@@ -1677,7 +1693,7 @@ function openVenueMenu(poi, who){
 function _venueSig(){
   if(!_venue) return 'x';
   const b=_venue.npcId?ohGetBond(_venue.vetKey,_venue.npcId):null, L=ohLedger();
-  return 'oh|'+_venue.rev+'|'+(b?b.t:0)+'|'+(b?b.p:0)+'|'+(L?(L.nights|0):0)+'|'+(_venue.pick?_venue.pick.idx:-1)+'|'+(_venue.beatIdx|0)+'|'+(_venue.result?1:0)+'|'+(CAMPAIGN.m3|0);
+  return 'oh|'+_venue.rev+'|'+(b?b.t:0)+'|'+(b?b.p:0)+'|'+(L?(L.nights|0):0)+'|'+(_venue.pick?_venue.pick.idx:-1)+'|'+(_venue.beatIdx|0)+'|'+(_venue.result?1:0)+'|'+(campaignM3(LOCAL_CTRL)|0);
 }
 function _venueBuild(body){
   if(!_venue || !body) return;
@@ -1690,7 +1706,7 @@ function _venueBuild(body){
   const npcName=(npcId&&typeof ohNpcName==='function')?ohNpcName(npcId):'';
   const vetName=(vet&&vet.lore&&typeof buildDossier==='function')?buildDossier(vet).full:(vet&&typeof trainTypeName==='function'?trainTypeName(vet):'a veteran');
   const tierName=bond?ohTierName(bond):'';
-  const nights=L?(L.nights|0):0, m3=(CAMPAIGN.m3|0);
+  const nights=L?(L.nights|0):0, m3=(campaignM3(LOCAL_CTRL)|0);
   const acts='style="display:flex;flex-direction:column;gap:8px;margin:12px 0"';
   const btn='class="hub-card-act" style="text-align:left;white-space:normal;line-height:1.4"';
   let h='<div class="hub-cols c2"><div class="hub-col scroll">';
@@ -1731,7 +1747,7 @@ function _venueBuild(body){
 }
 function _venueGift(){
   if(!_venue || !_venue.npcId) return;
-  if((CAMPAIGN.m3|0) < (OFFHOURS.tune.giftCost|0)){ if(typeof toast==='function') toast('Not enough M3rit$ for a gift.'); return; }
+  if((campaignM3(LOCAL_CTRL)|0) < (OFFHOURS.tune.giftCost|0)){ if(typeof toast==='function') toast('Not enough M3rit$ for a gift.'); return; }
   const payload={ vetKey:_venue.vetKey, npcId:_venue.npcId, kind:_venueBondKind(_venue.kind), gift:true };
   let res=null;
   if(typeof netOffhoursCommit==='function') res=netOffhoursCommit(G, payload);
@@ -1759,7 +1775,7 @@ function _venueChoose(ci){
       if(nb && nb.open!=null){ const o=nb.open; _venue.lead=ohFill(Array.isArray(o)?o[0]:o, _venue.vet, _venue.npcId); }
       _venue.rev++; return;
     }
-    if((CAMPAIGN.m3|0) < (OFFHOURS.tune.sceneCost|0)){ if(typeof toast==='function') toast('Not enough M3rit$ for a round.'); return; }
+    if((campaignM3(LOCAL_CTRL)|0) < (OFFHOURS.tune.sceneCost|0)){ if(typeof toast==='function') toast('Not enough M3rit$ for a round.'); return; }
     const payloadM={ vetKey:_venue.vetKey, npcId:_venue.npcId, sceneIdx:_venue.pick.idx, path:_venue.path.slice() };
     let resM=null;
     if(typeof netOffhoursCommit==='function') resM=netOffhoursCommit(G, payloadM);
@@ -1771,7 +1787,7 @@ function _venueChoose(ci){
     return;
   }
   // legacy single-beat
-  if((CAMPAIGN.m3|0) < (OFFHOURS.tune.sceneCost|0)){ if(typeof toast==='function') toast('Not enough M3rit$ for a round.'); return; }
+  if((campaignM3(LOCAL_CTRL)|0) < (OFFHOURS.tune.sceneCost|0)){ if(typeof toast==='function') toast('Not enough M3rit$ for a round.'); return; }
   const payload={ vetKey:_venue.vetKey, npcId:_venue.npcId, sceneIdx:_venue.pick.idx, choiceIdx:ci };
   let res=null;
   if(typeof netOffhoursCommit==='function') res=netOffhoursCommit(G, payload);
@@ -1826,7 +1842,7 @@ function healPanelSignature(){
   return 'hst:'+(h.staged||[]).map(tag).join(',')
        +'|hse:'+(h.sessions||[]).map(s=>s.id+':'+((s.unit&&tag(s.unit))||'')).join(',')
        +'|v:'+((typeof CAMPAIGN!=='undefined'&&CAMPAIGN.visit)||0)
-       +'|m3:'+((typeof CAMPAIGN!=='undefined'&&(CAMPAIGN.m3|0))||0);
+       +'|m3:'+((typeof CAMPAIGN!=='undefined'&&(campaignM3(LOCAL_CTRL)|0))||0);
 }
 // ⚡ accelerated-treatment status text for a garrisoned snapshot (points left + live time remaining).
 function healAccelText(snap){
@@ -1852,11 +1868,13 @@ function healSpeedUpAction(snap){
 }
 function buildHealingBody(body){
   const h=(typeof CAMPAIGN!=='undefined'&&CAMPAIGN.healing)||{staged:[],sessions:[]};
-  const staged=h.staged||[], sessions=h.sessions||[];
+  // CO-OP: each player sees only ITS OWN wounded (snaps carry ctrl). No-op in solo.
+  const mine=(x)=>(typeof isMine!=='function' || isMine(x));
+  const staged=(h.staged||[]).filter(mine), sessions=(h.sessions||[]).filter(s=>mine(s.unit||s));
   const cap=(typeof MADOSIS!=='undefined'&&MADOSIS.healCap)||6;
 
   const sum=document.createElement('div'); sum.className='hub-stat';
-  sum.innerHTML='In care <b>'+(staged.length+sessions.length)+' / '+cap+'</b> · M3$ <b>'+((CAMPAIGN.m3|0))+'</b>';
+  sum.innerHTML='In care <b>'+(staged.length+sessions.length)+' / '+cap+'</b> · M3$ <b>'+((campaignM3(LOCAL_CTRL)|0))+'</b>';
   body.appendChild(sum);
 
   const cols=hubMenuColumns(2), left=hubMenuColumn(true), right=hubMenuColumn(true);
@@ -1968,11 +1986,19 @@ function openMdcMenu(poi){
     subtitle:'Enlist veterans here, then launch the next quarterly deployment',
     staffPoi:(poi&&poi.hubPoi)?poi.hubPoi.id:null,
     signature: function(){ const d=(CAMPAIGN.dispatch&&CAMPAIGN.dispatch.staged)||[];
-      return 'mdc:'+d.join(',')+'|m3:'+(CAMPAIGN.m3|0)+'|nx:'+(CAMPAIGN&&CAMPAIGN.nextMapIndex!=null?CAMPAIGN.nextMapIndex:-1); },
+      const rr=(typeof MP_SESSION!=='undefined'&&MP_SESSION._p2HubReady?1:0)+''+(typeof NET!=='undefined'&&NET._hubReadyLocal?1:0);   // B5: rebuild when either side's READY flips
+      return 'mdc:'+d.join(',')+'|m3:'+(campaignM3(LOCAL_CTRL)|0)+'|nx:'+(CAMPAIGN&&CAMPAIGN.nextMapIndex!=null?CAMPAIGN.nextMapIndex:-1)+'|rr:'+rr; },
     build: function(body){
       const cap=(typeof hubDispatchVetCap==='function')?hubDispatchVetCap():6;
-      const live=(typeof hubEnlistedUnits==='function')?hubEnlistedUnits(G):[];
+      const liveAll=(typeof hubEnlistedUnits==='function')?hubEnlistedUnits(G):[];
+      // CO-OP: each player's panel lists only ITS OWN enlisted vets (no-op in solo via isMine). liveAll stays
+      // the FULL set so the launch gate still fires when only the ally enlisted (dispatch deploys everyone's staged).
+      const mine=(x)=>(typeof isMine!=='function' || isMine(x));
+      const live=liveAll.filter(mine);
       const vets=live.filter(u=>!u.hero), heroes=live.filter(u=>u.hero);
+      // every hero on hand in the H.U.B. (not just the enlisted ones) — they auto-deploy, so they
+      // count toward "can we launch?" and reassure the player when no veteran is enlisted yet.
+      const hubHeroes=(typeof hubDeployableHeroes==='function')?hubDeployableHeroes(G):heroes;
       let idx=(typeof hubNextDeployIndex==='function') ? hubNextDeployIndex()
             : ((CAMPAIGN&&CAMPAIGN.nextMapIndex!=null)?CAMPAIGN.nextMapIndex:0);   // gate villains + finale routing (T2-7)
 
@@ -1988,7 +2014,9 @@ function openMdcMenu(poi){
       // ---- LEFT: Enlisted for the next mission ----
       left.appendChild(hubMenuSection('Enlisted for the next mission'));
       if(!live.length){ const m=document.createElement('div'); m.className='muted';
-        m.textContent='Walk veterans into a red M.D.C. to enlist them for the next deployment.'; left.appendChild(m); }
+        m.textContent='Walk veterans into a red M.D.C. to enlist them for the next deployment.'
+          + (hubHeroes.length? ' Your hero'+(hubHeroes.length>1?'es':'')+' auto-deploy'+(hubHeroes.length>1?'':'s')+' either way.' : '');
+        left.appendChild(m); }
       else {
         left.appendChild(hubMenuUnitGrid(live, u=>({
           caption: trainTypeName(u)+(u.hero?'<br>⭐ hero':''),   // level now shown by the card's built-in .train-rank row
@@ -2000,12 +2028,31 @@ function openMdcMenu(poi){
       right.appendChild(hubMenuSection('Next deployment'));
       right.appendChild(hubMdcBriefCard(idx));
 
-      // ---- FOOTER (full width): vet-cap note + DISPATCH ----
+      // ---- FOOTER (full width): vet-cap note + DISPATCH (host/solo) / READY (client) ----
       const foot=document.createElement('div'); foot.className='hub-footer';
       const info=document.createElement('div'); info.className='grow';
       info.innerHTML='The next quarter only requires <b>'+cap+'</b> units. Heroes auto-deploy and don’t count.';
       foot.appendChild(info);
-      foot.appendChild(hubMenuActionBtn('🚀 DISPATCH — Launch Episode '+(idx+1), null, live.length>0, ()=>{ closeHubMenu(); hubDispatchNextEpisode(); }));
+      const isClient = (typeof netRole!=='undefined' && netRole==='client');
+      if(isClient){
+        // B5 — the client can't launch (dispatch is host-authoritative), so instead of a dead DISPATCH it gets a
+        // READY toggle: it stages its own p2 units, then signals the host it's set. Non-authoritative (mirrors mppause).
+        const ready = !!(typeof NET!=='undefined' && NET._hubReadyLocal);
+        const rb = hubMenuActionBtn(ready? '✓ READY — waiting for the host to launch' : '☑ READY UP — tell the host you’re set',
+          null, true, ()=>{ if(typeof netHubReady==='function') netHubReady(!ready); });
+        if(ready && rb) rb.classList.add('is-ready');
+        foot.appendChild(rb);
+      } else {
+        // host/solo DISPATCH. enable when ANY unit is enlisted (either co-founder) OR a hero is on hand — heroes
+        // auto-deploy, so a hero-only roster isn't stranded (mirrors hubDispatchNextEpisode). In co-op, also wait
+        // until the connected ally has readied up (pacing), so the host never launches out from under p2.
+        const peerHere = (typeof netRole!=='undefined' && netRole==='host' && typeof MP_SESSION!=='undefined' && !!MP_SESSION.peerId);
+        const allyReady = !!(typeof MP_SESSION!=='undefined' && MP_SESSION._p2HubReady);
+        if(peerHere){ const ind=document.createElement('div'); ind.className='mdc-ally'+(allyReady?' ready':'');
+          ind.innerHTML = allyReady? 'Ally: <b style="color:#8f8">READY ✓</b>' : 'Ally: <b>standing by…</b>'; foot.appendChild(ind); }
+        const canLaunch = (liveAll.length>0 || hubHeroes.length>0) && (!peerHere || allyReady);
+        foot.appendChild(hubMenuActionBtn('🚀 DISPATCH — Launch Episode '+(idx+1), null, canLaunch, ()=>{ closeHubMenu(); hubDispatchNextEpisode(); }));
+      }
       body.appendChild(foot);
     }
   });
@@ -2026,7 +2073,7 @@ function openCondoMenu(poiOrId){
     signature: function(){ const c=(CAMPAIGN.condos&&CAMPAIGN.condos[id])||{};
       // structural facts ONLY (level/treasury/who lives here) — statuses are tick-updated text,
       // never part of the signature, so cards don't rebuild under the player's finger.
-      return 'condo:'+id+':'+(c.level||0)+'|m3:'+(CAMPAIGN.m3|0)
+      return 'condo:'+id+':'+(c.level||0)+'|m3:'+(campaignM3(LOCAL_CTRL)|0)
         +'|r:'+((c.residents||[]).join(','))
         +'|n:'+npcsHere().map(n=>n.id+(n.mourning?'!':'')).join(','); },
     build: function(body){
@@ -2112,7 +2159,7 @@ function openCondoClinic(poiOrId){
       const r=_clinicResidents(id).map(s=>s.key).join(',');
       const k=_clinic.key, ch=k?JSON.stringify(chromeOf(k)):'';
       const sig=(k && CAMPAIGN.upgrades && CAMPAIGN.upgrades[k] && CAMPAIGN.upgrades[k].sig)||0;
-      return 'clinic:'+id+'|k:'+(k||'')+'|c:'+ch+'|sig:'+sig+'|cap:'+(k?chromeCapUsed(k):0)+'|m3:'+(CAMPAIGN.m3|0)+'|cat:'+(_clinic.cat?_clinic.cat.tileKey:'')+'|r:'+r;
+      return 'clinic:'+id+'|k:'+(k||'')+'|c:'+ch+'|sig:'+sig+'|cap:'+(k?chromeCapUsed(k):0)+'|m3:'+(campaignM3(LOCAL_CTRL)|0)+'|cat:'+(_clinic.cat?_clinic.cat.tileKey:'')+'|r:'+r;
     },
     build:function(body){ buildClinicBody(body, id); },
     tick:function(body){ const cv=body.querySelector('canvas.rip-figure'); if(cv){ const s=_clinicActiveSnap(); drawCyberwareBodyMap(cv, s, performance.now()/1000, {ring:true}); } },   // no slot→body cables — they never landed on the right body part; just the figure on its plinth + targeting ring
@@ -2194,7 +2241,7 @@ function ripStatStrip(snap){
     '<div class="rip-stat clear"><span class="rip-stat-k">Clearance</span><span class="rip-stat-v">EP '+ep+'</span></div>'+
     '<div class="rip-cap'+(over?' over':'')+'"><div class="rip-cap-k"><span class="rip-lock">⛓ Capacity</span><b>'+used+' / '+cap+'</b></div>'+
       '<div class="rip-cap-track"><div class="rip-cap-fill" style="width:'+(frac*100).toFixed(1)+'%"></div></div></div>'+
-    '<div class="rip-stat m3"><span class="rip-stat-k">Treasury</span><span class="rip-stat-v">M3$ '+(CAMPAIGN.m3|0)+'</span></div>';
+    '<div class="rip-stat m3"><span class="rip-stat-k">Treasury</span><span class="rip-stat-v">M3$ '+(campaignM3(LOCAL_CTRL)|0)+'</span></div>';
   return strip;
 }
 function ripSlotGroup(snap, slot){
@@ -2280,7 +2327,7 @@ function ripCatRow(snap, slotId, tileKey, imp, tier, labelOverride){
   const eff=cyberEffect({id:imp.id, tier});
   const cap=capCostOf({id:imp.id, tier}), m3=m3CostOf({id:imp.id, tier});
   const free=chromeCapacity(snap)-_chromeCapUsedExcl(snap.key, tileKey), over=cap-free;
-  const afford=(CAMPAIGN.m3|0)>=m3;
+  const afford=(campaignM3(LOCAL_CTRL)|0)>=m3;
   if(over>0 || !afford) row.className+=' dim'+(over>0?' over':'');
   row.innerHTML='<div class="rcr-top"><span class="rcr-name">'+(labelOverride||imp.name)+'</span><span class="rcr-tier">T'+tier+'</span></div>'+
     '<div class="rcr-flavor">'+imp.flavor+'</div>'+
@@ -2403,10 +2450,10 @@ function openUltraMenu(){
     id:'ultra', icon:'◆', title:'ULTRA Headquarters',
     subtitle:'The company that fabricates life for everyone, everywhere',
     staffPoi:'ultra',
-    signature: function(){ return 'ultra:'+(CAMPAIGN.m3|0)+'|g:'+(CAMPAIGN.gambled?1:0)+'|v:'+(CAMPAIGN.visit|0)+'|si:'+(CAMPAIGN.seriesInf|0); },
+    signature: function(){ return 'ultra:'+(campaignM3(LOCAL_CTRL)|0)+'|g:'+(CAMPAIGN.gambled?1:0)+'|v:'+(CAMPAIGN.visit|0)+'|si:'+(CAMPAIGN.seriesInf|0); },
     build: function(body){
       const s=document.createElement('div'); s.className='hub-stat';
-      s.innerHTML='Treasury <b>M3$ '+(CAMPAIGN.m3|0)+'</b> · H.U.B. visit <b>#'+(CAMPAIGN.visit|0)+'</b>';
+      s.innerHTML='Treasury <b>M3$ '+(campaignM3(LOCAL_CTRL)|0)+'</b> · H.U.B. visit <b>#'+(CAMPAIGN.visit|0)+'</b>';
       body.appendChild(s);
       // T3-9: Series \u221e — the uncapped sink. Rising cost, +1% roster HP per closed round.
       body.appendChild(hubMenuSection('Series \u221e Desk'));
@@ -2565,7 +2612,7 @@ function showSkirmish(){
   // T3-9: meta-currency as roguelite run-investment — campaign M3$ buys one-run boosts
   const bo=document.getElementById('skirmish-boosts');
   if(bo){
-    const m3=((typeof CAMPAIGN!=='undefined'&&CAMPAIGN&&CAMPAIGN.m3)|0);
+    const m3=((typeof CAMPAIGN!=='undefined'&&CAMPAIGN&&campaignM3(LOCAL_CTRL))|0);
     bo.innerHTML=`<label class="mut-row"><input type="checkbox" value="bigger" ${m3<150?'disabled':''}> <b>\u{1F4B0} Buy a Bigger Round</b> <span>+600 starting Funding \u00b7 M3$ 150 (treasury: ${m3})</span></label>`
       +`<label class="mut-row"><input type="checkbox" value="lobby" ${m3<200?'disabled':''}> <b>\u{1F3A9} Hire Lobbyists</b> <span>2 free Lv3 Lobbyist veterans \u00b7 M3$ 200</span></label>`;
   }

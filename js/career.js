@@ -137,7 +137,7 @@ function promoteIfReady(u, state){
   if(typeof ACH!=='undefined' && !window._rbReplaying) ACH.fire('promote',{stars:s});   // T3-5
   if(state && typeof hubEnsureStats==='function'){ const _hs=hubEnsureStats(state); _hs.promotions=(_hs.promotions||0)+(s-old); }   // run summary (T1-9)
   if(s>=1 && typeof ensureDossier==='function') ensureDossier(u);   // T0-5: identity exists from Lv1 (prose still gates at Lv2)
-  if(!window._rbReplaying) toast('★ Promotion! '+careerTitle(s)+' '+DEF[u.type].name);   // stat changes are serialized; the toast is cosmetic → skip during rollback re-sim
+  if(!window._rbReplaying){ const _pt='★ Promotion! '+careerTitle(s)+' '+DEF[u.type].name; toast(_pt); if(typeof narrate==='function') narrate('toast',{ html:_pt }); }   // stat changes are serialized; the toast is cosmetic → skip during rollback re-sim; co-op mirrors it to the client
   // career v3: dossier is born at level 2, then a backstory-connected life-event at each new level
   if(typeof rollLifeEvent==='function'){
     let last=null;
@@ -157,7 +157,9 @@ function promoteIfReady(u, state){
     }
     if(last && typeof eventToast==='function'){
       const d=buildDossier(u);
-      eventToast(u.lore.events.length<=1 ? `📖 <b>${d.full}</b> of ${d.home}: ${last.text}` : `📖 <b>${d.first}</b>: ${last.text}`, 8800, last.say);
+      const _le = u.lore.events.length<=1 ? `📖 <b>${d.full}</b> of ${d.home}: ${last.text}` : `📖 <b>${d.first}</b>: ${last.text}`;
+      eventToast(_le, 8800, last.say);
+      if(typeof narrate==='function') narrate('toast',{ html:_le, ev:1, ms:8800 });   // co-op: mirror the 📖 life-event toast to the client
       if(typeof LNS!=='undefined' && LNS.ultraEvent) LNS.ultraEvent('heroLifeEvent', { unit:u, event:last });
     }
     // in-world dialog: the unit speaks its freshest life-event in a box above its head (+ voice clip)

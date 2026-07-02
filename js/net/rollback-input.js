@@ -98,6 +98,10 @@
         const sel = (cmd.ids||[]).map(id=>byId.get(id)).filter(e=>e&&!e.dead&&!e.storedIn&&e.owner==='player'&&e.hero&&(e.ctrl||'p1')===ctrl);
         if(sel.length && typeof castSigAbility==='function') quietApply(()=> castSigAbility(state, sel));
       }
+      // TODO(coop-parity): no cases for the HUB-intent kinds (chrome / offhours / hubact). Harmless today —
+      // USE_ROLLBACK defaults false AND the hub is snapshot-driven, never a rollback-simulated step() context, so
+      // netHubAct's rbEnqueue path can't fire in the hub. If rollback is ever extended to cover hub ticks, mirror
+      // applyRemoteCmd here: runScoped(ctrl, [], ()=> apply{Chrome|Offhours|HubAct}Commit(state, cmd.payload)).
     } finally { state.selection = saveSel; state._cmdCtrl = saveCtrl; }
   }
 

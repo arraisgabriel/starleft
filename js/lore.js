@@ -193,8 +193,10 @@ function applyEventFx(u, fx, state){
         try{
           const d=buildDossier(u);
           const line='I outlasted it. The thing I built is still standing.';
-          if(typeof eventToast==='function') eventToast(`🏆 <b>${d.full}</b> just fulfilled their dream — ${_loCap(d.dream)}`, 14000, line);
+          const _dh = `🏆 <b>${d.full}</b> just fulfilled their dream — ${_loCap(d.dream)}`;
+          if(typeof eventToast==='function') eventToast(_dh, 14000, line);
           if(typeof pushDialog==='function') pushDialog(u, line, {type:'lore', tone:'pos'});
+          if(typeof narrate==='function'){ narrate('toast',{ html:_dh, ev:1, ms:14000 }); narrate('say',{ unitId:u.id, text:line, tone:'pos' }); }   // co-op: mirror the dream-fulfilled climax to the client
           window._lastDreamFulfilled = d.full;   // read by crawlVars() as {dreamFulfilled}
           if(typeof ACH!=='undefined') ACH.fire('dream');   // T3-5
           if(typeof LNS!=='undefined' && LNS.ultraEvent) LNS.ultraEvent('dreamFulfilled', { unit:u });
@@ -230,17 +232,21 @@ function recordFallen(u){
   if(!u.hero && (u.stars||0) < 2) return;   // veterans-only: u.lore now mints from Lv1/first-kill/first-select, so the .lore check alone no longer means "veteran"
   if(u.id!=null){ if(_fallenIds.has(u.id)) return; _fallenIds.add(u.id); }   // dedup across rollback re-simulations (the dead unit leaves G.entities, so the guard can't live on it)
   const d = buildDossier(u);
-  fallenVets.push({ name:d.full, type:u.type, lvl:u.stars||0, dream:d.dream, home:d.home,
+  const f = { name:d.full, type:u.type, lvl:u.stars||0, dream:d.dream, home:d.home,
                     map:(typeof G!=='undefined'&&G&&G.cfg)?G.cfg.name:'', dreamDone:!!u.dreamDone,
                     // ---- resurrection identity for The Wake (append-only; legacy fallen lack these) ----
                     fid: fallenMintId(u),
                     lore: u.lore ? { seed:u.lore.seed, v:u.lore.v, events:(u.lore.events||[]).slice(), fixed:u.lore.fixed||null } : null,
                     xp: u.xp||0, stars: u.stars||0, hero:!!u.hero, heroId:u.heroId||null,
                     spriteType: u.spriteType||null, sanityThreshold: u.sanityThreshold||0,
-                    reborn:false });   // f.reborn === "this fallen has been resurrected" (distinct from a unit's u.reborn)
-  if(typeof eventToast==='function')
-    eventToast(`🕯 <b>${d.full}</b> has fallen — ${u.dreamDone?'their dream fulfilled':'dream unfulfilled: '+_loCap(d.dream)}.`, 10000);
-  if(typeof fallenSceneMaybe==='function') fallenSceneMaybe(u);   // T1-1: brief solo memorial beat (gates live inside)
+                    reborn:false };   // f.reborn === "this fallen has been resurrected" (distinct from a unit's u.reborn)
+  fallenVets.push(f);
+  const _obit = `🕯 <b>${d.full}</b> has fallen — ${u.dreamDone?'their dream fulfilled':'dream unfulfilled: '+_loCap(d.dream)}.`;
+  if(typeof eventToast==='function') eventToast(_obit, 10000);
+  // co-op: fill the client's "The Fallen" wall LIVE (dedup by fid) + relay the obituary — today the
+  // client's fallenVets stays empty mid-session until a save mirror.
+  if(typeof narrate==='function') narrate('fallen',{ obit:_obit, rec:f, ms:10000 });
+  if(typeof fallenSceneMaybe==='function') fallenSceneMaybe(u);   // T1-1: brief solo memorial beat (gates live inside; co-op uses the wall+toast above)
   if(typeof ACH!=='undefined' && !window._rbReplaying) ACH.fire('fallen',{count:fallenVets.length});   // T3-5
   // story-polish §5.3: a watching hero marks the loss (cosmetic, throttled, skips on rollback)
   if(typeof sayHeroEvent==='function' && !window._rbReplaying) sayHeroEvent('grief');

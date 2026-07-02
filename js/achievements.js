@@ -44,7 +44,13 @@ const ACH = (function(){
     { id:'daily',      ev:'daily',    icon:'📅', name:'Daily Disruption',        desc:'Clear a Daily Disruption skirmish.' },
   ];
 
+  // co-op (root #2): the host mirrors the achievement EVENT to the client, which runs its OWN test() against
+  // its OWN per-device localStorage — so p2 earns its own unlocks. Only scalar ctx crosses the wire (no entity
+  // refs). narrate is host-only + non-rollback; the client's replayed ACH.fire won't re-relay (narrate no-ops).
+  function _scalarCtx(ctx){ const o={}; if(ctx) for(const k in ctx){ const v=ctx[k], t=typeof v; if(v==null||t==='string'||t==='number'||t==='boolean') o[k]=v; } return o; }
   function fire(ev, ctx){
+    if(typeof netRole!=='undefined' && netRole==='host' && !window._rbReplaying && typeof narrate==='function')
+      narrate('ach', { ev:ev, ctx:_scalarCtx(ctx) });
     let any=false;
     for(const a of LIST){
       if(a.ev!==ev || unlocked[a.id]) continue;

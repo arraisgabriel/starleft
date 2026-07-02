@@ -126,8 +126,10 @@ function sayHeroMentor(u){
   const h=heroes[(Math.random()*heroes.length)|0], pool=HERO_MENTOR_LINES[h.heroId];
   if(!pool || !pool.length) return;
   const line=_pickLine(h, pool);
+  const _idx=(h._lastLineIdx!=null)?h._lastLineIdx:pool.indexOf(line);
   pushDialog(h, line, { type:'select', tone:'pos' });
-  if(typeof VOICE!=='undefined') VOICE.playBark(h.heroId+'_mentor', (h._lastLineIdx!=null)?h._lastLineIdx:pool.indexOf(line));
+  if(typeof VOICE!=='undefined') VOICE.playBark(h.heroId+'_mentor', _idx);
+  if(typeof narrate==='function') narrate('bark', { unitId:h.id, text:line, tone:'pos', voiceKey:h.heroId+'_mentor', idx:_idx });   // co-op: mirror to the client (resolved speaker+line, no RNG re-roll)
 }
 if(typeof window!=='undefined') window.sayHeroMentor=sayHeroMentor;
 
@@ -151,16 +153,20 @@ function sayHeroEvent(kind, who){
   const h=cands[(Math.random()*cands.length)|0], pool=byKind[h.heroId];
   const line=_pickLine(h, pool);
   _heroEventLast[kind]=now;
-  pushDialog(h, line, { type:'select', tone: kind==='grief'?'neg':(kind==='heal'?'pos':'neutral') });
-  if(typeof VOICE!=='undefined') VOICE.playBark(h.heroId+'_'+kind, (h._lastLineIdx!=null)?h._lastLineIdx:pool.indexOf(line));
+  const _tone = kind==='grief'?'neg':(kind==='heal'?'pos':'neutral');
+  const _idx=(h._lastLineIdx!=null)?h._lastLineIdx:pool.indexOf(line);
+  pushDialog(h, line, { type:'select', tone:_tone });
+  if(typeof VOICE!=='undefined') VOICE.playBark(h.heroId+'_'+kind, _idx);
+  if(typeof narrate==='function') narrate('bark', { unitId:h.id, text:line, tone:_tone, voiceKey:h.heroId+'_'+kind, idx:_idx });   // co-op: mirror to the client
 }
 if(typeof window!=='undefined') window.sayHeroEvent=sayHeroEvent;
 // sayIdx (when provided) is the LORE_SAY index of a variable-free line → it has a pre-rendered clip.
 function sayLoreEvent(u, say, tone, sayIdx){
   if(!u || !say) return;
+  const _lv=(u.hero && u.heroId) ? u.heroId : u.type;
   pushDialog(u, say, { type:'lore', tone:tone||'neutral' });
-  if(typeof VOICE!=='undefined' && sayIdx!=null)
-    VOICE.playLore((u.hero && u.heroId) ? u.heroId : u.type, sayIdx);
+  if(typeof VOICE!=='undefined' && sayIdx!=null) VOICE.playLore(_lv, sayIdx);
+  if(typeof narrate==='function') narrate('say', { unitId:u.id, text:say, tone:tone||'neutral', sayIdx:(sayIdx!=null?sayIdx:undefined), loreVoice:_lv });   // co-op: mirror the gold life-event box + lore voice to the client
 }
 
 // fired from refreshUI() each HUD tick — bark only on a genuinely NEW single-unit selection

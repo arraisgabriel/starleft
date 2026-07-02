@@ -1307,7 +1307,7 @@ function bossOutcome(state, kind){
 // via _bossDeathCsDone. Returns true when it takes over the win this tick.
 function tryBossDeathCutscene(state){
   if(window._rbReplaying) return false;
-  if(typeof netRole!=='undefined' && netRole!=='solo') return false;
+  if(typeof netRole!=='undefined' && netRole==='client') return false;   // co-op: client mirrors via the flash cue below, never authors
   if(typeof startFlashCutscene!=='function') return false;
   const vl=state.cfg && state.cfg.villain;
   const vids=(Array.isArray(vl)?vl:(vl?[vl]:[])).map(v=>v&&v.id);
@@ -1325,6 +1325,15 @@ function tryBossDeathCutscene(state){
   state._bossDeathCsDone=true;
   startFlashCutscene(state, focus, lines);   // victory routes on the natural checkWinLose re-check after the cutscene closes
   if(state.flashCutscene) state.flashCutscene.manual=true;   // villain DEATH lines are click-to-advance even though we frame a player unit (the dead boss can't be framed)
+  // CO-OP host: FREEZE the sim behind the cutscene (running=false) + a HOLD cue so the ally freezes too — the
+  // background host-clock worker only respects `running`, so a non-hold cutscene would let the sim route the
+  // win ~120ms in and cut the death lines off. endFlashCutscene (via _coopHold) resumes both on close, then
+  // the natural checkWinLose routes the win. Solo is untouched (freezes via the rAF flashCutscene guard).
+  if(typeof netRole!=='undefined' && netRole==='host'){
+    running=false;
+    if(state.flashCutscene) state.flashCutscene._coopHold=true;
+    if(typeof cinematic==='function') cinematic('flash', { linesKey:name, speaker:focus.heroId||null, speakerId:focus.id, manual:true }, null, { hold:true });
+  }
   return true;
 }
 
@@ -1345,11 +1354,20 @@ function beginBossExtract(state, boss){
   const name = (boss.villainId==='ex_terminator_mk2') ? 'EXTERM_DEATH_2' : 'EXTERM_DEATH_1';
   const lines = (typeof window!=='undefined') && window[name];
   const solo = (typeof netRole==='undefined' || netRole==='solo') && !window._rbReplaying;
-  if(solo && lines && lines.length && typeof startFlashCutscene==='function'){
+  const hostCoop = (typeof netRole!=='undefined' && netRole==='host') && !window._rbReplaying;   // co-op host plays the airlift too (was: toast-only) and mirrors the lines to the client
+  if((solo || hostCoop) && lines && lines.length && typeof startFlashCutscene==='function'){
     const fromRight = boss.x < state.W*TILE*0.5;                  // enter from whichever side crosses the framed boss
     state.bossExtract = { id:boss.id, ex:boss.x, ey:boss.y, fromRight };
     startFlashCutscene(state, boss, lines, ()=>finalizeBossExtract(state, boss));   // focus the LIVE boss; onEnd finalizes the escape
     if(state.flashCutscene) state.flashCutscene._holdLast=true;                     // his final "I'll be back" stays on screen until the player clicks to skip
+    // co-op host: FREEZE the sim (running=false) + HOLD cue so both peers hold on the same beat (the worker
+    // ignores flashCutscene). The boss stays alive+untargetable, so the client frames him by id; the HOST's
+    // onEnd → endFlashCutscene (_coopHold) resumes both and finalizeBossExtract marks him escaped → shared win.
+    if(hostCoop){
+      running=false;
+      if(state.flashCutscene) state.flashCutscene._coopHold=true;
+      if(typeof cinematic==='function') cinematic('flash', { linesKey:name, speaker:null, speakerId:boss.id }, null, { hold:true });
+    }
   } else {
     if(typeof toast==='function' && !window._rbReplaying) toast('🛩️ THE EX-TERMINATOR is airlifted out by an A&O bomber — "I\'ll be back."');
     finalizeBossExtract(state, boss);

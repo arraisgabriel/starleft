@@ -87,6 +87,7 @@ function holdoutToast(state, msg){
   if(typeof window!=='undefined' && window._rbReplaying) return;
   if(typeof eventToast==='function') eventToast(msg, 8000);
   else if(typeof toast==='function') toast(msg);
+  if(typeof narrate==='function') narrate('toast',{ html:msg, ev:1, ms:8000 });   // co-op: mirror holdout arm/transfer%/boss prompts to the client (single choke-point)
 }
 function holdoutSyncQuest(state){
   const hd=state.cfg.holdout, H=state.holdout;

@@ -131,7 +131,7 @@
       running = true;
       if(typeof startHostClock==='function') startHostClock();   // keep the host simulating + broadcasting off-focus
       NET.tick = 0; NET._sAcc = 0; NET._kAcc = 0;
-      NET._baseline = new Map(); NET._lastEcoStr = null; NET._lastQuestStr = null; NET._sinceSend = 0;   // reset Phase 4 delta baseline / eco + quest signatures for the new map
+      NET._baseline = new Map(); NET._lastEcoStr = null; NET._lastQuestStr = null; NET._sinceSend = 0; NET._loreSent = new Map();   // reset Phase 4 delta baseline / eco + quest signatures + dossier-identity dirty-set for the new map
       NET.mpLog && NET.mpLog('info','co-op sim live — map '+S.mapIndex+', shipping full snapshot');
       NET.sendFull(S.peerId);
       toast('Co-op match started — Quarter '+(S.mapIndex+1));
@@ -196,8 +196,9 @@
         const lines = (d.linesKey && typeof window!=='undefined' && window[d.linesKey]) || null;
         if(lines && lines.length && typeof startFlashCutscene==='function' && G && G.entities){
           let sp = d.speaker ? G.entities.find(x=>x.heroId===d.speaker && !x.dead && !x.storedIn) : null;
+          if(!sp && d.speakerId!=null) sp = G.entities.find(x=>x.id===d.speakerId && !x.dead && !x.storedIn);   // frame any entity by host id (boss-death focuses a live player unit)
           if(!sp) sp = G.entities.find(x=>x.villain && !x.dead && !x.storedIn);
-          if(sp) startFlashCutscene(G, sp, lines);     // updateFlashCutscene (main.js, outside the sim guard) advances it even while frozen
+          if(sp){ startFlashCutscene(G, sp, lines); if(G.flashCutscene && d.manual) G.flashCutscene.manual=true; }   // updateFlashCutscene (main.js, outside the sim guard) advances it even while frozen
         }
         break;
       }
@@ -209,6 +210,33 @@
         NET._cueHold = false;
         if(G && !G.over){ running = true; if(NET.resetWatchdog) NET.resetWatchdog(); }
         if(typeof syncPauseBtn==='function') syncPauseBtn();
+        break;
+      }
+      case 'narrate': {
+        // root #2 — mirror the host's narrative/feedback layer. All targets are already client-safe:
+        // toast/eventToast render locally (+ fill the Events panel via logEvent); the client already runs
+        // updateDialogs+drawDialogs so a relayed pushDialog gold box renders with no new plumbing; VOICE
+        // needs only an id/index; ACH is per-device localStorage.
+        const k = d.kind;
+        if(k==='toast'){
+          if(d.ev){ if(typeof eventToast==='function') eventToast(d.html, d.ms||9000); }
+          else if(typeof toast==='function') toast(d.html, d.ms);
+        } else if(k==='say' || k==='bark'){
+          const u = (d.unitId!=null && G && G.entities) ? G.entities.find(x=>x.id===d.unitId && !x.dead && !x.storedIn) : null;
+          if(u && typeof pushDialog==='function'){
+            pushDialog(u, d.text, { type:(k==='say'?'lore':'select'), tone:d.tone });   // resolve speaker by host id (missing → drop silently, matches solo)
+            if(typeof VOICE!=='undefined'){
+              if(k==='say' && d.sayIdx!=null && d.loreVoice && VOICE.playLore) VOICE.playLore(d.loreVoice, d.sayIdx);
+              else if(k==='bark' && d.idx!=null && d.voiceKey && VOICE.playBark) VOICE.playBark(d.voiceKey, d.idx);
+            }
+          }
+        } else if(k==='ach'){
+          if(typeof ACH!=='undefined' && ACH.fire) ACH.fire(d.ev, d.ctx||{});   // client runs its OWN test() (per-device localStorage)
+        } else if(k==='fallen'){
+          // A4: append the obituary's fallen record so the client's "The Fallen" wall fills live (dedup by fid).
+          if(d.rec){ if(typeof fallenVets!=='undefined'){ const fid=d.rec.fid; if(!(fid!=null && fallenVets.some(x=>x&&x.fid===fid))) fallenVets.push(d.rec); } }
+          if(d.obit && typeof eventToast==='function') eventToast(d.obit, d.ms||10000);
+        }
         break;
       }
     }
@@ -387,6 +415,7 @@
     // ran the host-only enterHubFlashAftermath that clears them) — strip them so the H.U.B. HUD is visible.
     if(typeof document!=='undefined'){ document.body.classList.remove('scene-flash'); document.body.classList.remove('scene-hubload'); }
     NET._cueHold=false;   // arriving at the hub IS the end of any finale hold → let onFullApplied finalize the drop-in normally (a transient reconnect never routes here, so it stays frozen)
+    NET._hubReadyLocal=false;   // B5: a fresh quarter's hub starts un-readied (the client re-arms READY once it's staged its units)
     running = false;
     NET._lastAppliedTick = -1;
     if(NET.resetWatchdog) NET.resetWatchdog();
@@ -537,7 +566,7 @@
     if(S.role!=='host') return;
     S.mapIndex = mapIndex|0;
     NET.tick = 0; NET._sAcc = 0; NET._kAcc = 0;
-    NET._baseline = new Map(); NET._lastEcoStr = null; NET._lastQuestStr = null; NET._sinceSend = 0;   // reset Phase 4 delta baseline / eco + quest signatures for the new map
+    NET._baseline = new Map(); NET._lastEcoStr = null; NET._lastQuestStr = null; NET._sinceSend = 0; NET._loreSent = new Map();   // reset Phase 4 delta baseline / eco + quest signatures + dossier-identity dirty-set for the new map
     MP.send('mphub', { mapIndex:S.mapIndex, mode:S.mode, mpCampaignId:S.mpCampaignId, campaign: typeof serializeHubCampaign==='function' ? serializeHubCampaign() : null });
     if(S.peerId && NET.sendFull) NET.sendFull(S.peerId);
   };
@@ -591,7 +620,7 @@
     if(typeof refreshUI==='function') refreshUI();
     running = true;
     if(typeof startHostClock==='function') startHostClock();
-    NET.tick=0; NET._sAcc=0; NET._kAcc=0; NET._baseline=new Map(); NET._lastEcoStr=null; NET._lastQuestStr=null; NET._sinceSend=0; NET._lastAppliedTick=-1;
+    NET.tick=0; NET._sAcc=0; NET._kAcc=0; NET._baseline=new Map(); NET._lastEcoStr=null; NET._lastQuestStr=null; NET._sinceSend=0; NET._lastAppliedTick=-1; NET._loreSent=new Map();
     // write the host's own slot under this campaign id (latest battlefield/HUB)
     try{ if(typeof mpSaveKey==='function' && typeof saveWrite==='function') saveWrite(mpSaveKey(S.mpCampaignId), d); }catch(_){}
     // tell the client to RESUME (not newMap) and ship the full blob it will deserialize

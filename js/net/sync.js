@@ -34,6 +34,7 @@ window.NET = window.NET || {};
   NET._baseline = new Map();      // host: last packed entity set (delta baseline)
   NET._lastEcoStr = null;         // host: last-sent eco signature (4a)
   NET._lastQuestStr = null;       // host: last-sent quest-progress signature (change-tracked like eco)
+  NET._loreSent = new Map();      // host: entityId -> last-sent lore signature (dossier identity ships ONCE per change, off the 12 Hz hot path)
   // ---- Robustness: desync guards + connection reliability ----
   NET._lastAppliedTick = -1;      // client: highest snap.t applied (drop out-of-order / stale snaps)
   NET.CHUNK_TTL = 10000;          // ms: discard a stalled full-snapshot reassembly buffer so a lost chunk can't wedge it forever
@@ -105,6 +106,12 @@ window.NET = window.NET || {};
   };
 
   /* ---------------- compact per-entity snapshot (the 12 Hz hot path) ---------------- */
+  // Dossier identity (lore) is immutable-once-minted and append-only per level; ship it ONCE per change
+  // (seed|version|event-count signature) instead of on every snap. The FULL snapshot already carries lore
+  // (serializeEntity denylist), so this covers the units that spawn/level AFTER a client joined — trained
+  // units and redeployed p2 veterans — which otherwise stay nameless/dossier-less forever on the client.
+  function loreSig(e){ return e.lore ? (e.lore.seed+'|'+((e.lore.v|0)||1)+'|'+(e.lore.events?e.lore.events.length:0)+(e.lore.fixed?'|f':'')) : ''; }
+  function loreDirty(e){ if(!e.lore) return false; const sig=loreSig(e), prev=NET._loreSent.get(e.id); if(sig!==prev){ NET._loreSent.set(e.id,sig); return true; } return false; }
   function packEnt(e){
     if(e.type==='goldmine'){
       return { id:e.id, gm:1, x:e.x, y:e.y, amt:Math.round(e.amount), a0:e.amount0, ftx:e.ftx, fty:e.fty, r:e.r };
@@ -121,6 +128,8 @@ window.NET = window.NET || {};
       if(e.carrying) o.cr=e.carrying;
       if(e.stars) o.st=e.stars;
       if(e.spriteType) o.sp=e.spriteType;
+      if(e.heroId) o.hid=e.heroId;                                   // identity: heroId (immutable; load-bearing for cue speaker resolution + p2 hero pools)
+      if(loreDirty(e)) o.lo={ s:e.lore.seed, v:e.lore.v, e:e.lore.events.slice(), f:e.lore.fixed||undefined, xp:e.xp||0 };   // dossier identity — client ADOPTS, never mints (mint uses runSalt^id → would mismatch)
       if(e.air) o.air=1;
       if(e.hero) o.h=1;
       if(e.sieged) o.sg=1;
@@ -226,6 +235,14 @@ window.NET = window.NET || {};
       else e._lastAst=null;
       e.carrying=o.cr||0; e.stars=o.st||0; e.spriteType=o.sp||null;
       if((o.st||0) > _oldStars && typeof spawnLevelArrow==='function') spawnLevelArrow(G, e);   // client derives the level-up arrow from the star-delta (never runs promoteIfReady)
+      // dossier identity (adopt-only): heroId + lore ride the compact snap once per change (legacy/absent = keep existing).
+      // The client never MINTS lore (that would use its own runSalt/id-space → mismatched names); it only adopts the host's.
+      if(o.hid) e.heroId=o.hid;
+      if(o.lo){
+        if(!e.lore) e.lore={ seed:o.lo.s, v:o.lo.v, events:(o.lo.e||[]).slice(), fixed:o.lo.f||undefined };
+        else if((o.lo.e||[]).length > (e.lore.events||[]).length) e.lore.events=o.lo.e.slice();   // only GROW the service record (a stale packet can't truncate it)
+        if(o.lo.xp!=null) e.xp=o.lo.xp;
+      }
       e.hero=!!o.h; e.sieged=!!o.sg; e.captive=!!o.cap; e.sprinting=!!o.spr; e._vip=!!o.vip;
       if(o.si!=null) e.storedIn=o.si; else delete e.storedIn;
       e._tgtId = o.tg!=null ? o.tg : null;

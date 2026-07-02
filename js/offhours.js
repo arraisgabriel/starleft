@@ -348,6 +348,15 @@ function ohBeatStep(sceneIdx, scene, beatIdx, choiceIdx, bond, visit){
 function applyOffhoursCommit(state, payload){
   if(!payload) return null;
   const L=ohLedger(); if(!L) return null;
+  // ownership gate (co-op): the operative going out must belong to the acting player — never let a client drive a
+  // p1 vet's night (self-funded, but it mutates p1's bonds/romance/dossier). Solo/host-on-own: actingCtrl===ctrl → passes.
+  if(typeof actingCtrl==='function' && payload.vetKey){
+    const _ac=actingCtrl(state);
+    const _ov=_ohFindVet(state, payload.vetKey);
+    let _tc = _ov ? (_ov.ctrl||'p1') : null;
+    if(_tc===null){ const _r=((typeof CAMPAIGN!=='undefined'&&CAMPAIGN.roster)||[]).find(function(x){return x&&x.key===payload.vetKey;}); _tc=_r?(_r.ctrl||'p1'):'p1'; }
+    if(_tc!==_ac) return { denied:true };
+  }
   // I3 — a gift opens/accelerates a bond and returns a keepsake (Hades first-nectar). Host-authoritative.
   if(payload.gift){
     const g=ohEnsureBond(payload.vetKey, payload.npcId, payload.kind||'friend'); if(!g) return null;

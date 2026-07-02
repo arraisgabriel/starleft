@@ -61,7 +61,7 @@ function madName(u){
   if(typeof buildDossier==='function' && u.lore){ const d=buildDossier(u); if(d && d.first) return d.first; }
   return (DEF[u.type] && DEF[u.type].name) || 'A unit';
 }
-function madToast(u, msg){ if(typeof toast==='function') toast(msg); }
+function madToast(u, msg){ if(typeof toast==='function') toast(msg); if(typeof narrate==='function') narrate('toast',{ html:msg }); }   // co-op: mirror madosis onset/feral/relief toasts to the client (single choke-point)
 
 // outgoing-damage multiplier from a unit's madosis state (read in units.js at fire time).
 function madDmgMul(u){

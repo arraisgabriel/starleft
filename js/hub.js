@@ -94,6 +94,7 @@ function hubDefaultCampaign(){
   return {
     mode:'combat',
     m3:0,
+    m3p2:0,   // CO-OP: p2's own M3$ pool (split treasury). Legacy/solo saves default 0 via the deserialize merge → single p1 pool.
     nextMapIndex:0,
     roster:[],
     condos,
@@ -159,10 +160,47 @@ function deserializeHubCampaign(data){
     CAMPAIGN.stats = Object.assign({trainSessions:0, wakeStarts:0, healedHighMad:0}, data.stats||{});
   }
 }
-function hubOwnerCtrl(){ return 'p1'; }
-function hubCanAct(){
-  return netRole==='solo' || LOCAL_CTRL===hubOwnerCtrl();
+function hubOwnerCtrl(){ return 'p1'; }   // still the "who owns the launch trigger" primitive (dispatch/shared infra stay hubCanAct('p1'))
+// CO-OP: "may the acting controller operate the H.U.B. for its OWN units?" On the HOST every ctrl is
+// authorized — it is authoritative (it already validated the client's intent in applyRemoteCmd, and per-unit
+// ownership is enforced in applyHubAct via u.ctrl===actingCtrl); on the CLIENT only its own LOCAL_CTRL (p2);
+// solo = p1. Bare hubCanAct() resolves the acting ctrl (actingCtrl reads G._cmdCtrl, set by runScoped during
+// a replay), so existing solo/host call sites are unchanged (solo→true, host→true for p1).
+function hubCanAct(ctrl){
+  ctrl = ctrl || (typeof actingCtrl==='function' ? actingCtrl(G) : LOCAL_CTRL);
+  return netRole==='solo' || ctrl===LOCAL_CTRL || netRole==='host';
 }
+// Split treasury (co-op): each co-founder spends from its OWN pool. Solo / p1 use CAMPAIGN.m3; p2 uses m3p2.
+function campaignM3(ctrl){ return (ctrl==='p2') ? (CAMPAIGN.m3p2||0) : (CAMPAIGN.m3||0); }
+function campaignAddM3(ctrl, d){ if(ctrl==='p2') CAMPAIGN.m3p2=(CAMPAIGN.m3p2||0)+d; else CAMPAIGN.m3=(CAMPAIGN.m3||0)+d; }
+// CO-OP: host dispatcher for a client's hub-facility intent (from netHubAct / applyRemoteCmd 'hubact').
+// Runs on the HOST (via runScoped, so actingCtrl is the intent's ctrl → hubSpend draws that pool). Resolves
+// the target unit by key, ENFORCES ownership (must belong to the acting controller), then runs the SAME
+// facility fn. The client never reaches the fns directly (each guards `netRole==='client' → netHubAct`);
+// this is the single point where p2's target ownership is validated.
+function applyHubAct(state, p){
+  if(!state || !state.hub || !p || !p.op) return { ok:false };
+  const ctrl = (typeof actingCtrl==='function') ? actingCtrl(state) : LOCAL_CTRL;
+  const ownsKey = (key)=>{
+    if(!key) return false;
+    const e=(state.entities||[]).find(x=>x && !x.dead && x.owner==='player' && x.kind==='unit' && hubUnitKey(x)===key);
+    if(e) return (e.ctrl||'p1')===ctrl;
+    const r=(CAMPAIGN.roster||[]).find(x=>x && x.key===key);   // staged/off-field vets live only in the roster
+    return r ? ((r.ctrl||'p1')===ctrl) : false;
+  };
+  switch(p.op){
+    case 'release':       if(ownsKey(p.key)) hubReleaseFromMdc(p.key); break;
+    case 'trainStart':    if(ownsKey(p.keyA) && ownsKey(p.keyB)) hubTrainCreateSession(p.keyA, p.keyB); break;
+    case 'trainWithdraw': if(ownsKey(p.key)) hubTrainWithdraw(p.key); break;
+    case 'healStart':     if(ownsKey(p.key)) hubHealStartSession(p.key); break;
+    case 'healCancel':    if(ownsKey(p.key)) hubHealCancel(p.key); break;
+    case 'healSpeed':     if(ownsKey(p.key)) hubHealSpeedUp(p.key); break;
+    case 'unitUpg':       if(ownsKey(p.key)){ const u=(state.entities||[]).find(x=>x && !x.dead && x.owner==='player' && x.kind==='unit' && hubUnitKey(x)===p.key);
+                            if(u){ const sv=state.selection; state.selection=[u]; hubUpgradeSelectedUnit(p.kind); state.selection=sv; } } break;
+  }
+  return { ok:true };
+}
+window.applyHubAct=applyHubAct;
 
 function hubUnitKey(u){
   if(!u) return '';
@@ -566,6 +604,7 @@ function enterHubFromCombat(state){
   if(typeof document!=='undefined') document.body.classList.remove('scene-hubload');   // end the panorama loading scene
   const reward=hubRewardFor(state);
   CAMPAIGN.m3 += reward.total;
+  if(netRole!=='solo') CAMPAIGN.m3p2 += reward.total;   // co-op: the ally earns the SAME full reward into its own pool → total M3$ scales ×player-count
   CAMPAIGN.lastReward=reward;
   // boss detour just ended (host path): resume the linear campaign at the villain's returnTo + mark it cleared
   if(typeof MAPS!=='undefined' && MAPS[mapIndex] && MAPS[mapIndex].isVillain && typeof villainNextLinear==='function') CAMPAIGN.nextMapIndex=villainNextLinear(mapIndex);
@@ -631,7 +670,7 @@ function epSevenFlashAftermath(state){
 function enterHubFlashAftermath(state){
   if(typeof document!=='undefined'){ document.body.classList.remove('scene-flash'); document.body.classList.remove('scene-hubload'); }
   const reward=hubRewardFor(state);
-  CAMPAIGN.m3 += reward.total; CAMPAIGN.lastReward=reward;     // you DID liquidate THE CONGLOMERATE — meta merit survives the flash
+  CAMPAIGN.m3 += reward.total; if(netRole!=='solo') CAMPAIGN.m3p2 += reward.total; CAMPAIGN.lastReward=reward;     // co-op: the ally earns the same full reward; ×player-count total. you DID liquidate THE CONGLOMERATE — meta merit survives the flash
   CAMPAIGN.mode='hub'; CAMPAIGN.visit++; CAMPAIGN.gambled=false; CAMPAIGN.dispatch={mdcId:null, staged:[]};
   if(typeof hubSyncNpcs==='function') hubSyncNpcs();   // living city: the whole town learns what the flash took (mourning diffs)
   if(typeof MUSIC!=='undefined' && MUSIC.stopCinematic) MUSIC.stopCinematic();   // the flash track ends as the hub map loads
@@ -1444,7 +1483,7 @@ function cyberMaxTier(stars){ let n=0; for(const thr of CYBERWARE.tune.tierStars
 // the hero's presence on the roster + the Level-3 lore gate. Append-only safe (resolves by id).
 function hubGrantIconics(){
   if(typeof CYBERWARE==='undefined' || !(CYBERWARE.iconics||[]).length) return;
-  if(typeof hubCanAct==='function' && !hubCanAct()) return;
+  if(typeof hubCanAct==='function' && !hubCanAct('p1')) return;
   const heroes=(CAMPAIGN.roster||[]).filter(r=>r && (r.hero||r.heroId) && (r.stars||0)>=CYBERWARE.tune.minStars);
   for(const ic of CYBERWARE.iconics){
     const owner=heroes.find(h=>h.heroId===ic.hero); if(!owner) continue;
@@ -1523,6 +1562,11 @@ function applyChromeCommit(state, payload){
   const tune=CYBERWARE.tune;
   const snap=(CAMPAIGN.roster||[]).find(r=>r.key===key) || null;
   const live=(state && state.entities||[]).find(e=>e&&!e.dead&&e.kind==='unit'&&e.owner==='player'&&hubUnitKey(e)===key) || null;
+  // ownership gate (co-op): a client may chrome only its OWN operatives. Self-funded (spends the acting pool), but
+  // modding a p1 unit would corrupt p1's loadout/stats. Solo & host-on-own: actingCtrl===target ctrl → passes unchanged.
+  const _acCtrl = (typeof actingCtrl==='function') ? actingCtrl(state) : LOCAL_CTRL;
+  const _tgtCtrl = (live && (live.ctrl||'p1')) || (snap && (snap.ctrl||'p1')) || 'p1';
+  if(_tgtCtrl !== _acCtrl){ toast('That operative is not yours.'); return { ok:false }; }
   const stars=(snap&&snap.stars)||(live&&live.stars)||0;
   const isHero=!!((snap&&(snap.hero||snap.heroId))||(live&&(live.hero||live.heroId)));
   const rebake=()=>{ up.capUsed=chromeCapUsed(key); if(live){ hubApplyUpgrades(live); if(typeof applyVetHp==='function') applyVetHp(live,true); } };
@@ -1547,7 +1591,7 @@ function applyChromeCommit(state, payload){
     if(cur.iconic){ toast('Iconic chrome is bound to the hero — it can’t be removed.'); return { ok:false }; }
     const refund=Math.round(m3CostOf(cur)*(tune.refundMul||0));
     delete up.chrome[tk];
-    if(refund>0){ CAMPAIGN.m3+=refund; }
+    if(refund>0){ campaignAddM3(actingCtrl(state), refund); }
     rebake();
     return { ok:true, msg:'Implant removed'+(refund?(' · +M3$ '+refund):''), refund };
   }
@@ -1574,8 +1618,8 @@ function applyChromeCommit(state, payload){
   if(cur && cur.id===imp.id && tier>cur.tier){
     if(!hubSpend(Math.max(0, m3CostOf({id:imp.id,tier}) - m3CostOf(cur)))) return { ok:false };
   } else {
-    if(cur){ refund=Math.round(m3CostOf(cur)*(tune.refundMul||0)); if(refund>0) CAMPAIGN.m3+=refund; }
-    if(!hubSpend(m3CostOf({id:imp.id,tier}))){ if(refund>0) CAMPAIGN.m3-=refund; return { ok:false }; }   // roll back the refund if unaffordable
+    if(cur){ refund=Math.round(m3CostOf(cur)*(tune.refundMul||0)); if(refund>0) campaignAddM3(actingCtrl(state), refund); }
+    if(!hubSpend(m3CostOf({id:imp.id,tier}))){ if(refund>0) campaignAddM3(actingCtrl(state), -refund); return { ok:false }; }   // roll back the refund if unaffordable
   }
   up.chrome[tk]={ id:imp.id, tier };
   if(over>0) up.overScar=Math.max(up.overScar||0, over);   // permanent overload scar (survives removal) → steeper for reborn via chromeStrainFor
@@ -1668,6 +1712,14 @@ function hubDispatchVetCount(state, exceptKey){
     .filter(u=>!u.hero && hubUnitKey(u)!==exceptKey)
     .length;
 }
+// Heroes auto-deploy whether or not they were walked into an M.D.C. (the panel promises "Heroes
+// auto-deploy and don't count"), so a roster whose only survivor is a hero can still launch. This
+// lists the owner-side heroes present in the H.U.B. — used to enable DISPATCH and pass the launch
+// guard even with zero enlisted veterans. (Heroes are always p1; the ctrl filter mirrors `live`.)
+function hubDeployableHeroes(state){
+  return ((state&&state.entities)||[])
+    .filter(u=>u&&!u.dead&&u.owner==='player'&&u.kind==='unit'&&u.hero&&(u.ctrl||'p1')===hubOwnerCtrl());
+}
 function hubMdcExitTile(state,mdc,seed){
   if(!state||!mdc) return null;
   const free=(tx,ty)=>{
@@ -1730,6 +1782,7 @@ function hubStageUnit(u,mdcId,mdc){
   refreshUI();
 }
 function hubReleaseFromMdc(unitKey){
+  if(typeof netRole!=='undefined' && netRole==='client') return netHubAct('release', { key:unitKey });   // co-op: route to the host (acts on p2's own vet)
   if(!hubCanAct()){ toast('Only the host can operate the H.U.B.'); return false; }
   if(!G||!G.hub||!unitKey) return false;
   const u=(G.entities||[]).find(e=>e&&!e.dead&&e.owner==='player'&&e.kind==='unit'&&hubUnitKey(e)===unitKey);
@@ -1754,16 +1807,25 @@ function hubReleaseFromMdc(unitKey){
   return true;
 }
 function hubDispatchNextEpisode(){
-  if(!hubCanAct()){ toast('Only the host can launch from the H.U.B.'); return; }
+  if(!hubCanAct('p1')){ toast('Only the host can launch from the H.U.B.'); return; }
   const live=hubEnlistedUnits(G).filter(u=>(u.ctrl||'p1')===hubOwnerCtrl());
-  if(!live.length){ toast('Enlist at least one unit at an M.D.C..'); return; }
-  const heroes=live.filter(u=>u.hero), vets=live.filter(u=>!u.hero);
+  // Launch is allowed with zero enlisted veterans as long as a hero is on hand — heroes auto-deploy
+  // (captureHeroes(G) below carries them), so a hero-only roster isn't stranded at the H.U.B.
+  if(!live.length && !hubDeployableHeroes(G).length){ toast('Enlist at least one unit at an M.D.C..'); return; }
+  const vets=live.filter(u=>!u.hero);
   const cap=hubDispatchVetCap();
   if(vets.length>cap){ toast(hubDispatchFullMessage(cap)); return; }
+  // B5: the launch is committed → clear the ally's READY so the NEXT quarter waits fresh (transient pacing flag).
+  if(typeof MP_SESSION!=='undefined') MP_SESSION._p2HubReady=false;
+  if(typeof NET!=='undefined') NET._hubReadyLocal=false;
   // MADOSIS rest-decay: every veteran left behind this dispatch recovers a little sanity (Training
   // Grounds trainees are exempt — their minds are occupied). Operates on the persistent roster.
   if(typeof madosisRestDecay==='function') madosisRestDecay(new Set(live.map(u=>hubUnitKey(u))));
-  setCarryover(vets.slice(0,cap)); captureHeroes({entities:heroes});
+  // Heroes AUTO-deploy whether or not the player walked them into an M.D.C. — the panel promises
+  // "Heroes auto-deploy and don't count." Capture EVERY hero alive in the H.U.B. (full G), not just
+  // the enlisted ones, so an un-enlisted Biba/Nino still rides to the next episode. Mirrors the
+  // victory screen + NG+ (both captureHeroes(G)); G has no extractReady here, so no garrison gate.
+  setCarryover(vets.slice(0,cap)); captureHeroes(G);
   // CO-OP: the ally can't operate the H.U.B. (it's p1-only), so the host AUTO-carries the ally's surviving
   // veterans — up to the same cap — so they redeploy at the p2 base next Quarter (spawnVetsP2). Heroes are
   // captured above (captureHeroes is owner-agnostic); this is the non-hero p2 rank-and-file.
@@ -1789,13 +1851,14 @@ function hubDispatchNextEpisode(){
   showCrawl(idx, ()=>{ gateMission(idx, ()=>{ endDispatchFlight(G); loadMap(idx); }); });
 }
 function hubLaunchNextEpisode(){ hubDispatchNextEpisode(); }
-function hubSpend(cost){
-  if(!hubCanAct()){ toast('Only the host can spend M3rit$.'); return false; }
-  if(CAMPAIGN.m3 < cost){ toast('Not enough M3rit$'); return false; }
-  CAMPAIGN.m3-=cost; return true;
+function hubSpend(cost, ctrl){
+  ctrl = ctrl || (typeof actingCtrl==='function' ? actingCtrl(G) : LOCAL_CTRL);   // host replay sets G._cmdCtrl='p2'; solo/host-direct → 'p1'
+  if(!hubCanAct(ctrl)){ toast('You can only spend your own M3rit$.'); return false; }
+  if(campaignM3(ctrl) < cost){ toast('Not enough M3rit$'); return false; }
+  campaignAddM3(ctrl, -cost); return true;
 }
 function hubUpgradeSelectedCondo(id){
-  if(!hubCanAct()){ toast('Only the host can upgrade the H.U.B.'); return; }
+  if(!hubCanAct('p1')){ toast('Only the host can upgrade the H.U.B.'); return; }
   // accepts an explicit condo id (condo panel opened by arrival/locate) or falls back to the selection
   let condoId=id;
   if(!condoId){ const poi=G&&G.selection[0]; if(!poi||!poi.hubPoi||poi.hubPoi.kind!=='condo') return; condoId=poi.hubPoi.id; }
@@ -1819,6 +1882,7 @@ function hubRebakeResidents(c){
   }
 }
 function hubUpgradeSelectedUnit(kind){
+  if(typeof netRole!=='undefined' && netRole==='client'){ const su=G&&G.selection.find(e=>e.kind==='unit'&&e.owner==='player'); if(su) return netHubAct('unitUpg', { key:hubUnitKey(su), kind:kind }); return; }
   if(!hubCanAct()){ toast('Only the host can upgrade H.U.B. residents.'); return; }
   const u=G&&G.selection.find(e=>e.kind==='unit'&&e.owner==='player'); if(!u){ toast('Select a resident first'); return; }
   const key=hubUnitKey(u), up=CAMPAIGN.upgrades[key]||(CAMPAIGN.upgrades[key]={});
@@ -1836,7 +1900,7 @@ function hubUpgradeSelectedUnit(kind){
   refreshUI();
 }
 function hubGamble(){
-  if(!hubCanAct()){ toast('Only the host can speculate at ULTRA.'); return; }
+  if(!hubCanAct('p1')){ toast('Only the host can speculate at ULTRA.'); return; }
   if(CAMPAIGN.gambled){ toast('The kiosk already liquidated your optimism.'); return; }
   if(!hubSpend(HUB.gambleStake)) return;
   CAMPAIGN.gambled=true;
@@ -1845,14 +1909,14 @@ function hubGamble(){
   if(CAMPAIGN._gambleSeed==null) CAMPAIGN._gambleSeed=(Math.random()*1e9)>>>0;
   CAMPAIGN._gambleSeed=(Math.imul(CAMPAIGN._gambleSeed,1664525)+1013904223)>>>0;
   const win=(CAMPAIGN._gambleSeed/4294967296) < (1/3);
-  if(win){ CAMPAIGN.m3+=260; toast('Speculation paid out: M3$260'); }
+  if(win){ campaignAddM3(actingCtrl(G), 260); toast('Speculation paid out: M3$260'); }
   else toast('Speculation failed. The market calls it learning.');
   refreshUI();
 }
 // T3-9: "Series \u221e" — the uncapped M3$ sink. Each rank: +1% max HP for the whole roster, rising cost.
 function seriesInfCost(){ const r=(CAMPAIGN.seriesInf||0); return Math.round(300*Math.pow(1.35, r)); }
 function hubBuySeriesInf(){
-  if(!hubCanAct()){ toast('Only the host can raise at ULTRA.'); return; }
+  if(!hubCanAct('p1')){ toast('Only the host can raise at ULTRA.'); return; }
   if(!hubSpend(seriesInfCost())) return;
   CAMPAIGN.seriesInf=(CAMPAIGN.seriesInf||0)+1;
   // re-bake every live player unit's HP so the rank lands immediately
@@ -2231,6 +2295,7 @@ function hubTrainReleaseSnap(state, fac, snap){
 }
 // Withdraw a staged unit OR cancel a whole session (frees both) — junior keeps its ORIGINAL level.
 function hubTrainWithdraw(unitKey){
+  if(typeof netRole!=='undefined' && netRole==='client') return netHubAct('trainWithdraw', { key:unitKey });
   if(!hubCanAct()){ toast('Only the host can operate the H.U.B.'); return false; }
   if(!G||!G.hub||!unitKey) return false;
   const t=CAMPAIGN.training, fac=hubFindTrainingGrounds(G);
@@ -2272,6 +2337,7 @@ function hubTrainValidatePair(a, b){
 }
 // Start a session from two staged units (keys are hubUnitKeys). mentor = higher level.
 function hubTrainCreateSession(keyA, keyB){
+  if(typeof netRole!=='undefined' && netRole==='client') return netHubAct('trainStart', { keyA:keyA, keyB:keyB });
   if(!hubCanAct()){ toast('Only the host can operate the H.U.B.'); return false; }
   const t=CAMPAIGN.training;
   const a=(t.staged||[]).find(s=>s.key===keyA), b=(t.staged||[]).find(s=>s.key===keyB);
@@ -2409,7 +2475,7 @@ function rebornRosterKey(ses){
 }
 // Begin a resurrection (host/solo only). Returns true on success; toasts the reason on every rejection.
 function hubWakeStart(fid){
-  if(!hubCanAct()){ toast('Only the host can power The Wake.'); return false; }
+  if(!hubCanAct('p1')){ toast('Only the host can power The Wake.'); return false; }
   if(!CAMPAIGN.reborn) CAMPAIGN.reborn={sessions:[],done:[]};
   if(!rebornUnlocked()){ toast('The coils are cold — you don’t hold the lattice yet.'); return false; }
   const f=(typeof fallenVets!=='undefined'?fallenVets:[]).find(x=>fallenStableId(x)===fid);
@@ -2558,6 +2624,7 @@ function hubHealStage(state, u, poi){
 }
 // Enroll a staged unit: pay up-front; it occupies one mission, then recovers `heal` madosis.
 function hubHealStartSession(key){
+  if(typeof netRole!=='undefined' && netRole==='client') return netHubAct('healStart', { key:key });
   if(!hubCanAct()){ toast('Only the host can operate the H.U.B.'); return false; }
   const h=CAMPAIGN.healing;
   const snap=(h.staged||[]).find(s=>s.key===key);
@@ -2605,6 +2672,7 @@ function hubHealApply(state, ses){
 }
 // Withdraw a staged unit OR cancel an in-care session — released un-healed, no refund.
 function hubHealCancel(key){
+  if(typeof netRole!=='undefined' && netRole==='client') return netHubAct('healCancel', { key:key });
   if(!hubCanAct()){ toast('Only the host can operate the H.U.B.'); return false; }
   if(!G||!G.hub||!key) return false;
   const h=CAMPAIGN.healing, fac=hubFindMentalHealth(G);
@@ -2667,6 +2735,7 @@ function hubHealAccelCost(chunk){
 }
 // Buy one acceleration chunk for a garrisoned unit: pay M3$, queue up to `points` madosis to drain.
 function hubHealSpeedUp(key){
+  if(typeof netRole!=='undefined' && netRole==='client') return netHubAct('healSpeed', { key:key });
   if(!hubCanAct()){ toast('Only the host can operate the H.U.B.'); return false; }
   const A=(typeof MADOSIS!=='undefined' && MADOSIS.accel)||null;
   if(!A){ toast('Accelerated treatment is unavailable.'); return false; }
